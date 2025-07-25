@@ -1,5 +1,5 @@
 // External packages
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 
 // Constants
 import { COLORS, SPACING, DURATIONS } from '@/constants'
@@ -14,16 +14,31 @@ import { apiKeyStorage } from '@/services/ApiKeyStorage'
 
 // Components
 import { CourseSeedInput } from '@/components/CourseSeedInputRefactored'
-import { AIPromptGenerator } from '@/components/AIPromptGenerator'
-import { JSONImportValidator } from '@/components/JSONImportValidatorRefactored'
 import { Button } from '@/components/DesignSystem'
 
-// Import components directly
-import { MediaEnhancementWizard } from './components/MediaEnhancementWizardRefactored'
-import { AudioNarrationWizard } from './components/AudioNarrationWizardRefactored'
-import { ActivitiesEditor } from './components/ActivitiesEditorRefactored'
-import { SCORMPackageBuilder } from './components/SCORMPackageBuilderRefactored'
-import { TestChecklist } from './components/TestChecklist'
+// Lazy load step components
+const AIPromptGenerator = lazy(() => 
+  import('@/components/AIPromptGenerator').then(m => ({ default: m.AIPromptGenerator }))
+)
+const JSONImportValidator = lazy(() => 
+  import('@/components/JSONImportValidatorRefactored').then(m => ({ default: m.JSONImportValidator }))
+)
+
+const MediaEnhancementWizard = lazy(() => 
+  import('./components/MediaEnhancementWizardRefactored').then(m => ({ default: m.MediaEnhancementWizard }))
+)
+const AudioNarrationWizard = lazy(() => 
+  import('./components/AudioNarrationWizardRefactored').then(m => ({ default: m.AudioNarrationWizard }))
+)
+const ActivitiesEditor = lazy(() => 
+  import('./components/ActivitiesEditorRefactored').then(m => ({ default: m.ActivitiesEditor }))
+)
+const SCORMPackageBuilder = lazy(() => 
+  import('./components/SCORMPackageBuilderRefactored').then(m => ({ default: m.SCORMPackageBuilder }))
+)
+const TestChecklist = lazy(() => 
+  import('./components/TestChecklist').then(m => ({ default: m.TestChecklist }))
+)
 // Types
 import type { CourseSeedData } from '@/types/course'
 import type { CourseContent, CourseContentUnion, Topic, Media } from '@/types/aiPrompt'
@@ -32,17 +47,21 @@ import type { ProjectData } from '@/types/project'
 // Components
 // DevTools removed - not needed
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-// Import dialog components directly
-import { Settings } from './components/SettingsRefactored'
-import { HelpPage } from './components/HelpPageRefactored'
+// Lazy load dialog components
+const Settings = lazy(() => 
+  import('./components/SettingsRefactored').then(m => ({ default: m.Settings }))
+)
+const HelpPage = lazy(() => 
+  import('./components/HelpPageRefactored').then(m => ({ default: m.HelpPage }))
+)
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
 import { NetworkStatusIndicator } from '@/components/DesignSystem'
 // LoadingComponent removed - using inline loading
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
-// Services
-import { exportProject, importProject } from '@/services/ProjectExportImport'
+// Lazy load export/import services
+const loadExportImport = () => import('@/services/ProjectExportImport')
 // Hooks
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { useStorage } from './contexts/PersistentStorageContext'
@@ -1056,6 +1075,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Export functionality
   const handleExport = async () => {
     try {
+      const { exportProject } = await loadExportImport()
       const result = await exportProject({
         metadata: {
           version: '1.0',
@@ -1117,6 +1137,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
       
+      const { importProject } = await loadExportImport()
       const result = await importProject(file)
       
       if (result.success && result.data) {
@@ -1306,33 +1327,37 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             )}
           
             {currentStep === 'prompt' && courseSeedData && (
-              <AIPromptGenerator
-                courseSeedData={courseSeedData}
-                onNext={handlePromptNext}
-                onBack={handlePromptBack}
-                onSettingsClick={handleSettingsClick}
-                onHelp={handleHelp}
-                onSave={() => handleManualSave()}
-                onSaveAs={handleSaveAs}
-                onOpen={handleOpen}
-                onStepClick={handleStepClick}
-              />
-            )}
-            
-            {currentStep === 'json' && (() => {
-              console.log('Rendering JSON step with courseContent:', courseContent)
-              return (
-                <JSONImportValidator
-                  onNext={handleJSONNext}
-                  onBack={handleJSONBack}
+              <Suspense fallback={<LoadingComponent />}>
+                <AIPromptGenerator
+                  courseSeedData={courseSeedData}
+                  onNext={handlePromptNext}
+                  onBack={handlePromptBack}
                   onSettingsClick={handleSettingsClick}
                   onHelp={handleHelp}
                   onSave={() => handleManualSave()}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
-                  initialData={courseContent || undefined}
                 />
+              </Suspense>
+            )}
+            
+            {currentStep === 'json' && (() => {
+              console.log('Rendering JSON step with courseContent:', courseContent)
+              return (
+                <Suspense fallback={<LoadingComponent />}>
+                  <JSONImportValidator
+                    onNext={handleJSONNext}
+                    onBack={handleJSONBack}
+                    onSettingsClick={handleSettingsClick}
+                    onHelp={handleHelp}
+                    onSave={() => handleManualSave()}
+                    onSaveAs={handleSaveAs}
+                    onOpen={handleOpen}
+                    onStepClick={handleStepClick}
+                    initialData={courseContent || undefined}
+                  />
+                </Suspense>
               )
             })()}
             
