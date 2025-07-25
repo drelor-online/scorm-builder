@@ -104,10 +104,6 @@ vi.mock('../../components/HelpPageRefactored', () => ({
   HelpPage: () => <div>Help</div>
 }))
 
-vi.mock('../../components/OpenProjectDialogRefactored', () => ({
-  OpenProjectDialog: () => <div>Open Project</div>
-}))
-
 vi.mock('../../components/ErrorBoundary', () => ({
   ErrorBoundary: ({ children }: any) => <>{children}</>
 }))
