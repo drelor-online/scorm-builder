@@ -1,0 +1,15 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" fill-rule="evenodd">
+    <!-- Logo Symbol -->
+    <rect fill="#f47b20" x="10" y="15" width="30" height="30" rx="4"/>
+    <path fill="#ffffff" d="M25 22 L25 38 M17 30 L33 30" stroke-width="3"/>
+    
+    <!-- Company Name -->
+    <text fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">
+      <tspan x="50" y="35">ENTRUST</tspan>
+    </text>
+    <text fill="#f47b20" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="400">
+      <tspan x="50" y="52">SOLUTIONS</tspan>
+    </text>
+  </g>
+</svg>

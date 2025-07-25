@@ -1,0 +1,138 @@
+/* Page Layout Container */
+.pageLayout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #18181b;
+  color: #a1a1aa;
+  
+  /* Add horizontal padding to prevent content from touching edges */
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* Responsive padding for smaller screens */
+@media (max-width: 768px) {
+  .pageLayout {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* Fixed Header */
+.fixedHeader {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background-color: #18181b;
+  border-bottom: 1px solid #3f3f46;
+  padding: 16px 0;
+}
+
+/* Header Content Container */
+.headerContent {
+  width: 100%;
+}
+
+/* Main Content Area */
+.mainContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+}
+
+@media (max-width: 768px) {
+  .mainContent {
+    padding: 16px 0;
+  }
+}
+
+/* Content Container */
+.contentContainer {
+  width: 100%;
+}
+
+/* Page Content Wrapper */
+.pageContent {
+  width: 100%;
+}
+
+/* Title Section */
+.pageTitleSection {
+  margin-bottom: 32px;
+}
+
+.pageTitleSection h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  margin-bottom: 8px;
+}
+
+.pageTitleSection p {
+  font-size: 1rem;
+  color: #a1a1aa;
+}
+
+/* Stepper Container - Moved to top */
+.stepperContainer {
+  background-color: #18181b;
+  padding: 16px 0;
+  margin-top: 16px;
+  border-bottom: 1px solid #3f3f46;
+  position: sticky;
+  top: 73px; /* Height of header */
+  z-index: 40;
+}
+
+/* Sticky Footer - Removed since stepper moved to top */
+.stickyFooter {
+  position: sticky;
+  bottom: 0;
+  background-color: #18181b;
+  border-top: 1px solid #3f3f46;
+  padding: 16px 0;
+}
+
+/* Form Section */
+.formSection {
+  background-color: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  margin-bottom: 16px;
+}
+
+/* Action Bar */
+.actionBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.actionBarLeft,
+.actionBarRight {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Ensure proper spacing for nested content */
+.pageLayout main {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+/* Additional vertical spacing between sections */
+.pageLayout > * + * {
+  margin-top: 24px;
+}

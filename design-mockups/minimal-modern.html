@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCORM Builder - Minimal Modern</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'accent': '#6366f1',
+                        'accent-light': '#a5b4fc',
+                        'gray': {
+                            50: '#fafafa',
+                            100: '#f5f5f5',
+                            200: '#e5e5e5',
+                            300: '#d4d4d4',
+                            400: '#a3a3a3',
+                            500: '#737373',
+                            600: '#525252',
+                            700: '#404040',
+                            800: '#262626',
+                            900: '#171717'
+                        }
+                    },
+                    fontFamily: {
+                        'sans': ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-white font-sans text-gray-800">
+    <!-- Minimal Header -->
+    <header class="border-b border-gray-100">
+        <div class="max-w-6xl mx-auto px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 bg-accent rounded"></div>
+                    <span class="text-lg font-medium">SCORM Builder</span>
+                </div>
+                <div class="flex items-center space-x-6 text-sm">
+                    <a href="#" class="text-gray-500 hover:text-gray-800 transition-colors">Help</a>
+                    <a href="#" class="text-gray-500 hover:text-gray-800 transition-colors">Settings</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-3xl mx-auto px-8 py-16">
+        <!-- Simple Progress -->
+        <div class="mb-16">
+            <div class="flex items-center space-x-3 text-sm">
+                <span class="text-accent font-medium">1</span>
+                <span class="text-gray-400">Course Setup</span>
+                <span class="text-gray-200">·</span>
+                <span class="text-gray-400">2</span>
+                <span class="text-gray-400">AI Generation</span>
+                <span class="text-gray-200">·</span>
+                <span class="text-gray-400">3</span>
+                <span class="text-gray-400">Media & Export</span>
+            </div>
+        </div>
+
+        <!-- Main Form -->
+        <div class="space-y-12">
+            <!-- Title Section -->
+            <div>
+                <h1 class="text-3xl font-light text-gray-900 mb-3">Create Course</h1>
+                <p class="text-gray-500 text-lg">Start by describing your learning objectives</p>
+            </div>
+
+            <!-- Course Title -->
+            <div class="space-y-3">
+                <label class="block text-sm font-medium text-gray-700">Course Title</label>
+                <input 
+                    type="text" 
+                    placeholder="What will learners master?"
+                    class="w-full text-xl py-4 border-0 border-b-2 border-gray-100 focus:border-accent outline-none bg-transparent placeholder-gray-300 transition-colors"
+                >
+            </div>
+
+            <!-- Difficulty Slider -->
+            <div class="space-y-6">
+                <label class="block text-sm font-medium text-gray-700">Difficulty Level</label>
+                <div class="relative">
+                    <input type="range" min="1" max="5" value="3" class="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-accent">
+                    <div class="flex justify-between text-xs text-gray-400 mt-2">
+                        <span>Beginner</span>
+                        <span>Intermediate</span>
+                        <span>Advanced</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Topics -->
+            <div class="space-y-3">
+                <label class="block text-sm font-medium text-gray-700">Learning Topics</label>
+                <div class="space-y-2">
+                    <div class="flex items-center space-x-3 p-3 border border-gray-100 rounded-lg">
+                        <span class="w-2 h-2 bg-accent rounded-full"></span>
+                        <input type="text" placeholder="Add a topic..." class="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400">
+                        <button class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-3 p-3 border border-gray-100 rounded-lg">
+                        <span class="w-2 h-2 bg-accent rounded-full"></span>
+                        <input type="text" placeholder="Add a topic..." class="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400">
+                        <button class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-3 p-3 border border-gray-100 rounded-lg">
+                        <span class="w-2 h-2 bg-accent rounded-full"></span>
+                        <input type="text" placeholder="Add a topic..." class="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400">
+                        <button class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="flex items-center space-x-2 p-3 border-2 border-dashed border-gray-200 rounded-lg w-full text-gray-400 hover:border-accent hover:text-accent transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span>Add topic</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Template Cards -->
+            <div class="space-y-3">
+                <label class="block text-sm font-medium text-gray-700">Quick Start Templates</label>
+                <div class="grid grid-cols-2 gap-4">
+                    <button class="p-6 border border-gray-100 rounded-lg text-left hover:border-accent transition-colors group">
+                        <div class="text-2xl mb-2">🛡️</div>
+                        <div class="font-medium text-gray-800 group-hover:text-accent">Safety Training</div>
+                        <div class="text-sm text-gray-500 mt-1">Workplace safety protocols</div>
+                    </button>
+                    <button class="p-6 border border-gray-100 rounded-lg text-left hover:border-accent transition-colors group">
+                        <div class="text-2xl mb-2">💼</div>
+                        <div class="font-medium text-gray-800 group-hover:text-accent">Business Skills</div>
+                        <div class="text-sm text-gray-500 mt-1">Professional development</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Action -->
+            <div class="pt-8">
+                <button class="w-full py-4 bg-accent text-white rounded-lg hover:bg-indigo-600 transition-colors font-medium">
+                    Generate Course Content
+                </button>
+                <p class="text-center text-sm text-gray-400 mt-3">This will create an AI prompt for your course structure</p>
+            </div>
+        </div>
+
+        <!-- Bottom Spacing -->
+        <div class="h-24"></div>
+    </main>
+</body>
+</html>

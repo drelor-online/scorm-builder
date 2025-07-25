@@ -1,0 +1,72 @@
+:root {
+  /* Define color variables for accessibility */
+  --color-primary: #1a73e8;
+  --color-background: #ffffff;
+  --color-text: #202124;
+  --color-text-secondary: #5f6368;
+  --color-border: #dadce0;
+  --color-focus: #1967d2;
+  --color-error: #d93025;
+  --color-success: #188038;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.App {
+  /* Styles will be handled by Tailwind classes */
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Skip link for keyboard navigation */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-primary);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Toast animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Focus styles for all interactive elements - using Tailwind focus styles instead */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --color-primary: #0051c3;
+    --color-background: #ffffff;
+    --color-text: #000000;
+    --color-border: #000000;
+  }
+}

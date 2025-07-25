@@ -1,0 +1,155 @@
+{
+  "projectId": "test-project-123",
+  "courseSeedData": {
+    "title": "Introduction to Web Development",
+    "difficulty": 3,
+    "customTopics": "HTML fundamentals, CSS styling and layouts, JavaScript programming, React framework, Node.js backend development, RESTful APIs, Database design"
+  },
+  "courseContent": {
+    "title": "Introduction to Web Development",
+    "description": "A comprehensive course covering modern web development technologies",
+    "objectives": [
+      "Understand HTML5 semantic elements and structure",
+      "Master CSS3 styling and responsive design",
+      "Learn JavaScript ES6+ features and best practices",
+      "Build interactive web applications with React",
+      "Create RESTful APIs with Node.js and Express",
+      "Design and implement database schemas"
+    ],
+    "modules": [
+      {
+        "id": "module-1",
+        "title": "HTML Fundamentals",
+        "description": "Learn the building blocks of web pages",
+        "topics": [
+          {
+            "id": "topic-1-1",
+            "title": "HTML Document Structure",
+            "content": "Understanding DOCTYPE, head, and body elements...",
+            "activities": [
+              {
+                "id": "activity-1-1-1",
+                "type": "multipleChoice",
+                "question": "What is the purpose of the DOCTYPE declaration?",
+                "options": [
+                  "To define the document type",
+                  "To style the page",
+                  "To add JavaScript",
+                  "To create links"
+                ],
+                "correctAnswer": 0
+              }
+            ]
+          },
+          {
+            "id": "topic-1-2",
+            "title": "Semantic HTML Elements",
+            "content": "Using header, nav, main, section, article, and footer...",
+            "activities": []
+          }
+        ]
+      },
+      {
+        "id": "module-2",
+        "title": "CSS Styling and Layouts",
+        "description": "Master modern CSS techniques",
+        "topics": [
+          {
+            "id": "topic-2-1",
+            "title": "CSS Selectors and Properties",
+            "content": "Understanding selectors, specificity, and the cascade...",
+            "activities": []
+          },
+          {
+            "id": "topic-2-2",
+            "title": "Flexbox and Grid Layouts",
+            "content": "Creating responsive layouts with modern CSS...",
+            "activities": []
+          }
+        ]
+      },
+      {
+        "id": "module-3",
+        "title": "JavaScript Programming",
+        "description": "Learn modern JavaScript development",
+        "topics": [
+          {
+            "id": "topic-3-1",
+            "title": "Variables and Data Types",
+            "content": "Understanding let, const, and data types in JavaScript...",
+            "activities": []
+          }
+        ]
+      }
+    ]
+  },
+  "activities": [
+    {
+      "id": "activity-1",
+      "moduleId": "module-1",
+      "topicId": "topic-1-1",
+      "type": "multipleChoice",
+      "question": "Which HTML element is used for the main content of a document?",
+      "options": [
+        "<main>",
+        "<body>",
+        "<content>",
+        "<article>"
+      ],
+      "correctAnswer": 0,
+      "feedback": {
+        "correct": "Correct! The <main> element represents the main content of the document.",
+        "incorrect": "Not quite. The <main> element is specifically for the main content area."
+      }
+    },
+    {
+      "id": "activity-2",
+      "moduleId": "module-2",
+      "topicId": "topic-2-1",
+      "type": "trueFalse",
+      "question": "CSS Grid can only create 2-dimensional layouts.",
+      "correctAnswer": false,
+      "feedback": {
+        "correct": "Correct! CSS Grid can create both 1D and 2D layouts.",
+        "incorrect": "Actually, CSS Grid is very flexible and can create 1D layouts too."
+      }
+    }
+  ],
+  "mediaEnhancements": {
+    "welcomeVideo": {
+      "enabled": true,
+      "url": "https://example.com/welcome-video.mp4",
+      "transcript": "Welcome to Introduction to Web Development..."
+    },
+    "moduleImages": {
+      "module-1": "https://example.com/html-fundamentals.jpg",
+      "module-2": "https://example.com/css-styling.jpg",
+      "module-3": "https://example.com/javascript.jpg"
+    }
+  },
+  "audioNarration": {
+    "enabled": true,
+    "voice": "en-US-Standard-A",
+    "speed": 1.0,
+    "scripts": {
+      "welcome": "Welcome to Introduction to Web Development. In this course...",
+      "module-1": "In this module, we'll explore HTML fundamentals...",
+      "module-2": "CSS is the language we use to style web pages..."
+    }
+  },
+  "scormSettings": {
+    "scormVersion": "2004",
+    "completionCriteria": "80",
+    "passingScore": "70",
+    "maxAttempts": "3",
+    "timeLimitAction": "continue,no message",
+    "launchData": "",
+    "scaledPassingScore": "0.7",
+    "completionThreshold": "0.8"
+  },
+  "metadata": {
+    "lastSaved": "2024-01-20T10:00:00Z",
+    "version": "1.0.0",
+    "author": "Test User"
+  }
+}

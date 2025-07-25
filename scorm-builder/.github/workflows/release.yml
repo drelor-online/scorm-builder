@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests
+        run: npm test -- --run
+      
+      - name: Build application
+        run: |
+          touch .env.local
+          echo "VITE_GOOGLE_IMAGE_API_KEY=${{ secrets.VITE_GOOGLE_IMAGE_API_KEY }}" >> .env.local
+          echo "VITE_GOOGLE_CSE_ID=${{ secrets.VITE_GOOGLE_CSE_ID }}" >> .env.local
+          echo "VITE_YOUTUBE_API_KEY=${{ secrets.VITE_YOUTUBE_API_KEY }}" >> .env.local
+          npm run build:prod
+      
+      - name: Create release archive
+        run: |
+          cd dist
+          zip -r ../scorm-builder-${{ github.ref_name }}.zip .
+          cd ..
+      
+      - name: Generate changelog
+        id: changelog
+        uses: requarks/changelog-action@v1
+        with:
+          token: ${{ github.token }}
+          tag: ${{ github.ref_name }}
+      
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## SCORM Builder ${{ github.ref_name }}
+            
+            ### What's Changed
+            ${{ steps.changelog.outputs.changes }}
+            
+            ### Installation
+            1. Download the release archive
+            2. Extract to your web server
+            3. Configure environment variables
+            4. Serve the application
+            
+            ### Full Changelog
+            https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.previousTag }}...${{ github.ref_name }}
+          draft: false
+          prerelease: false
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./scorm-builder-${{ github.ref_name }}.zip
+          asset_name: scorm-builder-${{ github.ref_name }}.zip
+          asset_content_type: application/zip

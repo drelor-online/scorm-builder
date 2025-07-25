@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Principles of Electrical Safety</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body data-has-knowledge-check="true" style="margin: 0; padding: 20px; overflow-y: auto; height: 100vh; box-sizing: border-box;">
+    <div class="content-layout">
+        <div class="text-section">
+            <p><h2>The Nature of Electricity</h2><p>To work safely with electricity, we must first understand its basic properties. Electricity is the flow of electrons through a conductor. Three key concepts define this flow:</p><ul><li><strong>Voltage (V):</strong> The pressure from a power source that pushes charged electrons (current) through a conducting loop. Think of it as the 'force'. It's measured in Volts.</li><li><strong>Current (I):</strong> The rate at which electrons flow. This is what causes electric shock. It's measured in Amperes (Amps). Even a small amount of current can be lethal.</li><li><strong>Resistance (R):</strong> The opposition to current flow. Materials with low resistance are conductors (like copper), while materials with high resistance are insulators (like rubber). It's measured in Ohms (&Omega;).</li></ul><p>These three elements are related by Ohm's Law: <strong>Voltage = Current &times; Resistance (V = I &times; R)</strong>. This means for a given voltage, if resistance decreases (e.g., through contact with water), the current will increase, raising the risk of severe shock.</p><h3>How Electricity Harms the Body</h3><p>The human body is a conductor. When it becomes part of an electrical circuit, current flows through it. The severity of the shock depends on the amount of current, the path it takes through the body, and the duration of contact. Effects can range from a tingling sensation to severe burns, muscle contractions, and cardiac arrest.</p></p>
+            
+            
+            <div class="knowledge-check" data-question-count="2">
+                <div class="kc-header">
+                    <h3 class="kc-title">Knowledge Check</h3>
+                    <span class="kc-count">Questions (2 total)</span>
+                </div>
+                
+                <div class="question" data-question-id="kc-q1-fundamentals">
+                    <p class="kc-question">Which of the following is the primary cause of electric shock?</p>
+                    <div class="kc-options">
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q1-fundamentals" value="0">
+                            Voltage
+                        </label>
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q1-fundamentals" value="1">
+                            Current
+                        </label>
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q1-fundamentals" value="2">
+                            Resistance
+                        </label>
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q1-fundamentals" value="3">
+                            Power
+                        </label>
+                    </div>
+                    <div id="kc-feedback-kc-q1-fundamentals" class="kc-feedback" style="display: none;">
+                        <p class="feedback-text"></p>
+                    </div>
+                </div>
+                <div class="question" data-question-id="kc-q2-fundamentals">
+                    <p class="kc-question">Materials with high resistance, like rubber, are good conductors of electricity.</p>
+                    <div class="kc-options">
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q2-fundamentals" value="0">
+                            True
+                        </label>
+                        
+                        <label class="kc-option">
+                            <input type="radio" name="kc-q2-fundamentals" value="1">
+                            False
+                        </label>
+                    </div>
+                    <div id="kc-feedback-kc-q2-fundamentals" class="kc-feedback" style="display: none;">
+                        <p class="feedback-text"></p>
+                    </div>
+                </div>
+                
+                <button class="kc-submit" onclick="submitAnswer()">Submit Answer</button>
+                
+                <script>
+                // answeredQuestions is already declared in navigation.js
+                
+                // Store correct answers for evaluation
+                const correctAnswers = {
+                    'kc-q1-fundamentals': { type: 'multiple-choice', answer: '1', correctFeedback: 'That\'s right! While voltage provides the \'push\', it\'s the flow of current through the body that causes harm.', incorrectFeedback: 'Not quite. The primary danger in an electric shock is the amount of current (measured in Amps) flowing through the body.' },
+                    'kc-q2-fundamentals': { type: 'multiple-choice', answer: '1', correctFeedback: 'Correct. Materials with high resistance are insulators, which block the flow of electricity.', incorrectFeedback: 'That\'s incorrect. Materials with high resistance are called insulators because they resist the flow of electricity. Conductors have low resistance.' }
+                };
+                
+                function submitAnswer() {
+                    console.log('submitAnswer called');
+                    console.log('correctAnswers object:', correctAnswers);
+                    
+                    const questions = document.querySelectorAll('.question');
+                    console.log('Found questions:', questions.length);
+                    
+                    let allAnswered = true;
+                    let allCorrect = true;
+                    
+                    // Handle case where no questions are found
+                    if (questions.length === 0) {
+                        console.error('No questions found in knowledge check');
+                        return;
+                    }
+                    
+                    questions.forEach((questionEl, index) => {
+                        const questionId = questionEl.getAttribute('data-question-id');
+                        try {
+                            console.log('Processing question:', questionId);
+                            const correctAnswer = correctAnswers[questionId];
+                            
+                            // Skip if no correct answer is defined for this question
+                            if (!correctAnswer) {
+                                console.error('No correct answer defined for question:', questionId);
+                                console.error('Available questions in correctAnswers:', Object.keys(correctAnswers));
+                                return;
+                            }
+                            console.log('Found correctAnswer:', correctAnswer);
+                        
+                        const radioInput = document.querySelector('input[name="' + questionId + '"]:checked');
+                        const textInput = document.querySelector('input[name="' + questionId + '"][type="text"]') || document.getElementById('input-' + questionId);
+                        
+                        let hasAnswer = false;
+                        let isCorrect = false;
+                        let userAnswer = '';
+                        
+                        if (correctAnswer.type === 'fill-in-the-blank' && textInput) {
+                            userAnswer = textInput.value.trim();
+                            if (userAnswer) {
+                                hasAnswer = true;
+                                // Case-insensitive comparison for fill-in-the-blank
+                                isCorrect = userAnswer.toLowerCase() === correctAnswer.answer.toLowerCase();
+                            }
+                        } else if (correctAnswer.type === 'multiple-choice' && radioInput) {
+                            userAnswer = radioInput.value;
+                            hasAnswer = true;
+                            // Compare as strings for consistency
+                            isCorrect = userAnswer === correctAnswer.answer;
+                        }
+                        
+                        if (!hasAnswer) {
+                            allAnswered = false;
+                        } else {
+                            answeredQuestions[questionId] = isCorrect;
+                            
+                            // Mark question as answered
+                            questionEl.classList.add('question-answered');
+                            questionEl.classList.add(isCorrect ? 'correct' : 'incorrect');
+                            
+                            // Show feedback
+                            const feedbackEl = document.getElementById('kc-feedback-' + questionId) || document.getElementById('feedback-' + questionId);
+                            if (feedbackEl) {
+                                feedbackEl.style.display = 'block';
+                                const feedbackText = feedbackEl.querySelector('.feedback-text') || feedbackEl;
+                                
+                                // Debug logging
+                                console.log('Feedback Debug:', {
+                                    questionId: questionId,
+                                    isCorrect: isCorrect,
+                                    correctAnswer: correctAnswer,
+                                    correctFeedback: correctAnswer.correctFeedback,
+                                    incorrectFeedback: correctAnswer.incorrectFeedback,
+                                    feedbackElement: feedbackEl,
+                                    feedbackTextElement: feedbackText
+                                });
+                                
+                                feedbackText.textContent = isCorrect ? 
+                                    (correctAnswer.correctFeedback || 'Correct!') : 
+                                    (correctAnswer.incorrectFeedback || 'Please try again.');
+                                feedbackEl.className = feedbackEl.className.includes('kc-feedback') ? 
+                                    'kc-feedback ' + (isCorrect ? 'correct' : 'incorrect') : 
+                                    'feedback ' + (isCorrect ? 'feedback-correct' : 'feedback-incorrect');
+                            } else {
+                                console.error('Feedback element not found for question:', questionId);
+                            }
+                            
+                            if (isCorrect) {
+                                // For correct answers, mark the selected option as correct
+                                if (correctAnswer.type === 'multiple-choice' && radioInput) {
+                                    radioInput.parentElement.classList.add('correct');
+                                } else if (correctAnswer.type === 'fill-in-the-blank' && textInput) {
+                                    // Add correct class to fill-in-the-blank input
+                                    textInput.classList.add('correct');
+                                }
+                            } else {
+                                allCorrect = false;
+                                // For incorrect answers
+                                if (correctAnswer.type === 'multiple-choice') {
+                                    // Mark the selected option as incorrect
+                                    if (radioInput && radioInput.parentElement) {
+                                        radioInput.parentElement.classList.add('incorrect');
+                                    }
+                                    
+                                    // Find and flash the correct answer (using index value)
+                                    const correctOption = document.querySelector('input[name="' + questionId + '"][value="' + correctAnswer.answer + '"]');
+                                    if (correctOption && correctOption.parentElement) {
+                                        correctOption.parentElement.classList.add('flash');
+                                        // After flashing, keep it green
+                                        setTimeout(() => {
+                                            correctOption.parentElement.classList.remove('flash');
+                                            correctOption.parentElement.classList.add('correct');
+                                        }, 1500);
+                                    }
+                                } else if (correctAnswer.type === 'fill-in-the-blank' && textInput) {
+                                    // Add incorrect class to fill-in-the-blank input
+                                    textInput.classList.add('incorrect');
+                                }
+                            }
+                        }
+                        } catch (error) {
+                            console.error('Error processing question:', questionId, error);
+                            console.error('Error stack:', error.stack);
+                        }
+                    });
+                    
+                    if (!allAnswered) {
+                        // Use custom alert from parent window or current window
+                        if (window !== window.parent && window.parent.showCustomAlert) {
+                            window.parent.showCustomAlert('Please answer all questions before proceeding.');
+                        } else if (window.showCustomAlert) {
+                            window.showCustomAlert('Please answer all questions before proceeding.');
+                        }
+                        return;
+                    }
+                    
+                    // Disable submit button and inputs after submission
+                    document.querySelector('.kc-submit').disabled = true;
+                    document.querySelectorAll('.question input').forEach(input => {
+                        input.disabled = true;
+                    });
+                    
+                    // Mark as attempted and enable navigation
+                    const inIframe = window !== window.parent;
+                    const pageId = inIframe && window.parent.currentPage ? window.parent.currentPage : (window.currentPage || 'topic-1');
+                    
+                    if (inIframe && window.parent.knowledgeCheckAttempts) {
+                        window.parent.knowledgeCheckAttempts[pageId] = true;
+                    } else if (window.knowledgeCheckAttempts) {
+                        window.knowledgeCheckAttempts[pageId] = true;
+                    }
+                    
+                    // Check if knowledge check is completed and enable navigation
+                    if (inIframe && window.parent.checkKnowledgeCheckCompletion) {
+                        window.parent.checkKnowledgeCheckCompletion();
+                    } else if (window.checkKnowledgeCheckCompletion) {
+                        window.checkKnowledgeCheckCompletion();
+                    }
+                }
+                
+                function enableNextButton() {
+                    // Mark knowledge check as attempted in parent navigation system
+                    const inIframe = window !== window.parent;
+                    const pageId = inIframe && window.parent.currentPage ? window.parent.currentPage : (window.currentPage || 'topic-1');
+                    
+                    if (inIframe && window.parent.knowledgeCheckAttempts) {
+                        window.parent.knowledgeCheckAttempts[pageId] = true;
+                    } else if (window.knowledgeCheckAttempts) {
+                        window.knowledgeCheckAttempts[pageId] = true;
+                    }
+                    
+                    // Enable the next button
+                    const nextBtn = document.getElementById('nextBtn');
+                    if (nextBtn) {
+                        nextBtn.disabled = false;
+                        nextBtn.classList.remove("disabled");
+                        nextBtn.removeAttribute('data-requires-answer');
+                    }
+                    
+                    // Also check if parent needs to enable navigation
+                    if (inIframe && window.parent.checkKnowledgeCheckCompletion) {
+                        window.parent.checkKnowledgeCheckCompletion();
+                    }
+                }
+                
+                // Check if all questions are answered
+                function checkAllQuestionsAnswered() {
+                    const totalQuestions = 2;
+                    const answeredCount = document.querySelectorAll(".question-answered").length;
+                    return answeredCount >= totalQuestions;
+                }
+                </script>
+            </div>
+        </div>
+
+        <div class="media-panel">
+            
+            <div class="video-container" data-media-index="0">
+                <iframe 
+                    src="https://youtube.com/embed/mc979OhitAg" 
+                    title="How ELECTRICITY works - working principle"
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen>
+                </iframe>
+            </div>
+            
+            
+            <div class="audio-player">
+                <audio id="audio-player-topic-1" src="../media/audio/0003-core-principles-of-electrical-safety.mp3" preload="metadata">
+                    <track kind="subtitles" src="../media/captions/0003-core-principles-of-electrical-safety.vtt" srclang="en" label="English" default>
+                </audio>
+                <div class="audio-main">
+                    <button class="play-pause" onclick="toggleAudio(0)">▶</button>
+                    <div class="audio-track">
+                        <div class="track-progress" onclick="seekAudio(event, 0)">
+                            <div class="track-fill" id="track-fill-0">
+                                <div class="track-handle"></div>
+                            </div>
+                        </div>
+                        <div class="track-time">
+                            <span id="current-time-0">0:00</span>
+                            <span id="duration-0">0:00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="audio-controls">
+                    <button class="audio-btn" onclick="skip(-10, 0)">◀ 10s</button>
+                    <button class="audio-btn" id="speed-btn-0" onclick="changeSpeed(0)">1x</button>
+                    <button class="audio-btn active" id="cc-btn-0" onclick="toggleCaptions(0)">CC</button>
+                    <button class="audio-btn" onclick="toggleVolume(0)">🔊</button>
+                    <button class="audio-btn" onclick="skip(10, 0)">10s ▶</button>
+                </div>
+                <div class="caption-display" id="captionDisplay-0">
+                    <p id="caption-text-0"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="lightbox-overlay" onclick="closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-image" src="" alt="">
+            <button class="lightbox-close" onclick="closeLightbox()">×</button>
+        </div>
+    </div>
+    
+    <!-- Navigation handled by main index.html sidebar and footer -->
+    
+    <script src="../scripts/navigation.js"></script>
+    
+    
+    <script>
+        // Disable next button on page load if knowledge check exists
+        window.addEventListener('load', function() {
+            const nextBtn = document.getElementById('nextBtn');
+            if (nextBtn && nextBtn.dataset.requiresAnswer === 'true') {
+                nextBtn.disabled = true;
+                nextBtn.classList.add('disabled');
+            }
+        });
+    </script>
+    
+    
+    <!-- Custom Alert Container -->
+    <div id="scorm-alert-container"></div>
+</body>
+</html>

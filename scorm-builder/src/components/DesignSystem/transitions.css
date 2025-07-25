@@ -1,0 +1,166 @@
+/* Fade In Transitions */
+.fade-in {
+  opacity: 0;
+  transition: opacity ease-in-out;
+}
+
+.fade-in-active {
+  opacity: 1;
+}
+
+/* Slide In Transitions */
+.slide-in {
+  transition: transform ease-out, opacity ease-out;
+}
+
+/* Slide from left */
+.slide-in-left {
+  transform: translateX(-20px);
+  opacity: 0;
+}
+
+.slide-in-left-active {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* Slide from right */
+.slide-in-right {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+.slide-in-right-active {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* Slide from top */
+.slide-in-top {
+  transform: translateY(-20px);
+  opacity: 0;
+}
+
+.slide-in-top-active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Slide from bottom */
+.slide-in-bottom {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+.slide-in-bottom-active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Scale In Transitions */
+.scale-in {
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform ease-out, opacity ease-out;
+}
+
+.scale-in-active {
+  transform: scale(1);
+  opacity: 1;
+}
+
+/* Stagger Animations */
+.stagger-container {
+  display: contents;
+}
+
+.stagger-item {
+  opacity: 0;
+  animation-fill-mode: forwards;
+}
+
+.stagger-item.stagger-active {
+  animation-name: staggerFadeIn;
+}
+
+.stagger-item.stagger-fade.stagger-active {
+  animation-name: staggerFadeIn;
+}
+
+.stagger-item.stagger-slide-up.stagger-active {
+  animation-name: staggerSlideUp;
+}
+
+.stagger-item.stagger-slide-down.stagger-active {
+  animation-name: staggerSlideDown;
+}
+
+.stagger-item.stagger-scale.stagger-active {
+  animation-name: staggerScale;
+}
+
+/* Stagger Keyframes */
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes staggerSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes staggerSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes staggerScale {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Smooth transitions for page changes */
+.page-transition-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.page-transition-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.page-transition-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}

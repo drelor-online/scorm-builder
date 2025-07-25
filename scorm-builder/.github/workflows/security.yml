@@ -1,0 +1,201 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run npm audit
+      run: npm audit --audit-level=moderate
+      continue-on-error: true
+    
+    - name: Run npm audit fix (dry run)
+      run: npm audit fix --dry-run
+    
+    - name: Check for critical vulnerabilities
+      run: |
+        npm audit --json > audit-report.json
+        critical_count=$(cat audit-report.json | jq '.metadata.vulnerabilities.critical // 0')
+        high_count=$(cat audit-report.json | jq '.metadata.vulnerabilities.high // 0')
+        
+        if [ "$critical_count" -gt 0 ]; then
+          echo "❌ Found $critical_count critical vulnerabilities!"
+          exit 1
+        fi
+        
+        if [ "$high_count" -gt 0 ]; then
+          echo "⚠️ Found $high_count high severity vulnerabilities"
+        fi
+    
+    - name: Upload audit report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: npm-audit-report
+        path: audit-report.json
+
+  rust-security:
+    name: Rust Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    
+    - name: Run cargo audit
+      working-directory: ./src-tauri
+      run: cargo audit
+    
+    - name: Check Rust dependencies
+      working-directory: ./src-tauri
+      run: |
+        cargo tree --duplicate > duplicates.txt
+        if [ -s duplicates.txt ]; then
+          echo "⚠️ Found duplicate dependencies:"
+          cat duplicates.txt
+        fi
+
+  code-security:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/typescript
+          p/rust
+          p/react
+    
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        languages: javascript, typescript
+
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check licenses
+      run: |
+        npx license-checker --production --onlyAllow 'MIT;Apache-2.0;BSD-3-Clause;BSD-2-Clause;ISC;0BSD;CC-BY-4.0;CC0-1.0;Unlicense' > licenses.txt
+      continue-on-error: true
+    
+    - name: Upload license report
+      uses: actions/upload-artifact@v4
+      with:
+        name: license-report
+        path: licenses.txt
+
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install dependencies
+      run: |
+        npm ci
+        cd src-tauri && cargo build --release
+    
+    - name: Run security tests
+      run: npm test src/tests/security.test.ts
+    
+    - name: Run integration security tests
+      run: npm test src/tests/integration/security-integration.test.ts
+      continue-on-error: true
+
+  create-report:
+    name: Create Security Report
+    needs: [dependency-scan, rust-security, code-security, license-check, security-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Create summary report
+      run: |
+        echo "# Security Scan Report" > security-report.md
+        echo "Date: $(date)" >> security-report.md
+        echo "" >> security-report.md
+        
+        echo "## Summary" >> security-report.md
+        echo "- Dependency Scan: ${{ needs.dependency-scan.result }}" >> security-report.md
+        echo "- Rust Security: ${{ needs.rust-security.result }}" >> security-report.md
+        echo "- Code Security: ${{ needs.code-security.result }}" >> security-report.md
+        echo "- License Check: ${{ needs.license-check.result }}" >> security-report.md
+        echo "- Security Tests: ${{ needs.security-tests.result }}" >> security-report.md
+    
+    - name: Upload final report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-report
+        path: security-report.md
+    
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('security-report.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: report
+          });

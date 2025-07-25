@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCORM Builder - Dark Professional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'brand': {
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb'
+                        },
+                        'dark': {
+                            50: '#18181b',
+                            100: '#27272a',
+                            200: '#3f3f46',
+                            300: '#52525b',
+                            400: '#71717a',
+                            500: '#a1a1aa',
+                            600: '#d4d4d8',
+                            700: '#e4e4e7',
+                            800: '#f4f4f5',
+                            900: '#fafafa'
+                        }
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-dark-50 font-sans text-dark-600">
+    <!-- Header -->
+    <header class="bg-dark-100 border-b border-dark-200">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-brand-400 to-brand-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-xl font-semibold text-dark-800">SCORM Builder</h1>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <button class="px-4 py-2 text-dark-500 hover:text-dark-600 hover:bg-dark-200 rounded-lg transition-all">
+                        Help
+                    </button>
+                    <button class="px-4 py-2 text-dark-500 hover:text-dark-600 hover:bg-dark-200 rounded-lg transition-all">
+                        Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 py-8">
+        <!-- Progress Indicator -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-8">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-brand-500 text-white rounded-full flex items-center justify-center text-sm font-semibold">1</div>
+                        <div>
+                            <div class="text-sm font-medium text-brand-400">Step 1</div>
+                            <div class="text-xs text-dark-500">Course Setup</div>
+                        </div>
+                    </div>
+                    <div class="w-16 h-px bg-dark-200"></div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-dark-200 text-dark-400 rounded-full flex items-center justify-center text-sm font-semibold">2</div>
+                        <div>
+                            <div class="text-sm text-dark-400">Step 2</div>
+                            <div class="text-xs text-dark-400">AI Prompt</div>
+                        </div>
+                    </div>
+                    <div class="w-16 h-px bg-dark-200"></div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-dark-200 text-dark-400 rounded-full flex items-center justify-center text-sm font-semibold">3</div>
+                        <div>
+                            <div class="text-sm text-dark-400">Step 3</div>
+                            <div class="text-xs text-dark-400">Media</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-sm text-dark-500">1 of 6 steps</div>
+            </div>
+        </div>
+
+        <!-- Main Card -->
+        <div class="bg-dark-100 rounded-xl border border-dark-200 overflow-hidden">
+            <!-- Header -->
+            <div class="px-8 py-6 border-b border-dark-200">
+                <h2 class="text-2xl font-semibold text-dark-800 mb-2">Course Configuration</h2>
+                <p class="text-dark-500">Set up your course fundamentals to generate targeted learning content</p>
+            </div>
+
+            <!-- Form Content -->
+            <div class="p-8 space-y-8">
+                <!-- Course Title -->
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium text-dark-700">Course Title *</label>
+                    <input 
+                        type="text" 
+                        placeholder="Enter your course title"
+                        class="w-full px-4 py-3 bg-dark-50 border border-dark-200 rounded-lg text-dark-700 placeholder-dark-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all"
+                    >
+                </div>
+
+                <!-- Two Column Layout -->
+                <div class="grid md:grid-cols-2 gap-8">
+                    <!-- Difficulty -->
+                    <div class="space-y-3">
+                        <label class="block text-sm font-medium text-dark-700">Difficulty Level</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="px-3 py-2 text-sm rounded-lg border border-dark-200 text-dark-500 hover:border-brand-400 hover:text-brand-400 transition-colors">Basic</button>
+                            <button class="px-3 py-2 text-sm rounded-lg bg-brand-500 text-white border border-brand-500">Medium</button>
+                            <button class="px-3 py-2 text-sm rounded-lg border border-dark-200 text-dark-500 hover:border-brand-400 hover:text-brand-400 transition-colors">Expert</button>
+                        </div>
+                    </div>
+
+                    <!-- Duration -->
+                    <div class="space-y-3">
+                        <label class="block text-sm font-medium text-dark-700">Expected Duration</label>
+                        <select class="w-full px-4 py-3 bg-dark-50 border border-dark-200 rounded-lg text-dark-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all">
+                            <option>15-30 minutes</option>
+                            <option>30-45 minutes</option>
+                            <option>45-60 minutes</option>
+                            <option>1-2 hours</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Topics -->
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium text-dark-700">Learning Topics</label>
+                    <textarea 
+                        rows="8"
+                        placeholder="List your course topics (one per line):&#10;&#10;• Introduction to workplace safety&#10;• Hazard identification techniques&#10;• Personal protective equipment&#10;• Emergency response procedures&#10;• Incident reporting protocols"
+                        class="w-full px-4 py-3 bg-dark-50 border border-dark-200 rounded-lg text-dark-700 placeholder-dark-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all resize-none"
+                    ></textarea>
+                    <div class="flex items-center space-x-4 text-xs text-dark-500">
+                        <span>📝 Recommended: 5-15 topics</span>
+                        <span>⏱️ Aim for 2-3 minutes per topic</span>
+                    </div>
+                </div>
+
+                <!-- Template Selection -->
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium text-dark-700">Course Template (Optional)</label>
+                    <div class="grid md:grid-cols-2 gap-3">
+                        <button class="p-4 border border-dark-200 rounded-lg text-left hover:border-brand-400 transition-colors group">
+                            <div class="text-sm font-medium text-dark-700 group-hover:text-brand-400">🛡️ Safety & Compliance</div>
+                            <div class="text-xs text-dark-500 mt-1">Workplace safety, regulations, procedures</div>
+                        </button>
+                        <button class="p-4 border border-dark-200 rounded-lg text-left hover:border-brand-400 transition-colors group">
+                            <div class="text-sm font-medium text-dark-700 group-hover:text-brand-400">🏢 Corporate Training</div>
+                            <div class="text-xs text-dark-500 mt-1">Company policies, onboarding, culture</div>
+                        </button>
+                        <button class="p-4 border border-dark-200 rounded-lg text-left hover:border-brand-400 transition-colors group">
+                            <div class="text-sm font-medium text-dark-700 group-hover:text-brand-400">⚙️ Technical Skills</div>
+                            <div class="text-xs text-dark-500 mt-1">Software, tools, technical procedures</div>
+                        </button>
+                        <button class="p-4 border border-dark-200 rounded-lg text-left hover:border-brand-400 transition-colors group">
+                            <div class="text-sm font-medium text-dark-700 group-hover:text-brand-400">📈 Professional Development</div>
+                            <div class="text-xs text-dark-500 mt-1">Leadership, communication, skills</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="px-8 py-6 bg-dark-200/50 border-t border-dark-200 flex justify-between items-center">
+                <button class="text-sm text-dark-500 hover:text-dark-600 transition-colors">
+                    Save as Draft
+                </button>
+                <div class="flex space-x-3">
+                    <button class="px-6 py-3 border border-dark-300 text-dark-600 rounded-lg hover:bg-dark-200 transition-colors">
+                        Preview
+                    </button>
+                    <button class="px-8 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium">
+                        Continue to AI Prompt →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Assistant -->
+        <div class="mt-6 flex items-start space-x-4 p-4 bg-dark-100 rounded-lg border border-dark-200">
+            <div class="w-8 h-8 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                </svg>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-dark-700 mb-1">AI Suggestion</div>
+                <div class="text-sm text-dark-500">Based on your title, consider adding topics like "Risk Assessment" and "Safety Documentation" for comprehensive coverage.</div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Gas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Century+Gothic:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/space-efficient.css">
+</head>
+<body>
+    <div id="course-container">
+        <!-- Content will be dynamically loaded here -->
+    </div>
+    
+    <script src="scripts/scorm-api.js"></script>
+    <script src="scripts/player.js"></script>
+    <script>
+        // Initialize course data
+        window.courseData = {
+  "title": "Natural Gas",
+  "duration": 30,
+  "passMark": 80,
+  "navigationMode": "linear",
+  "allowRetake": true,
+  "welcome": {
+    "title": "Welcome to Natural Gas Safety",
+    "content": "<h2>Welcome to the Natural Gas Safety Course!</h2><p>This course is designed to provide you with a comprehensive understanding of the essential safety principles and practices required when working with or around natural gas. Natural gas is a vital energy source, but its inherent properties demand respect and rigorous safety protocols. Throughout this training, we will explore the fundamentals of natural gas, identify potential hazards, and learn the procedures necessary to maintain a safe working environment for yourself and your colleagues.</p><p>Your safety is our top priority. By engaging with this material, you are taking a critical step towards preventing incidents, protecting infrastructure, and fostering a culture of safety. Let's begin this important journey together.</p>",
+    "startButtonText": "Start Course"
+  },
+  "objectives": [
+    "Describe the fundamental properties of natural gas and core safety principles.",
+    "Identify common hazards associated with natural gas and use appropriate detection methods.",
+    "Perform a basic risk assessment and apply the hierarchy of controls.",
+    "Select and correctly use Personal Protective Equipment (PPE) for gas-related tasks.",
+    "Execute emergency response procedures for leaks, fires, and exposures.",
+    "Explain the importance of incident and near-miss reporting and outline the process.",
+    "Recognize key regulatory standards governing natural gas safety.",
+    "Contribute to a process of continuous safety improvement in the workplace.",
+    "Understand the requirements for safety training and competency verification.",
+    "Define safety culture and describe your role in strengthening it."
+  ],
+  "topics": [
+    {
+      "id": "topic-safety-fundamentals",
+      "title": "Core Principles of Natural Gas Safety",
+      "content": "<h2>Understanding Natural Gas</h2><p>Natural gas is primarily composed of methane ($CH_4$), a colorless, odorless, and flammable gas. Because it's odorless, a potent odorant called <strong>Mercaptan</strong> is added to give it a distinct 'rotten egg' smell for leak detection. It is lighter than air and will rise and dissipate in well-ventilated areas. However, in enclosed spaces, it can displace oxygen and create an asphyxiation hazard, and also accumulate to form an explosive mixture.</p><h3>The Fire Triangle & Explosion Pentagon</h3><p>For a fire to occur, three elements are needed: <strong>Fuel</strong> (natural gas), <strong>Oxygen</strong> (from the air), and an <strong>Ignition Source</strong> (heat, spark). This is the Fire Triangle. For a gas explosion, two additional elements are required: <strong>Dispersion</strong> and <strong>Confinement</strong>, forming the Explosion Pentagon. Understanding this is critical to prevention; by removing any one of these elements, you can prevent a fire or explosion.</p><h3>Flammable Range</h3><p>Natural gas is only flammable within a specific range of concentrations in the air, known as the Lower Explosive Limit (LEL) and Upper Explosive Limit (UEL). For methane, this range is approximately <strong>5% to 15%</strong> gas in air. Concentrations below the LEL are too lean to burn, and those above the UEL are too rich. Monitoring equipment is designed to detect gas levels well before they reach the LEL.</p>",
+      "imageUrl": "core-principles-of-natural-gas-safety.jpg",
+      "audioFile": "0001-core-principles-of-natural-gas-safety.mp3",
+      "captionFile": "0001-core-principles-of-natural-gas-safety.vtt",
+      "media": []
+    },
+    {
+      "id": "topic-hazard-identification",
+      "title": "Recognizing Dangers in Gas Operations",
+      "content": "<h2>Identifying Common Hazards</h2><p>Proactive hazard identification is a cornerstone of safety. In natural gas environments, hazards can be broadly categorized:</p><ul><li><strong>Leaks:</strong> The most common hazard, leading to fire, explosion, and asphyxiation risks. Signs include the smell of mercaptan, a hissing sound, or bubbling in wet ground.</li><li><strong>Ignition Sources:</strong> Any source of energy sufficient to ignite a flammable mixture. Examples include static electricity, open flames, smoking, non-intrinsically safe electronics, and sparks from tools.</li><li><strong>Confined Spaces:</strong> Areas not designed for continuous occupancy with limited entry/exit, such as vaults, tanks, or trenches. They pose risks of hazardous atmospheres and entrapment.</li><li><strong>Excavation & Trenching:</strong> Digging can damage underground gas lines. It also poses risks of cave-ins. Always 'Call Before You Dig'.</li><li><strong>Oxygen Deficiency:</strong> In confined spaces or areas with large leaks, natural gas can displace oxygen to dangerously low levels (below 19.5%).</li></ul><h3>Detection Methods</h3><p>Never rely on a single sense. Use a combination of methods:</p><ol><li><strong>Smell:</strong> The added mercaptan is a primary indicator.</li><li><strong>Sound:</strong> Listen for the hissing or roaring sound of escaping gas.</li><li><strong>Sight:</strong> Look for blowing dirt, bubbling water, or dead vegetation over a pipeline.</li><li><strong>Gas Detectors:</strong> Electronic devices are essential for quantifying gas concentrations and detecting levels below the LEL.</li></ol>",
+      "imageUrl": "recognizing-dangers-in-gas-operations.jpg",
+      "audioFile": "0002-recognizing-dangers-in-gas-operations.mp3",
+      "captionFile": "0002-recognizing-dangers-in-gas-operations.vtt",
+      "knowledgeCheck": {
+        "question": "Which of the following is NOT a reliable sign of a potential gas leak?",
+        "options": [
+          "A hissing sound",
+          "The smell of gasoline",
+          "Bubbling in a puddle of water",
+          "A patch of dead vegetation"
+        ],
+        "correctAnswer": 1
+      },
+      "media": []
+    },
+    {
+      "id": "topic-risk-assessment",
+      "title": "Evaluating and Mitigating Risks",
+      "content": "<h2>The Risk Assessment Process</h2><p>Once a hazard is identified, the next step is to assess its risk. Risk is the combination of the <strong>likelihood</strong> of an incident occurring and the <strong>severity</strong> of its potential consequences. A formal process like a Job Safety Analysis (JSA) or Job Hazard Analysis (JHA) is often used.</p><h3>Risk Matrix</h3><p>A risk matrix is a simple tool to visualize and prioritize risks. It plots likelihood against severity. High-risk tasks (high likelihood, high severity) require the most robust control measures.</p><table><tr><th></th><th>Low Severity</th><th>Medium Severity</th><th>High Severity</th></tr><tr><td>High Likelihood</td><td>Medium Risk</td><td>High Risk</td><td>Extreme Risk</td></tr><tr><td>Medium Likelihood</td><td>Low Risk</td><td>Medium Risk</td><td>High Risk</td></tr><tr><td>Low Likelihood</td><td>Low Risk</td><td>Low Risk</td><td>Medium Risk</td></tr></table><h3>Hierarchy of Controls</h3><p>When mitigating risks, we apply controls in a specific order of effectiveness, known as the <strong>Hierarchy of Controls</strong>. The goal is to use the most effective methods possible.</p><ol><li><strong>Elimination:</strong> Physically remove the hazard. (Most effective)</li><li><strong>Substitution:</strong> Replace the hazard with something less hazardous.</li><li><strong>Engineering Controls:</strong> Isolate people from the hazard (e.g., ventilation systems, machine guards).</li><li><strong>Administrative Controls:</strong> Change the way people work (e.g., procedures, warning signs, training).</li><li><strong>Personal Protective Equipment (PPE):</strong> Protect the worker with equipment. (Least effective)</li></ol><p>PPE is always the last line of defense, used only after all other controls have been considered and implemented.</p>",
+      "imageUrl": "evaluating-and-mitigating-risks.jpg",
+      "audioFile": "0003-evaluating-and-mitigating-risks.mp3",
+      "captionFile": "0003-evaluating-and-mitigating-risks.vtt",
+      "media": []
+    },
+    {
+      "id": "topic-ppe",
+      "title": "Essential Gear for Personal Protection",
+      "content": "<h2>Selecting and Using PPE</h2><p>Personal Protective Equipment (PPE) is your last line of defense. The specific PPE required depends on the task's risk assessment. Standard PPE in natural gas environments often includes:</p><ul><li><strong>Flame-Resistant Clothing (FRC):</strong> Specially treated clothing that resists ignition and will not continue to burn after an ignition source is removed. It is NOT fire-proof but is designed to minimize burn injury in a flash fire. It must be worn as the outermost layer.</li><li><strong>Eye Protection:</strong> Safety glasses or goggles are mandatory to protect against flying debris and chemical splashes.</li><li><strong>Head Protection:</strong> Hard hats are required in areas with overhead hazards.</li><li><strong>Hand Protection:</strong> Gloves appropriate for the specific task, such as cut-resistant gloves for handling pipe or insulated gloves for electrical work.</li><li><strong>Foot Protection:</strong> Steel-toed safety boots are required to protect against falling objects and punctures.</li><li><strong>Respiratory Protection:</strong> May be required in oxygen-deficient atmospheres or where toxic gases are present. This requires specialized training and fit-testing.</li></ul><h3>Care and Maintenance</h3><p>PPE is only effective if it is in good condition. Always inspect your PPE before each use. Look for rips or tears in FRC, scratches on safety glasses, or cracks in a hard hat. Clean your PPE according to the manufacturer's instructions. Damaged PPE must be removed from service immediately.</p>",
+      "imageUrl": "essential-gear-for-personal-protection.jpg",
+      "audioFile": "0004-essential-gear-for-personal-protection.mp3",
+      "captionFile": "0004-essential-gear-for-personal-protection.vtt",
+      "knowledgeCheck": {
+        "question": "What is the primary purpose of Flame-Resistant Clothing (FRC)?",
+        "options": [
+          "To keep you warm in cold weather.",
+          "To be completely fire-proof.",
+          "To resist ignition and self-extinguish, minimizing burn injury.",
+          "To protect against chemical spills."
+        ],
+        "correctAnswer": 2
+      },
+      "media": []
+    },
+    {
+      "id": "topic-emergency-procedures",
+      "title": "Responding Effectively to Emergencies",
+      "content": "<h2>Emergency Response Plan (ERP)</h2><p>Every worksite must have a specific Emergency Response Plan (ERP). You must know the plan for your location, including evacuation routes, muster points, and emergency contact numbers.</p><h3>Response to a Gas Leak</h3><ol><li><strong>Secure the Area:</strong> Immediately clear all non-essential personnel from the area and establish a perimeter.</li><li><strong>Eliminate Ignition Sources:</strong> Turn off vehicles, equipment, and any other potential sources of ignition. Do NOT operate light switches or use phones in the immediate vicinity.</li><li><strong>Notify:</strong> Inform your supervisor and the appropriate emergency response team or utility company.</li><li><strong>Assess, Don't Act:</strong> Do not attempt to operate valves or stop the leak unless you are specifically trained and authorized to do so.</li></ol><h3>In Case of Fire</h3><ul><li>If the fire is small (e.g., waste bin fire) and you are trained, you may attempt to use a fire extinguisher.</li><li><strong>If natural gas itself is burning</strong> from a pipe, DO NOT extinguish the flame. A burning leak is a visible hazard, but an un-ignited leak can form a large, invisible explosive cloud. The best course of action is to let it burn while securing the area and shutting off the gas supply from a remote location.</li></ul><h3>First Aid</h3><ul><li><strong>Inhalation/Asphyxiation:</strong> Immediately move the victim to fresh air. If they are not breathing, call for medical help and start CPR if you are trained.</li><li><strong>Burns:</strong> For thermal burns, cool the area with cool (not cold) running water for at least 10 minutes. Cover with a clean, dry dressing. Seek immediate medical attention.</li></ul>",
+      "imageUrl": "responding-effectively-to-emergencies.jpg",
+      "audioFile": "0005-responding-effectively-to-emergencies.mp3",
+      "captionFile": "0005-responding-effectively-to-emergencies.vtt",
+      "media": []
+    },
+    {
+      "id": "topic-incident-reporting",
+      "title": "Learning from Incidents and Near Misses",
+      "content": "<h2>The Importance of Reporting</h2><p>A robust safety program relies on learning from past events. This is only possible if all incidents, no matter how small, are reported. This includes:</p><ul><li><strong>Incidents:</strong> An unplanned event that results in injury, illness, or property damage.</li><li><strong>Near Misses:</strong> An unplanned event that did not result in injury or damage, but had the potential to do so. A near miss is a free lesson and a powerful predictor of future incidents.</li></ul><p>There is no blame associated with reporting a near miss. The goal is purely to identify weaknesses in our systems and processes before they cause real harm.</p><h3>The Reporting and Investigation Process</h3><p>While the exact forms may vary, the process generally follows these steps:</p><ol><li><strong>Immediate Action:</strong> Secure the scene and seek medical attention if required.</li><li><strong>Notification:</strong> Report the event to your supervisor as soon as possible.</li><li><strong>Documentation:</strong> Complete an incident/near miss report form with as much detail as possible. Be factual and objective. Include what happened, where, when, and who was involved.</li><li><strong>Investigation:</strong> A team will investigate the event to determine the <strong>root cause</strong>. The goal is not to assign blame, but to understand the 'why' behind the event. Was it a procedural failure, a training gap, or an equipment malfunction?</li><li><strong>Corrective Actions:</strong> Based on the root cause analysis, corrective and preventive actions are developed and implemented to prevent recurrence.</li><li><strong>Communication:</strong> The lessons learned are shared with all relevant personnel.</li></ol>",
+      "imageUrl": "learning-from-incidents-and-near-misses.jpg",
+      "audioFile": "0006-learning-from-incidents-and-near-misses.mp3",
+      "captionFile": "0006-learning-from-incidents-and-near-misses.vtt",
+      "media": []
+    },
+    {
+      "id": "topic-safety-regulations",
+      "title": "Navigating Compliance in the Gas Industry",
+      "content": "<h2>Key Regulatory Bodies and Standards</h2><p>The natural gas industry is highly regulated to ensure public and worker safety. Compliance is not optional. Key agencies in the United States include:</p><ul><li><strong>Occupational Safety and Health Administration (OSHA):</strong> Part of the Department of Labor, OSHA sets and enforces standards to ensure safe and healthful working conditions. Key standards include those for Personal Protective Equipment (29 CFR 1910.132), Confined Spaces (29 CFR 1910.146), and the Process Safety Management (PSM) of Highly Hazardous Chemicals (29 CFR 1910.119), which applies to many gas processing facilities.</li><li><strong>Pipeline and Hazardous Materials Safety Administration (PHMSA):</strong> Part of the Department of Transportation, PHMSA is responsible for the safe transportation of energy and other hazardous materials. They regulate the design, construction, operation, and maintenance of natural gas pipelines.</li><li><strong>Environmental Protection Agency (EPA):</strong> The EPA regulates the environmental impact of the natural gas industry, including emissions and reporting requirements under the Risk Management Plan (RMP) rule.</li></ul><h3>Worker Rights and Responsibilities</h3><p>Under OSHA, you have the right to:</p><ul><li>A safe workplace free of known hazards.</li><li>Receive training about workplace hazards and safety protocols in a language you understand.</li><li>Be provided with required safety equipment (PPE).</li><li>Report a hazard or injury to your employer or OSHA without fear of retaliation.</li></ul><p>You also have the responsibility to:</p><ul><li>Follow all lawful employer safety and health rules.</li><li>Wear and properly maintain required PPE.</li><li>Report job-related injuries and illnesses to your supervisor.</li></ul>",
+      "imageUrl": "navigating-compliance-in-the-gas-industry.jpg",
+      "audioFile": "0007-navigating-compliance-in-the-gas-industry.mp3",
+      "captionFile": "0007-navigating-compliance-in-the-gas-industry.vtt",
+      "knowledgeCheck": {
+        "question": "Which U.S. government agency is primarily responsible for regulating the safety of natural gas pipelines?",
+        "options": [
+          "OSHA",
+          "EPA",
+          "PHMSA",
+          "FBI"
+        ],
+        "correctAnswer": 2
+      },
+      "media": []
+    },
+    {
+      "id": "topic-continuous-improvement",
+      "title": "Proactively Enhancing Safety",
+      "content": "<h2>The Cycle of Improvement</h2><p>Safety is not a static state; it's a dynamic process of continuous improvement. A 'set it and forget it' attitude leads to complacency and accidents. We must always be looking for ways to get better. This is often represented by the <strong>Plan-Do-Check-Act (PDCA)</strong> cycle:</p><ul><li><strong>Plan:</strong> Identify an opportunity for improvement and plan a change (e.g., a new procedure or tool).</li><li><strong>Do:</strong> Implement the change on a small scale.</li><li><strong>Check:</strong> Observe and analyze the results. Did it work as expected? Did it introduce any new hazards?</li><li><strong>Act:</strong> If the change was successful, implement it on a wider scale and standardize it. If not, begin the cycle again with a new plan.</li></ul><h3>Tools for Improvement</h3><p>Several key activities drive continuous improvement:</p><ul><li><strong>Safety Audits and Inspections:</strong> Regularly scheduled reviews of worksites and procedures to identify non-compliance and areas for improvement before an incident occurs.</li><li><strong>Management of Change (MOC):</strong> A formal process for reviewing any proposed change—whether to equipment, procedures, or personnel—to ensure that safety is not compromised.</li><li><strong>Reviewing Incident Data:</strong> Analyzing trends from incident and near-miss reports to identify recurring problems that need systemic solutions.</li><li><strong>Feedback Mechanisms:</strong> Creating easy ways for employees to provide safety suggestions, such as a suggestion box, safety meetings, or direct conversations with supervisors.</li></ul>",
+      "imageUrl": "proactively-enhancing-safety.jpg",
+      "audioFile": "0008-proactively-enhancing-safety.mp3",
+      "captionFile": "0008-proactively-enhancing-safety.vtt",
+      "media": []
+    },
+    {
+      "id": "topic-safety-training",
+      "title": "Building Competence Through Training",
+      "content": "<h2>Effective Safety Training</h2><p>Training is an administrative control that is essential for ensuring everyone has the knowledge and skills to work safely. It is not a one-time event.</p><h3>Types of Training</h3><ul><li><strong>New Hire Orientation:</strong> Comprehensive safety training provided to all new employees before they begin work.</li><li><strong>Task-Specific Training:</strong> Hands-on training for the specific equipment and procedures a worker will use.</li><li><strong>Refresher Training:</strong> Periodic training (often annually) to reinforce key safety concepts and introduce any new procedures or regulations.</li><li><strong>Emergency Drill Training:</strong> Practicing responses to emergencies like fires or evacuations to ensure everyone knows their role.</li></ul><h3>Competency Verification</h3><p>Training is not complete until competency is verified. This means confirming that the worker not only understands the information but can also demonstrate the required skills. Verification methods include:</p><ul><li><strong>Written Tests:</strong> To check knowledge retention.</li><li><strong>Practical Demonstrations:</strong> Observing the worker correctly performing a task (e.g., properly donning PPE, following a lockout/tagout procedure).</li><li><strong>On-the-Job Observation:</strong> Supervisors observing employees during normal work activities to ensure safe practices are being followed.</li></ul><h3>Documentation</h3><p>All training must be documented. Records should include the employee's name, the date of the training, the topics covered, and the name of the trainer. These records are legal documents that demonstrate compliance and are often reviewed during safety audits.</p>",
+      "imageUrl": "building-competence-through-training.jpg",
+      "audioFile": "0009-building-competence-through-training.mp3",
+      "captionFile": "0009-building-competence-through-training.vtt",
+      "knowledgeCheck": {
+        "question": "Confirming that a worker can correctly demonstrate a safety procedure is an example of:",
+        "options": [
+          "New Hire Orientation",
+          "Competency Verification",
+          "Refresher Training",
+          "Incident Reporting"
+        ],
+        "correctAnswer": 1
+      },
+      "media": []
+    },
+    {
+      "id": "topic-safety-culture",
+      "title": "Fostering a Commitment to Safety",
+      "content": "<h2>What is Safety Culture?</h2><p>Safety culture is the shared set of beliefs, values, and attitudes that shape how safety is managed in a workplace. It's 'the way we do things around here' when it comes to safety. It's the difference between a workplace where safety is just a list of rules to be followed and one where every single person feels a personal responsibility for their own safety and the safety of their coworkers.</p><h3>Elements of a Strong Safety Culture</h3><ul><li><strong>Leadership Commitment:</strong> Safety starts at the top. When leaders consistently demonstrate that safety is a core value, employees follow suit. This means providing resources, holding people accountable, and leading by example.</li><li><strong>Employee Involvement:</strong> All employees are actively encouraged to participate in the safety program. This includes reporting hazards, suggesting improvements, and participating in safety committees.</li><li><strong>Open Communication:</strong> There are open and honest two-way conversations about safety. Employees feel comfortable reporting concerns without fear of reprisal, and leadership shares information about safety performance and lessons learned.</li><li><strong>Mutual Trust and Accountability:</strong> There is a high level of trust between management and employees. Everyone is held accountable for their safety responsibilities, from the CEO to the frontline worker.</li></ul><h3>Your Role in Safety Culture</h3><p>A strong safety culture is not just management's responsibility; it's everyone's. You can strengthen the safety culture by:</p><ul><li>Taking personal ownership of your safety.</li><li>Looking out for the safety of your teammates.</li><li>Never taking shortcuts that compromise safety.</li><li>Speaking up when you see an unsafe act or condition.</li><li>Participating actively in safety meetings and training.</li></ul>",
+      "imageUrl": "fostering-a-commitment-to-safety.jpg",
+      "audioFile": "0010-fostering-a-commitment-to-safety.mp3",
+      "captionFile": "0010-fostering-a-commitment-to-safety.vtt",
+      "media": []
+    }
+  ],
+  "assessment": {
+    "questions": [
+      {
+        "id": "assessment-q1",
+        "question": "What is the primary reason mercaptan is added to natural gas?",
+        "options": [
+          "To make it burn more efficiently.",
+          "To make it lighter than air.",
+          "To give it a distinct odor for leak detection.",
+          "To prevent pipelines from corroding."
+        ],
+        "correctAnswer": 2
+      },
+      {
+        "id": "assessment-q2",
+        "question": "The flammable range for natural gas is between approximately 5% and 15% gas-in-air concentration.",
+        "options": [
+          "True",
+          "False"
+        ],
+        "correctAnswer": 0
+      },
+      {
+        "id": "assessment-q3",
+        "question": "In the Hierarchy of Controls, which of the following is the MOST effective?",
+        "options": [
+          "Personal Protective Equipment (PPE)",
+          "Administrative Controls (Procedures)",
+          "Engineering Controls (Ventilation)",
+          "Elimination (Physically removing the hazard)"
+        ],
+        "correctAnswer": 3
+      },
+      {
+        "id": "assessment-q4",
+        "question": "Flame-Resistant Clothing (FRC) is designed to be completely fire-proof.",
+        "options": [
+          "True",
+          "False"
+        ],
+        "correctAnswer": 1
+      },
+      {
+        "id": "assessment-q5",
+        "question": "If you discover a gas leak, what is one of the first things you should NOT do?",
+        "options": [
+          "Evacuate the area.",
+          "Notify your supervisor.",
+          "Operate a light switch.",
+          "Move upwind from the leak."
+        ],
+        "correctAnswer": 2
+      },
+      {
+        "id": "assessment-q6",
+        "question": "What is the correct action to take if you find a natural gas pipeline fire?",
+        "options": [
+          "Immediately use a water hose to extinguish it.",
+          "Try to smother the flame with a blanket.",
+          "Secure the area and let it burn until the gas supply can be shut off.",
+          "Throw dirt on the fire."
+        ],
+        "correctAnswer": 2
+      },
+      {
+        "id": "assessment-q7",
+        "question": "Reporting a 'near miss' is optional and only necessary if someone was almost seriously injured.",
+        "options": [
+          "True",
+          "False"
+        ],
+        "correctAnswer": 1
+      },
+      {
+        "id": "assessment-q8",
+        "question": "Which US agency's primary mission is to ensure safe and healthful working conditions for employees?",
+        "options": [
+          "PHMSA",
+          "EPA",
+          "OSHA",
+          "DOT"
+        ],
+        "correctAnswer": 2
+      },
+      {
+        "id": "assessment-q9",
+        "question": "A strong safety culture relies solely on management to enforce rules.",
+        "options": [
+          "True",
+          "False"
+        ],
+        "correctAnswer": 1
+      },
+      {
+        "id": "assessment-q10",
+        "question": "The process of reviewing changes to equipment or procedures to ensure safety is not compromised is called:",
+        "options": [
+          "Job Safety Analysis (JSA)",
+          "Management of Change (MOC)",
+          "Incident Investigation",
+          "Refresher Training"
+        ],
+        "correctAnswer": 1
+      }
+    ]
+  }
+};
+        
+        // Initialize player
+        window.addEventListener('DOMContentLoaded', function() {
+            initializePlayer();
+        });
+    </script>
+</body>
+</html>

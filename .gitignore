@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+*/node_modules/
+.npm/
+.yarn/
+
+# Build outputs
+dist/
+build/
+target/
+*.log
+*.zip
+scorm-builder/dist/
+scorm-builder/src-tauri/target/
+scorm-builder/SCORM-Builder-Portable/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Claude AI
+.claude/
+nul
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# Test outputs
+coverage/
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
+test-results/
+playwright-report/
+*.webm
+test-output/
+test-output-enhanced/
+lighthouse-report.json
+test-results.json
+cypress-results.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Lock files (keep only one)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+
+# Screenshots and test artifacts
+screenshots*/
+button-screenshots/
+design-system-screenshots/
+mockups/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/

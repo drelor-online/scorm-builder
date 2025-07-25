@@ -1,0 +1,66 @@
+{
+  "welcomePage": {
+    "id": "welcome",
+    "title": "Natural Gas Safety – Welcome",
+    "content": "<h2>Welcome to Natural Gas Safety</h2><p>Natural gas is an essential energy source that powers millions of homes and businesses across the world. In this course, you'll learn about the safe handling, transportation, and use of natural gas. Whether you're new to the industry or a seasoned professional, this course will provide valuable insights into best practices for natural gas safety.</p>",
+    "narration": "Welcome to this comprehensive course on natural gas safety. Natural gas plays a vital role in our daily lives, providing energy for heating, cooking, and industrial processes. However, working with natural gas requires a thorough understanding of safety protocols and procedures to prevent accidents and ensure the well-being of workers and the public. Throughout this course, we'll explore the properties of natural gas, potential hazards, safety equipment, emergency response procedures, and regulatory requirements. By the end of this training, you'll have the knowledge and skills necessary to work safely with natural gas in various settings. Let's begin our journey into understanding this important energy resource and how to handle it responsibly.",
+    "imageKeywords": ["natural gas", "safety", "energy"],
+    "imagePrompts": ["Industrial natural gas facility with safety equipment and workers in protective gear"],
+    "videoSearchTerms": ["natural gas safety introduction", "energy safety training"],
+    "duration": 2
+  },
+  "learningObjectivesPage": {
+    "id": "learning-objectives",
+    "title": "Learning Objectives",
+    "content": "<h2>Learning Objectives</h2><p>By the end of this course, you will be able to:</p><ul><li>Identify the properties and characteristics of natural gas</li><li>Recognize potential hazards associated with natural gas</li><li>Demonstrate proper use of safety equipment and detection devices</li><li>Apply emergency response procedures for gas leaks and incidents</li><li>Understand regulatory requirements and industry standards</li><li>Implement best practices for natural gas handling and transportation</li></ul>",
+    "narration": "Let's review the key learning objectives for this natural gas safety course. First, you'll learn to identify the fundamental properties and characteristics of natural gas, including its composition, behavior, and how it differs from other fuel sources. Second, you'll develop the ability to recognize potential hazards associated with natural gas in various environments, from residential settings to industrial facilities. Third, we'll cover the proper use of safety equipment and gas detection devices that are essential for protecting yourself and others. Fourth, you'll master emergency response procedures for handling gas leaks and other critical incidents. Fifth, we'll explore the regulatory requirements and industry standards that govern natural gas operations. Finally, you'll learn to implement best practices for the safe handling, storage, and transportation of natural gas. These objectives will equip you with comprehensive knowledge to work safely and confidently with natural gas.",
+    "imageKeywords": ["objectives", "goals", "checklist"],
+    "imagePrompts": ["Professional training room with safety objectives displayed on screen"],
+    "videoSearchTerms": ["natural gas training objectives", "safety learning goals"],
+    "duration": 3
+  },
+  "topics": [
+    {
+      "id": "topic-1",
+      "title": "Understanding Natural Gas Properties",
+      "content": "<h2>Properties of Natural Gas</h2><p>Natural gas is primarily composed of methane (CH4) and has several important characteristics:</p><ul><li><strong>Colorless and Odorless:</strong> In its natural state, you can't see or smell it</li><li><strong>Lighter than Air:</strong> Natural gas rises and disperses quickly in open areas</li><li><strong>Flammable Range:</strong> Burns when mixed with air at concentrations between 5-15%</li><li><strong>Non-toxic:</strong> However, it can displace oxygen in confined spaces</li></ul><h3>Mercaptan Odorant</h3><p>For safety, an odorant called mercaptan is added to give natural gas its distinctive 'rotten egg' smell, making leaks easier to detect.</p>",
+      "narration": "Understanding the properties of natural gas is fundamental to working with it safely. Natural gas consists primarily of methane, making up about 70 to 90 percent of its composition, with smaller amounts of ethane, propane, and other hydrocarbons. One of the most important characteristics to remember is that natural gas is colorless and odorless in its natural state. This means you cannot see it or smell it without assistance. Natural gas is also lighter than air, with a specific gravity of approximately 0.6, which means it will rise and disperse in open areas. However, in confined spaces, this property can create dangerous accumulation near ceilings. The flammable range of natural gas is between 5 and 15 percent concentration in air. Below 5 percent, there isn't enough gas to ignite, and above 15 percent, there isn't enough oxygen to support combustion. For safety purposes, an odorant called mercaptan is added to natural gas, giving it that distinctive rotten egg smell that helps us detect leaks quickly.",
+      "imageKeywords": ["natural gas", "methane", "properties"],
+      "imagePrompts": ["Molecular structure of methane with safety information graphics"],
+      "videoSearchTerms": ["natural gas properties", "methane characteristics"],
+      "duration": 5,
+      "knowledgeCheck": {
+        "questions": [
+          {
+            "id": "kc-1-1",
+            "type": "multiple-choice",
+            "question": "What is the primary component of natural gas?",
+            "options": ["Propane", "Methane", "Butane", "Ethane"],
+            "correctAnswer": "Methane",
+            "feedback": {
+              "correct": "Excellent! Methane (CH4) makes up 70-90% of natural gas composition.",
+              "incorrect": "Not quite. The primary component of natural gas is methane (CH4), which makes up 70-90% of its composition."
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "assessment": {
+    "questions": [
+      {
+        "id": "assessment-1",
+        "type": "multiple-choice",
+        "question": "What percentage range represents the flammable limits of natural gas in air?",
+        "options": ["1-5%", "5-15%", "15-25%", "25-35%"],
+        "correctAnswer": "5-15%",
+        "feedback": {
+          "correct": "Correct! Natural gas is flammable when mixed with air at concentrations between 5-15%.",
+          "incorrect": "Incorrect. Natural gas is flammable when mixed with air at concentrations between 5-15%."
+        }
+      }
+    ],
+    "passMark": 80,
+    "narration": null
+  }
+}
