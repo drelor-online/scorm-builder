@@ -1361,7 +1361,7 @@ export const MediaEnhancementWizard: React.FC<MediaEnhancementWizardProps> = ({
                     const media = pageMedia[0]
                     
                     // Filter out audio files - they shouldn't be displayed on media enhancement page
-                    if (media.type === 'audio' || media.mediaType === 'audio') {
+                    if (media.type === 'audio') {
                       console.log('[MediaEnhancement] Skipping audio file in display:', media.id)
                       return null
                     }
