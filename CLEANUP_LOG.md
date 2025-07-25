@@ -45,4 +45,28 @@
 4. **Mockups** - Moved to `archive/`:
    - mockups/ folder with all HTML mockup files
 
-### Phase 3: Test Files Consolidation (TODO)
+### Phase 3: Unused Scripts and Test Artifacts Removal
+
+#### Scripts Removed:
+1. **Utility Scripts**:
+   - analyze-bundle-improvement.js
+   - analyze-scorm-output.cjs
+   - generateTestSCORM.cjs
+   - fix-build-errors.cjs
+   - test-debug.js
+   - test-runner.js
+   - test-scorm-output.js
+   
+2. **Test Output Folders**:
+   - test-results/
+   - test-output/
+   - test-output-enhanced/
+   - playwright-report/
+   
+3. **Test Data Moved to Archive**:
+   - *.json (test results, coverage reports)
+   - test-*.html
+   - test-*.md
+   - visual-regression-report.md
+
+### Phase 4: Test Files Consolidation (TODO)
