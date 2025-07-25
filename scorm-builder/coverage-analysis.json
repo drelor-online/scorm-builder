@@ -1,6 +1,6 @@
 {
   "total": 128,
-  "tested": 74,
+  "tested": 77,
   "untested": [
     "App.dashboard.tsx",
     "components\\DebugInfo.tsx",
@@ -32,12 +32,9 @@
     "hooks\\useProjectData.ts",
     "main.tsx",
     "mocks\\mockTauriAPI.ts",
-    "services\\ApiKeyStorage.ts",
     "services\\mediaIdMigration.ts",
-    "services\\MediaStore.ts",
     "services\\mediaUrl.ts",
     "services\\MockFileStorage.ts",
-    "services\\PersistentStorage.ts",
     "services\\previewGenerator.ts",
     "services\\scormPlayerPreview.ts",
     "styles\\buttonStyles.ts",
@@ -151,14 +148,11 @@
     },
     "services": {
       "total": 21,
-      "tested": 13,
+      "tested": 16,
       "untested": [
-        "services\\ApiKeyStorage.ts",
         "services\\mediaIdMigration.ts",
-        "services\\MediaStore.ts",
         "services\\mediaUrl.ts",
         "services\\MockFileStorage.ts",
-        "services\\PersistentStorage.ts",
         "services\\previewGenerator.ts",
         "services\\scormPlayerPreview.ts"
       ]
