@@ -1,0 +1,214 @@
+{
+  "total": 128,
+  "tested": 71,
+  "untested": [
+    "App.dashboard.tsx",
+    "components\\DebugInfo.tsx",
+    "components\\DesignSystem\\FormField.tsx",
+    "components\\DesignSystem\\FormGroup.tsx",
+    "components\\DesignSystem\\index.ts",
+    "components\\DesignSystem\\LoadingOverlay.tsx",
+    "components\\DesignSystem\\Pagination.tsx",
+    "components\\DesignSystem\\ProgressBar.tsx",
+    "components\\DesignSystem\\Skeleton.tsx",
+    "components\\DesignSystem\\StepProgress.tsx",
+    "components\\DesignSystem\\ValidationMessage.tsx",
+    "components\\ErrorBoundary\\index.ts",
+    "components\\ErrorNotification.tsx",
+    "components\\MediaDisplay.tsx",
+    "components\\ProjectLoadingDialog.tsx",
+    "components\\RichTextEditor.tsx",
+    "components\\SCORMPackageBuilderLazy.tsx",
+    "components\\TestChecklist.tsx",
+    "constants\\colors.ts",
+    "constants\\durations.ts",
+    "constants\\index.ts",
+    "constants\\spacing.ts",
+    "contexts\\AutoSaveContext.tsx",
+    "contexts\\MediaContext.tsx",
+    "contexts\\PersistentStorageContext.tsx",
+    "hooks\\useAppState.ts",
+    "hooks\\useAudioRecorder.ts",
+    "hooks\\useFormChanges.ts",
+    "hooks\\useFormValidation.ts",
+    "hooks\\useLocalStorageAutoSave.ts",
+    "hooks\\useProjectData.ts",
+    "main.tsx",
+    "mocks\\mockTauriAPI.ts",
+    "services\\ApiKeyStorage.ts",
+    "services\\mediaIdMigration.ts",
+    "services\\MediaStore.ts",
+    "services\\mediaUrl.ts",
+    "services\\MockFileStorage.ts",
+    "services\\PersistentStorage.ts",
+    "services\\previewGenerator.ts",
+    "services\\scormPlayerPreview.ts",
+    "styles\\buttonStyles.ts",
+    "test-main.tsx",
+    "types\\aiPrompt.ts",
+    "types\\course.ts",
+    "types\\media.ts",
+    "types\\metadata.ts",
+    "types\\project.ts",
+    "types\\projectStructure.ts",
+    "utils\\automatedUITests.ts",
+    "utils\\browserE2ETests.ts",
+    "utils\\dynamicImports.ts",
+    "utils\\e2eTests.ts",
+    "utils\\fileAssociation.ts",
+    "utils\\performanceMonitor.ts",
+    "utils\\testRunner.ts",
+    "utils\\windowTitle.ts"
+  ],
+  "byCategory": {
+    "App.dashboard.tsx": {
+      "total": 1,
+      "tested": 0,
+      "untested": [
+        "App.dashboard.tsx"
+      ]
+    },
+    "App.lazy.tsx": {
+      "total": 1,
+      "tested": 1,
+      "untested": []
+    },
+    "App.tsx": {
+      "total": 1,
+      "tested": 1,
+      "untested": []
+    },
+    "components": {
+      "total": 56,
+      "tested": 39,
+      "untested": [
+        "components\\DebugInfo.tsx",
+        "components\\DesignSystem\\FormField.tsx",
+        "components\\DesignSystem\\FormGroup.tsx",
+        "components\\DesignSystem\\index.ts",
+        "components\\DesignSystem\\LoadingOverlay.tsx",
+        "components\\DesignSystem\\Pagination.tsx",
+        "components\\DesignSystem\\ProgressBar.tsx",
+        "components\\DesignSystem\\Skeleton.tsx",
+        "components\\DesignSystem\\StepProgress.tsx",
+        "components\\DesignSystem\\ValidationMessage.tsx",
+        "components\\ErrorBoundary\\index.ts",
+        "components\\ErrorNotification.tsx",
+        "components\\MediaDisplay.tsx",
+        "components\\ProjectLoadingDialog.tsx",
+        "components\\RichTextEditor.tsx",
+        "components\\SCORMPackageBuilderLazy.tsx",
+        "components\\TestChecklist.tsx"
+      ]
+    },
+    "config": {
+      "total": 2,
+      "tested": 2,
+      "untested": []
+    },
+    "constants": {
+      "total": 4,
+      "tested": 0,
+      "untested": [
+        "constants\\colors.ts",
+        "constants\\durations.ts",
+        "constants\\index.ts",
+        "constants\\spacing.ts"
+      ]
+    },
+    "contexts": {
+      "total": 4,
+      "tested": 1,
+      "untested": [
+        "contexts\\AutoSaveContext.tsx",
+        "contexts\\MediaContext.tsx",
+        "contexts\\PersistentStorageContext.tsx"
+      ]
+    },
+    "errorMonitor.ts": {
+      "total": 1,
+      "tested": 1,
+      "untested": []
+    },
+    "hooks": {
+      "total": 14,
+      "tested": 8,
+      "untested": [
+        "hooks\\useAppState.ts",
+        "hooks\\useAudioRecorder.ts",
+        "hooks\\useFormChanges.ts",
+        "hooks\\useFormValidation.ts",
+        "hooks\\useLocalStorageAutoSave.ts",
+        "hooks\\useProjectData.ts"
+      ]
+    },
+    "main.tsx": {
+      "total": 1,
+      "tested": 0,
+      "untested": [
+        "main.tsx"
+      ]
+    },
+    "mocks": {
+      "total": 1,
+      "tested": 0,
+      "untested": [
+        "mocks\\mockTauriAPI.ts"
+      ]
+    },
+    "services": {
+      "total": 21,
+      "tested": 13,
+      "untested": [
+        "services\\ApiKeyStorage.ts",
+        "services\\mediaIdMigration.ts",
+        "services\\MediaStore.ts",
+        "services\\mediaUrl.ts",
+        "services\\MockFileStorage.ts",
+        "services\\PersistentStorage.ts",
+        "services\\previewGenerator.ts",
+        "services\\scormPlayerPreview.ts"
+      ]
+    },
+    "styles": {
+      "total": 1,
+      "tested": 0,
+      "untested": [
+        "styles\\buttonStyles.ts"
+      ]
+    },
+    "test-main.tsx": {
+      "total": 1,
+      "tested": 0,
+      "untested": [
+        "test-main.tsx"
+      ]
+    },
+    "types": {
+      "total": 6,
+      "tested": 0,
+      "untested": [
+        "types\\aiPrompt.ts",
+        "types\\course.ts",
+        "types\\media.ts",
+        "types\\metadata.ts",
+        "types\\project.ts",
+        "types\\projectStructure.ts"
+      ]
+    },
+    "utils": {
+      "total": 13,
+      "tested": 5,
+      "untested": [
+        "utils\\automatedUITests.ts",
+        "utils\\browserE2ETests.ts",
+        "utils\\dynamicImports.ts",
+        "utils\\e2eTests.ts",
+        "utils\\fileAssociation.ts",
+        "utils\\performanceMonitor.ts",
+        "utils\\testRunner.ts",
+        "utils\\windowTitle.ts"
+      ]
+    }
+  }
+}

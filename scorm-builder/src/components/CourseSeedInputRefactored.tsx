@@ -53,7 +53,8 @@ const Select: React.FC<{
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
   children: React.ReactNode
   id?: string
-}> = ({ label, value, onChange, children, id }) => {
+  'data-testid'?: string
+}> = ({ label, value, onChange, children, id, 'data-testid': dataTestId }) => {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-')
   
   return (
@@ -68,6 +69,7 @@ const Select: React.FC<{
         value={value}
         onChange={onChange}
         className="input"
+        data-testid={dataTestId}
         style={{
           appearance: 'none',
           backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
@@ -162,9 +164,15 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     const saveMetadata = async () => {
       if (courseTitle && storage.currentProjectId && storage.isInitialized) {
         try {
+          const topicsArray = customTopics
+            .split('\n')
+            .map(topic => topic.trim())
+            .filter(topic => topic.length > 0)
+          
           await storage.saveCourseMetadata({
             courseTitle,
             difficulty,
+            topics: topicsArray,
             lastModified: new Date().toISOString()
           })
         } catch (error) {
@@ -176,7 +184,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     // Debounce the save
     const timer = setTimeout(saveMetadata, 1000)
     return () => clearTimeout(timer)
-  }, [courseTitle, difficulty, storage])
+  }, [courseTitle, difficulty, customTopics, storage])
   
   // Wrapped navigation handlers
   const handleStepClick = (stepIndex: number) => {
@@ -337,7 +345,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       onExport={onExport}
       onImport={onImport}
     >
-      <form aria-label="Course Seed Input" data-testid="course-seed-input" onSubmit={handleSubmit}>
+      <form aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
         {/* Error announcement region for screen readers */}
         <div role="alert" aria-live="assertive" style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}>
           {error}
@@ -369,6 +377,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                 helperText="Enter a descriptive title for your course"
                 maxLength={100}
                 error={!courseTitle.trim() && courseTitleTouched ? 'Course title is required' : undefined}
+                data-testid="course-title-input"
               />
               <div style={{ 
                 fontSize: '0.75rem', 
@@ -438,6 +447,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     size="small"
                     onClick={() => setShowComingSoon(true)}
                     type="button"
+                    data-testid="manage-templates-button"
                     style={{ marginBottom: '0.25rem' }}
                   >
                     Manage Templates
@@ -447,6 +457,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   id="course-template-select"
                   value={template}
                   onChange={handleTemplateChange}
+                  data-testid="template-select"
                 >
                   <option value="None">Choose a template...</option>
                   <option value="How-to Guide">How-to Guide</option>
@@ -466,6 +477,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     size="small"
                     onClick={addTemplateTopics}
                     type="button"
+                    data-testid="add-template-topics"
                     style={{
                       marginTop: '0.25rem',
                       fontSize: '0.875rem',
@@ -494,6 +506,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               value={customTopics}
               onChange={(e) => setCustomTopics(e.target.value)}
               fullWidth
+              data-testid="topics-textarea"
             />
             <Flex gap="large" style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#71717a' }}>
               <span style={{ whiteSpace: 'nowrap' }}>📝 Recommended: 10-20 topics</span>
@@ -525,12 +538,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               <Button
                 variant="secondary"
                 onClick={() => setShowTopicWarning(false)}
+                data-testid="cancel-replace-topics"
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 onClick={replaceTopicsWithTemplate}
+                data-testid="confirm-replace-topics"
               >
                 Confirm
               </Button>
@@ -555,6 +570,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               <Button
                 variant="primary"
                 onClick={() => setShowComingSoon(false)}
+                data-testid="coming-soon-ok"
               >
                 OK
               </Button>

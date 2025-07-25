@@ -573,39 +573,36 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [toast])
 
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
-    setCourseSeedData(data)
-    setCurrentStep('prompt')
-    navigation.navigateToStep(stepNumbers.prompt)
-    setHasUnsavedChanges(true)
-    
-    // Save to PersistentStorage
     try {
-      // Create a new project if we don't have one
+      // Create a new project if we don't have one - BEFORE setting state or navigating
       if (!storage.currentProjectId) {
         const project = await storage.createProject(data.courseTitle)
-        if (project && project.id) {
-          // Project created successfully, now save the data
-          await storage.saveContent('courseSeedData', data)
-          await storage.saveContent('currentStep', { step: 'prompt' })
-          await storage.saveCourseMetadata({
-            courseTitle: data.courseTitle,
-            difficulty: data.difficulty,
-            lastModified: new Date().toISOString()
-          })
+        if (!project || !project.id) {
+          throw new Error('Failed to create project')
         }
-      } else {
-        // Project already exists, just save the data
-        await storage.saveContent('courseSeedData', data)
-        await storage.saveContent('currentStep', { step: 'prompt' })
-        await storage.saveCourseMetadata({
-          courseTitle: data.courseTitle,
-          difficulty: data.difficulty,
-          lastModified: new Date().toISOString()
-        })
       }
+      
+      // Now save the data
+      await storage.saveContent('courseSeedData', data)
+      await storage.saveContent('currentStep', { step: 'prompt' })
+      await storage.saveCourseMetadata({
+        courseTitle: data.courseTitle,
+        difficulty: data.difficulty,
+        topics: data.customTopics,
+        lastModified: new Date().toISOString()
+      })
+      
+      // Only update state and navigate after everything is saved successfully
+      setCourseSeedData(data)
+      setCurrentStep('prompt')
+      navigation.navigateToStep(stepNumbers.prompt)
+      setHasUnsavedChanges(true)
     } catch (error) {
       console.error('Failed to save course seed data:', error)
-      setToast({ message: 'Failed to save data', type: 'error' })
+      setToast({ 
+        message: error instanceof Error ? error.message : 'Failed to save data', 
+        type: 'error' 
+      })
     }
   }
 

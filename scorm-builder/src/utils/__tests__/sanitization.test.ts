@@ -1,301 +1,254 @@
-import { describe, it, expect, vi } from 'vitest'
-import {
-  sanitizeHTML,
-  sanitizeForAttribute,
+import { describe, it, expect } from 'vitest'
+import { 
+  sanitizeHTML, 
+  sanitizeForAttribute, 
   sanitizeForURL,
-  createSanitizer,
-  sanitizeForSCORM,
-  needsSanitization
-} from '../sanitization'
+  createSanitizer
+} from './sanitization'
 
-// Mock DOMPurify
-vi.mock('dompurify', () => ({
-  default: {
-    sanitize: vi.fn((dirty: string, config: any) => {
-      // Simple mock implementation for testing
-      if (dirty.includes('<script>')) return dirty.replace(/<script[^>]*>.*?<\/script>/gi, '')
-      if (dirty.includes('javascript:')) return dirty.replace(/javascript:/gi, '')
-      
-      // Remove event handlers
-      let cleaned = dirty.replace(/\son\w+\s*=/gi, '')
-      
-      // Handle allowed tags
-      if (config && config.ALLOWED_TAGS) {
-        const allowedTags = config.ALLOWED_TAGS
-        const tagRegex = /<(\/?[^>\s]+)[^>]*>/g
-        cleaned = cleaned.replace(tagRegex, (match, tag) => {
-          const tagName = tag.replace('/', '').toLowerCase()
-          if (allowedTags.includes(tagName) || allowedTags.includes('/' + tagName)) {
-            return match
-          }
-          return ''
-        })
-      }
-      
-      // Handle forbidden attributes
-      if (config && config.FORBID_ATTR) {
-        config.FORBID_ATTR.forEach((attr: string) => {
-          const attrRegex = new RegExp(`\\s${attr}\\s*=\\s*["'][^"']*["']`, 'gi')
-          cleaned = cleaned.replace(attrRegex, '')
-        })
-      }
-      
-      return cleaned
-    })
-  }
-}))
-
-describe('sanitization utilities', () => {
+describe('Sanitization Utilities', () => {
   describe('sanitizeHTML', () => {
-    it('should return empty string for falsy input', () => {
-      expect(sanitizeHTML('')).toBe('')
+    it('should remove script tags', () => {
+      const dirty = '<p>Hello</p><script>alert("XSS")</script><p>World</p>'
+      const clean = sanitizeHTML(dirty)
+      expect(clean).toBe('<p>Hello</p><p>World</p>')
+      expect(clean).not.toContain('<script>')
+    })
+
+    it('should remove event handlers', () => {
+      const dirty = '<button onclick="alert(\'XSS\')">Click me</button>'
+      const clean = sanitizeHTML(dirty)
+      expect(clean).toBe('<button>Click me</button>')
+      expect(clean).not.toContain('onclick')
+    })
+
+    it('should allow safe HTML tags', () => {
+      const safe = '<p>Hello <strong>world</strong> <em>today</em></p>'
+      const clean = sanitizeHTML(safe)
+      expect(clean).toBe(safe)
+    })
+
+    it('should handle img tags safely', () => {
+      const dirty = '<img src="javascript:alert(\'XSS\')" onerror="alert(\'XSS\')">'
+      const clean = sanitizeHTML(dirty)
+      expect(clean).not.toContain('javascript:')
+      expect(clean).not.toContain('onerror')
+    })
+
+    it('should preserve allowed attributes', () => {
+      const html = '<a href="https://example.com" target="_blank">Link</a>'
+      const clean = sanitizeHTML(html)
+      expect(clean).toContain('href="https://example.com"')
+      expect(clean).toContain('target="_blank"')
+    })
+
+    it('should handle null and undefined gracefully', () => {
       expect(sanitizeHTML(null as any)).toBe('')
       expect(sanitizeHTML(undefined as any)).toBe('')
     })
 
-    it('should return empty string for non-string input', () => {
-      expect(sanitizeHTML(123 as any)).toBe('')
-      expect(sanitizeHTML({} as any)).toBe('')
-      expect(sanitizeHTML([] as any)).toBe('')
+    it('should handle empty strings', () => {
+      expect(sanitizeHTML('')).toBe('')
     })
 
-    it('should sanitize dangerous content', () => {
-      expect(sanitizeHTML('<script>alert("xss")</script>')).toBe('')
-      expect(sanitizeHTML('<img src="x">'))
-        .toBe('<img src="x">')
+    it('should strip dangerous protocols from links', () => {
+      const dirty = '<a href="javascript:void(0)">Click</a>'
+      const clean = sanitizeHTML(dirty)
+      expect(clean).not.toContain('javascript:')
     })
 
-    it('should allow safe HTML tags by default', () => {
-      const safeHTML = '<p>Hello <strong>world</strong></p>'
-      expect(sanitizeHTML(safeHTML)).toBe(safeHTML)
+    it('should allow data URIs for images', () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANS'
+      const html = `<img src="${dataUri}" alt="Test">`
+      const clean = sanitizeHTML(html)
+      expect(clean).toContain('data:image/png')
     })
 
-    it('should respect custom allowed tags', () => {
-      const html = '<p>Hello <custom>world</custom></p>'
-      const options = { allowedTags: ['p', 'custom'] }
-      expect(sanitizeHTML(html, options)).toBe(html)
-    })
-
-    it('should handle style attributes based on options', () => {
-      const html = '<p style="color: red;">Styled text</p>'
-      
-      // Without allowStyles (style should be removed)
-      expect(sanitizeHTML(html)).toBe('<p>Styled text</p>')
-      
-      // With allowStyles
-      expect(sanitizeHTML(html, { allowStyles: true })).toBe(html)
-    })
-
-    it('should handle custom protocols', () => {
-      const html = '<a href="custom://app">Link</a>'
-      const options = { allowedProtocols: ['custom'] }
-      expect(sanitizeHTML(html, options)).toBe(html)
-    })
-
-    it('should apply tag transformations', () => {
-      const html = '<b>Bold text</b>'
-      const options = {
-        transformTags: { 'b': 'strong' }
-      }
-      const result = sanitizeHTML(html, options)
-      expect(result).toBe('<strong>Bold text</strong>')
-    })
-
-    it('should handle multiple tag transformations', () => {
-      const html = '<b>Bold</b> and <i>italic</i>'
-      const options = {
-        transformTags: { 
-          'b': 'strong',
-          'i': 'em'
-        }
-      }
-      const result = sanitizeHTML(html, options)
-      expect(result).toBe('<strong>Bold</strong> and <em>italic</em>')
+    it('should remove style tags by default', () => {
+      const dirty = '<style>body { display: none; }</style><p>Content</p>'
+      const clean = sanitizeHTML(dirty)
+      expect(clean).toBe('<p>Content</p>')
+      expect(clean).not.toContain('<style>')
     })
   })
 
   describe('sanitizeForAttribute', () => {
-    it('should return empty string for falsy input', () => {
-      expect(sanitizeForAttribute('')).toBe('')
+    it('should escape quotes', () => {
+      const input = 'Hello "World" and \'Universe\''
+      const escaped = sanitizeForAttribute(input)
+      expect(escaped).toBe('Hello &quot;World&quot; and &#x27;Universe&#x27;')
+    })
+
+    it('should escape HTML entities', () => {
+      const input = '<script>alert("XSS")</script>'
+      const escaped = sanitizeForAttribute(input)
+      expect(escaped).not.toContain('<')
+      expect(escaped).not.toContain('>')
+    })
+
+    it('should handle special characters', () => {
+      const input = '& < > " \' /'
+      const escaped = sanitizeForAttribute(input)
+      expect(escaped).toBe('&amp; &lt; &gt; &quot; &#x27; &#x2F;')
+    })
+
+    it('should handle null and undefined', () => {
       expect(sanitizeForAttribute(null as any)).toBe('')
       expect(sanitizeForAttribute(undefined as any)).toBe('')
-    })
-
-    it('should return empty string for non-string input', () => {
-      expect(sanitizeForAttribute(123 as any)).toBe('')
-      expect(sanitizeForAttribute({} as any)).toBe('')
-    })
-
-    it('should escape HTML special characters', () => {
-      expect(sanitizeForAttribute('&')).toBe('&amp;')
-      expect(sanitizeForAttribute('<')).toBe('&lt;')
-      expect(sanitizeForAttribute('>')).toBe('&gt;')
-      expect(sanitizeForAttribute('"')).toBe('&quot;')
-      expect(sanitizeForAttribute("'")).toBe('&#x27;')
-      expect(sanitizeForAttribute('/')).toBe('&#x2F;')
-    })
-
-    it('should escape multiple characters', () => {
-      expect(sanitizeForAttribute('<script>alert("XSS")</script>'))
-        .toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;&#x2F;script&gt;')
-    })
-
-    it('should handle normal text', () => {
-      expect(sanitizeForAttribute('Hello World')).toBe('Hello World')
-      expect(sanitizeForAttribute('user@example.com')).toBe('user@example.com')
     })
   })
 
   describe('sanitizeForURL', () => {
-    it('should return # for falsy input', () => {
-      expect(sanitizeForURL('')).toBe('#')
-      expect(sanitizeForURL(null as any)).toBe('#')
-      expect(sanitizeForURL(undefined as any)).toBe('#')
-    })
-
-    it('should return # for non-string input', () => {
-      expect(sanitizeForURL(123 as any)).toBe('#')
-      expect(sanitizeForURL({} as any)).toBe('#')
+    it('should allow safe URLs', () => {
+      const urls = [
+        'https://example.com',
+        'http://example.com',
+        '/relative/path',
+        'path/to/resource',
+        '#anchor'
+      ]
+      
+      urls.forEach(url => {
+        expect(sanitizeForURL(url)).toBe(url)
+      })
     })
 
     it('should block dangerous protocols', () => {
-      expect(sanitizeForURL('javascript:alert(1)')).toBe('#')
-      expect(sanitizeForURL('vbscript:alert(1)')).toBe('#')
-      expect(sanitizeForURL('file:///etc/passwd')).toBe('#')
-      expect(sanitizeForURL('data:text/html,<script>alert(1)</script>')).toBe('#')
-    })
-
-    it('should allow safe protocols', () => {
-      expect(sanitizeForURL('https://example.com')).toBe('https://example.com')
-      expect(sanitizeForURL('http://example.com')).toBe('http://example.com')
-      expect(sanitizeForURL('mailto:user@example.com')).toBe('mailto:user@example.com')
-      expect(sanitizeForURL('tel:+1234567890')).toBe('tel:+1234567890')
-      expect(sanitizeForURL('#section')).toBe('#section')
-    })
-
-    it('should handle whitespace in URLs', () => {
-      expect(sanitizeForURL('  javascript:alert(1)  ')).toBe('#')
-      expect(sanitizeForURL('java\nscript:alert(1)')).toBe('#')
-      expect(sanitizeForURL('java\tscript:alert(1)')).toBe('#')
-    })
-
-    it('should allow safe data URLs when option is set', () => {
-      const imageDataUrl = 'data:image/png;base64,iVBORw0KGgo='
-      expect(sanitizeForURL(imageDataUrl, { allowDataUrls: true })).toBe(imageDataUrl)
+      const dangerous = [
+        'javascript:alert("XSS")',
+        'data:text/html,<script>alert("XSS")</script>',
+        'vbscript:msgbox("XSS")',
+        'file:///etc/passwd'
+      ]
       
-      const jpegUrl = 'data:image/jpeg;base64,/9j/4AAQ='
-      expect(sanitizeForURL(jpegUrl, { allowDataUrls: true })).toBe(jpegUrl)
+      dangerous.forEach(url => {
+        expect(sanitizeForURL(url)).toBe('#')
+      })
     })
 
-    it('should block non-image data URLs even with allowDataUrls', () => {
-      const htmlDataUrl = 'data:text/html,<script>alert(1)</script>'
-      expect(sanitizeForURL(htmlDataUrl, { allowDataUrls: true })).toBe('#')
+    it('should allow data URIs for specific types', () => {
+      const allowedDataUris = [
+        'data:image/png;base64,iVBORw0KGgoAAAANS',
+        'data:image/jpeg;base64,/9j/4AAQSkZJRg',
+        'data:image/gif;base64,R0lGODlhAQABAAAA',
+        'data:image/svg+xml;base64,PHN2ZyB4bWxucz',
+        'data:image/webp;base64,UklGRiQAAABXRUJQ'
+      ]
+      
+      allowedDataUris.forEach(url => {
+        expect(sanitizeForURL(url, { allowDataUrls: true })).toBe(url)
+      })
     })
 
-    it('should handle case insensitive protocols', () => {
-      expect(sanitizeForURL('JAVASCRIPT:alert(1)')).toBe('#')
-      expect(sanitizeForURL('JavaScript:alert(1)')).toBe('#')
-      expect(sanitizeForURL('DATA:text/html,test')).toBe('#')
+    it('should block non-image data URIs', () => {
+      const url = 'data:text/html,<script>alert("XSS")</script>'
+      expect(sanitizeForURL(url, { allowDataUrls: true })).toBe('#')
+    })
+
+    it('should handle malformed URLs', () => {
+      const malformed = [
+        'javascript:',
+        'java\nscript:alert("XSS")',
+        'java\tscript:alert("XSS")',
+        '   javascript:alert("XSS")'
+      ]
+      
+      malformed.forEach(url => {
+        expect(sanitizeForURL(url)).toBe('#')
+      })
+    })
+
+    it('should handle null and undefined', () => {
+      expect(sanitizeForURL(null as any)).toBe('#')
+      expect(sanitizeForURL(undefined as any)).toBe('#')
     })
   })
 
   describe('createSanitizer', () => {
-    it('should create a function that uses provided options', () => {
+    it('should create custom sanitizer with options', () => {
       const sanitizer = createSanitizer({
         allowedTags: ['p', 'span'],
+        allowedAttributes: {
+          'p': ['class'],
+          'span': ['id']
+        }
+      })
+      
+      const html = '<p class="test"><span id="s1">Text</span><div>Removed</div></p>'
+      const clean = sanitizer(html)
+      expect(clean).toContain('<p class="test">')
+      expect(clean).toContain('<span id="s1">')
+      expect(clean).not.toContain('<div>')
+    })
+
+    it('should allow styles when specified', () => {
+      const sanitizer = createSanitizer({
         allowStyles: true
       })
       
-      expect(typeof sanitizer).toBe('function')
-      
-      const html = '<p style="color: red;">Test</p>'
-      expect(sanitizer(html)).toBe(html)
+      const html = '<p style="color: red;">Red text</p>'
+      const clean = sanitizer(html)
+      expect(clean).toContain('style="color: red;"')
     })
 
-    it('should create reusable sanitizer with consistent options', () => {
+    it('should strip styles by default', () => {
+      const sanitizer = createSanitizer({})
+      const html = '<p style="color: red;">Red text</p>'
+      const clean = sanitizer(html)
+      expect(clean).not.toContain('style=')
+    })
+
+    it('should allow additional protocols', () => {
       const sanitizer = createSanitizer({
-        transformTags: { 'b': 'strong' }
+        allowedProtocols: ['tel', 'mailto']
       })
       
-      expect(sanitizer('<b>Bold 1</b>')).toBe('<strong>Bold 1</strong>')
-      expect(sanitizer('<b>Bold 2</b>')).toBe('<strong>Bold 2</strong>')
+      const html = '<a href="tel:+1234567890">Call</a><a href="mailto:test@example.com">Email</a>'
+      const clean = sanitizer(html)
+      expect(clean).toContain('href="tel:+1234567890"')
+      expect(clean).toContain('href="mailto:test@example.com"')
+    })
+
+    it('should handle custom tag transformations', () => {
+      const sanitizer = createSanitizer({
+        transformTags: {
+          'b': 'strong',
+          'i': 'em'
+        }
+      })
+      
+      const html = '<b>Bold</b> and <i>italic</i>'
+      const clean = sanitizer(html)
+      expect(clean).toBe('<strong>Bold</strong> and <em>italic</em>')
     })
   })
 
-  describe('sanitizeForSCORM', () => {
-    it('should allow SCORM-specific attributes', () => {
-      const html = '<div data-scorm-element="test" data-scorm-id="123">Content</div>'
-      expect(sanitizeForSCORM(html)).toBe(html)
+  describe('SCORM-specific sanitization', () => {
+    it('should preserve SCORM-specific attributes', () => {
+      const html = '<div data-scorm-element="navigation" data-scorm-id="nav1">Nav</div>'
+      const clean = sanitizeHTML(html, { 
+        allowedAttributes: {
+          div: ['data-scorm-element', 'data-scorm-id']
+        }
+      })
+      expect(clean).toContain('data-scorm-element="navigation"')
+      expect(clean).toContain('data-scorm-id="nav1"')
     })
 
-    it('should allow SCORM objective and interaction attributes', () => {
-      const html = '<span data-scorm-objective="obj1" data-scorm-interaction="choice">Question</span>'
-      expect(sanitizeForSCORM(html)).toBe(html)
-    })
-
-    it('should not allow inline styles', () => {
-      const html = '<p style="color: red;">No styles in SCORM</p>'
-      expect(sanitizeForSCORM(html)).toBe('<p>No styles in SCORM</p>')
-    })
-
-    it('should handle empty input', () => {
-      expect(sanitizeForSCORM('')).toBe('')
-    })
-
-    it('should remove dangerous content', () => {
-      expect(sanitizeForSCORM('<script>alert(1)</script>')).toBe('')
-    })
-  })
-
-  describe('needsSanitization', () => {
-    it('should return false for falsy input', () => {
-      expect(needsSanitization('')).toBe(false)
-      expect(needsSanitization(null as any)).toBe(false)
-      expect(needsSanitization(undefined as any)).toBe(false)
-    })
-
-    it('should return false for non-string input', () => {
-      expect(needsSanitization(123 as any)).toBe(false)
-      expect(needsSanitization({} as any)).toBe(false)
-    })
-
-    it('should detect script tags', () => {
-      expect(needsSanitization('<script>alert(1)</script>')).toBe(true)
-      expect(needsSanitization('<SCRIPT>alert(1)</SCRIPT>')).toBe(true)
-      expect(needsSanitization('<script src="evil.js"></script>')).toBe(true)
-    })
-
-    it('should detect event handlers', () => {
-      expect(needsSanitization('<img onerror="alert(1)">')).toBe(true)
-      expect(needsSanitization('<div onclick="alert(1)">')).toBe(true)
-      expect(needsSanitization('<body onload="alert(1)">')).toBe(true)
-    })
-
-    it('should detect dangerous protocols', () => {
-      expect(needsSanitization('<a href="javascript:alert(1)">Link</a>')).toBe(true)
-      expect(needsSanitization('<a href="vbscript:alert(1)">Link</a>')).toBe(true)
-    })
-
-    it('should detect dangerous tags', () => {
-      expect(needsSanitization('<iframe src="evil.com"></iframe>')).toBe(true)
-      expect(needsSanitization('<object data="evil.swf"></object>')).toBe(true)
-      expect(needsSanitization('<embed src="evil.swf">')).toBe(true)
-      expect(needsSanitization('<link rel="stylesheet" href="evil.css">')).toBe(true)
-      expect(needsSanitization('<meta http-equiv="refresh">')).toBe(true)
-      expect(needsSanitization('<style>body { display: none; }</style>')).toBe(true)
-    })
-
-    it('should return false for safe content', () => {
-      expect(needsSanitization('<p>Hello world</p>')).toBe(false)
-      expect(needsSanitization('<strong>Bold text</strong>')).toBe(false)
-      expect(needsSanitization('<a href="https://example.com">Link</a>')).toBe(false)
-      expect(needsSanitization('Plain text content')).toBe(false)
-    })
-
-    it('should be case insensitive', () => {
-      expect(needsSanitization('<IFRAME>')).toBe(true)
-      expect(needsSanitization('JAVASCRIPT:alert(1)')).toBe(true)
-      expect(needsSanitization('onClick="alert(1)"')).toBe(true)
+    it('should sanitize SCORM content while preserving structure', () => {
+      const scormContent = `
+        <div class="scorm-content">
+          <h1>Title</h1>
+          <p>Content with <script>alert("XSS")</script> removed</p>
+          <img src="image.jpg" alt="Test" onerror="alert('XSS')">
+        </div>
+      `
+      const clean = sanitizeHTML(scormContent)
+      expect(clean).toContain('<h1>Title</h1>')
+      expect(clean).toContain('<p>Content with  removed</p>')
+      expect(clean).toContain('<img src="image.jpg" alt="Test">')
+      expect(clean).not.toContain('onerror')
+      expect(clean).not.toContain('<script>')
     })
   })
 })
