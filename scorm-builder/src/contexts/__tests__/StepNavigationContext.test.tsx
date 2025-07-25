@@ -1,9 +1,65 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import React, { useContext } from 'react'
 import { StepNavigationProvider, useStepNavigation } from '../StepNavigationContext'
+import { PersistentStorageProvider } from '../PersistentStorageContext'
+
+// Mock the usePersistentStorage hook
+vi.mock('../../hooks/usePersistentStorage', () => ({
+  usePersistentStorage: vi.fn(() => ({
+    isInitialized: true,
+    currentProjectId: 'test-project',
+    error: null,
+    createProject: vi.fn().mockResolvedValue({}),
+    openProject: vi.fn().mockResolvedValue(undefined),
+    openProjectFromFile: vi.fn().mockResolvedValue(undefined),
+    openProjectFromPath: vi.fn().mockResolvedValue(undefined),
+    saveProject: vi.fn().mockResolvedValue(undefined),
+    saveProjectAs: vi.fn().mockResolvedValue(undefined),
+    listProjects: vi.fn().mockResolvedValue([]),
+    getRecentProjects: vi.fn().mockResolvedValue([]),
+    checkForRecovery: vi.fn().mockResolvedValue({ hasBackup: false }),
+    recoverFromBackup: vi.fn().mockResolvedValue(undefined),
+    storeMedia: vi.fn().mockResolvedValue(undefined),
+    storeYouTubeVideo: vi.fn().mockResolvedValue(undefined),
+    getMedia: vi.fn().mockResolvedValue(null),
+    getMediaForTopic: vi.fn().mockResolvedValue([]),
+    saveContent: vi.fn().mockResolvedValue(undefined),
+    getContent: vi.fn().mockResolvedValue(null),
+    saveCourseMetadata: vi.fn().mockResolvedValue(undefined),
+    getCourseMetadata: vi.fn().mockResolvedValue(null),
+    saveAiPrompt: vi.fn().mockResolvedValue(undefined),
+    getAiPrompt: vi.fn().mockResolvedValue(null),
+    saveAudioSettings: vi.fn().mockResolvedValue(undefined),
+    getAudioSettings: vi.fn().mockResolvedValue(null),
+    saveScormConfig: vi.fn().mockResolvedValue(undefined),
+    getScormConfig: vi.fn().mockResolvedValue(null),
+    deleteProject: vi.fn().mockResolvedValue(undefined),
+    exportProject: vi.fn().mockResolvedValue(new Blob()),
+    importProjectFromZip: vi.fn().mockResolvedValue(undefined),
+    getCurrentProjectId: vi.fn(() => 'test-project'),
+    setProjectsDirectory: vi.fn(),
+    migrateFromLocalStorage: vi.fn().mockResolvedValue([]),
+    clearRecentFilesCache: vi.fn().mockResolvedValue(undefined)
+  }))
+}))
 
 describe('StepNavigationContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Helper function to wrap components with necessary providers
+  const renderWithProviders = (ui: React.ReactElement, initialStep = 0) => {
+    return render(
+      <PersistentStorageProvider>
+        <StepNavigationProvider initialStep={initialStep}>
+          {ui}
+        </StepNavigationProvider>
+      </PersistentStorageProvider>
+    )
+  }
+
   describe('Step Navigation State Management', () => {
     it('should track the current step', () => {
       const TestComponent = () => {
@@ -11,11 +67,7 @@ describe('StepNavigationContext', () => {
         return <div>Current Step: {currentStep}</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={2}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />, 2)
 
       expect(screen.getByText('Current Step: 2')).toBeInTheDocument()
     })
@@ -26,11 +78,7 @@ describe('StepNavigationContext', () => {
         return <div>Visited: {visitedSteps.join(',')}</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       expect(screen.getByText('Visited: 0')).toBeInTheDocument()
     })
@@ -44,11 +92,7 @@ describe('StepNavigationContext', () => {
         return <div>Visited: {visitedSteps.join(',')}</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       act(() => {
         navigateToStep(2)
@@ -66,11 +110,7 @@ describe('StepNavigationContext', () => {
         return <div>Visited: {visitedSteps.join(',')}</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       act(() => {
         navigateToStep(2)
@@ -102,11 +142,7 @@ describe('StepNavigationContext', () => {
         )
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       expect(screen.getByText(/Can navigate to 0: yes/)).toBeInTheDocument()
       expect(screen.getByText(/Can navigate to 1: yes/)).toBeInTheDocument()
@@ -130,11 +166,7 @@ describe('StepNavigationContext', () => {
         return <div>Test</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       act(() => {
         navigateToStep(2)
@@ -165,11 +197,7 @@ describe('StepNavigationContext', () => {
         return <div>Test</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       act(() => {
         navigateToStep(1)
@@ -195,11 +223,7 @@ describe('StepNavigationContext', () => {
         return <div>Test</div>
       }
 
-      render(
-        <StepNavigationProvider initialStep={0}>
-          <TestComponent />
-        </StepNavigationProvider>
-      )
+      renderWithProviders(<TestComponent />)
 
       act(() => {
         unsubscribe()

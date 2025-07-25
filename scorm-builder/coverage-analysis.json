@@ -1,6 +1,6 @@
 {
   "total": 128,
-  "tested": 71,
+  "tested": 74,
   "untested": [
     "App.dashboard.tsx",
     "components\\DebugInfo.tsx",
@@ -24,9 +24,6 @@
     "constants\\durations.ts",
     "constants\\index.ts",
     "constants\\spacing.ts",
-    "contexts\\AutoSaveContext.tsx",
-    "contexts\\MediaContext.tsx",
-    "contexts\\PersistentStorageContext.tsx",
     "hooks\\useAppState.ts",
     "hooks\\useAudioRecorder.ts",
     "hooks\\useFormChanges.ts",
@@ -118,12 +115,8 @@
     },
     "contexts": {
       "total": 4,
-      "tested": 1,
-      "untested": [
-        "contexts\\AutoSaveContext.tsx",
-        "contexts\\MediaContext.tsx",
-        "contexts\\PersistentStorageContext.tsx"
-      ]
+      "tested": 4,
+      "untested": []
     },
     "errorMonitor.ts": {
       "total": 1,
