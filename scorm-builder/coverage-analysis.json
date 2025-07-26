@@ -1,14 +1,10 @@
 {
   "total": 128,
-  "tested": 91,
+  "tested": 95,
   "untested": [
     "App.dashboard.tsx",
     "components\\DebugInfo.tsx",
-    "components\\DesignSystem\\FormGroup.tsx",
     "components\\DesignSystem\\index.ts",
-    "components\\DesignSystem\\Pagination.tsx",
-    "components\\DesignSystem\\Skeleton.tsx",
-    "components\\DesignSystem\\StepProgress.tsx",
     "components\\ErrorBoundary\\index.ts",
     "components\\ErrorNotification.tsx",
     "components\\MediaDisplay.tsx",
@@ -60,14 +56,10 @@
     },
     "components": {
       "total": 56,
-      "tested": 43,
+      "tested": 47,
       "untested": [
         "components\\DebugInfo.tsx",
-        "components\\DesignSystem\\FormGroup.tsx",
         "components\\DesignSystem\\index.ts",
-        "components\\DesignSystem\\Pagination.tsx",
-        "components\\DesignSystem\\Skeleton.tsx",
-        "components\\DesignSystem\\StepProgress.tsx",
         "components\\ErrorBoundary\\index.ts",
         "components\\ErrorNotification.tsx",
         "components\\MediaDisplay.tsx",
