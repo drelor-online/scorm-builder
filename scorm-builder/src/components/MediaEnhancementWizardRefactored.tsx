@@ -1295,6 +1295,7 @@ export const MediaEnhancementWizard: React.FC<MediaEnhancementWizardProps> = ({
               onClick={() => setShowContentEditor(true)}
               variant="secondary"
               size="small"
+              data-testid="edit-content-button"
             >
               Edit Content
             </Button>

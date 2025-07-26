@@ -716,6 +716,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           <div style={{ marginBottom: '2rem' }}>
             <Input
               label="JSON Input"
+              data-testid="json-input-textarea"
               multiline
               rows={15}
               value={jsonInput}
@@ -737,6 +738,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 variant="secondary"
                 onClick={handlePasteFromClipboard}
                 icon="📋"
+                data-testid="paste-clipboard-button"
               >
                 Paste from Clipboard
               </Button>
@@ -745,11 +747,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 variant="secondary"
                 onClick={() => document.getElementById('json-file')?.click()}
                 icon="📁"
+                data-testid="choose-file-button"
               >
                 Choose File
               </Button>
               <input
                 id="json-file"
+                data-testid="json-file-input"
                 type="file"
                 accept=".json"
                 onChange={handleFileUpload}
@@ -762,6 +766,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
               variant="primary"
               onClick={validateJSON} 
               disabled={!jsonInput.trim() || isLocked}
+              data-testid="validate-json-button"
             >
               Validate JSON
             </Button>
@@ -774,6 +779,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 variant="secondary"
                 onClick={handleClear}
                 icon="🗑️"
+                data-testid="clear-json-button"
               >
                 Clear JSON
               </Button>

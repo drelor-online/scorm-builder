@@ -1,0 +1,81 @@
+import { Before, After, BeforeAll, AfterAll } from '@cucumber/cucumber';
+import { Browser, BrowserContext, Page } from '@playwright/test';
+import { launchTauriWithWebDriver, connectToTauriWebDriver, stopTauri } from './tauriDriver';
+import { ChildProcess } from 'child_process';
+
+let tauriProcess: ChildProcess;
+let browser: Browser;
+let context: BrowserContext;
+
+BeforeAll(async function() {
+  console.log('🎭 Setting up Tauri WebDriver tests...');
+  
+  try {
+    // Launch Tauri with WebDriver
+    const result = await launchTauriWithWebDriver();
+    tauriProcess = result.process;
+    
+    // Connect Playwright to Tauri
+    browser = await connectToTauriWebDriver(result.webdriverUrl);
+    
+    console.log('✅ Connected to Tauri WebDriver');
+  } catch (error) {
+    console.error('❌ Failed to setup Tauri WebDriver:', error);
+    throw error;
+  }
+});
+
+Before(async function() {
+  // Create a new context for each scenario
+  context = await browser.newContext({
+    viewport: { width: 1280, height: 720 }
+  });
+  
+  // Get the first page or create one
+  const pages = context.pages();
+  this.page = pages.length > 0 ? pages[0] : await context.newPage();
+  
+  // Initialize console error tracking
+  this.consoleErrors = [];
+  
+  this.page.on('console', msg => {
+    if (msg.type() === 'error') {
+      console.error('Browser console error:', msg.text());
+      this.consoleErrors.push(msg.text());
+    }
+  });
+  
+  this.page.on('pageerror', error => {
+    console.error('Page error:', error.message);
+    this.consoleErrors.push(error.message);
+  });
+});
+
+After(async function() {
+  if (this.page) {
+    // Take screenshot on failure
+    const scenario = this.pickle;
+    if (scenario.status === 'failed') {
+      const screenshot = await this.page.screenshot();
+      this.attach(screenshot, 'image/png');
+    }
+    
+    await this.page.close();
+  }
+  
+  if (context) {
+    await context.close();
+  }
+});
+
+AfterAll(async function() {
+  console.log('🧹 Cleaning up Tauri WebDriver tests...');
+  
+  if (browser) {
+    await browser.close();
+  }
+  
+  if (tauriProcess) {
+    await stopTauri(tauriProcess);
+  }
+});

@@ -1,18 +1,14 @@
 {
   "total": 128,
-  "tested": 83,
+  "tested": 91,
   "untested": [
     "App.dashboard.tsx",
     "components\\DebugInfo.tsx",
-    "components\\DesignSystem\\FormField.tsx",
     "components\\DesignSystem\\FormGroup.tsx",
     "components\\DesignSystem\\index.ts",
-    "components\\DesignSystem\\LoadingOverlay.tsx",
     "components\\DesignSystem\\Pagination.tsx",
-    "components\\DesignSystem\\ProgressBar.tsx",
     "components\\DesignSystem\\Skeleton.tsx",
     "components\\DesignSystem\\StepProgress.tsx",
-    "components\\DesignSystem\\ValidationMessage.tsx",
     "components\\ErrorBoundary\\index.ts",
     "components\\ErrorNotification.tsx",
     "components\\MediaDisplay.tsx",
@@ -20,10 +16,6 @@
     "components\\RichTextEditor.tsx",
     "components\\SCORMPackageBuilderLazy.tsx",
     "components\\TestChecklist.tsx",
-    "constants\\colors.ts",
-    "constants\\durations.ts",
-    "constants\\index.ts",
-    "constants\\spacing.ts",
     "main.tsx",
     "mocks\\mockTauriAPI.ts",
     "services\\mediaIdMigration.ts",
@@ -68,18 +60,14 @@
     },
     "components": {
       "total": 56,
-      "tested": 39,
+      "tested": 43,
       "untested": [
         "components\\DebugInfo.tsx",
-        "components\\DesignSystem\\FormField.tsx",
         "components\\DesignSystem\\FormGroup.tsx",
         "components\\DesignSystem\\index.ts",
-        "components\\DesignSystem\\LoadingOverlay.tsx",
         "components\\DesignSystem\\Pagination.tsx",
-        "components\\DesignSystem\\ProgressBar.tsx",
         "components\\DesignSystem\\Skeleton.tsx",
         "components\\DesignSystem\\StepProgress.tsx",
-        "components\\DesignSystem\\ValidationMessage.tsx",
         "components\\ErrorBoundary\\index.ts",
         "components\\ErrorNotification.tsx",
         "components\\MediaDisplay.tsx",
@@ -96,13 +84,8 @@
     },
     "constants": {
       "total": 4,
-      "tested": 0,
-      "untested": [
-        "constants\\colors.ts",
-        "constants\\durations.ts",
-        "constants\\index.ts",
-        "constants\\spacing.ts"
-      ]
+      "tested": 4,
+      "untested": []
     },
     "contexts": {
       "total": 4,

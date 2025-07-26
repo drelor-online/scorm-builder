@@ -539,8 +539,16 @@ export class FileStorage {
       // Complete
       onProgress?.({ phase: 'finalizing', percent: 100, message: 'Project loaded successfully!' })
     } catch (error: any) {
-      // Reset state on error
-      this.currentFilePath = null
+      // Only reset state on critical errors
+      const shouldResetState = 
+        error.message?.includes('Invalid project file') ||
+        error.message?.includes('No such file') ||
+        error.message?.includes('Permission denied') ||
+        error.message?.includes('not found')
+      
+      if (shouldResetState) {
+        this.currentFilePath = null
+      }
       
       if (error.message === 'UNSAVED_CHANGES') {
         throw error
@@ -562,8 +570,16 @@ export class FileStorage {
     logger.debug('[FileStorage.saveProject] Current file path:', this.currentFilePath)
     logger.debug('[FileStorage.saveProject] Stack trace:', new Error().stack)
     
-    if (!this.currentProject || !this.currentFilePath) {
-      throw new Error('No project currently open')
+    if (!this.currentProject) {
+      throw new Error('No project currently open - project data is missing')
+    }
+    
+    if (!this.currentFilePath) {
+      logger.error('[FileStorage.saveProject] currentFilePath is null but project exists:', {
+        projectId: this.currentProjectId,
+        projectName: this.currentProject?.project?.name
+      })
+      throw new Error('No project file path set - cannot save project')
     }
     
     try {

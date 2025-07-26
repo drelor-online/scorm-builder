@@ -330,6 +330,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
       <FormSection title="AI Prompt">
         <textarea
           id="ai-prompt"
+          data-testid="ai-prompt-textarea"
           value={prompt}
           onChange={(e) => setCustomPrompt(e.target.value)}
           rows={20}
@@ -352,6 +353,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         <button
           onClick={handleCopy}
           aria-label="Copy prompt to clipboard"
+          data-testid="copy-prompt-button"
           style={getButtonStyle(copied ? 'success' : 'tertiary', 'medium', { marginTop: '1rem' })}
         >
           {copied ? '✓ Copied!' : '📋 Copy Prompt'}

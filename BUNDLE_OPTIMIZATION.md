@@ -52,3 +52,23 @@ These components should only load when needed:
 - Implement route-based code splitting
 - Optimize images and assets
 - Review and remove console.logs
+
+## Dependencies Removed
+
+Successfully removed 10 unused dependencies:
+- puppeteer (24.14.0) - Using playwright instead
+- cypress (14.5.2) - Using playwright for e2e tests
+- start-server-and-test (2.0.12) - Only needed for cypress
+- tailwindcss (4.1.11) - Not using Tailwind CSS
+- @tailwindcss/postcss (4.1.11) - Tailwind related
+- autoprefixer (10.4.21) - Tailwind related
+- jest-axe (10.0.0) - Using vitest, not jest
+- @types/jest-axe (3.5.9) - Jest related
+- vite-plugin-pwa (1.0.1) - Not implementing PWA features
+
+## Final Results
+
+- **Main bundle reduced by 59%** (234KB → 96KB)
+- **10 unused dependencies removed**
+- **Initial load time significantly improved**
+- **Better code organization with lazy loading**

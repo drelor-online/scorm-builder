@@ -209,6 +209,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     onClick={onBack}
                     type="button"
                     style={commonButtons.secondaryAction}
+                    data-testid="back-button"
                   >
                     ← Back
                   </button>
@@ -221,6 +222,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     type="button"
                     style={commonButtons.primaryAction}
                     disabled={isGenerating}
+                    data-testid="generate-scorm-button"
                   >
                     {isGenerating ? 'Generating...' : 'Generate SCORM Package'}
                   </button>
@@ -232,6 +234,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     type="button"
                     style={commonButtons.primaryAction}
                     disabled={nextDisabled}
+                    data-testid="next-button"
                   >
                     Next →
                   </button>

@@ -1371,6 +1371,7 @@ export const AudioNarrationWizard: React.FC<AudioNarrationWizardProps> = ({
                 onClick={downloadNarrationFile}
                 variant="primary"
                 icon="📥"
+                data-testid="download-narration-button"
               >
                 Download Narration Text
               </Button>
@@ -1398,6 +1399,7 @@ export const AudioNarrationWizard: React.FC<AudioNarrationWizardProps> = ({
                   variant="secondary"
                   disabled={isUploading}
                   icon="📁"
+                  data-testid="upload-audio-zip-button"
                 >
                   {isUploading ? 'Uploading...' : 'Upload Audio ZIP'}
                 </Button>
@@ -1408,6 +1410,7 @@ export const AudioNarrationWizard: React.FC<AudioNarrationWizardProps> = ({
                   onChange={handleAudioZipUpload}
                   style={{ display: 'none' }}
                   aria-label="Upload audio zip"
+                  data-testid="audio-zip-input"
                 />
                 {audioUploaded && (
                   <Alert variant="success">
@@ -1427,6 +1430,7 @@ export const AudioNarrationWizard: React.FC<AudioNarrationWizardProps> = ({
                   onClick={() => captionInputRef.current?.click()}
                   variant="secondary"
                   icon="📁"
+                  data-testid="upload-captions-zip-button"
                 >
                   Upload Captions ZIP
                 </Button>
@@ -1437,6 +1441,7 @@ export const AudioNarrationWizard: React.FC<AudioNarrationWizardProps> = ({
                   onChange={handleCaptionZipUpload}
                   style={{ display: 'none' }}
                   aria-label="Upload captions zip"
+                  data-testid="captions-zip-input"
                 />
                 {captionsUploaded && (
                   <Alert variant="success">

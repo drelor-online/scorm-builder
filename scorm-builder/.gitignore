@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test artifacts
+test-results/screenshots/
+test-results/visual-regression/actual/
+test-results/visual-regression/diff/
+test-results/visual-regression/report/
+# Keep baselines in version control
+!test-results/visual-regression/baseline/
+tests/bdd/screenshots/
+*-state.json
+test-debug-*.png

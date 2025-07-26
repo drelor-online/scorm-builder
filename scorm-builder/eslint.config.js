@@ -6,7 +6,20 @@ import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'src-tauri/**'],
+    ignores: [
+      'dist/**', 
+      'node_modules/**', 
+      'src-tauri/**',
+      'archive/**',
+      'tests/**',
+      'playwright-report/**',
+      'test-results/**',
+      'coverage/**',
+      '**/*.mjs',
+      'vite.config.*.ts',
+      'vitest.config.ts',
+      'vite.config.ts'
+    ],
   },
   js.configs.recommended,
   {
@@ -26,6 +39,9 @@ export default [
         console: 'readonly',
         navigator: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
         alert: 'readonly',
         prompt: 'readonly',
         File: 'readonly',
@@ -35,6 +51,23 @@ export default [
         HTMLSelectElement: 'readonly',
         HTMLTextAreaElement: 'readonly',
         HTMLImageElement: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
+        performance: 'readonly',
+        URL: 'readonly',
+        Blob: 'readonly',
+        DataTransfer: 'readonly',
+        Event: 'readonly',
+        KeyboardEvent: 'readonly',
+        MouseEvent: 'readonly',
+        DragEvent: 'readonly',
+        fetch: 'readonly',
+        location: 'readonly',
+        process: 'readonly',
+        global: 'readonly',
+        React: 'readonly',
       },
     },
     plugins: {
@@ -49,6 +82,49 @@ export default [
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    files: ['**/*.config.{ts,js}', 'vite.config.*.ts', 'vitest.config.ts'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        Buffer: 'readonly',
+        global: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['**/*.cjs', 'scripts/**/*.js', 'build-portable-package.js'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['public/sw.js'],
+    languageOptions: {
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        location: 'readonly',
+      },
     },
   },
 ];
