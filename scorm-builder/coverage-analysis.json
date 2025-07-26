@@ -1,6 +1,6 @@
 {
   "total": 128,
-  "tested": 77,
+  "tested": 83,
   "untested": [
     "App.dashboard.tsx",
     "components\\DebugInfo.tsx",
@@ -24,12 +24,6 @@
     "constants\\durations.ts",
     "constants\\index.ts",
     "constants\\spacing.ts",
-    "hooks\\useAppState.ts",
-    "hooks\\useAudioRecorder.ts",
-    "hooks\\useFormChanges.ts",
-    "hooks\\useFormValidation.ts",
-    "hooks\\useLocalStorageAutoSave.ts",
-    "hooks\\useProjectData.ts",
     "main.tsx",
     "mocks\\mockTauriAPI.ts",
     "services\\mediaIdMigration.ts",
@@ -122,15 +116,8 @@
     },
     "hooks": {
       "total": 14,
-      "tested": 8,
-      "untested": [
-        "hooks\\useAppState.ts",
-        "hooks\\useAudioRecorder.ts",
-        "hooks\\useFormChanges.ts",
-        "hooks\\useFormValidation.ts",
-        "hooks\\useLocalStorageAutoSave.ts",
-        "hooks\\useProjectData.ts"
-      ]
+      "tested": 14,
+      "untested": []
     },
     "main.tsx": {
       "total": 1,
