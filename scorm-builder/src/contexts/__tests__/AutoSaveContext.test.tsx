@@ -1,5 +1,5 @@
-import { renderHook } from '@testing-library/react'
-import { vi, describe, it, expect } from 'vitest'
+import { renderHook } from '../../test/testProviders'
+import { describe, it, expect } from 'vitest'
 import { ReactNode } from 'react'
 import { AutoSaveProvider, useAutoSaveState } from '../AutoSaveContext'
 

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect, vi } from 'vitest'
 import { EmptyState } from './EmptyState'
 
@@ -52,7 +52,7 @@ describe('EmptyState', () => {
   })
 
   it('should support custom className', () => {
-    const { container } = render(
+    render(
       <EmptyState
         icon="🚀"
         title="Get started"

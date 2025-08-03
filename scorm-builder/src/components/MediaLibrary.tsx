@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Card, Button, Input, EmptyState } from './DesignSystem'
 import { tokens } from './DesignSystem/designTokens'
 import { Toast } from './Toast'
@@ -49,6 +49,16 @@ export function MediaLibrary({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadIntervalRef = useRef<number | null>(null)
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (uploadIntervalRef.current !== null) {
+        clearInterval(uploadIntervalRef.current)
+      }
+    }
+  }, [])
 
   // Get all unique tags
   const allTags = useMemo(() => {
@@ -78,6 +88,9 @@ export function MediaLibrary({
       filtered = filtered.filter(item => item.tags?.includes(selectedTag))
     }
 
+    // Create a copy before sorting to avoid mutating the original array
+    filtered = [...filtered]
+    
     // Sort items
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -138,14 +151,23 @@ export function MediaLibrary({
       return
     }
 
+    // Clear any existing interval before starting a new one
+    if (uploadIntervalRef.current !== null) {
+      clearInterval(uploadIntervalRef.current)
+      uploadIntervalRef.current = null
+    }
+
     setUploadError(null)
     setUploadProgress(0)
 
     // Simulate upload progress
-    const interval = setInterval(() => {
+    uploadIntervalRef.current = window.setInterval(() => {
       setUploadProgress(prev => {
         if (prev === null || prev >= 100) {
-          clearInterval(interval)
+          if (uploadIntervalRef.current !== null) {
+            clearInterval(uploadIntervalRef.current)
+            uploadIntervalRef.current = null
+          }
           return null
         }
         return prev + 10
@@ -251,12 +273,12 @@ export function MediaLibrary({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         style={{
-          border: `2px dashed ${isDragging ? tokens.colors.primary.main : tokens.colors.border.default}`,
+          border: `2px dashed ${isDragging ? tokens.colors.primary[500] : tokens.colors.border.default}`,
           borderRadius: tokens.borderRadius.lg,
           padding: tokens.spacing.xl,
           marginBottom: tokens.spacing.lg,
           textAlign: 'center',
-          backgroundColor: isDragging ? tokens.colors.primary.main : tokens.colors.background.tertiary,
+          backgroundColor: isDragging ? tokens.colors.primary[500] : tokens.colors.background.tertiary,
           transition: 'all 0.2s ease'
         }}
       >
@@ -282,14 +304,14 @@ export function MediaLibrary({
             <div role="progressbar" style={{
               width: '100%',
               height: '4px',
-              backgroundColor: tokens.colors.background.card,
+              backgroundColor: tokens.colors.background.secondary,
               borderRadius: tokens.borderRadius.sm,
               overflow: 'hidden'
             }}>
               <div style={{
                 width: `${uploadProgress}%`,
                 height: '100%',
-                backgroundColor: tokens.colors.primary.main,
+                backgroundColor: tokens.colors.primary[500],
                 transition: 'width 0.3s ease'
               }} />
             </div>
@@ -305,7 +327,7 @@ export function MediaLibrary({
         {uploadError && (
           <p style={{
             marginTop: tokens.spacing.sm,
-            color: tokens.colors.danger.main
+            color: tokens.colors.danger[500]
           }}>
             {uploadError}
           </p>
@@ -382,7 +404,7 @@ export function MediaLibrary({
       {multiSelect && (
         <div style={{
           padding: tokens.spacing.md,
-          backgroundColor: selectedItems.size > 0 ? tokens.colors.primary.main : tokens.colors.background.secondary,
+          backgroundColor: selectedItems.size > 0 ? tokens.colors.primary[500] : tokens.colors.background.secondary,
           borderRadius: tokens.borderRadius.md,
           marginBottom: tokens.spacing.lg,
           display: 'flex',
@@ -681,7 +703,7 @@ export function MediaLibrary({
           zIndex: 1000
         }}>
           <div style={{
-            backgroundColor: tokens.colors.background.card,
+            backgroundColor: tokens.colors.background.secondary,
             borderRadius: tokens.borderRadius.lg,
             padding: tokens.spacing.xl,
             maxWidth: '400px',
@@ -713,7 +735,7 @@ export function MediaLibrary({
                   <div style={{
                     width: `${(bulkDeleteProgress.current / bulkDeleteProgress.total) * 100}%`,
                     height: '100%',
-                    backgroundColor: tokens.colors.primary.main,
+                    backgroundColor: tokens.colors.primary[500],
                     transition: 'width 0.3s ease'
                   }} />
                 </div>

@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { render, screen } from '../../test/testProviders'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ConfirmDialog } from '../ConfirmDialog'
 
 // Mock the design tokens
@@ -188,7 +188,7 @@ describe('ConfirmDialog', () => {
   })
 
   it('should stop propagation on content click', () => {
-    const { container } = render(<ConfirmDialog {...defaultProps} />)
+    render(<ConfirmDialog {...defaultProps} />)
     
     const content = container.querySelector('.dialog-content') as HTMLElement
     const clickEvent = new MouseEvent('click', { bubbles: true })

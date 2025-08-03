@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
+import { render, screen } from '../../test/testProviders'
+
 import { AIPromptGenerator } from '../AIPromptGenerator'
 import type { CourseSeedData } from '../../types/course'
 

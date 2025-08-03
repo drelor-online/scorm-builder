@@ -42,15 +42,22 @@ export const Toast: React.FC<ToastProps> = ({
         padding: '1rem 1.5rem',
         borderRadius: '0.5rem',
         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-        zIndex: 1000,
+        zIndex: 9999,
         animation: 'slideIn 0.3s ease-out',
         display: 'flex',
         alignItems: 'center',
         gap: '0.75rem',
-        maxWidth: '400px'
+        maxWidth: '400px',
+        wordWrap: 'break-word',
+        overflowWrap: 'break-word'
       }}
     >
-      <span>{message}</span>
+      <span style={{
+        flex: 1,
+        wordWrap: 'break-word',
+        overflowWrap: 'break-word',
+        whiteSpace: 'normal'
+      }}>{message}</span>
       <button
         onClick={onClose}
         style={{

@@ -1,0 +1,121 @@
+<div class="content-wrapper">
+    <div class="two-column-layout">
+        <!-- Left Column: Objectives Content -->
+        <div class="content-column">
+            <div class="objectives-container">
+                <h2>Learning Objectives</h2>
+                <ul class="objectives-list">
+                {{#each objectives}}
+                    <li>{{this}}</li>
+                {{/each}}
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Right Column: Media and Audio -->
+        <div class="content-column media-column">
+            {{#or image_url media}}
+            <div class="media-container">
+                {{#if image_url}}
+                <img src="{{image_url}}" alt="Learning Objectives" class="topic-image" onclick="window.openLightbox('{{image_url}}', 'Learning Objectives')" />
+                {{/if}}
+                {{#each media}}
+                {{#eq type "image"}}
+                <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" />
+                {{else}}
+                    {{#eq type "video"}}
+                        {{#if is_youtube}}
+                        <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                            <iframe 
+                                src="{{embed_url}}" 
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                        {{else}}
+                        <video controls class="topic-video">
+                            <source src="{{url}}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        {{/if}}
+                    {{/eq}}
+                {{/eq}}
+                {{/each}}
+            </div>
+            {{/or}}
+            
+            <!-- Debug: audio_file = {{audio_file}} -->
+            {{#if audio_file}}
+            <div class="advanced-audio-player">
+                <div class="audio-controls">
+                    <button class="audio-play-pause" onclick="window.togglePlayPause('objectives')">
+                        <span class="play-icon">▶</span>
+                        <span class="pause-icon" style="display:none">❚❚</span>
+                    </button>
+                    
+                    <div class="audio-progress-container" onclick="window.seekAudio('objectives', event)">
+                        <div class="audio-progress" id="progress-objectives"></div>
+                    </div>
+                    
+                    <div class="audio-time">
+                        <span id="current-time-objectives">0:00</span> / 
+                        <span id="duration-objectives">0:00</span>
+                    </div>
+                </div>
+                
+                <div class="audio-secondary-controls">
+                    <button class="audio-button" onclick="window.skipBackward('objectives', 10)">
+                        ⏪ 10s
+                    </button>
+                    
+                    <button class="audio-button" onclick="window.skipForward('objectives', 10)">
+                        10s ⏩
+                    </button>
+                    
+                    <div class="audio-volume-container">
+                        <button class="audio-button" onclick="window.toggleMute('objectives')">
+                            <span class="volume-icon">🔊</span>
+                            <span class="mute-icon" style="display:none">🔇</span>
+                        </button>
+                        <div class="audio-volume-slider" onclick="window.setVolume('objectives', event)">
+                            <div class="audio-volume-fill" id="volume-objectives"></div>
+                        </div>
+                    </div>
+                    
+                    <select class="audio-speed-selector" onchange="window.setPlaybackSpeed('objectives', this.value)">
+                        <option value="0.5">0.5x</option>
+                        <option value="0.75">0.75x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="1.25">1.25x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="2">2x</option>
+                    </select>
+                    
+                    {{#if caption_file}}
+                    <button class="audio-button" onclick="window.toggleCaptions('objectives')">
+                        <span class="caption-icon">CC</span>
+                    </button>
+                    {{/if}}
+                </div>
+                
+                <!-- Hidden audio element -->
+                <audio id="topic-audio-objectives" 
+                       src="{{audio_file}}" 
+                       {{#if caption_file}}data-caption-file="{{caption_file}}"{{/if}}
+                       onloadedmetadata="window.onAudioLoaded('objectives')"
+                       ontimeupdate="window.onAudioTimeUpdate('objectives')"
+                       onended="window.onAudioEnded('objectives')">
+                    Your browser does not support the audio element.
+                </audio>
+                
+                {{#if caption_file}}
+                <div class="caption-display" id="caption-objectives" style="display:none;">
+                    <!-- Captions will be loaded here -->
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+        </div>
+    </div>
+</div>

@@ -1,5 +1,5 @@
-import React from 'react'
-import { render } from '@testing-library/react'
+// Removed unused React import
+import { render } from '../../test/testProviders'
 import '@testing-library/jest-dom'
 
 // Import components
@@ -8,7 +8,7 @@ import { Button, ButtonGroup, Card, Input, Section, Flex, Grid } from '../Design
 describe('Component Padding Analysis', () => {
   describe('DesignSystem Components', () => {
     it('ButtonGroup should have gap between buttons', () => {
-      const { container } = render(
+      render(
         <ButtonGroup gap="medium">
           <Button>Button 1</Button>
           <Button>Button 2</Button>
@@ -24,7 +24,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Card should have adequate padding', () => {
-      const { container } = render(
+      render(
         <Card title="Test Card">
           <p>Card content</p>
         </Card>
@@ -41,7 +41,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Input fields should have proper spacing', () => {
-      const { container } = render(
+      render(
         <div>
           <Input label="Field 1" placeholder="Enter text" />
           <Input label="Field 2" placeholder="Enter text" />
@@ -62,7 +62,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Section should have margin between sections', () => {
-      const { container } = render(
+      render(
         <div>
           <Section>
             <p>Section 1 content</p>
@@ -83,7 +83,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Flex component should handle gap properly', () => {
-      const { container } = render(
+      render(
         <Flex gap="large" align="center">
           <Button>Button 1</Button>
           <Button>Button 2</Button>
@@ -100,7 +100,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Grid should have proper gap between items', () => {
-      const { container } = render(
+      render(
         <Grid cols={3} gap="medium">
           <Card>Item 1</Card>
           <Card>Item 2</Card>
@@ -119,7 +119,7 @@ describe('Component Padding Analysis', () => {
 
   describe('Common UI Patterns', () => {
     it('Form fields should not be cramped', () => {
-      const { container } = render(
+      render(
         <Card>
           <Input label="Username" placeholder="Enter username" fullWidth />
           <Input label="Email" placeholder="Enter email" fullWidth />
@@ -143,7 +143,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Navigation buttons should be properly spaced', () => {
-      const { container } = render(
+      render(
         <Flex justify="space-between" style={{ width: '100%' }}>
           <Button variant="secondary">← Back</Button>
           <Flex gap="medium">
@@ -163,7 +163,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Alert messages should have proper spacing', () => {
-      const { container } = render(
+      render(
         <div>
           <div className="alert alert-info">
             Information message
@@ -184,7 +184,7 @@ describe('Component Padding Analysis', () => {
 
   describe('Specific Problem Areas', () => {
     it('Difficulty slider should not touch buttons', () => {
-      const { container } = render(
+      render(
         <div>
           <ButtonGroup gap="small" className="difficulty-button-group">
             <Button variant="secondary">Basic</Button>
@@ -210,7 +210,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Modal buttons should not be cramped', () => {
-      const { container } = render(
+      render(
         <div className="modal-footer">
           <Button variant="secondary">Cancel</Button>
           <Button variant="primary">Confirm</Button>
@@ -227,7 +227,7 @@ describe('Component Padding Analysis', () => {
     })
 
     it('Inline buttons with text should have spacing', () => {
-      const { container } = render(
+      render(
         <div>
           <span>Select a template:</span>
           <Button variant="tertiary" size="small">

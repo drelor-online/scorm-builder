@@ -1,0 +1,121 @@
+<div class="content-wrapper">
+    <div class="two-column-layout">
+        <!-- Left Column: Welcome Content -->
+        <div class="content-column">
+            <div class="welcome-container">
+                <div class="welcome-header">
+                    <h1>{{title}}</h1>
+                </div>
+                <div class="welcome-content">
+                    {{{content}}}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Column: Media and Audio -->
+        <div class="content-column media-column">
+            {{#or image_url media}}
+            <div class="media-container">
+                {{#if image_url}}
+                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" />
+                {{/if}}
+                {{#each media}}
+                {{#eq type "image"}}
+                <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" />
+                {{else}}
+                    {{#eq type "video"}}
+                        {{#if is_youtube}}
+                        <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                            <iframe 
+                                src="{{embed_url}}" 
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                        {{else}}
+                        <video controls class="topic-video">
+                            <source src="{{url}}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        {{/if}}
+                    {{/eq}}
+                {{/eq}}
+                {{/each}}
+            </div>
+            {{/or}}
+            
+            <!-- Debug: audio_file = {{audio_file}} -->
+            {{#if audio_file}}
+            <div class="advanced-audio-player">
+                <div class="audio-controls">
+                    <button class="audio-play-pause" onclick="window.togglePlayPause('welcome')">
+                        <span class="play-icon">▶</span>
+                        <span class="pause-icon" style="display:none">❚❚</span>
+                    </button>
+                    
+                    <div class="audio-progress-container" onclick="window.seekAudio('welcome', event)">
+                        <div class="audio-progress" id="progress-welcome"></div>
+                    </div>
+                    
+                    <div class="audio-time">
+                        <span id="current-time-welcome">0:00</span> / 
+                        <span id="duration-welcome">0:00</span>
+                    </div>
+                </div>
+                
+                <div class="audio-secondary-controls">
+                    <button class="audio-button" onclick="window.skipBackward('welcome', 10)">
+                        ⏪ 10s
+                    </button>
+                    
+                    <button class="audio-button" onclick="window.skipForward('welcome', 10)">
+                        10s ⏩
+                    </button>
+                    
+                    <div class="audio-volume-container">
+                        <button class="audio-button" onclick="window.toggleMute('welcome')">
+                            <span class="volume-icon">🔊</span>
+                            <span class="mute-icon" style="display:none">🔇</span>
+                        </button>
+                        <div class="audio-volume-slider" onclick="window.setVolume('welcome', event)">
+                            <div class="audio-volume-fill" id="volume-welcome"></div>
+                        </div>
+                    </div>
+                    
+                    <select class="audio-speed-selector" onchange="window.setPlaybackSpeed('welcome', this.value)">
+                        <option value="0.5">0.5x</option>
+                        <option value="0.75">0.75x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="1.25">1.25x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="2">2x</option>
+                    </select>
+                    
+                    {{#if caption_file}}
+                    <button class="audio-button" onclick="window.toggleCaptions('welcome')">
+                        <span class="caption-icon">CC</span>
+                    </button>
+                    {{/if}}
+                </div>
+                
+                <!-- Hidden audio element -->
+                <audio id="topic-audio-welcome" 
+                       src="{{audio_file}}" 
+                       {{#if caption_file}}data-caption-file="{{caption_file}}"{{/if}}
+                       onloadedmetadata="window.onAudioLoaded('welcome')"
+                       ontimeupdate="window.onAudioTimeUpdate('welcome')"
+                       onended="window.onAudioEnded('welcome')">
+                    Your browser does not support the audio element.
+                </audio>
+                
+                {{#if caption_file}}
+                <div class="caption-display" id="caption-welcome" style="display:none;">
+                    <!-- Captions will be loaded here -->
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+        </div>
+    </div>
+</div>

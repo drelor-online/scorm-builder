@@ -28,6 +28,9 @@ interface Project {
   metadata?: Record<string, any>
 }
 
+import { generateProjectId } from '../utils/idGenerator'
+import { performanceMonitor } from '../utils/performanceMonitor'
+
 export class PersistentStorage {
   private db: IDBDatabase | null = null
   private currentProjectId: string | null = null
@@ -65,66 +68,76 @@ export class PersistentStorage {
   
   // Media Storage Methods
   async storeMedia(id: string, blob: Blob, mediaType: 'image' | 'video' | 'audio', metadata?: Record<string, any>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized')
-    
-    // Check storage quota
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
-      try {
-        const estimate = await navigator.storage.estimate()
-        const usage = estimate.usage || 0
-        const quota = estimate.quota || Number.MAX_SAFE_INTEGER
+    return performanceMonitor.measureOperation(
+      'PersistentStorage.storeMedia',
+      async () => {
+        if (!this.db) throw new Error('Database not initialized')
         
-        // If quota is very large (likely in test environments), check blob size directly
-        if (quota > 1000 * 1024 * 1024 * 1024 && blob.size > 50 * 1024 * 1024) { // 50MB threshold
-          throw new Error('Storage quota exceeded - file too large')
+        // Check storage quota
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+          try {
+            const estimate = await navigator.storage.estimate()
+            const usage = estimate.usage || 0
+            const quota = estimate.quota || Number.MAX_SAFE_INTEGER
+            
+            // If quota is very large (likely in test environments), check blob size directly
+            if (quota > 1000 * 1024 * 1024 * 1024 && blob.size > 50 * 1024 * 1024) { // 50MB threshold
+              throw new Error('Storage quota exceeded - file too large')
+            }
+            
+            if (usage + blob.size > quota * 0.9) { // 90% threshold
+              throw new Error('Storage quota exceeded')
+            }
+          } catch (error) {
+            // If storage estimation fails, still check for very large files
+            if (blob.size > 50 * 1024 * 1024) { // 50MB threshold
+              throw new Error('Storage quota exceeded - file too large')
+            }
+          }
+        } else {
+          // Fallback for environments without storage API
+          if (blob.size > 50 * 1024 * 1024) { // 50MB threshold
+            throw new Error('Storage quota exceeded - file too large')
+          }
         }
         
-        if (usage + blob.size > quota * 0.9) { // 90% threshold
-          throw new Error('Storage quota exceeded')
+        const mediaItem: MediaItem = {
+          id,
+          blob,
+          type: blob.type, // Store the full mime type from the blob
+          mediaType, // Store the media category
+          metadata,
+          timestamp: Date.now()
         }
-      } catch (error) {
-        // If storage estimation fails, still check for very large files
-        if (blob.size > 50 * 1024 * 1024) { // 50MB threshold
-          throw new Error('Storage quota exceeded - file too large')
-        }
+        
+        return new Promise((resolve, reject) => {
+          const transaction = this.db!.transaction([this.MEDIA_STORE], 'readwrite')
+          const store = transaction.objectStore(this.MEDIA_STORE)
+          const request = store.put(mediaItem)
+          
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(request.error)
+        })
       }
-    } else {
-      // Fallback for environments without storage API
-      if (blob.size > 50 * 1024 * 1024) { // 50MB threshold
-        throw new Error('Storage quota exceeded - file too large')
-      }
-    }
-    
-    const mediaItem: MediaItem = {
-      id,
-      blob,
-      type: blob.type, // Store the full mime type from the blob
-      mediaType, // Store the media category
-      metadata,
-      timestamp: Date.now()
-    }
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.MEDIA_STORE], 'readwrite')
-      const store = transaction.objectStore(this.MEDIA_STORE)
-      const request = store.put(mediaItem)
-      
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
+    )
   }
   
   async getMedia(id: string): Promise<MediaItem | null> {
-    if (!this.db) throw new Error('Database not initialized')
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.MEDIA_STORE], 'readonly')
-      const store = transaction.objectStore(this.MEDIA_STORE)
-      const request = store.get(id)
-      
-      request.onsuccess = () => resolve(request.result || null)
-      request.onerror = () => reject(request.error)
-    })
+    return performanceMonitor.measureOperation(
+      'PersistentStorage.getMedia',
+      async () => {
+        if (!this.db) throw new Error('Database not initialized')
+        
+        return new Promise((resolve, reject) => {
+          const transaction = this.db!.transaction([this.MEDIA_STORE], 'readonly')
+          const store = transaction.objectStore(this.MEDIA_STORE)
+          const request = store.get(id)
+          
+          request.onsuccess = () => resolve(request.result || null)
+          request.onerror = () => reject(request.error)
+        })
+      }
+    )
   }
   
   async getMediaForTopic(topicId: string): Promise<MediaItem[]> {
@@ -176,7 +189,7 @@ export class PersistentStorage {
   // Project Management Methods
   async createProject(name: string, defaultFolder?: string): Promise<Project> {
     const project: Project = {
-      id: `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateProjectId(),
       name,
       created: new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
@@ -191,17 +204,22 @@ export class PersistentStorage {
   }
   
   async openProject(projectId: string): Promise<void> {
-    this.currentProjectId = projectId
-    
-    // Update last accessed time
-    const key = `${this.PROJECT_PREFIX}${projectId}`
-    const data = localStorage.getItem(key)
-    
-    if (data) {
-      const project = JSON.parse(data)
-      project.lastAccessed = new Date().toISOString()
-      localStorage.setItem(key, JSON.stringify(project))
-    }
+    return performanceMonitor.measureOperation(
+      'PersistentStorage.openProject',
+      async () => {
+        this.currentProjectId = projectId
+        
+        // Update last accessed time
+        const key = `${this.PROJECT_PREFIX}${projectId}`
+        const data = localStorage.getItem(key)
+        
+        if (data) {
+          const project = JSON.parse(data)
+          project.lastAccessed = new Date().toISOString()
+          localStorage.setItem(key, JSON.stringify(project))
+        }
+      }
+    )
   }
   
   async listProjects(): Promise<Project[]> {
@@ -309,5 +327,44 @@ export class PersistentStorage {
       request.onsuccess = () => resolve()
       request.onerror = () => reject(request.error)
     })
+  }
+  
+  // SCORM and Settings Methods
+  async saveScormConfig(config: any): Promise<void> {
+    if (!this.currentProjectId) throw new Error('No project open')
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_scormConfig`
+    localStorage.setItem(key, JSON.stringify(config))
+  }
+  
+  async getScormConfig(): Promise<any> {
+    if (!this.currentProjectId) return null
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_scormConfig`
+    const config = localStorage.getItem(key)
+    return config ? JSON.parse(config) : null
+  }
+  
+  async saveAudioSettings(settings: any): Promise<void> {
+    if (!this.currentProjectId) throw new Error('No project open')
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_audioSettings`
+    localStorage.setItem(key, JSON.stringify(settings))
+  }
+  
+  async getAudioSettings(): Promise<any> {
+    if (!this.currentProjectId) return null
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_audioSettings`
+    const settings = localStorage.getItem(key)
+    return settings ? JSON.parse(settings) : null
+  }
+  
+  async saveAiPrompt(prompt: string): Promise<void> {
+    if (!this.currentProjectId) throw new Error('No project open')
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_aiPrompt`
+    localStorage.setItem(key, prompt)
+  }
+  
+  async getAiPrompt(): Promise<string | null> {
+    if (!this.currentProjectId) return null
+    const key = `${this.PROJECT_PREFIX}${this.currentProjectId}_aiPrompt`
+    return localStorage.getItem(key)
   }
 }

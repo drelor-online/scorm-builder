@@ -126,7 +126,7 @@ class PerformanceMonitor {
     };
   }
 
-  private recordMetric(metric: PerformanceMetric) {
+  recordMetric(metric: PerformanceMetric) {
     this.metrics.push(metric);
     
     // Keep only the last N metrics

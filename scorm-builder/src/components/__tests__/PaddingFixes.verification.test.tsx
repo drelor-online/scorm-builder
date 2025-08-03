@@ -1,5 +1,6 @@
-import React from 'react'
-import { render } from '@testing-library/react'
+import { vi } from 'vitest'
+// Removed unused React import
+import { render } from '../../test/testProviders'
 import '@testing-library/jest-dom'
 import { AutoSaveIndicator } from '../AutoSaveIndicator'
 import { NetworkStatusIndicator } from '../DesignSystem/NetworkStatusIndicator'
@@ -17,7 +18,7 @@ vi.mock('../../hooks/useNetworkStatus', () => ({
 describe('Padding Fixes Verification', () => {
   describe('AutoSaveIndicator', () => {
     it('should use design tokens instead of hardcoded values', () => {
-      const { container } = render(
+      render(
         <AutoSaveIndicator 
           isSaving={true}
           hasDraft={false}
@@ -36,7 +37,7 @@ describe('Padding Fixes Verification', () => {
     })
 
     it('should use border tokens', () => {
-      const { container } = render(
+      render(
         <AutoSaveIndicator 
           isSaving={false}
           hasDraft={true}
@@ -53,7 +54,7 @@ describe('Padding Fixes Verification', () => {
 
   describe('NetworkStatusIndicator', () => {
     it('should use spacing constants for dimensions', () => {
-      const { container } = render(<NetworkStatusIndicator />)
+      render(<NetworkStatusIndicator />)
 
       const statusDot = container.querySelector('span[style*="border-radius"]')
       expect(statusDot).toBeTruthy()
@@ -64,7 +65,7 @@ describe('Padding Fixes Verification', () => {
     })
 
     it('should use design tokens for styling', () => {
-      const { container } = render(<NetworkStatusIndicator />)
+      render(<NetworkStatusIndicator />)
 
       const indicator = container.querySelector('.network-status-indicator')
       const style = indicator?.getAttribute('style')
@@ -77,7 +78,7 @@ describe('Padding Fixes Verification', () => {
 
   describe('Form field spacing', () => {
     it('should have consistent spacing between form fields', () => {
-      const { container } = render(
+      render(
         <div className="form-section">
           <div className="form-field">
             <input type="text" />
@@ -96,7 +97,7 @@ describe('Padding Fixes Verification', () => {
 
   describe('Button group spacing', () => {
     it('should use increased spacing for button groups', () => {
-      const { container } = render(
+      render(
         <div className="button-group button-group-gap-medium">
           <button>Button 1</button>
           <button>Button 2</button>
@@ -111,7 +112,7 @@ describe('Padding Fixes Verification', () => {
 
   describe('Modal footer', () => {
     it('should have proper spacing', () => {
-      const { container } = render(
+      render(
         <div className="modal-footer">
           <button>Cancel</button>
           <button>Confirm</button>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { CourseSeedInput } from '../CourseSeedInputRefactored'
+import { render, screen } from '../../test/testProviders'
+import { CourseSeedInput } from '../CourseSeedInput'
 import './setupCourseSeedTests'
 
 describe('CourseSeedInput Visual Enhancements', () => {
@@ -14,7 +14,7 @@ describe('CourseSeedInput Visual Enhancements', () => {
   }
 
   it('should have consistent spacing between form sections', () => {
-    const { container } = render(<CourseSeedInput {...mockProps} />)
+    render(<CourseSeedInput {...mockProps} />)
     const sections = container.querySelectorAll('.section')
     
     sections.forEach(section => {
@@ -34,7 +34,7 @@ describe('CourseSeedInput Visual Enhancements', () => {
   })
 
   it('should have consistent card styling for form groups', () => {
-    const { container } = render(<CourseSeedInput {...mockProps} />)
+    render(<CourseSeedInput {...mockProps} />)
     const cards = container.querySelectorAll('.card')
     
     cards.forEach(card => {
@@ -51,7 +51,7 @@ describe('CourseSeedInput Visual Enhancements', () => {
   })
 
   it('should have visual indicators for difficulty levels', () => {
-    const { container } = render(<CourseSeedInput {...mockProps} />)
+    render(<CourseSeedInput {...mockProps} />)
     const difficultyButtons = container.querySelectorAll('[data-testid^="difficulty-"]')
     
     // Should have 5 difficulty levels

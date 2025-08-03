@@ -1,6 +1,7 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
+// Removed unused React import
+import { render, screen } from '../../test/testProviders'
+
 import { TemplateEditor } from '../TemplateEditor'
 import { Modal } from '../DesignSystem/Modal'
 
@@ -62,7 +63,7 @@ describe('Template Editor Scrolling', () => {
   })
 
   it('should have flex layout in TemplateEditor component', () => {
-    const { container } = render(
+    render(
       <TemplateEditor
         onClose={vi.fn()}
         onSave={vi.fn()}
@@ -127,7 +128,7 @@ describe('Template Editor Scrolling', () => {
   })
 
   it('should maintain content visibility when scrolling', () => {
-    const { container } = render(
+    render(
       <TemplateEditor
         onClose={vi.fn()}
         onSave={vi.fn()}

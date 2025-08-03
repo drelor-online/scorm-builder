@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { FormGroup } from '../FormGroup'
 
@@ -18,7 +18,7 @@ describe('FormGroup', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <FormGroup className="custom-form-group">
           <input />
         </FormGroup>
@@ -139,7 +139,7 @@ describe('FormGroup', () => {
         email: 'Email error'
       }
       
-      const { container } = render(
+      render(
         <FormGroup errors={errors} showSummary>
           <input />
         </FormGroup>
@@ -264,7 +264,7 @@ describe('FormGroup', () => {
     })
 
     it('should render with no children', () => {
-      const { container } = render(<FormGroup />)
+      render(<FormGroup />)
       
       expect(container.firstChild).toHaveClass('form-group')
     })
@@ -272,7 +272,7 @@ describe('FormGroup', () => {
 
   describe('CSS Classes', () => {
     it('should apply all expected CSS classes', () => {
-      const { container } = render(
+      render(
         <FormGroup errors={{ field: 'Error' }} showSummary className="custom">
           <input />
         </FormGroup>

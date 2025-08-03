@@ -6,11 +6,30 @@ import type {
   LegacyTopic
 } from '../types/aiPrompt'
 import type { CourseMetadata } from '../types/metadata'
-import type { EnhancedCourseContent } from './spaceEfficientScormGenerator'
+import type { EnhancedCourseContent } from '../types/scorm'
+import type { Media } from '../types/aiPrompt'
 
 // Type guard to check if content is new format
 function isNewFormat(content: CourseContentUnion): content is CourseContent {
   return 'welcomePage' in content && 'learningObjectivesPage' in content && 'assessment' in content
+}
+
+// Helper function to resolve media URL
+function resolveMediaUrl(media: Media | undefined, _projectId?: string): string | undefined {
+  if (!media) return undefined
+  
+  // If we have a storageId, use that
+  if ((media as any).storageId) {
+    return (media as any).storageId
+  }
+  
+  // If it's an external URL, keep it (will be downloaded during SCORM generation)
+  if (media.url && (media.url.startsWith('http://') || media.url.startsWith('https://'))) {
+    return media.url
+  }
+  
+  // Otherwise, can't use it
+  return undefined
 }
 
 // Export for testing
@@ -18,11 +37,12 @@ export const isNewFormatCourseContent = isNewFormat
 
 export function convertToEnhancedCourseContent(
   courseContent: CourseContentUnion,
-  metadata: CourseMetadata
+  metadata: CourseMetadata,
+  projectId?: string
 ): EnhancedCourseContent {
   // Handle new format
   if (isNewFormat(courseContent)) {
-    return convertNewFormat(courseContent, metadata)
+    return convertNewFormat(courseContent, metadata, projectId)
   }
   
   // Handle old format
@@ -32,45 +52,53 @@ export function convertToEnhancedCourseContent(
 // Convert new format to enhanced format
 function convertNewFormat(
   courseContent: CourseContent,
-  metadata: CourseMetadata
+  metadata: CourseMetadata,
+  projectId?: string
 ): EnhancedCourseContent {
     // Process welcome page media
     const welcomeMedia = courseContent.welcomePage.media || []
     const welcomeImageMedia = welcomeMedia.find(m => m.type === 'image')
     const welcomeVideoMedia = welcomeMedia.find(m => m.type === 'video')
-    const welcomeSlug = 'welcome'
     
-    // Fix audio file naming to ensure unique prefixes
+    // Use simple file naming without topic/page names
     const getWelcomeAudioFile = () => {
-      if (courseContent.welcomePage.audioFile) {
-        // If file starts with 0001- but should be 0000-, fix it
-        if (courseContent.welcomePage.audioFile.startsWith('0001-')) {
-          return courseContent.welcomePage.audioFile.replace('0001-', '0000-')
-        }
-        return courseContent.welcomePage.audioFile
+      // Prefer audioId over audioFile
+      if ((courseContent.welcomePage as any).audioId) {
+        return (courseContent.welcomePage as any).audioId
       }
-      return courseContent.welcomePage.narration ? `0000-${welcomeSlug}.mp3` : undefined
+      if (courseContent.welcomePage.audioFile) {
+        // If file already uses simple format, keep it
+        if (courseContent.welcomePage.audioFile.match(/^audio-\d+\.(mp3|bin)$/)) {
+          return courseContent.welcomePage.audioFile
+        }
+      }
+      return courseContent.welcomePage.narration ? `audio-0.bin` : undefined
     }
     
     const getWelcomeCaptionFile = () => {
-      if (courseContent.welcomePage.captionFile) {
-        // If file starts with 0001- but should be 0000-, fix it
-        if (courseContent.welcomePage.captionFile.startsWith('0001-')) {
-          return courseContent.welcomePage.captionFile.replace('0001-', '0000-')
-        }
-        return courseContent.welcomePage.captionFile
+      // Prefer captionId over captionFile
+      if ((courseContent.welcomePage as any).captionId) {
+        return (courseContent.welcomePage as any).captionId
       }
-      return courseContent.welcomePage.narration ? `0000-${welcomeSlug}.vtt` : undefined
+      if (courseContent.welcomePage.captionFile) {
+        // If file already uses simple format, keep it
+        if (courseContent.welcomePage.captionFile.match(/^caption-\d+\.(vtt|bin)$/)) {
+          return courseContent.welcomePage.captionFile
+        }
+      }
+      return courseContent.welcomePage.narration ? `caption-0.bin` : undefined
     }
     
     const welcome = {
       title: courseContent.welcomePage.title,
       content: courseContent.welcomePage.content,
       startButtonText: 'Start Course',
-      imageUrl: (welcomeImageMedia?.url && !welcomeImageMedia.url.startsWith('blob:')) ? welcomeImageMedia.url : undefined,
+      imageUrl: resolveMediaUrl(welcomeImageMedia, projectId),
       audioFile: getWelcomeAudioFile(),
+      audioId: (courseContent.welcomePage as any).audioId,
       audioBlob: (courseContent.welcomePage as any).audioBlob,
       captionFile: getWelcomeCaptionFile(),
+      captionId: (courseContent.welcomePage as any).captionId,
       captionBlob: (courseContent.welcomePage as any).captionBlob,
       embedUrl: welcomeVideoMedia?.embedUrl,
       media: welcomeMedia.map(m => ({
@@ -93,13 +121,14 @@ function convertNewFormat(
     const objectivesMedia = courseContent.learningObjectivesPage.media || []
     const objectivesImageMedia = objectivesMedia.find(m => m.type === 'image')
     const objectivesVideoMedia = objectivesMedia.find(m => m.type === 'video')
-    const objectivesSlug = 'objectives'
     
     const objectivesPage = {
-      imageUrl: (objectivesImageMedia?.url && !objectivesImageMedia.url.startsWith('blob:')) ? objectivesImageMedia.url : undefined,
-      audioFile: courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `0001-${objectivesSlug}.mp3` : undefined),
+      imageUrl: resolveMediaUrl(objectivesImageMedia, projectId),
+      audioFile: (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `audio-1.bin` : undefined),
+      audioId: (courseContent.learningObjectivesPage as any).audioId,
       audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
-      captionFile: courseContent.learningObjectivesPage.captionFile || (courseContent.learningObjectivesPage.narration ? `0001-${objectivesSlug}.vtt` : undefined),
+      captionFile: (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile || (courseContent.learningObjectivesPage.narration ? `caption-1.bin` : undefined),
+      captionId: (courseContent.learningObjectivesPage as any).captionId,
       captionBlob: (courseContent.learningObjectivesPage as any).captionBlob,
       embedUrl: objectivesVideoMedia?.embedUrl,
       media: objectivesMedia.map(m => ({
@@ -118,8 +147,6 @@ function convertNewFormat(
     // Convert topics with new format
     const enhancedTopics = courseContent.topics.map((topic, index) => {
       // Generate block number for audio files (starting from 1 for topics)
-      const blockNumber = String(index + 1).padStart(4, '0')
-      const topicSlug = topic.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
       
       // Handle knowledge check from new format
       const knowledgeCheck = convertKnowledgeCheck(topic.knowledgeCheck)
@@ -129,14 +156,15 @@ function convertNewFormat(
       const imageMedia = topicMedia.find(m => m.type === 'image')
       const videoMedia = topicMedia.find(m => m.type === 'video')
       
-      // Generate file names
-      const audioFile = topic.audioFile || (topic.narration ? `${blockNumber}-${topicSlug}.mp3` : undefined)
-      const captionFile = topic.captionFile || (topic.narration ? `${blockNumber}-${topicSlug}.vtt` : undefined)
-      const imageUrl = imageMedia && imageMedia.url && !imageMedia.url.startsWith('blob:')
-        ? imageMedia.url
-        : topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
-        ? `${topicSlug}.jpg`
-        : undefined
+      // Generate file names using simple numbering (no topic names)
+      // Welcome is audio-0, objectives is audio-1, so topics start at audio-2
+      const topicAudioIndex = index + 2
+      const audioFile = (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}.bin` : undefined)
+      const captionFile = (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}.bin` : undefined)
+      const imageUrl = resolveMediaUrl(imageMedia, projectId) || 
+        (topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
+          ? `image-${index}.jpg`
+          : undefined)
       const embedUrl = videoMedia?.embedUrl
       
       return {
@@ -145,8 +173,10 @@ function convertNewFormat(
         content: topic.content,
         imageUrl,
         audioFile,
+        audioId: (topic as any).audioId,
         audioBlob: (topic as any).audioBlob,
         captionFile,
+        captionId: (topic as any).captionId,
         captionBlob: (topic as any).captionBlob,
         embedUrl,
         knowledgeCheck,
@@ -228,7 +258,7 @@ function convertOldFormat(
   const objectives = extractObjectives(courseContent as LegacyCourseContent)
   
   // Convert topics
-  const enhancedTopics = courseContent.topics.map((topic) => {
+  const enhancedTopics = courseContent.topics.map((topic, index) => {
     // Find any activity that might be a knowledge check for this topic
     const topicActivity = (courseContent as LegacyCourseContent).activities?.find(
       activity => activity.type === 'multiple-choice' && 
@@ -258,19 +288,20 @@ function convertOldFormat(
     const imageMedia = topicMedia.find((m) => m.type === 'image')
     const videoMedia = topicMedia.find((m) => m.type === 'video')
     
-    // Generate file names for old format
-    const topicSlug = topic.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    // Generate file names using simple numbering (no topic names)
+    // Welcome is audio-0, objectives is audio-1, so topics start at audio-2
+    const topicAudioIndex = index + 2
     const oldTopic = topic as LegacyTopic
     const audioFile = oldTopic.narration && oldTopic.narration.length > 0 
-      ? `${oldTopic.narration[0].blockNumber}-${topicSlug}.mp3`
+      ? `audio-${topicAudioIndex}.bin`
       : undefined
     const captionFile = oldTopic.narration && oldTopic.narration.length > 0
-      ? `${oldTopic.narration[0].blockNumber}-${topicSlug}.vtt`
+      ? `caption-${topicAudioIndex}.bin`
       : undefined
     const imageUrl = imageMedia 
       ? imageMedia.url // Use actual media URL
       : topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
-      ? `${topicSlug}.jpg`
+      ? `image-${index}.jpg`
       : undefined
     const embedUrl = videoMedia?.embedUrl
     
@@ -390,11 +421,16 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
     
     // Handle multiple-choice questions
     if (firstQuestion.type === 'multiple-choice' && firstQuestion.options) {
+      // Convert string correctAnswer to numeric index
+      const correctAnswerIndex = typeof firstQuestion.correctAnswer === 'string' 
+        ? firstQuestion.options.indexOf(firstQuestion.correctAnswer)
+        : firstQuestion.correctAnswer
+      
       return {
         type: 'multiple-choice' as const,
         question: firstQuestion.question,
         options: firstQuestion.options,
-        correctAnswer: firstQuestion.correctAnswer, // Keep as text, don't convert to index
+        correctAnswer: correctAnswerIndex >= 0 ? correctAnswerIndex : 0, // Convert to index
         explanation: firstQuestion.feedback?.correct || firstQuestion.feedback?.incorrect || firstQuestion.explanation,
         feedback: firstQuestion.feedback // Preserve the feedback object
       }
@@ -402,11 +438,16 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
     
     // Handle true/false questions
     if (firstQuestion.type === 'true-false') {
+      // Convert string correctAnswer to numeric index for true/false
+      const correctAnswerIndex = typeof firstQuestion.correctAnswer === 'string'
+        ? firstQuestion.correctAnswer.toLowerCase() === 'true' ? 0 : 1
+        : firstQuestion.correctAnswer
+      
       return {
         type: 'true-false' as const,
         question: firstQuestion.question,
         options: ['True', 'False'],
-        correctAnswer: firstQuestion.correctAnswer, // Keep as text
+        correctAnswer: correctAnswerIndex, // Convert to index
         explanation: firstQuestion.feedback?.correct || firstQuestion.feedback?.incorrect || firstQuestion.explanation,
         feedback: firstQuestion.feedback // Preserve the feedback object
       }
@@ -432,17 +473,27 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
     correctAnswer: 0, // Dummy value, not used when questions array is present
     questions: knowledgeCheck.questions.map(q => {
       if (q.type === 'multiple-choice' && q.options) {
+        // Convert string correctAnswer to numeric index
+        const correctAnswerIndex = typeof q.correctAnswer === 'string' 
+          ? q.options.indexOf(q.correctAnswer)
+          : q.correctAnswer
+          
         return {
           ...q,
-          correctAnswer: q.correctAnswer, // Keep as text, don't convert to index
+          correctAnswer: correctAnswerIndex >= 0 ? correctAnswerIndex : 0, // Convert to index
           explanation: q.feedback?.correct || q.feedback?.incorrect || q.explanation
         }
       } else if (q.type === 'true-false') {
+        // Convert string correctAnswer to numeric index for true/false
+        const correctAnswerIndex = typeof q.correctAnswer === 'string'
+          ? q.correctAnswer.toLowerCase() === 'true' ? 0 : 1
+          : q.correctAnswer
+          
         return {
           ...q,
           type: 'multiple-choice' as const,
           options: ['True', 'False'],
-          correctAnswer: q.correctAnswer, // Keep as text
+          correctAnswer: correctAnswerIndex, // Convert to index
           explanation: q.feedback?.correct || q.feedback?.incorrect || q.explanation
         }
       } else if (q.type === 'fill-in-the-blank') {

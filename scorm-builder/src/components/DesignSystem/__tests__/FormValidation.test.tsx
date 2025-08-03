@@ -1,12 +1,12 @@
-import React from 'react'
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+// Removed unused React import
+import { describe, it, expect, act, vi } from 'vitest'
+import { render, screen } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { FormField } from '../FormField'
 import { FormGroup } from '../FormGroup'
 import { ValidationMessage } from '../ValidationMessage'
 import { useFormValidation } from '../../../hooks/useFormValidation'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 
 describe('Form Validation - User Intent Tests', () => {
   describe('User expects clear validation feedback', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { render } from '../../../test/testProviders'
 import { Modal } from '../Modal'
 import './setupTests'
 
@@ -11,7 +11,7 @@ describe('Modal Visual Enhancements', () => {
   }
 
   it('should have proper backdrop blur and opacity', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <p>Modal content</p>
       </Modal>
@@ -27,7 +27,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have elevated modal content with shadow', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <p>Modal content</p>
       </Modal>
@@ -45,7 +45,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have smooth entry and exit animations', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <p>Modal content</p>
       </Modal>
@@ -63,7 +63,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have proper header styling with divider', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <p>Modal content</p>
       </Modal>
@@ -80,7 +80,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have accessible close button with hover state', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <p>Modal content</p>
       </Modal>
@@ -102,7 +102,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have proper focus management', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <input type="text" placeholder="Test input" />
         <button>Test button</button>
@@ -116,7 +116,7 @@ describe('Modal Visual Enhancements', () => {
   })
 
   it('should have appropriate max dimensions and scrolling', () => {
-    const { container } = render(
+    render(
       <Modal {...defaultProps}>
         <div style={{ height: '2000px' }}>Very tall content</div>
       </Modal>

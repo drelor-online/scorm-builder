@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { Input } from '../Input'
 
 describe('Input Component - Simple Tests', () => {
@@ -74,7 +74,7 @@ describe('Input Component - Simple Tests', () => {
   })
 
   it('should work with fullWidth prop', () => {
-    const { container } = render(<Input label="Full Width" name="fullwidth" fullWidth />)
+    render(<Input label="Full Width" name="fullwidth" fullWidth />)
     
     const wrapper = container.querySelector('.input-wrapper')
     expect(wrapper).toHaveClass('input-full-width')

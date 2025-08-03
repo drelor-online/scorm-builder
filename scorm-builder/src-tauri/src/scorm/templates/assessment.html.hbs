@@ -1,0 +1,29 @@
+<div class="content-wrapper">
+    <div class="assessment-container">
+        <h2>Course Assessment</h2>
+        <p>Please answer all questions to complete the course.</p>
+        
+        {{#each assessment.questions}}
+        <div class="question-container">
+            <p class="question-text">{{add index 1}}. {{text}}</p>
+            <div class="kc-options">
+            {{#each options}}
+            <label class="kc-option">
+                <input type="radio" 
+                       name="assessment-q{{../index}}" 
+                       value="{{this}}"
+                       data-correct="{{../correct_answer}}"
+                       data-feedback="{{../explanation}}">
+                <span>{{this}}</span>
+            </label>
+            {{/each}}
+            </div>
+            <div id="assessment-feedback-{{index}}" class="feedback"></div>
+        </div>
+        {{/each}}
+        
+        <button class="submit-assessment" onclick="window.submitAssessment()">
+            Submit Assessment
+        </button>
+    </div>
+</div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { generateNotificationId } from '../utils/idGenerator'
 
 export interface ErrorMessage {
   id: string
@@ -14,7 +15,7 @@ let errorHandlers: Set<(error: ErrorMessage) => void> = new Set()
 
 export function showError(message: string, action?: ErrorMessage['action']) {
   const error: ErrorMessage = {
-    id: Date.now().toString(),
+    id: generateNotificationId(),
     message,
     type: 'error',
     action
@@ -24,7 +25,7 @@ export function showError(message: string, action?: ErrorMessage['action']) {
 
 export function showWarning(message: string, action?: ErrorMessage['action']) {
   const error: ErrorMessage = {
-    id: Date.now().toString(),
+    id: generateNotificationId(),
     message,
     type: 'warning',
     action
@@ -34,7 +35,7 @@ export function showWarning(message: string, action?: ErrorMessage['action']) {
 
 export function showInfo(message: string, action?: ErrorMessage['action']) {
   const error: ErrorMessage = {
-    id: Date.now().toString(),
+    id: generateNotificationId(),
     message,
     type: 'info',
     action
@@ -44,7 +45,7 @@ export function showInfo(message: string, action?: ErrorMessage['action']) {
 
 export function showSuccess(message: string, action?: ErrorMessage['action']) {
   const error: ErrorMessage = {
-    id: Date.now().toString(),
+    id: generateNotificationId(),
     message,
     type: 'success',
     action

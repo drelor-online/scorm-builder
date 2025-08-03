@@ -81,7 +81,7 @@ export interface Assessment {
 
 export interface AssessmentQuestion {
   id: string
-  type: 'multiple-choice' | 'true-false' // NO fill-in-the-blank
+  type: 'multiple-choice' | 'true-false' | 'fill-in-the-blank'
   question: string
   options?: string[] // for multiple choice
   correctAnswer: string

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../test/testProviders'
 import { Toast } from '../Toast'
 
 describe('Toast Component - Simple Tests', () => {
@@ -71,7 +71,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should apply success type styling', () => {
-    const { container } = render(
+    render(
       <Toast message="Success!" type="success" onClose={mockOnClose} />
     )
     
@@ -80,7 +80,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should apply error type styling', () => {
-    const { container } = render(
+    render(
       <Toast message="Error!" type="error" onClose={mockOnClose} />
     )
     
@@ -89,7 +89,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should apply info type styling', () => {
-    const { container } = render(
+    render(
       <Toast message="Info!" type="info" onClose={mockOnClose} />
     )
     
@@ -117,7 +117,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should be positioned fixed at bottom right', () => {
-    const { container } = render(
+    render(
       <Toast message="Test" type="info" onClose={mockOnClose} />
     )
     
@@ -128,7 +128,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should have proper z-index', () => {
-    const { container } = render(
+    render(
       <Toast message="Test" type="info" onClose={mockOnClose} />
     )
     
@@ -158,7 +158,7 @@ describe('Toast Component - Simple Tests', () => {
   })
 
   it('should have animation style', () => {
-    const { container } = render(
+    render(
       <Toast message="Test" type="info" onClose={mockOnClose} />
     )
     

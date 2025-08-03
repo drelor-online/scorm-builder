@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { DeleteConfirmDialog } from '../DeleteConfirmDialog'
 
@@ -108,7 +108,7 @@ describe('DeleteConfirmDialog - User Intent Tests', () => {
     })
 
     it('should not render when closed', () => {
-      const { container } = render(
+      render(
         <DeleteConfirmDialog
           isOpen={false}
           projectName="Hidden"

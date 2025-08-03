@@ -50,19 +50,19 @@ pub fn get_metadata_path(project_id: &str, media_id: &str) -> Result<PathBuf, St
 #[tauri::command]
 pub fn store_media(
     id: String,
-    project_id: String,
+    #[allow(non_snake_case)] projectId: String,
     data: Vec<u8>,
     metadata: MediaMetadata,
 ) -> Result<(), String> {
-    println!("[media_storage] Storing media {} for project {}", id, project_id);
+    println!("[media_storage] Storing media {} for project {}", id, projectId);
     
     // Store the binary data
-    let data_path = get_media_path(&project_id, &id)?;
+    let data_path = get_media_path(&projectId, &id)?;
     fs::write(&data_path, &data)
         .map_err(|e| format!("Failed to write media data: {}", e))?;
     
     // Store the metadata
-    let metadata_path = get_metadata_path(&project_id, &id)?;
+    let metadata_path = get_metadata_path(&projectId, &id)?;
     let metadata_json = serde_json::to_string_pretty(&metadata)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
     fs::write(&metadata_path, metadata_json)
@@ -73,10 +73,10 @@ pub fn store_media(
 }
 
 #[tauri::command]
-pub fn get_all_project_media(project_id: String) -> Result<Vec<MediaData>, String> {
-    println!("[media_storage] Loading all media for project {}", project_id);
+pub fn get_all_project_media(#[allow(non_snake_case)] projectId: String) -> Result<Vec<MediaData>, String> {
+    println!("[media_storage] Loading all media for project {}", projectId);
     
-    let media_dir = get_media_directory(&project_id)?;
+    let media_dir = get_media_directory(&projectId)?;
     let mut media_list = Vec::new();
     
     if !media_dir.exists() {
@@ -105,7 +105,7 @@ pub fn get_all_project_media(project_id: String) -> Result<Vec<MediaData>, Strin
                 .map_err(|e| format!("Failed to parse metadata for {}: {}", media_id, e))?;
             
             // Read binary data
-            let data_path = get_media_path(&project_id, media_id)?;
+            let data_path = get_media_path(&projectId, media_id)?;
             if data_path.exists() {
                 let data = fs::read(&data_path)
                     .map_err(|e| format!("Failed to read media data for {}: {}", media_id, e))?;
@@ -130,45 +130,51 @@ pub fn get_all_project_media(project_id: String) -> Result<Vec<MediaData>, Strin
 }
 
 #[tauri::command]
-pub fn delete_media(project_id: String, media_id: String) -> Result<(), String> {
-    println!("[media_storage] Deleting media {} from project {}", media_id, project_id);
+pub fn delete_media(
+    #[allow(non_snake_case)] projectId: String,
+    #[allow(non_snake_case)] mediaId: String,
+) -> Result<(), String> {
+    println!("[media_storage] Deleting media {} from project {}", mediaId, projectId);
     
     // Delete data file
-    let data_path = get_media_path(&project_id, &media_id)?;
+    let data_path = get_media_path(&projectId, &mediaId)?;
     if data_path.exists() {
         fs::remove_file(&data_path)
             .map_err(|e| format!("Failed to delete media data: {}", e))?;
     }
     
     // Delete metadata file
-    let metadata_path = get_metadata_path(&project_id, &media_id)?;
+    let metadata_path = get_metadata_path(&projectId, &mediaId)?;
     if metadata_path.exists() {
         fs::remove_file(&metadata_path)
             .map_err(|e| format!("Failed to delete metadata: {}", e))?;
     }
     
-    println!("[media_storage] Successfully deleted media {}", media_id);
+    println!("[media_storage] Successfully deleted media {}", mediaId);
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_media(project_id: String, media_id: String) -> Result<MediaData, String> {
-    println!("[media_storage] Getting media {} from project {}", media_id, project_id);
+pub fn get_media(
+    #[allow(non_snake_case)] projectId: String,
+    #[allow(non_snake_case)] mediaId: String,
+) -> Result<MediaData, String> {
+    println!("[media_storage] Getting media {} from project {}", mediaId, projectId);
     
     // Read metadata
-    let metadata_path = get_metadata_path(&project_id, &media_id)?;
+    let metadata_path = get_metadata_path(&projectId, &mediaId)?;
     let metadata_json = fs::read_to_string(&metadata_path)
         .map_err(|e| format!("Failed to read metadata: {}", e))?;
     let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
         .map_err(|e| format!("Failed to parse metadata: {}", e))?;
     
     // Read binary data
-    let data_path = get_media_path(&project_id, &media_id)?;
+    let data_path = get_media_path(&projectId, &mediaId)?;
     let data = fs::read(&data_path)
         .map_err(|e| format!("Failed to read media data: {}", e))?;
     
     Ok(MediaData {
-        id: media_id,
+        id: mediaId,
         data,
         metadata,
     })

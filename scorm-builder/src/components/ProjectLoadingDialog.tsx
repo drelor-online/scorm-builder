@@ -19,13 +19,13 @@ export const ProjectLoadingDialog: React.FC<ProjectLoadingDialogProps> = ({
   const getPhaseMessage = () => {
     switch (progress.phase) {
       case 'loading':
-        return 'Loading project file...'
+        return 'Opening Project'
       case 'media':
-        return 'Loading media files...'
+        return 'Loading Media'
       case 'content':
-        return 'Loading course content...'
+        return 'Loading Content'
       case 'finalizing':
-        return 'Finalizing project...'
+        return 'Almost Ready'
       default:
         return 'Loading...'
     }
@@ -41,27 +41,75 @@ export const ProjectLoadingDialog: React.FC<ProjectLoadingDialogProps> = ({
     >
       <div style={{ padding: '1.5rem' }}>
         <div style={{ marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
+          <h3 style={{ 
+            fontSize: '1.25rem', 
+            marginBottom: '0.75rem',
+            fontWeight: '600'
+          }}>
             {getPhaseMessage()}
           </h3>
           {progress.message && (
-            <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1rem' }}>
+            <p style={{ 
+              fontSize: '0.9375rem', 
+              color: '#94a3b8', 
+              marginBottom: '1rem',
+              lineHeight: '1.5'
+            }}>
               {progress.message}
             </p>
           )}
         </div>
 
-        <ProgressBar 
-          value={progress.percent} 
-          label={`${progress.percent}%`}
-          className="mb-4"
-        />
+        <div style={{ marginBottom: '1rem' }}>
+          <ProgressBar 
+            value={progress.percent} 
+            label={`${progress.percent}%`}
+          />
+          <div style={{ 
+            textAlign: 'center', 
+            marginTop: '0.75rem',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#e4e4e7'
+          }}>
+            {progress.percent}%
+          </div>
+        </div>
 
         {progress.itemsLoaded !== undefined && progress.totalItems !== undefined && (
-          <p style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
+          <p style={{ 
+            fontSize: '0.8125rem', 
+            color: '#94a3b8', 
+            textAlign: 'center',
+            marginTop: '0.5rem'
+          }}>
             {progress.itemsLoaded} of {progress.totalItems} items loaded
           </p>
         )}
+
+        {/* Phase indicator dots */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '0.5rem',
+          marginTop: '1rem'
+        }}>
+          {['loading', 'media', 'content', 'finalizing'].map((phase, index) => (
+            <div
+              key={phase}
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: 
+                  progress.phase === phase ? '#3b82f6' :
+                  ['loading', 'media', 'content', 'finalizing'].indexOf(progress.phase) > index ? '#22c55e' :
+                  '#374151',
+                transition: 'background-color 0.3s ease'
+              }}
+            />
+          ))}
+        </div>
       </div>
     </Modal>
   )

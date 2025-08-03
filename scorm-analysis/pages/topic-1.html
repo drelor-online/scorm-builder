@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Principles of Natural Gas Safety</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body data-has-knowledge-check="true" style="margin: 0; padding: 0; box-sizing: border-box;">
+    <div class="content-layout">
+        <div class="text-section">
+            <h2>Understanding Natural Gas</h2><p>Natural gas is primarily composed of methane (CH<sub>4</sub>). In its natural state, it is colorless, odorless, and tasteless. To aid in detection, a pungent odorant called <strong>mercaptan</strong> is added, which gives it a smell similar to rotten eggs. Understanding its properties is the first step to safety.</p><h3>Key Properties:</h3><ul><li><strong>Flammability:</strong> Natural gas is flammable only within a specific range of gas-to-air concentration, typically between 5% and 15%. Below 5%, it's too lean to burn; above 15%, it's too rich.</li><li><strong>Density:</strong> It is lighter than air. If a leak occurs in an open area, it will typically rise and dissipate. In an enclosed space, it can accumulate, especially near the ceiling.</li><li><strong>Asphyxiation Risk:</strong> While not toxic, natural gas can displace oxygen in a confined space, leading to asphyxiation.</li></ul><p>The fundamental safety principle is to prevent the uncontrolled release of gas and to eliminate potential ignition sources in areas where gas could be present.</p>
+            
+            
+            <div class="knowledge-check-container">
+                <h3>Knowledge Check</h3>
+                <p class="kc-question">Why is mercaptan added to natural gas?</p>
+                <div class="kc-options">
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-0" value="0" data-correct="1">
+                        <span class="option-text">To make it burn hotter</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-0" value="1" data-correct="1">
+                        <span class="option-text">To aid in leak detection by giving it a distinct odor</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-0" value="2" data-correct="1">
+                        <span class="option-text">To make it lighter than air</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-0" value="3" data-correct="1">
+                        <span class="option-text">To prevent pipes from corroding</span>
+                    </label>
+                </div>
+                <button class="kc-submit" onclick="parent.checkAnswer(0, 1, &quot;Correct!%20Mercaptan%20provides%20the%20recognizable%20'rotten%20egg'%20smell%20to%20help%20detect%20leaks%2C%20as%20natural%20gas%20is%20naturally%20odorless.&quot;, &quot;Not%20quite.%20The%20primary%20purpose%20of%20mercaptan%20is%20to%20act%20as%20a%20warning%20agent.%20Because%20natural%20gas%20is%20odorless%2C%20mercaptan%20is%20added%20to%20make%20leaks%20detectable%20by%20smell.&quot;, event)">Submit Answer</button>
+                <div id="kc-feedback-topic-1" class="kc-feedback">
+                    <div class="feedback-text"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="media-panel">
+            
+            <div class="video-container" data-media-index="0">
+                <iframe 
+                    src="https://youtube.com/embed/-njmj0diWu8" 
+                    title="Natural Gas 101"
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen>
+                </iframe>
+            </div>
+            
+            
+            <div class="audio-player">
+                <audio id="audio-player-topic-1" src="../media/audio-2.mp3" preload="metadata">
+                    <track kind="captions" src="../media/caption-2.vtt" srclang="en" label="English" default>
+                </audio>
+                <div class="audio-main">
+                    <button class="play-pause" onclick="parent.toggleAudio('topic-1', event)">▶</button>
+                    <div class="audio-track">
+                        <div class="track-progress" onclick="parent.seekAudio(event, 'topic-1')">
+                            <div class="track-fill" id="track-fill-topic-1">
+                                <div class="track-handle"></div>
+                            </div>
+                        </div>
+                        <div class="track-time">
+                            <span id="current-time-topic-1">0:00</span>
+                            <span id="duration-topic-1">0:00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="audio-controls">
+                    <button class="audio-btn" onclick="parent.skip(-10, 'topic-1')">◀ 10s</button>
+                    <button class="audio-btn" id="speed-btn-topic-1" onclick="parent.changeSpeed('topic-1')">1x</button>
+                    <button class="audio-btn active" id="cc-btn-topic-1" onclick="parent.toggleCaptions('topic-1')">CC</button>
+                    <button class="audio-btn" onclick="parent.toggleVolume('topic-1', event)">🔊</button>
+                    <button class="audio-btn" onclick="parent.skip(10, 'topic-1')">10s ▶</button>
+                </div>
+                <div class="caption-display" id="caption-display-topic-1">
+                    <p id="caption-text-topic-1"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="lightbox-overlay" onclick="parent.closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-image" src="" alt="">
+            <button class="lightbox-close" onclick="parent.closeLightbox()">×</button>
+        </div>
+    </div>
+    
+    <!-- Navigation handled by main index.html sidebar and footer -->
+    
+    
+    <script>
+        // Disable next button on page load if knowledge check exists
+        window.addEventListener('load', function() {
+            // Try both in the parent frame and current frame
+            let nextBtn = parent.document.getElementById('next-btn');
+            if (!nextBtn) {
+                nextBtn = document.getElementById('next-btn');
+            }
+            
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.classList.add('disabled');
+                // Also set data attribute to track state
+                nextBtn.dataset.requiresAnswer = 'true';
+            }
+        });
+    </script>
+    
+    
+    <!-- Custom Alert Container -->
+    <div id="scorm-alert-container"></div>
+</body>
+</html>

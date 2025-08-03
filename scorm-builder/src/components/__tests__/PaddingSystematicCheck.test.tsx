@@ -1,20 +1,20 @@
-import React from 'react'
-import { render } from '@testing-library/react'
+// Removed unused React import
+import { render } from '../../test/testProviders'
 import '@testing-library/jest-dom'
 
 // Import all major components
-import { CourseSeedInputRefactored } from '../CourseSeedInputRefactored'
+import { CourseSeedInput } from '../CourseSeedInput'
 import { AIPromptGenerator } from '../AIPromptGenerator'
-import { JSONImportValidatorRefactored } from '../JSONImportValidatorRefactored'
-import { MediaEnhancementWizardRefactored } from '../MediaEnhancementWizardRefactored'
-import { AudioNarrationWizardRefactored } from '../AudioNarrationWizardRefactored'
-import { ActivitiesEditorRefactored } from '../ActivitiesEditorRefactored'
-import { SCORMPackageBuilderRefactored } from '../SCORMPackageBuilderRefactored'
+import { JSONImportValidator } from '../JSONImportValidator'
+import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
+import { AudioNarrationWizard } from '../AudioNarrationWizard'
+import { ActivitiesEditor } from '../ActivitiesEditor'
+import { SCORMPackageBuilder } from '../SCORMPackageBuilder'
 
 describe('Systematic Padding Checks', () => {
   describe('Button spacing checks', () => {
     it('should have proper spacing between adjacent buttons', () => {
-      const { container } = render(
+      render(
         <div>
           <button>Button 1</button>
           <button>Button 2</button>
@@ -33,7 +33,7 @@ describe('Systematic Padding Checks', () => {
     })
 
     it('should have proper spacing between buttons and text fields', () => {
-      const { container } = render(
+      render(
         <div>
           <input type="text" />
           <button>Submit</button>
@@ -56,7 +56,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Form field spacing', () => {
     it('should have consistent spacing between form fields', () => {
-      const { container } = render(
+      render(
         <div className="form-section">
           <div className="input-wrapper">
             <label>Field 1</label>
@@ -83,7 +83,7 @@ describe('Systematic Padding Checks', () => {
     })
 
     it('should have spacing between label and input', () => {
-      const { container } = render(
+      render(
         <div className="input-wrapper">
           <label>Test Label</label>
           <input type="text" />
@@ -109,7 +109,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Card and section spacing', () => {
     it('should have proper padding inside cards', () => {
-      const { container } = render(
+      render(
         <div className="card">
           <h3>Card Title</h3>
           <p>Card content</p>
@@ -126,7 +126,7 @@ describe('Systematic Padding Checks', () => {
     })
 
     it('should have spacing between sections', () => {
-      const { container } = render(
+      render(
         <div>
           <section className="section">Section 1</section>
           <section className="section">Section 2</section>
@@ -147,7 +147,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Button group spacing', () => {
     it('should have consistent spacing in button groups', () => {
-      const { container } = render(
+      render(
         <div className="button-group">
           <button>Option 1</button>
           <button>Option 2</button>
@@ -168,7 +168,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Navigation button spacing', () => {
     it('should have proper spacing between Back and Next buttons', () => {
-      const { container } = render(
+      render(
         <div className="navigation-buttons">
           <button>← Back</button>
           <button>Next →</button>
@@ -188,7 +188,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Alert and notification spacing', () => {
     it('should have proper spacing around alerts', () => {
-      const { container } = render(
+      render(
         <div>
           <div className="alert">Alert message</div>
           <div className="content">Main content</div>
@@ -207,7 +207,7 @@ describe('Systematic Padding Checks', () => {
 
   describe('Modal content spacing', () => {
     it('should have proper padding in modal content', () => {
-      const { container } = render(
+      render(
         <div className="modal-content">
           <h2>Modal Title</h2>
           <p>Modal body content</p>

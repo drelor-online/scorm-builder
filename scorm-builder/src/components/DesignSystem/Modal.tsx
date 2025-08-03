@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import './designSystem.css'
 import './modal.css'
+import './transitions.css'
 
 export interface ModalProps {
   isOpen: boolean
@@ -73,7 +74,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div 
-      className={`modal-backdrop ${isVisible ? 'modal-entering' : 'modal-exiting'}`}
+      className={`modal-backdrop ${isVisible ? 'modal-entering modal-backdrop-enter-active' : 'modal-exiting modal-backdrop-exit-active'}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose()
@@ -82,7 +83,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       <div 
         ref={modalRef}
-        className={`modal-content ${sizeClasses[size]} ${isVisible ? 'modal-entering' : 'modal-exiting'} ${className}`}
+        className={`modal-content ${sizeClasses[size]} ${isVisible ? 'modal-entering animate-scaleIn' : 'modal-exiting'} ${className}`}
         data-testid={dataTestId}
         role="dialog"
         aria-modal="true"

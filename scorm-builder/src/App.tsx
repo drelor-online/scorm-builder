@@ -1,11 +1,12 @@
 // External packages
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy, useMemo } from 'react'
 
 // Constants
 import { COLORS, SPACING, DURATIONS } from '@/constants'
 
 // Services
 import { apiKeyStorage } from '@/services/ApiKeyStorage'
+import { mapAudioIds } from '@/services/courseContentAudioIdMapper'
 
 // Utils
 
@@ -13,7 +14,7 @@ import { apiKeyStorage } from '@/services/ApiKeyStorage'
 // import './styles/ensure-text-visible.css' // Uncomment if text is not visible
 
 // Components
-import { CourseSeedInput } from '@/components/CourseSeedInputRefactored'
+import { CourseSeedInput } from '@/components/CourseSeedInput'
 import { Button } from '@/components/DesignSystem'
 
 // Lazy load step components
@@ -21,27 +22,30 @@ const AIPromptGenerator = lazy(() =>
   import('@/components/AIPromptGenerator').then(m => ({ default: m.AIPromptGenerator }))
 )
 const JSONImportValidator = lazy(() => 
-  import('@/components/JSONImportValidatorRefactored').then(m => ({ default: m.JSONImportValidator }))
+  import('@/components/JSONImportValidator').then(m => ({ default: m.JSONImportValidator }))
+)
+const PerformanceDashboard = lazy(() => 
+  import('@/components/PerformanceDashboard').then(m => ({ default: m.PerformanceDashboard }))
 )
 
 const MediaEnhancementWizard = lazy(() => 
-  import('./components/MediaEnhancementWizardRefactored').then(m => ({ default: m.MediaEnhancementWizard }))
+  import('./components/MediaEnhancementWizard').then(m => ({ default: m.MediaEnhancementWizard }))
 )
 const AudioNarrationWizard = lazy(() => 
-  import('./components/AudioNarrationWizardRefactored').then(m => ({ default: m.AudioNarrationWizard }))
+  import('./components/AudioNarrationWizard').then(m => ({ default: m.default }))
 )
 const ActivitiesEditor = lazy(() => 
-  import('./components/ActivitiesEditorRefactored').then(m => ({ default: m.ActivitiesEditor }))
+  import('./components/ActivitiesEditor').then(m => ({ default: m.ActivitiesEditor }))
 )
 const SCORMPackageBuilder = lazy(() => 
-  import('./components/SCORMPackageBuilderRefactored').then(m => ({ default: m.SCORMPackageBuilder }))
+  import('./components/SCORMPackageBuilder').then(m => ({ default: m.SCORMPackageBuilder }))
 )
 const TestChecklist = lazy(() => 
   import('./components/TestChecklist').then(m => ({ default: m.TestChecklist }))
 )
 // Types
 import type { CourseSeedData } from '@/types/course'
-import type { CourseContent, CourseContentUnion, Topic, Media } from '@/types/aiPrompt'
+import type { CourseContent, CourseContentUnion, Topic } from '@/types/aiPrompt'
 import type { ProjectData } from '@/types/project'
 
 // Components
@@ -49,10 +53,10 @@ import type { ProjectData } from '@/types/project'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 // Lazy load dialog components
 const Settings = lazy(() => 
-  import('./components/SettingsRefactored').then(m => ({ default: m.Settings }))
+  import('./components/Settings').then(m => ({ default: m.Settings }))
 )
 const HelpPage = lazy(() => 
-  import('./components/HelpPageRefactored').then(m => ({ default: m.HelpPage }))
+  import('./components/HelpPage').then(m => ({ default: m.HelpPage }))
 )
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
@@ -61,15 +65,17 @@ import { NetworkStatusIndicator } from '@/components/DesignSystem'
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
 // Lazy load export/import services
-const loadExportImport = () => import('@/services/ProjectExportImport')
+// const loadExportImport = () => import('@/services/ProjectExportImport')
 // Hooks
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { useStorage } from './contexts/PersistentStorageContext'
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor'
+import { useDialogManager } from '@/hooks/useDialogManager'
 
 // Contexts
 import { StepNavigationProvider, useStepNavigation } from './contexts/StepNavigationContext'
 import { AutoSaveProvider } from './contexts/AutoSaveContext'
-import { MediaProvider, useMedia } from './contexts/MediaContext'
+import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 
 // Config
 import { envConfig } from '@/config/environment'
@@ -92,23 +98,34 @@ interface AppProps {
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
   const storage = useStorage()
   const navigation = useStepNavigation()
+  const {
+    activeDialog,
+    projectToDelete,
+    showDialog,
+    hideDialog,
+    setProjectToDelete: _setProjectToDelete,
+  } = useDialogManager();
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
   
-  // Debug effect to log state changes
-  useEffect(() => {
-    console.log('State changed:', {
-      currentStep,
-      hasCourseSeedData: !!courseSeedData,
-      courseSeedDataKeys: courseSeedData ? Object.keys(courseSeedData) : null,
-      hasCourseContent: !!courseContent,
-      courseContentKeys: courseContent ? Object.keys(courseContent) : null
-    })
-  }, [currentStep, courseSeedData, courseContent])
-  const [showSettings, setShowSettings] = useState(false)
-  const [showHelp, setShowHelp] = useState(false)
-  const [showTestChecklist, setShowTestChecklist] = useState(false)
+  // Performance monitoring
+  const { measureAsync } = usePerformanceMonitor({
+    componentName: 'App',
+    trackRenders: false,
+    trackMountTime: true
+  })
+  
+  // Debug effect to log state changes - DISABLED to prevent console spam
+  // useEffect(() => {
+  //   console.log('State changed:', {
+  //     currentStep,
+  //     hasCourseSeedData: !!courseSeedData,
+  //     courseSeedDataKeys: courseSeedData ? Object.keys(courseSeedData) : null,
+  //     hasCourseContent: !!courseContent,
+  //     courseContentKeys: courseContent ? Object.keys(courseContent) : null
+  //   })
+  // }, [currentStep, courseSeedData, courseContent])
   // Load API keys from encrypted file or fall back to environment config
   const [apiKeys, setApiKeys] = useState({
     googleImageApiKey: envConfig.googleImageApiKey,
@@ -117,18 +134,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   })
   
   // Save/Open state
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
-  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   
   // Check for pending project when component mounts or pendingProjectId changes
   useEffect(() => {
     if (pendingProjectId && hasUnsavedChanges) {
-      setShowUnsavedDialog(true)
+      showDialog('unsaved');
     }
-  }, [pendingProjectId, hasUnsavedChanges])
+  }, [pendingProjectId, hasUnsavedChanges, showDialog])
   
   // Step mapping for progress indicator
   const stepNumbers = {
@@ -141,29 +156,34 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     scorm: 6
   }
   
-  // Create project data for saving
-  const projectData: ProjectData = courseSeedData ? {
-    courseTitle: courseSeedData.courseTitle,
-    courseSeedData: courseSeedData,
-    courseContent: courseContent || undefined,
-    currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
-    lastModified: new Date().toISOString(),
-    mediaFiles: {},
-    audioFiles: {}
-  } : {
-    courseTitle: '',
-    courseSeedData: {
+  // Track last saved time separately to avoid triggering auto-save
+  const [lastSavedTime, setLastSavedTime] = useState<string>(new Date().toISOString())
+  
+  // Create project data for saving - memoized to prevent unnecessary re-renders
+  const projectData: ProjectData = useMemo(() => {
+    return courseSeedData ? {
+      courseTitle: courseSeedData.courseTitle,
+      courseSeedData: courseSeedData,
+      courseContent: courseContent || undefined,
+      currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
+      lastModified: lastSavedTime, // Use stable value that only updates on actual saves
+      mediaFiles: {},
+      audioFiles: {}
+    } : {
       courseTitle: '',
-      difficulty: 3,
-      customTopics: [],
-      template: 'None',
-      templateTopics: []
-    },
-    currentStep: 0,
-    lastModified: new Date().toISOString(),
-    mediaFiles: {},
-    audioFiles: {}
-  }
+      courseSeedData: {
+        courseTitle: '',
+        difficulty: 3,
+        customTopics: [],
+        template: 'None',
+        templateTopics: []
+      },
+      currentStep: 0,
+      lastModified: lastSavedTime, // Use stable value
+      mediaFiles: {},
+      audioFiles: {}
+    }
+  }, [courseSeedData, courseContent, currentStep, lastSavedTime])
   
   // Clear old localStorage data and load API keys on first load
   useEffect(() => {
@@ -184,13 +204,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'T') {
         e.preventDefault()
-        setShowTestChecklist(prev => !prev)
+        showDialog('testChecklist');
+      }
+      // Performance dashboard shortcut (Ctrl+Shift+P)
+      else if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+        e.preventDefault()
+        showDialog('performance');
       }
     }
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [showDialog])
 
   useEffect(() => {
     // Load API keys from encrypted file
@@ -212,62 +237,40 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Load project data from PersistentStorage on mount
   useEffect(() => {
+    if (!storage.currentProjectId || !storage.isInitialized || lastLoadedProjectId === storage.currentProjectId) {
+      return
+    }
+
     const loadProjectData = async () => {
-      console.log('loadProjectData called with:', {
-        currentProjectId: storage.currentProjectId,
-        isInitialized: storage.isInitialized
-      })
-      if (storage.currentProjectId && storage.isInitialized) {
-        try {
-          // Load course metadata
+      setLastLoadedProjectId(storage.currentProjectId)
+      try {
+        let loadedCourseContent: CourseContent | null = null
+        let loadedCourseSeedData: CourseSeedData | null = null
+        let loadedStep = 'seed'
+
+        await measureAsync('loadProjectData', async () => {
           const metadata = await storage.getCourseMetadata()
-          console.log('Loaded metadata:', metadata)
-          
-          // Check if this is a new project (no topics means it's new)
+
           if (metadata && metadata.topics && metadata.topics.length > 0) {
-            console.log('Loading existing project data...')
-            console.log('Metadata topics:', metadata.topics)
-            // Load topics and reconstruct course data
             const topics: Topic[] = []
-            
-            // Check if this is an old format where topics are stored as strings (topic names)
-            const firstTopic = metadata.topics[0]
-            const isOldFormat = typeof firstTopic === 'string' && !firstTopic.includes('-')
-            console.log('Topic format check:', { firstTopic, isOldFormat })
-            
             for (let i = 0; i < metadata.topics.length; i++) {
               const topicIdOrName = metadata.topics[i]
-              console.log('Loading topic:', topicIdOrName)
-              
-              // Always use numeric content IDs for consistency
-              const numericContentId = `content-${2 + i}` // Topics start at content-2
+              const numericContentId = `content-${2 + i}`
               const topicContent = await storage.getContent(numericContentId)
-              
-              // For backward compatibility, also try the old ID if numeric fails
               let fallbackContent = null
               if (!topicContent) {
-                // Try old format IDs as fallback
                 let oldTopicId: string
-                
                 if (typeof topicIdOrName === 'string' && !topicIdOrName.includes('-')) {
-                  // Old format: topics are stored as names
                   oldTopicId = topicIdOrName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
                 } else {
-                  // Already an ID
                   oldTopicId = topicIdOrName
                 }
-                
                 fallbackContent = await storage.getContent(oldTopicId)
-                console.log('Tried fallback ID:', oldTopicId, 'found:', !!fallbackContent)
               }
-              console.log('Topic content loaded:', topicContent || fallbackContent)
-              
               const finalContent = topicContent || fallbackContent
-              
               if (finalContent) {
-                // Always use numeric ID for consistency
                 topics.push({
-                  id: `topic-${i}`, // Simple numeric topic ID
+                  id: `topic-${i}`,
                   title: finalContent.title || topicIdOrName,
                   content: finalContent.content,
                   narration: finalContent.narration || '',
@@ -276,158 +279,104 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   videoSearchTerms: finalContent.videoSearchTerms || [],
                   duration: finalContent.duration || 5,
                   knowledgeCheck: finalContent.knowledgeCheck,
-                  media: finalContent.media
+                  media: finalContent.media,
                 } as Topic)
               } else if (typeof topicIdOrName === 'string') {
-                // For missing content, create a basic topic structure
-                console.log('Creating basic topic for:', topicIdOrName)
                 topics.push({
-                  id: `topic-${i}`, // Simple numeric topic ID
+                  id: `topic-${i}`,
                   title: topicIdOrName,
                   content: `<p>Content for ${topicIdOrName}</p>`,
                   narration: '',
                   imageKeywords: [],
                   imagePrompts: [],
                   videoSearchTerms: [],
-                  duration: 5
+                  duration: 5,
                 } as Topic)
               }
             }
-            
-            // Set course content if we have it
+
             if (topics.length > 0) {
-              // Load additional content
-              console.log('Loading additional content...')
               const assessment = await storage.getContent('assessment')
-              console.log('Assessment:', assessment)
               const welcomePage = await storage.getContent('welcome')
-              console.log('Welcome page:', welcomePage)
               const learningObjectivesPage = await storage.getContent('objectives')
-              console.log('Learning objectives page:', learningObjectivesPage)
-              
-              // Load legacy activities and quiz if they exist
               const activities = await storage.getContent('activities')
-              console.log('Activities:', activities)
               const quiz = await storage.getContent('quiz')
-              console.log('Quiz:', quiz)
-              
-              // Determine format and set content accordingly
+
               if (assessment) {
-                // New format
-                const newContent = {
+                loadedCourseContent = {
                   topics,
-                  welcomePage: welcomePage || { 
-                    id: 'content-0',
-                    title: 'Welcome',
-                    content: metadata.welcomeContent || '',
-                    narration: '',
-                    imageKeywords: [],
-                    imagePrompts: [],
-                    videoSearchTerms: [],
-                    duration: 1
-                  },
-                  learningObjectivesPage: learningObjectivesPage || {
-                    id: 'content-1',
-                    title: 'Learning Objectives',
-                    content: metadata.objectives?.join('<br>') || '',
-                    narration: '',
-                    imageKeywords: [],
-                    imagePrompts: [],
-                    videoSearchTerms: [],
-                    duration: 1
-                  },
+                  welcomePage: welcomePage || { id: 'content-0', title: 'Welcome', content: metadata.welcomeContent || '', narration: '', imageKeywords: [], imagePrompts: [], videoSearchTerms: [], duration: 1 },
+                  learningObjectivesPage: learningObjectivesPage || { id: 'content-1', title: 'Learning Objectives', content: metadata.objectives?.join('<br>') || '', narration: '', imageKeywords: [], imagePrompts: [], videoSearchTerms: [], duration: 1 },
                   objectives: metadata.objectives || [],
-                  assessment
+                  assessment,
                 } as CourseContent
-                console.log('Setting course content (new format):', newContent)
-                setCourseContent(newContent)
               } else if (activities || quiz) {
-                // Legacy format
-                const legacyContent = {
+                loadedCourseContent = {
                   topics,
                   activities: activities || [],
-                  quiz: quiz || { questions: [], passMark: 80 }
+                  quiz: quiz || { questions: [], passMark: 80 },
                 } as any
-                console.log('Setting course content (legacy format):', legacyContent)
-                setCourseContent(legacyContent)
               } else {
-                // Basic format without assessment
-                const basicContent = {
+                loadedCourseContent = {
                   topics,
-                  welcomePage: welcomePage || { 
-                    id: 'content-0',
-                    title: 'Welcome',
-                    content: metadata.welcomeContent || '',
-                    narration: '',
-                    imageKeywords: [],
-                    imagePrompts: [],
-                    videoSearchTerms: [],
-                    duration: 1
-                  },
-                  learningObjectivesPage: learningObjectivesPage || {
-                    id: 'content-1',
-                    title: 'Learning Objectives', 
-                    content: metadata.objectives?.join('<br>') || '',
-                    narration: '',
-                    imageKeywords: [],
-                    imagePrompts: [],
-                    videoSearchTerms: [],
-                    duration: 1
-                  },
+                  welcomePage: welcomePage || { id: 'content-0', title: 'Welcome', content: metadata.welcomeContent || '', narration: '', imageKeywords: [], imagePrompts: [], videoSearchTerms: [], duration: 1 },
+                  learningObjectivesPage: learningObjectivesPage || { id: 'content-1', title: 'Learning Objectives', content: metadata.objectives?.join('<br>') || '', narration: '', imageKeywords: [], imagePrompts: [], videoSearchTerms: [], duration: 1 },
                   objectives: metadata.objectives || [],
-                  assessment: { questions: [], passMark: 80, narration: null }
+                  assessment: { questions: [], passMark: 80, narration: null },
                 } as CourseContent
-                console.log('Setting course content (basic format):', basicContent)
-                setCourseContent(basicContent)
               }
             }
-            
-            // Try to load seed data
+
             const seedData = await storage.getContent('courseSeedData')
-            console.log('Loaded seed data from storage:', seedData)
             if (seedData) {
-              console.log('Setting course seed data with keys:', Object.keys(seedData))
-              setCourseSeedData(seedData as CourseSeedData)
-            } else {
-              console.log('No seed data found in storage')
+              loadedCourseSeedData = seedData as CourseSeedData
             }
-            
-            // Load current step - but only after we've loaded the data
+
             const stepData = await storage.getContent('currentStep')
-            console.log('Loaded step data:', stepData)
             if (stepData && stepData.step) {
-              console.log('Setting current step to:', stepData.step)
-              
-              // For json step and beyond, ensure we have courseContent
               if (stepData.step !== 'seed' && stepData.step !== 'prompt' && !topics?.length) {
                 console.warn('Step requires courseContent but topics not found, defaulting to seed step')
-                setCurrentStep('seed')
-                navigation.navigateToStep(0)
+                loadedStep = 'seed'
               } else {
-                setCurrentStep(stepData.step)
-                // The visited steps will be loaded automatically by StepNavigationContext
+                loadedStep = stepData.step
               }
             }
-          } else {
-            console.log('New project detected, starting fresh...')
-            // For new projects, just set the initial step
-            setCurrentStep('seed')
-            navigation.navigateToStep(0)
           }
-        } catch (error) {
-          console.error('Failed to load project data:', error)
+        })
+        
+        // Map audioIds from backend if courseContent was loaded
+        if (loadedCourseContent && storage.currentProjectId) {
+          try {
+            loadedCourseContent = await mapAudioIds(loadedCourseContent, storage.currentProjectId)
+            console.log('[App] Mapped audioIds from backend')
+          } catch (error) {
+            console.warn('[App] Failed to map audioIds from backend:', error)
+          }
         }
+
+        // Atomic state updates
+        setCourseContent(loadedCourseContent)
+        setCourseSeedData(loadedCourseSeedData)
+        setCurrentStep(loadedStep)
+        if (loadedStep !== 'seed') {
+          navigation.navigateToStep(stepNumbers[loadedStep as keyof typeof stepNumbers])
+        } else {
+          navigation.navigateToStep(0)
+        }
+
+      } catch (error) {
+        console.error('Failed to load project data:', error)
       }
     }
-    
+
     loadProjectData()
-  }, [storage.currentProjectId, storage.isInitialized, storage])
+  }, [storage.currentProjectId, storage.isInitialized, lastLoadedProjectId, navigation, measureAsync])
   
-  // Debug courseContent changes
-  useEffect(() => {
-    console.log('courseContent state updated:', courseContent)
-    console.log('Current step when courseContent updates:', currentStep)
-  }, [courseContent, currentStep])
+  // Debug courseContent changes - DISABLED to prevent console spam
+  // useEffect(() => {
+  //   console.log('courseContent state updated:', courseContent)
+  //   console.log('Current step when courseContent updates:', currentStep)
+  // }, [courseContent, currentStep])
 
   // Track unsaved changes
   useEffect(() => {
@@ -496,19 +445,20 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       await storage.saveProject()
       setToast({ message: 'Project saved successfully', type: 'success' })
       setHasUnsavedChanges(false)
+      setLastSavedTime(new Date().toISOString()) // Update last saved time
       return { success: true }
     } catch (error: any) {
       console.error('[handleSave] Save error:', error)
       setToast({ message: error.message || 'Failed to save project', type: 'error' })
       return { success: false, error: error.message }
     }
-  }, [storage, projectData])
+  }, [storage, projectData, setLastSavedTime])
 
   // Autosave functionality (no toast)
   const handleAutosave = useCallback(async (data: ProjectData) => {
     try {
-      // Use passed data if provided, otherwise use state
-      const dataToSave = data || projectData
+      // The data is passed directly from useAutoSave, no need for fallback
+      const dataToSave = data
       
       // Save all data from all pages (same as manual save)
       if (dataToSave.courseSeedData) {
@@ -549,13 +499,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       await storage.saveProject()
       setHasUnsavedChanges(false)
+      setLastSavedTime(new Date().toISOString()) // Update last saved time
       return { success: true }
     } catch (error: any) {
       // Only show error toast for autosave failures
       setToast({ message: 'Autosave failed', type: 'error' })
       return { success: false, error: error.message }
     }
-  }, [storage, projectData])
+  }, [storage, setLastSavedTime])
   
   const autoSaveState = useAutoSave({
     data: projectData,
@@ -574,13 +525,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
     try {
-      // Create a new project if we don't have one - BEFORE setting state or navigating
-      if (!storage.currentProjectId) {
-        const project = await storage.createProject(data.courseTitle)
-        if (!project || !project.id) {
-          throw new Error('Failed to create project')
+      await measureAsync('handleCourseSeedSubmit', async () => {
+        // Create a new project if we don't have one - BEFORE setting state or navigating
+        if (!storage.currentProjectId) {
+          const project = await storage.createProject(data.courseTitle)
+          if (!project || !project.id) {
+            throw new Error('Failed to create project')
+          }
         }
-      }
       
       // Now save the data
       await storage.saveContent('courseSeedData', data)
@@ -597,6 +549,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       setCurrentStep('prompt')
       navigation.navigateToStep(stepNumbers.prompt)
       setHasUnsavedChanges(true)
+      }) // End of measureAsync
     } catch (error) {
       console.error('Failed to save course seed data:', error)
       setToast({ 
@@ -642,7 +595,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Save to PersistentStorage
     if (storage.currentProjectId) {
       try {
+        await measureAsync('saveJSONContent', async () => {
         await storage.saveContent('currentStep', { step: 'media' })
+        await storage.saveContent('course-content', data)
         
         // Save course metadata
         await storage.saveCourseMetadata({
@@ -680,6 +635,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             media: topic.media
           })
         }
+        }) // End of measureAsync
       } catch (error) {
         console.error('Failed to save course content:', error)
         setToast({ message: 'Failed to save data', type: 'error' })
@@ -938,21 +894,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }
 
-  const handleSettingsClick = () => {
-    setShowSettings(true)
-  }
-
   const handleSettingsSave = (newApiKeys: typeof apiKeys) => {
     setApiKeys(newApiKeys)
-    setShowSettings(false)
+    hideDialog();
     // Note: The Settings component already saves to localStorage
-  }
-
-  const handleSettingsClose = () => {
-    // Don't close without saving - instead trigger save
-    // Get the current form data from the Settings component
-    // For now, just close the modal since Settings already saves to localStorage on form submit
-    setShowSettings(false)
   }
   
   // Save functionality
@@ -1003,7 +948,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // If we have a dashboard callback, use it to go back to dashboard
     if (onBackToDashboard) {
       if (hasUnsavedChanges && courseSeedData?.courseTitle) {
-        setShowUnsavedDialog(true)
+        showDialog('unsaved');
       } else {
         onBackToDashboard()
       }
@@ -1022,132 +967,134 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleConfirmDelete = async () => {
     if (projectToDelete) {
       try {
-        await storage.deleteProject(projectToDelete.id)
+        await storage.deleteProject(projectToDelete.path || projectToDelete.id)
         setToast({ message: `Deleted project: ${projectToDelete.name}`, type: 'success' })
         if (storage.currentProjectId === projectToDelete.id) {
-          // Current project was deleted, need to handle this
-          // TODO: Clear current project or redirect to dashboard
+          // Current project was deleted, clear state and redirect to dashboard
+          // Clear state since current project was deleted
+          setCourseContent(null)
+          setCourseSeedData(null)
+          setCurrentStep('seed')
+          // The dashboard will automatically show when currentProjectId is null
         }
       } catch (error: any) {
         setToast({ message: error.message || 'Failed to delete project', type: 'error' })
       }
     }
-    setShowDeleteDialog(false)
-    setProjectToDelete(null)
+    hideDialog();
   }
   
   // Unsaved changes handling
   const handleSaveAndContinue = async () => {
     const result = await handleSave(projectData)
     if (result.success) {
-      setShowUnsavedDialog(false)
+      hideDialog();
       setHasUnsavedChanges(false)
       if (pendingProjectId) {
         // Handle pending project after save
         onPendingProjectHandled?.()
+        // Only navigate back to dashboard if we're switching projects
+        if (onBackToDashboard) {
+          onBackToDashboard()
+        }
       }
-      if (onBackToDashboard) {
-        onBackToDashboard()
-      }
+      // If no pendingProjectId, just continue with current workflow
     }
   }
   
   const handleDiscardChanges = async () => {
-    setShowUnsavedDialog(false)
+    hideDialog();
     setHasUnsavedChanges(false)
     if (pendingProjectId) {
       // Handle pending project after discard
       onPendingProjectHandled?.()
-    }
-    if (onBackToDashboard) {
-      onBackToDashboard()
-    }
-  }
-  
-  // Help functionality
-  const handleHelp = () => {
-    setShowHelp(true)
-  }
-  
-  // Export functionality
-  const handleExport = async () => {
-    try {
-      const { exportProject } = await loadExportImport()
-      const result = await exportProject({
-        metadata: {
-          version: '1.0',
-          exportDate: new Date().toISOString(),
-          projectName: projectData.courseTitle
-        },
-        courseData: {
-          title: projectData.courseTitle,
-          language: 'en',
-          keywords: [],
-          topics: courseContent?.topics.map((topic: Topic) => ({
-            title: topic.title,
-            content: topic.content,
-            media: topic.media?.map((m: Media) => ({
-              id: m.id,
-              type: m.type as 'image' | 'audio' | 'youtube',
-              url: m.url,
-              name: m.title,
-              filename: m.title
-            }))
-          })) || []
-        },
-        media: {
-          images: [],
-          audio: [],
-          captions: []
-        }
-      })
-      
-      if (!result.success || !result.blob || !result.filename) {
-        throw new Error(result.error || 'Export failed')
-      }
-      
-      const { blob, filename } = result
-      
-      // Download the file
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-      
-      setToast({ message: 'Project exported successfully', type: 'success' })
-    } catch (error) {
-      setToast({ message: 'Failed to export project', type: 'error' })
-    }
-  }
-  
-  // Import functionality
-  const handleImport = async () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.zip,.json'
-    
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      
-      const { importProject } = await loadExportImport()
-      const result = await importProject(file)
-      
-      if (result.success && result.data) {
-        // Import functionality is not fully implemented for the new format
-        // For now, just show an error
-        setToast({ message: 'Import functionality needs to be updated for the new format', type: 'error' })
-      } else {
-        setToast({ message: result.error || 'Failed to import project', type: 'error' })
+      // Only navigate back to dashboard if we're switching projects
+      if (onBackToDashboard) {
+        onBackToDashboard()
       }
     }
-    
-    input.click()
+    // If no pendingProjectId, just continue with current workflow
   }
+  
+  // Export functionality - currently unused
+  // const handleExport = async () => {
+  //   try {
+  //     const { exportProject } = await loadExportImport()
+  //     const result = await exportProject({
+  //       metadata: {
+  //         version: '1.0',
+  //         exportDate: new Date().toISOString(),
+  //         projectName: projectData.courseTitle
+  //       },
+  //       courseData: {
+  //         title: projectData.courseTitle,
+  //         language: 'en',
+  //         keywords: [],
+  //         topics: courseContent?.topics.map((topic: Topic) => ({
+  //           title: topic.title,
+  //           content: topic.content,
+  //           media: topic.media?.map((m: Media) => ({
+  //             id: m.id,
+  //             type: m.type as 'image' | 'audio' | 'youtube',
+  //             url: m.url,
+  //             name: m.title,
+  //             filename: m.title
+  //           }))
+  //         })) || []
+  //       },
+  //       media: {
+  //         images: [],
+  //         audio: [],
+  //         captions: []
+  //       }
+  //     })
+  //     
+  //     if (!result.success || !result.blob || !result.filename) {
+  //       throw new Error(result.error || 'Export failed')
+  //     }
+  //     
+  //     const { blob, filename } = result
+  //     
+  //     // Download the file
+  //     const url = URL.createObjectURL(blob)
+  //     const link = document.createElement('a')
+  //     link.href = url
+  //     link.download = filename
+  //     document.body.appendChild(link)
+  //     link.click()
+  //     link.remove()
+  //     URL.revokeObjectURL(url)
+  //     
+  //     setToast({ message: 'Project exported successfully', type: 'success' })
+  //   } catch (error) {
+  //     setToast({ message: 'Failed to export project', type: 'error' })
+  //   }
+  // }
+  
+  // Import functionality - currently unused
+  // const handleImport = async () => {
+  //   const input = document.createElement('input')
+  //   input.type = 'file'
+  //   input.accept = '.zip,.json'
+  //   
+  //   input.onchange = async (e) => {
+  //     const file = (e.target as HTMLInputElement).files?.[0]
+  //     if (!file) return
+  //     
+  //     const { importProject } = await loadExportImport()
+  //     const result = await importProject(file)
+  //     
+  //     if (result.success && result.data) {
+  //       // Import functionality is not fully implemented for the new format
+  //       // For now, just show an error
+  //       setToast({ message: 'Import functionality needs to be updated for the new format', type: 'error' })
+  //     } else {
+  //       setToast({ message: result.error || 'Failed to import project', type: 'error' })
+  //     }
+  //   }
+  //   
+  //   input.click()
+  // }
 
   // Handle step navigation from progress indicator
   const handleStepClick = async (stepIndex: number) => {
@@ -1180,29 +1127,29 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // Ctrl/Cmd + S: Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        if (!showSettings && !showHelp) {
+        if (!activeDialog) {
           handleManualSave()
         }
       }
       // Ctrl/Cmd + O: Open
       else if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault()
-        if (!showSettings && !showHelp) {
+        if (!activeDialog) {
           handleOpen()
         }
       }
       // F1: Help
       else if (e.key === 'F1') {
         e.preventDefault()
-        if (!showSettings) {
-          setShowHelp(true)
+        if (activeDialog !== 'settings') {
+          showDialog('help');
         }
       }
       // Ctrl/Cmd + ,: Settings
       else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
-        if (!showHelp) {
-          setShowSettings(true)
+        if (activeDialog !== 'help') {
+          showDialog('settings');
         }
       }
       // Ctrl/Cmd + Shift + D: Toggle Debug Mode
@@ -1221,13 +1168,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showSettings, showHelp, handleManualSave, handleOpen])
+  }, [activeDialog, handleManualSave, handleOpen, showDialog])
 
 
   return (
     <ErrorBoundary>
-      <MediaProvider projectId={storage.currentProjectId}>
-        <MediaLoadingWrapper>
+      <UnifiedMediaProvider projectId={storage.currentProjectId || ''}>
         <div style={{ backgroundColor: COLORS.background, color: COLORS.textMuted, minHeight: '100vh' }}>
         {/* Network status indicator */}
         <NetworkStatusIndicator />
@@ -1238,7 +1184,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       </a>
       
       <main id="main-content">
-        {showSettings && (
+        {activeDialog === 'settings' && (
           <div 
             style={{
               position: 'fixed',
@@ -1263,7 +1209,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               overflowY: 'auto'
             }}>
               <button
-                onClick={handleSettingsClose}
+                onClick={hideDialog}
                 className="close-button"
                 style={{
                   position: 'absolute',
@@ -1296,13 +1242,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           </div>
         )}
         
-        {showHelp && (
+        {activeDialog === 'help' && (
           <Suspense fallback={<LoadingComponent />}>
-            <HelpPage onBack={() => setShowHelp(false)} />
+            <HelpPage onBack={hideDialog} />
           </Suspense>
         )}
         
-        {!showSettings && !showHelp && (
+        {!activeDialog && (
           <AutoSaveProvider 
             isSaving={autoSaveState.isSaving}
             lastSaved={autoSaveState.lastSaved}
@@ -1310,16 +1256,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           >
             {currentStep === 'seed' && (
               <CourseSeedInput 
-                onSettingsClick={handleSettingsClick}
-                onHelp={handleHelp}
-                onSave={() => handleManualSave()}
-                onSaveAs={handleSaveAs}
-                onOpen={handleOpen}
+                onSettingsClick={() => showDialog('settings')}
+                onHelp={() => showDialog('help')}
+                onSave={(content?: any) => {
+                  if (content) {
+                    setCourseSeedData(content);
+                    handleManualSave();
+                  } else {
+                    handleManualSave();
+                  }
+                }}
                 onSubmit={handleCourseSeedSubmit}
                 onStepClick={handleStepClick}
                 initialData={courseSeedData || undefined}
-                onExport={handleExport}
-                onImport={handleImport}
               />
             )}
           
@@ -1329,9 +1278,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   courseSeedData={courseSeedData}
                   onNext={handlePromptNext}
                   onBack={handlePromptBack}
-                  onSettingsClick={handleSettingsClick}
-                  onHelp={handleHelp}
-                  onSave={() => handleManualSave()}
+                  onSettingsClick={() => showDialog('settings')}
+                  onHelp={() => showDialog('help')}
+                  onSave={(content?: any, silent?: boolean) => {
+                  if (content) {
+                    setCourseContent(content);
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
+                  }
+                }}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1339,40 +1297,75 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               </Suspense>
             )}
             
-            {currentStep === 'json' && (() => {
-              console.log('Rendering JSON step with courseContent:', courseContent)
-              return (
-                <Suspense fallback={<LoadingComponent />}>
-                  <JSONImportValidator
-                    onNext={handleJSONNext}
-                    onBack={handleJSONBack}
-                    onSettingsClick={handleSettingsClick}
-                    onHelp={handleHelp}
-                    onSave={() => handleManualSave()}
-                    onSaveAs={handleSaveAs}
-                    onOpen={handleOpen}
-                    onStepClick={handleStepClick}
-                    initialData={courseContent || undefined}
-                  />
-                </Suspense>
-              )
-            })()}
-            
-            {currentStep === 'media' && courseContent && courseSeedData && (
+            {currentStep === 'json' && (
               <Suspense fallback={<LoadingComponent />}>
-                <MediaEnhancementWizard
-                  courseContent={courseContent}
-                  courseSeedData={courseSeedData}
-                  onNext={handleMediaNext}
-                  onBack={handleMediaBack}
-                  apiKeys={apiKeys}
-                  onSettingsClick={handleSettingsClick}
-                  onHelp={handleHelp}
-                  onSave={() => handleManualSave()}
+                <JSONImportValidator
+                  onNext={handleJSONNext}
+                  onBack={handleJSONBack}
+                  onSettingsClick={() => showDialog('settings')}
+                  onHelp={() => showDialog('help')}
+                  onSave={(content?: any, silent?: boolean) => {
+                  if (content) {
+                    setCourseContent(content);
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
+                  }
+                }}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
+              </Suspense>
+            )}
+            
+            {currentStep === 'media' && (
+              <Suspense fallback={<LoadingComponent />}>
+                {courseContent && courseSeedData ? (
+                  <MediaEnhancementWizard
+                    courseContent={courseContent}
+                    courseSeedData={courseSeedData}
+                    onNext={handleMediaNext}
+                    onBack={handleMediaBack}
+                    apiKeys={apiKeys}
+                    onSettingsClick={() => showDialog('settings')}
+                    onHelp={() => showDialog('help')}
+                    onSave={(content?: any, silent?: boolean) => {
+                    if (content) {
+                      setCourseContent(content);
+                      if (!silent) {
+                        handleManualSave();
+                      }
+                    } else if (!silent) {
+                      handleManualSave();
+                    }
+                  }}
+                    onSaveAs={handleSaveAs}
+                    onOpen={handleOpen}
+                    onStepClick={handleStepClick}
+                  />
+                ) : (
+                  <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center',
+                    backgroundColor: COLORS.background,
+                    minHeight: '100vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Loading Course Content...</h2>
+                    <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
+                      {!courseContent ? 'Course content is not available. Please go back to the JSON Import step.' : 'Course seed data is missing.'}
+                    </p>
+                    <Button onClick={handleMediaBack} variant="secondary">
+                      Go Back
+                    </Button>
+                  </div>
+                )}
               </Suspense>
             )}
             
@@ -1383,9 +1376,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   courseSeedData={courseSeedData}
                   onNext={handleAudioNext}
                   onBack={handleAudioBack}
-                  onSettingsClick={handleSettingsClick}
-                  onHelp={handleHelp}
-                  onSave={() => handleManualSave()}
+                  onSettingsClick={() => showDialog('settings')}
+                  onHelp={() => showDialog('help')}
+                  onSave={(content?: any, silent?: boolean) => {
+                  if (content) {
+                    setCourseContent(content);
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
+                  }
+                }}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1400,9 +1402,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   courseSeedData={courseSeedData}
                   onNext={handleActivitiesNext}
                   onBack={handleActivitiesBack}
-                  onSettingsClick={handleSettingsClick}
-                  onHelp={handleHelp}
-                  onSave={() => handleManualSave()}
+                  onSettingsClick={() => showDialog('settings')}
+                  onHelp={() => showDialog('help')}
+                  onSave={(content?: any, silent?: boolean) => {
+                  if (content) {
+                    setCourseContent(content);
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
+                  }
+                }}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1413,14 +1424,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             {currentStep === 'scorm' && (
               <Suspense fallback={<LoadingComponent />}>
                 {(() => {
-                  console.log('SCORM step render check:', {
-                    currentStep,
-                    hasCourseContent: !!courseContent,
-                    hasCourseSeedData: !!courseSeedData,
-                    courseContentKeys: courseContent ? Object.keys(courseContent) : [],
-                    courseSeedDataKeys: courseSeedData ? Object.keys(courseSeedData) : [],
-                    courseSeedData: courseSeedData
-                  });
+                  // Debug logging removed to prevent excessive console output
                   
                   if (!courseContent || !courseSeedData) {
                     return (
@@ -1439,13 +1443,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       courseSeedData={courseSeedData}
                       onNext={handleSCORMNext}
                   onBack={handleSCORMBack}
-                  onSettingsClick={handleSettingsClick}
-                  onHelp={handleHelp}
-                  onSave={() => handleManualSave()}
+                  onSettingsClick={() => showDialog('settings')}
+                  onHelp={() => showDialog('help')}
+                  onSave={(content?: any, silent?: boolean) => {
+                  if (content) {
+                    setCourseContent(content);
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
+                  }
+                }}
                   onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
-                      storage={storage}
                     />
                   );
                 })()}
@@ -1457,27 +1469,30 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       
       {/* Dialogs */}
-      
       <DeleteConfirmDialog
-        isOpen={showDeleteDialog}
+        isOpen={activeDialog === 'delete'}
         projectName={projectToDelete?.name || ''}
         onConfirm={handleConfirmDelete}
-        onCancel={() => {
-          setShowDeleteDialog(false)
-          setProjectToDelete(null)
-        }}
+        onCancel={hideDialog}
       />
       
       <UnsavedChangesDialog
-        isOpen={showUnsavedDialog}
+        isOpen={activeDialog === 'unsaved'}
         currentProjectName={courseSeedData?.courseTitle || 'Current Project'}
         onSave={handleSaveAndContinue}
         onDiscard={handleDiscardChanges}
-        onCancel={() => setShowUnsavedDialog(false)}
+        onCancel={hideDialog}
       />
       
+      {/* Performance Dashboard - Press Ctrl+Shift+P to toggle */}
+      {activeDialog === 'performance' && (
+        <Suspense fallback={<LoadingComponent />}>
+          <PerformanceDashboard show={true} />
+        </Suspense>
+      )}
+      
       {/* Test Checklist Modal - Press Ctrl+Shift+T to toggle */}
-      {showTestChecklist && (
+      {activeDialog === 'testChecklist' && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -1496,7 +1511,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             overflowY: 'auto'
           }}>
             <Button
-              onClick={() => setShowTestChecklist(false)}
+              onClick={hideDialog}
               style={{
                 position: 'absolute',
                 right: '1rem',
@@ -1534,48 +1549,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         </div>
       )}
       </div>
-      </MediaLoadingWrapper>
-      </MediaProvider>
+      </UnifiedMediaProvider>
     </ErrorBoundary>
   )
-}
-
-// Wrapper component that blocks UI until MediaStore is loaded
-function MediaLoadingWrapper({ children }: { children: React.ReactNode }) {
-  const { isLoading: isMediaLoading } = useMedia()
-  const [showDelayedLoading, setShowDelayedLoading] = useState(false)
-  
-  useEffect(() => {
-    // Show loading indicator after a short delay to avoid flash
-    if (isMediaLoading) {
-      const timer = setTimeout(() => {
-        setShowDelayedLoading(true)
-      }, 300)
-      return () => clearTimeout(timer)
-    } else {
-      setShowDelayedLoading(false)
-    }
-  }, [isMediaLoading])
-  
-  if (isMediaLoading && showDelayedLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        backgroundColor: '#111827',
-        color: '#f3f4f6',
-        flexDirection: 'column',
-        gap: '1rem'
-      }}>
-        <div style={{ fontSize: '1.25rem' }}>Finalizing project load...</div>
-        <div style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Loading media resources</div>
-      </div>
-    )
-  }
-  
-  return <>{children}</>
 }
 
 // Inner wrapper that has access to storage context

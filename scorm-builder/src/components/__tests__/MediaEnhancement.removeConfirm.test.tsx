@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MediaEnhancementWizard } from '../MediaEnhancementWizardRefactored'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
+import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { CourseContent } from '../../types/aiPrompt'
-import { PersistentStorageProvider } from '../../contexts/PersistentStorageContext'
-
 describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
   const mockCourseContent: CourseContent = {
     welcomePage: {
@@ -39,6 +37,10 @@ describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
         title: 'Topic 1',
         content: '<p>Topic 1 content</p>',
         narration: 'Topic 1 narration',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
         imageKeywords: ['topic1'],
         imagePrompts: ['Topic 1 prompt'],
         videoSearchTerms: ['topic 1 video'],
@@ -75,11 +77,7 @@ describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
   })
 
   it('should show confirmation dialog when removing media', async () => {
-    render(
-      <PersistentStorageProvider>
-        <MediaEnhancementWizard {...defaultProps} />
-      </PersistentStorageProvider>
-    )
+    render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Media should be present
     expect(screen.getByText('✓ Media has been added to this topic')).toBeInTheDocument()
@@ -100,11 +98,7 @@ describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
   })
 
   it('should not remove media if user cancels confirmation', async () => {
-    render(
-      <PersistentStorageProvider>
-        <MediaEnhancementWizard {...defaultProps} />
-      </PersistentStorageProvider>
-    )
+    render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Media should be present
     expect(screen.getByText('✓ Media has been added to this topic')).toBeInTheDocument()
@@ -132,11 +126,7 @@ describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
   })
 
   it('should remove media if user confirms', async () => {
-    render(
-      <PersistentStorageProvider>
-        <MediaEnhancementWizard {...defaultProps} />
-      </PersistentStorageProvider>
-    )
+    render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Media should be present
     expect(screen.getByText('✓ Media has been added to this topic')).toBeInTheDocument()
@@ -183,11 +173,7 @@ describe('MediaEnhancementWizard - Remove Media Confirmation', () => {
       }]
     }
     
-    render(
-      <PersistentStorageProvider>
-        <MediaEnhancementWizard {...defaultProps} courseContent={contentWithTopicMedia} />
-      </PersistentStorageProvider>
-    )
+    render(<MediaEnhancementWizard {...defaultProps} courseContent={contentWithTopicMedia} />)
     
     // Navigate to topic 1
     fireEvent.click(screen.getByText('Next Topic →')) // to objectives

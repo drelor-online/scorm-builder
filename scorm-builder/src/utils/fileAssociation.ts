@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { fileStorage } from '../services/FileStorage'
+import { readFile } from '@tauri-apps/plugin-fs'
+import { importProject } from '../services/ProjectExportImport'
 
 interface FileAssociationCallbacks {
   onProjectOpened?: (projectId: string) => void
@@ -15,10 +16,25 @@ export async function handleFileAssociation(callbacks: FileAssociationCallbacks)
     }
     
     try {
-      await fileStorage.initialize()
-      await fileStorage.openProjectFromPath(filePath)
-      if (callbacks.onProjectOpened && fileStorage.currentProjectId) {
-        callbacks.onProjectOpened(fileStorage.currentProjectId)
+      // Read the file contents
+      const fileContents = await readFile(filePath)
+      
+      // Create a File object from the binary data
+      const blob = new Blob([fileContents])
+      const fileName = filePath.split(/[\\/]/).pop() || 'project.scormproj'
+      const file = new File([blob], fileName, { type: 'application/zip' })
+      
+      // Import the project using the existing import functionality
+      const result = await importProject(file)
+      
+      if (result.success && result.data) {
+        if (callbacks.onProjectOpened) {
+          // Generate a project ID based on the project name and timestamp
+          const projectId = `${result.data.metadata.projectName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
+          callbacks.onProjectOpened(projectId)
+        }
+      } else {
+        throw new Error(result.error || 'Failed to import project')
       }
     } catch (error: any) {
       if (error.message === 'UNSAVED_CHANGES') {

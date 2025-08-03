@@ -24,7 +24,7 @@ export default defineConfig({
     trace: 'on-first-retry',
     
     /* Take screenshot on failure */
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
     
     /* Visual regression testing options */
     video: 'retain-on-failure',
@@ -73,7 +73,10 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: 'npm run dev',
-    port: 1420,
-    reuseExistingServer: true,
+    url: 'http://localhost:1420',
+    reuseExistingServer: !process.env.CI,
+    timeout: 180000, // 180 seconds
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });

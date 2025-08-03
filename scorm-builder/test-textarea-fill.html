@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Textarea Fill</title>
+    <style>
+        body {
+            background: #1f2937;
+            color: #f3f4f6;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #log {
+            background: #111827;
+            border: 1px solid #374151;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 2px 0;
+        }
+        .error { color: #ef4444; }
+        .success { color: #10b981; }
+        .info { color: #3b82f6; }
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: #111827;
+            color: #f3f4f6;
+            border: 1px solid #374151;
+            padding: 10px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Testing Textarea Fill with Automation</h1>
+    <p>This page tests if the automation can fill the topics textarea correctly.</p>
+    
+    <div>
+        <label for="topics-textarea">Topics (Test):</label>
+        <textarea 
+            id="topics-textarea" 
+            data-testid="topics-textarea"
+            placeholder="Enter topics here..."
+        ></textarea>
+    </div>
+    
+    <div id="log">
+        <div class="log-entry info">Waiting for automation to run...</div>
+    </div>
+
+    <script type="module">
+        // Import the automation helpers
+        import { AutomationUINavigator } from './src/utils/automationUINavigator.ts';
+        
+        const log = document.getElementById('log');
+        
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Test the fillInput method
+        async function testTextareaFill() {
+            try {
+                addLog('Creating AutomationUINavigator instance...', 'info');
+                const navigator = new AutomationUINavigator({ speed: 'normal', highlight: true });
+                
+                const testTopics = [
+                    'Introduction to workplace safety',
+                    'Hazard identification techniques',
+                    'Personal protective equipment',
+                    'Emergency response procedures',
+                    'Incident reporting protocols'
+                ];
+                
+                const topicsString = testTopics.join('\n');
+                addLog(`Topics to fill: ${topicsString}`, 'info');
+                
+                addLog('Calling fillInput...', 'info');
+                await navigator.fillInput('[data-testid="topics-textarea"]', topicsString);
+                
+                // Check if the value was set
+                const textarea = document.querySelector('[data-testid="topics-textarea"]');
+                const actualValue = textarea.value;
+                
+                if (actualValue === topicsString) {
+                    addLog('✓ Success! Textarea was filled correctly!', 'success');
+                    addLog(`Value: "${actualValue}"`, 'success');
+                } else {
+                    addLog('✗ Failed! Textarea value does not match expected', 'error');
+                    addLog(`Expected: "${topicsString}"`, 'error');
+                    addLog(`Actual: "${actualValue}"`, 'error');
+                }
+                
+                navigator.cleanup();
+            } catch (error) {
+                addLog(`Error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Monitor textarea changes
+        const textarea = document.querySelector('[data-testid="topics-textarea"]');
+        textarea.addEventListener('input', (e) => {
+            addLog(`Textarea input event - value length: ${e.target.value.length}`, 'info');
+        });
+        textarea.addEventListener('change', (e) => {
+            addLog(`Textarea change event - value: "${e.target.value}"`, 'info');
+        });
+        
+        // Run test after page loads
+        window.addEventListener('load', () => {
+            setTimeout(testTextareaFill, 1000);
+        });
+    </script>
+</body>
+</html>

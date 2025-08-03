@@ -19,11 +19,11 @@ export const loadSCORMGenerator = async (version: string) => {
   
   switch (version) {
     case '1.2':
-      const scorm12Module = await import(
-        /* webpackChunkName: "scorm-1.2" */
-        '@/services/spaceEfficientScormGenerator'
+      const rustModule = await import(
+        /* webpackChunkName: "rust-scorm" */
+        '@/services/rustScormGenerator'
       )
-      generator = scorm12Module.generateSpaceEfficientSCORM12Buffer
+      generator = rustModule.generateRustSCORM
       break
       
     case '2004':
@@ -101,8 +101,8 @@ export const loadSearchService = async (searchType: 'image' | 'youtube') => {
 export const preloadCriticalModules = () => {
   // Preload in the background after initial render
   setTimeout(() => {
-    // Preload SCORM generator since it's likely to be used
-    import('@/services/spaceEfficientScormGenerator')
+    // Preload Rust SCORM generator since it's likely to be used
+    import('@/services/rustScormGenerator')
     
     // Preload converter
     import('@/services/courseContentConverter')

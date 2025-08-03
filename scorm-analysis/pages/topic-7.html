@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigating Gas Safety Regulations</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body data-has-knowledge-check="true" style="margin: 0; padding: 0; box-sizing: border-box;">
+    <div class="content-layout">
+        <div class="text-section">
+            <h2>Rules of the Road: Key Safety Regulations</h2><p>Working safely with natural gas isn't just a good idea--it's the law. Several government agencies create and enforce regulations to protect workers and the public. While regulations can be complex, understanding their purpose is essential.</p><h3>Key Regulatory Bodies (U.S. Example):</h3><ul><li><strong>OSHA (Occupational Safety and Health Administration):</strong> OSHA's primary mission is to ensure safe and healthful working conditions for employees. They set standards for things like PPE, confined space entry, and hazard communication. The General Duty Clause requires employers to provide a workplace free from recognized hazards.</li><li><strong>PHMSA (Pipeline and Hazardous Materials Safety Administration):</strong> PHMSA is responsible for the safe transportation of energy and other hazardous materials. They have specific and detailed regulations for the design, construction, operation, and maintenance of natural gas pipelines.</li><li><strong>State and Local Agencies:</strong> Many states and municipalities have their own additional safety codes, especially for gas distribution within communities and building codes for gas appliances.</li></ul><h3>Employee and Employer Responsibilities:</h3><p><strong>Employers</strong> are responsible for providing a safe workplace, providing required training, supplying necessary PPE, and complying with all applicable regulations. <strong>Employees</strong> are responsible for following all safety rules, using PPE correctly, reporting hazards and incidents, and participating in training.</p>
+            
+            
+            <div class="knowledge-check-container">
+                <h3>Knowledge Check</h3>
+                <p class="kc-question">Which U.S. agency is primarily responsible for regulating the safety of interstate natural gas pipelines?</p>
+                <div class="kc-options">
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-6" value="0" data-correct="2">
+                        <span class="option-text">Environmental Protection Agency (EPA)</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-6" value="1" data-correct="2">
+                        <span class="option-text">Occupational Safety and Health Administration (OSHA)</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-6" value="2" data-correct="2">
+                        <span class="option-text">Pipeline and Hazardous Materials Safety Administration (PHMSA)</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-6" value="3" data-correct="2">
+                        <span class="option-text">Federal Energy Regulatory Commission (FERC)</span>
+                    </label>
+                </div>
+                <button class="kc-submit" onclick="parent.checkAnswer(6, 2, &quot;That's%20right!%20PHMSA%20is%20the%20lead%20federal%20agency%20for%20the%20safe%20operation%20of%20the%20nation's%20pipeline%20system.&quot;, &quot;While%20other%20agencies%20are%20involved%20in%20energy%20and%20safety%2C%20PHMSA%20is%20the%20primary%20agency%20responsible%20for%20the%20regulations%20governing%20the%20safety%20of%20natural%20gas%20pipelines.&quot;, event)">Submit Answer</button>
+                <div id="kc-feedback-topic-7" class="kc-feedback">
+                    <div class="feedback-text"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="media-panel">
+            
+            
+            
+            <div class="audio-player">
+                <audio id="audio-player-topic-7" src="../media/audio-8.mp3" preload="metadata">
+                    <track kind="captions" src="../media/caption-8.vtt" srclang="en" label="English" default>
+                </audio>
+                <div class="audio-main">
+                    <button class="play-pause" onclick="parent.toggleAudio('topic-7', event)">▶</button>
+                    <div class="audio-track">
+                        <div class="track-progress" onclick="parent.seekAudio(event, 'topic-7')">
+                            <div class="track-fill" id="track-fill-topic-7">
+                                <div class="track-handle"></div>
+                            </div>
+                        </div>
+                        <div class="track-time">
+                            <span id="current-time-topic-7">0:00</span>
+                            <span id="duration-topic-7">0:00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="audio-controls">
+                    <button class="audio-btn" onclick="parent.skip(-10, 'topic-7')">◀ 10s</button>
+                    <button class="audio-btn" id="speed-btn-topic-7" onclick="parent.changeSpeed('topic-7')">1x</button>
+                    <button class="audio-btn active" id="cc-btn-topic-7" onclick="parent.toggleCaptions('topic-7')">CC</button>
+                    <button class="audio-btn" onclick="parent.toggleVolume('topic-7', event)">🔊</button>
+                    <button class="audio-btn" onclick="parent.skip(10, 'topic-7')">10s ▶</button>
+                </div>
+                <div class="caption-display" id="caption-display-topic-7">
+                    <p id="caption-text-topic-7"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="lightbox-overlay" onclick="parent.closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-image" src="" alt="">
+            <button class="lightbox-close" onclick="parent.closeLightbox()">×</button>
+        </div>
+    </div>
+    
+    <!-- Navigation handled by main index.html sidebar and footer -->
+    
+    
+    <script>
+        // Disable next button on page load if knowledge check exists
+        window.addEventListener('load', function() {
+            // Try both in the parent frame and current frame
+            let nextBtn = parent.document.getElementById('next-btn');
+            if (!nextBtn) {
+                nextBtn = document.getElementById('next-btn');
+            }
+            
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.classList.add('disabled');
+                // Also set data attribute to track state
+                nextBtn.dataset.requiresAnswer = 'true';
+            }
+        });
+    </script>
+    
+    
+    <!-- Custom Alert Container -->
+    <div id="scorm-alert-container"></div>
+</body>
+</html>

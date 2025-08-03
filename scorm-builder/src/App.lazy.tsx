@@ -6,7 +6,7 @@ import { COLORS } from '@/constants'
 
 // Lazy load heavy components
 const CourseSeedInput = lazy(() => 
-  import('@/components/CourseSeedInputRefactored').then(module => ({
+  import('@/components/CourseSeedInput').then(module => ({
     default: module.CourseSeedInput
   }))
 )
@@ -18,44 +18,44 @@ const AIPromptGenerator = lazy(() =>
 )
 
 const JSONImportValidator = lazy(() => 
-  import('@/components/JSONImportValidatorRefactored').then(module => ({
+  import('@/components/JSONImportValidator').then(module => ({
     default: module.JSONImportValidator
   }))
 )
 
 const MediaEnhancementWizard = lazy(() => 
-  import('./components/MediaEnhancementWizardRefactored').then(module => ({
+  import('./components/MediaEnhancementWizard').then(module => ({
     default: module.MediaEnhancementWizard
   }))
 )
 
 const AudioNarrationWizard = lazy(() => 
-  import('./components/AudioNarrationWizardRefactored').then(module => ({
-    default: module.AudioNarrationWizard
+  import('./components/AudioNarrationWizard').then(module => ({
+    default: module.default
   }))
 )
 
 const ActivitiesEditor = lazy(() => 
-  import('./components/ActivitiesEditorRefactored').then(module => ({
+  import('./components/ActivitiesEditor').then(module => ({
     default: module.ActivitiesEditor
   }))
 )
 
 const SCORMPackageBuilder = lazy(() => 
-  import('./components/SCORMPackageBuilderRefactored').then(module => ({
+  import('./components/SCORMPackageBuilder').then(module => ({
     default: module.SCORMPackageBuilder
   }))
 )
 
 // Lazy load dialogs
 const Settings = lazy(() => 
-  import('./components/SettingsRefactored').then(module => ({
+  import('./components/Settings').then(module => ({
     default: module.Settings
   }))
 )
 
 const HelpPage = lazy(() => 
-  import('./components/HelpPageRefactored').then(module => ({
+  import('./components/HelpPage').then(module => ({
     default: module.HelpPage
   }))
 )
@@ -95,7 +95,7 @@ const LoadingComponent = () => (
     <div style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Loading component...</div>
     <style>{`
       @keyframes spin {
-        to { transform: rotate(360deg); }
+        to { transform: rotate(360deg);}
       }
     `}</style>
   </div>
@@ -127,8 +127,7 @@ function App() {
   // Save/Open state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
-  const [, setShowImportModal] = useState(false)
-  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string; path?: string } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   
   // Step mapping for progress indicator
@@ -322,9 +321,9 @@ function App() {
     setShowHelp(true)
   }
   
-  const handleExport = async () => {
-    // Export should be handled by the current system
-    showToast('Export feature is being updated', 'error')
+  const handleSaveAs = async () => {
+    // Save As should be handled by the current system
+    showToast('Save As feature is being updated', 'error')
   }
   
   
@@ -347,11 +346,8 @@ function App() {
                     onSettingsClick={handleSettingsClick}
                     onHelp={handleHelp}
                     onSave={handleManualSave}
-                    onOpen={handleOpen}
                     onStepClick={handleStepClick}
                     initialData={courseSeedData || undefined}
-                    onExport={handleExport}
-                    onImport={() => setShowImportModal(true)}
                   />
                 </Suspense>
               )}
@@ -381,7 +377,6 @@ function App() {
                     onSave={handleManualSave}
                     onOpen={handleOpen}
                     onStepClick={handleStepClick}
-                    initialData={courseContent || undefined}
                   />
                 </Suspense>
               )}
@@ -397,6 +392,7 @@ function App() {
                     onSettingsClick={handleSettingsClick}
                     onHelp={handleHelp}
                     onSave={handleManualSave}
+                    onSaveAs={handleSaveAs}
                     onOpen={handleOpen}
                     onStepClick={handleStepClick}
                   />

@@ -1,320 +1,453 @@
-/**
- * Storage Refactor Migration Tests
- * Tests for migrating from IndexedDB + localStorage to file-based storage
- */
-
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { StorageRefactorMigration } from '../storageRefactorMigration';
-import { PersistentStorage } from '../PersistentStorage';
-import { FileMediaManager } from '../fileMediaManager';
-import type { MediaReference } from '../../types/projectStructure';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { StorageRefactorMigration } from '../storageRefactorMigration'
+import type { PersistentStorage } from '../PersistentStorage'
+import type { FileMediaManager } from '../fileMediaManager'
+import type { MigrationOptions, MigrationProgress } from '../storageRefactorMigration'
 
 // Mock dependencies
-vi.mock('../PersistentStorage');
-vi.mock('../fileMediaManager');
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn()
-}));
+vi.mock('../PersistentStorage')
+vi.mock('../fileMediaManager')
 
 describe('StorageRefactorMigration', () => {
-  let migration: StorageRefactorMigration;
-  let mockPersistentStorage: PersistentStorage;
-  let mockFileManager: FileMediaManager;
-
+  let migration: StorageRefactorMigration
+  let mockPersistentStorage: any
+  let mockFileManager: any
+  
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.clearAllMocks()
     
-    // Create mock instances
-    mockPersistentStorage = new PersistentStorage();
-    mockFileManager = new FileMediaManager('/test/project');
+    // Mock PersistentStorage
+    mockPersistentStorage = {
+      getMediaForTopic: vi.fn(),
+      deleteMedia: vi.fn(),
+      getContent: vi.fn(),
+      getCourseMetadata: vi.fn()
+    }
     
-    // Setup basic mocks
-    vi.mocked(mockPersistentStorage.initialize).mockResolvedValue(undefined);
-    vi.mocked(mockFileManager.initializeProjectStructure).mockResolvedValue(undefined);
-    vi.mocked(mockFileManager.saveMediaFile).mockResolvedValue(undefined);
-    vi.mocked(mockFileManager.saveProjectFile).mockResolvedValue(undefined);
-    vi.mocked(mockFileManager.scanMediaDirectory).mockResolvedValue([]);
-    vi.mocked(mockPersistentStorage.deleteMedia).mockResolvedValue(undefined);
+    // Mock FileMediaManager
+    mockFileManager = {
+      saveMediaFile: vi.fn(),
+      scanMediaDirectory: vi.fn(),
+      saveProjectFile: vi.fn(),
+      getMediaDirectory: vi.fn()
+    }
     
-    // Mock getMediaDirectory to return proper paths
-    vi.mocked(mockFileManager.getMediaDirectory).mockImplementation((type) => {
-      const paths = {
-        'audio': 'media/audio',
-        'image': 'media/images',
-        'video': 'media/video',
-        'caption': 'captions'
-      };
-      return paths[type] || 'media/files';
-    });
-  });
-
-  describe('Migration Process', () => {
-    it('should migrate all media files from IndexedDB to file system', async () => {
-      // Intent: All media stored in IndexedDB should be saved to disk with proper structure
+    migration = new StorageRefactorMigration(
+      mockPersistentStorage as PersistentStorage,
+      mockFileManager as FileMediaManager
+    )
+  })
+  
+  describe('migrateMedia', () => {
+    it('should migrate all media from IndexedDB to file system', async () => {
       const mockMediaItems = [
         {
-          id: 'audio-0001',
-          blob: new Blob(['audio content'], { type: 'audio/mpeg' }),
-          type: 'audio/mpeg',
+          id: 'audio-0',
+          blob: new Blob(['audio data'], { type: 'audio/mp3' }),
+          type: 'audio/mp3',
           mediaType: 'audio' as const,
-          metadata: { blockNumber: '0001', topicId: 'welcome' },
           timestamp: Date.now()
         },
         {
-          id: 'caption-0001',
-          blob: new Blob(['WEBVTT\n\n00:00.000 --> 00:05.000\nWelcome'], { type: 'text/vtt' }),
-          type: 'text/vtt',
-          mediaType: 'audio' as const, // Captions stored with audio mediaType
-          metadata: { blockNumber: '0001', topicId: 'welcome' },
-          timestamp: Date.now()
-        },
-        {
-          id: 'image-safety-diagram',
+          id: 'image-1',
           blob: new Blob(['image data'], { type: 'image/png' }),
           type: 'image/png',
           mediaType: 'image' as const,
-          metadata: { topicId: 'electrical-hazards' },
           timestamp: Date.now()
         }
-      ];
-
-      // Mock getting all media from IndexedDB
-      vi.mocked(mockPersistentStorage.getMediaForTopic).mockImplementation(async (topicId) => {
-        if (topicId === '*') {
-          return mockMediaItems;
-        }
-        return mockMediaItems.filter(item => item.metadata?.topicId === topicId);
-      });
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
-      const result = await migration.migrateMedia();
-
-      // Verify all media was saved to files
-      expect(mockFileManager.saveMediaFile).toHaveBeenCalledTimes(3);
+      ]
       
-      // Check audio file
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(mockMediaItems)
+      mockFileManager.getMediaDirectory.mockImplementation((type: string) => `media/${type}`)
+      
+      const result = await migration.migrateMedia()
+      
+      expect(result.success).toBe(true)
+      expect(result.migratedCount).toBe(2)
+      expect(result.errors).toBeUndefined()
+      
+      // Verify getAllMedia was called
+      expect(mockPersistentStorage.getMediaForTopic).toHaveBeenCalledWith('*')
+      
+      // Verify each media item was saved
+      expect(mockFileManager.saveMediaFile).toHaveBeenCalledTimes(2)
       expect(mockFileManager.saveMediaFile).toHaveBeenCalledWith(
         mockMediaItems[0].blob,
         expect.objectContaining({
-          id: 'audio-0001',
-          filename: '0001-welcome.mp3',
-          relativePath: 'media/audio/0001-welcome.mp3',
+          id: 'audio-0',
+          filename: 'audio-0.mp3',
           type: 'audio'
         })
-      );
-
-      // Check caption file
-      expect(mockFileManager.saveMediaFile).toHaveBeenCalledWith(
-        mockMediaItems[1].blob,
-        expect.objectContaining({
-          id: 'caption-0001',
-          filename: '0001-welcome.vtt',
-          relativePath: 'captions/0001-welcome.vtt',
-          type: 'caption'
-        })
-      );
-
-      // Check image file (filename includes topicId prefix when provided)
-      expect(mockFileManager.saveMediaFile).toHaveBeenCalledWith(
-        mockMediaItems[2].blob,
-        expect.objectContaining({
-          id: 'image-safety-diagram',
-          filename: 'electrical-hazards-safety-diagram.png',
-          relativePath: 'media/images/electrical-hazards-safety-diagram.png',
-          type: 'image'
-        })
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.migratedCount).toBe(3);
-    });
-
-    it('should continue migration even if some files fail', async () => {
-      // Intent: Migration should be resilient to individual file failures
+      )
+    })
+    
+    it('should report progress during migration', async () => {
       const mockMediaItems = [
         {
-          id: 'audio-0001',
-          blob: new Blob(['audio 1'], { type: 'audio/mpeg' }),
-          type: 'audio/mpeg',
+          id: 'audio-0',
+          blob: new Blob(['data']),
+          type: 'audio/mp3',
           mediaType: 'audio' as const,
-          metadata: { blockNumber: '0001' },
-          timestamp: Date.now()
-        },
-        {
-          id: 'audio-0002',
-          blob: new Blob(['audio 2'], { type: 'audio/mpeg' }),
-          type: 'audio/mpeg',
-          mediaType: 'audio' as const,
-          metadata: { blockNumber: '0002' },
           timestamp: Date.now()
         }
-      ];
-
-      vi.mocked(mockPersistentStorage.getMediaForTopic).mockResolvedValue(mockMediaItems);
+      ]
       
-      // First save succeeds, second fails
-      vi.mocked(mockFileManager.saveMediaFile)
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error('Disk full'));
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
-      const result = await migration.migrateMedia();
-
-      expect(result.success).toBe(true);
-      expect(result.migratedCount).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors![0]).toContain('audio-0002');
-    });
-  });
-
-  describe('Content Migration', () => {
-    it('should migrate JSON content to project files', async () => {
-      // Intent: All content from localStorage should be saved to project.scormproj file
-      const mockContent = {
-        'welcome': { topicId: 'welcome', title: 'Welcome', content: 'Welcome content' },
-        'objectives': { topicId: 'objectives', title: 'Learning Objectives', content: 'Objectives content' },
-        'topic1': { topicId: 'topic1', title: 'Electrical Hazards', content: 'Topic content' }
-      };
-
-      const mockMetadata = {
-        courseTitle: 'Electrical Safety',
-        courseIdentifier: 'ES001',
-        masteryScore: 80
-      };
-
-      // Mock content retrieval
-      vi.mocked(mockPersistentStorage.getContent).mockImplementation(async (id) => {
-        return mockContent[id] || null;
-      });
-      vi.mocked(mockPersistentStorage.getCourseMetadata).mockResolvedValue(mockMetadata);
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
-      const result = await migration.migrateProjectContent(['welcome', 'objectives', 'topic1']);
-
-      // Verify project file was saved
-      expect(mockFileManager.saveProjectFile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: mockMetadata,
-          content: mockContent,
-          mediaReferences: expect.any(Array)
-        })
-      );
-
-      expect(result.success).toBe(true);
-    });
-  });
-
-  describe('Filename Generation', () => {
-    it('should generate correct filenames for different media types', async () => {
-      // Intent: Filenames should follow the 0001-topicid.ext convention
-      const testCases = [
-        {
-          input: { id: 'audio-0001', type: 'audio/mpeg', metadata: { blockNumber: '0001', topicId: 'welcome' } },
-          expected: '0001-welcome.mp3'
-        },
-        {
-          input: { id: 'caption-0002', type: 'text/vtt', metadata: { blockNumber: '0002', topicId: 'objectives' } },
-          expected: '0002-objectives.vtt'
-        },
-        {
-          input: { id: 'image-diagram', type: 'image/png', metadata: { topicId: 'safety' } },
-          expected: 'safety-diagram.png'
-        },
-        {
-          input: { id: 'audio-0003', type: 'audio/mpeg', metadata: { blockNumber: '0003' } },
-          expected: '0003-audio.mp3'
-        }
-      ];
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
-
-      for (const testCase of testCases) {
-        const filename = migration.generateFilename(
-          testCase.input.id,
-          testCase.input.type,
-          testCase.input.metadata
-        );
-        expect(filename).toBe(testCase.expected);
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(mockMediaItems)
+      mockFileManager.getMediaDirectory.mockImplementation((type: string) => `media/${type}`)
+      
+      const progressUpdates: MigrationProgress[] = []
+      const options: MigrationOptions = {
+        onProgress: (progress) => progressUpdates.push(progress)
       }
-    });
-  });
-
-  describe('Cleanup Process', () => {
-    it('should clean up IndexedDB after successful migration', async () => {
-      // Intent: After migration, old IndexedDB data should be removed
-      const mockMediaItems = [{
-        id: 'audio-0001',
-        blob: new Blob(['audio'], { type: 'audio/mpeg' }),
-        type: 'audio/mpeg',
-        mediaType: 'audio' as const,
-        metadata: { blockNumber: '0001' },
-        timestamp: Date.now()
-      }];
-
-      vi.mocked(mockPersistentStorage.getMediaForTopic).mockResolvedValue(mockMediaItems);
-      vi.mocked(mockFileManager.saveMediaFile).mockResolvedValue(undefined);
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
       
-      // Enable cleanup
-      const result = await migration.migrateMedia({ cleanupAfter: true });
-
-      expect(result.success).toBe(true);
-      expect(mockPersistentStorage.deleteMedia).toHaveBeenCalledWith('audio-0001');
-    });
-
-    it('should not clean up if migration fails', async () => {
-      // Intent: Data should be preserved if migration encounters errors
-      vi.mocked(mockPersistentStorage.getMediaForTopic).mockRejectedValue(new Error('DB error'));
-
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
-      const result = await migration.migrateMedia({ cleanupAfter: true });
-
-      expect(result.success).toBe(false);
-      expect(mockPersistentStorage.deleteMedia).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Progress Tracking', () => {
-    it('should report progress during migration', async () => {
-      // Intent: Progress callbacks should be called to update UI
-      const mockMediaItems = Array.from({ length: 10 }, (_, i) => ({
-        id: `audio-000${i}`,
-        blob: new Blob([`audio ${i}`], { type: 'audio/mpeg' }),
-        type: 'audio/mpeg',
-        mediaType: 'audio' as const,
-        metadata: { blockNumber: `000${i}` },
-        timestamp: Date.now()
-      }));
-
-      vi.mocked(mockPersistentStorage.getMediaForTopic).mockResolvedValue(mockMediaItems);
-      vi.mocked(mockFileManager.saveMediaFile).mockResolvedValue(undefined);
-
-      const progressCallback = vi.fn();
-      migration = new StorageRefactorMigration(mockPersistentStorage, mockFileManager);
+      await migration.migrateMedia(options)
       
-      await migration.migrateMedia({ onProgress: progressCallback });
-
-      // Check first call (starting phase with total 0)
-      expect(progressCallback).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      expect(progressUpdates).toHaveLength(4)
+      expect(progressUpdates[0]).toMatchObject({
+        phase: 'starting',
+        message: 'Starting media migration...'
+      })
+      expect(progressUpdates[1]).toMatchObject({
+        phase: 'migrating',
         current: 0,
-        total: 0,
-        phase: 'starting'
-      }));
-
-      // Check second call (migrating phase with correct total)
-      expect(progressCallback).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        current: 0,
-        total: 10,
-        phase: 'migrating'
-      }));
-
-      // Check last call (complete phase)
-      expect(progressCallback).toHaveBeenLastCalledWith(expect.objectContaining({
-        current: 10,
-        total: 10,
-        phase: 'complete'
-      }));
-    });
-  });
-});
+        total: 1,
+        message: 'Found 1 media items to migrate'
+      })
+      expect(progressUpdates[2]).toMatchObject({
+        phase: 'migrating',
+        current: 1,
+        total: 1,
+        message: 'Migrated audio-0.mp3'
+      })
+      expect(progressUpdates[3]).toMatchObject({
+        phase: 'complete',
+        current: 1,
+        total: 1,
+        message: 'Migration complete: 1/1 items migrated'
+      })
+    })
+    
+    it('should cleanup IndexedDB entries when cleanupAfter is true', async () => {
+      const mockMediaItems = [
+        {
+          id: 'audio-0',
+          blob: new Blob(['data']),
+          type: 'audio/mp3',
+          mediaType: 'audio' as const,
+          timestamp: Date.now()
+        }
+      ]
+      
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(mockMediaItems)
+      mockFileManager.getMediaDirectory.mockImplementation((type: string) => `media/${type}`)
+      
+      await migration.migrateMedia({ cleanupAfter: true })
+      
+      expect(mockPersistentStorage.deleteMedia).toHaveBeenCalledWith('audio-0')
+    })
+    
+    it('should continue migration even if some items fail', async () => {
+      const mockMediaItems = [
+        {
+          id: 'audio-0',
+          blob: new Blob(['data']),
+          type: 'audio/mp3',
+          mediaType: 'audio' as const,
+          timestamp: Date.now()
+        },
+        {
+          id: 'image-1',
+          blob: new Blob(['data']),
+          type: 'image/png',
+          mediaType: 'image' as const,
+          timestamp: Date.now()
+        }
+      ]
+      
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(mockMediaItems)
+      mockFileManager.getMediaDirectory.mockImplementation((type: string) => `media/${type}`)
+      
+      // Make first save fail
+      mockFileManager.saveMediaFile
+        .mockRejectedValueOnce(new Error('Save failed'))
+        .mockResolvedValueOnce(undefined)
+      
+      const result = await migration.migrateMedia()
+      
+      expect(result.success).toBe(true)
+      expect(result.migratedCount).toBe(1)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors![0]).toContain('Failed to migrate audio-0')
+    })
+    
+    it('should handle complete migration failure', async () => {
+      mockPersistentStorage.getMediaForTopic.mockRejectedValue(new Error('DB error'))
+      
+      const result = await migration.migrateMedia()
+      
+      expect(result.success).toBe(false)
+      expect(result.migratedCount).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors![0]).toContain('Migration failed: Error: DB error')
+    })
+    
+    it('should handle empty media list', async () => {
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue([])
+      
+      const result = await migration.migrateMedia()
+      
+      expect(result.success).toBe(true)
+      expect(result.migratedCount).toBe(0)
+      expect(mockFileManager.saveMediaFile).not.toHaveBeenCalled()
+    })
+  })
+  
+  describe('migrateProjectContent', () => {
+    it('should migrate project content from localStorage to project file', async () => {
+      const contentIds = ['welcomePage', 'objectives', 'topic-0']
+      const mockContent = {
+        welcomePage: { content: 'Welcome' },
+        objectives: { content: 'Objectives' },
+        'topic-0': { content: 'Topic 1' }
+      }
+      const mockMetadata = { title: 'Test Course' }
+      
+      // Mock content retrieval
+      mockPersistentStorage.getContent.mockImplementation((id: string) => 
+        Promise.resolve(mockContent[id as keyof typeof mockContent])
+      )
+      mockPersistentStorage.getCourseMetadata.mockResolvedValue(mockMetadata)
+      
+      // Mock media scanning
+      mockFileManager.scanMediaDirectory.mockImplementation((type: string) => {
+        if (type === 'audio') return Promise.resolve([{ id: 'audio-0' }])
+        if (type === 'images') return Promise.resolve([{ id: 'image-1' }])
+        if (type === 'video') return Promise.resolve([])
+        return Promise.resolve([])
+      })
+      
+      const result = await migration.migrateProjectContent(contentIds)
+      
+      expect(result.success).toBe(true)
+      
+      // Verify content was retrieved
+      expect(mockPersistentStorage.getContent).toHaveBeenCalledTimes(3)
+      
+      // Verify project file was saved
+      expect(mockFileManager.saveProjectFile).toHaveBeenCalledWith({
+        metadata: mockMetadata,
+        content: mockContent,
+        mediaReferences: [{ id: 'audio-0' }, { id: 'image-1' }]
+      })
+    })
+    
+    it('should handle missing content gracefully', async () => {
+      const contentIds = ['welcomePage', 'missing']
+      
+      mockPersistentStorage.getContent.mockImplementation((id: string) => {
+        if (id === 'welcomePage') return Promise.resolve({ content: 'Welcome' })
+        return Promise.resolve(null)
+      })
+      mockPersistentStorage.getCourseMetadata.mockResolvedValue({})
+      mockFileManager.scanMediaDirectory.mockResolvedValue([])
+      
+      const result = await migration.migrateProjectContent(contentIds)
+      
+      expect(result.success).toBe(true)
+      expect(mockFileManager.saveProjectFile).toHaveBeenCalledWith({
+        metadata: {},
+        content: { welcomePage: { content: 'Welcome' } },
+        mediaReferences: []
+      })
+    })
+    
+    it('should handle project save failure', async () => {
+      mockPersistentStorage.getContent.mockResolvedValue({ content: 'Test' })
+      mockPersistentStorage.getCourseMetadata.mockResolvedValue({})
+      mockFileManager.scanMediaDirectory.mockResolvedValue([])
+      mockFileManager.saveProjectFile.mockRejectedValue(new Error('Save failed'))
+      
+      const result = await migration.migrateProjectContent(['page1'])
+      
+      expect(result.success).toBe(false)
+    })
+  })
+  
+  describe('generateFilename', () => {
+    it('should generate filename for audio with block number', () => {
+      const filename = migration.generateFilename(
+        'audio-0',
+        'audio/mp3',
+        { blockNumber: 1, topicId: 'welcome' }
+      )
+      
+      expect(filename).toBe('1-welcome.mp3')
+    })
+    
+    it('should generate filename for image with topic ID', () => {
+      const filename = migration.generateFilename(
+        'image-header',
+        'image/png',
+        { topicId: 'topic-1' }
+      )
+      
+      expect(filename).toBe('topic-1-header.png')
+    })
+    
+    it('should generate filename for image without topic ID', () => {
+      const filename = migration.generateFilename(
+        'image-logo',
+        'image/jpeg'
+      )
+      
+      expect(filename).toBe('logo.jpg')
+    })
+    
+    it('should handle unknown MIME types', () => {
+      const filename = migration.generateFilename(
+        'file-1',
+        'application/octet-stream'
+      )
+      
+      expect(filename).toBe('file-1.bin')
+    })
+    
+    it('should handle caption files', () => {
+      const filename = migration.generateFilename(
+        'caption-1',
+        'text/vtt'
+      )
+      
+      expect(filename).toBe('caption-1.vtt')
+    })
+  })
+  
+  describe('createMediaReference', () => {
+    it('should create media reference with correct directory', () => {
+      mockFileManager.getMediaDirectory.mockImplementation((type: string) => {
+        const dirs: Record<string, string> = {
+          audio: 'media/audio',
+          image: 'media/images',
+          video: 'media/video',
+          caption: 'captions'
+        }
+        return dirs[type]
+      })
+      
+      const mediaItem = {
+        id: 'audio-0',
+        blob: new Blob(['data'], { type: 'audio/mp3' }),
+        type: 'audio/mp3',
+        mediaType: 'audio' as const,
+        timestamp: Date.now(),
+        metadata: { blockNumber: 1 }
+      }
+      
+      // Access private method through prototype
+      const createMediaReference = (migration as any).createMediaReference.bind(migration)
+      const reference = createMediaReference(mediaItem)
+      
+      expect(reference).toMatchObject({
+        id: 'audio-0',
+        filename: '1-audio.mp3',
+        relativePath: 'media/audio/1-audio.mp3',
+        type: 'audio',
+        size: 4 // 'data' blob size
+      })
+    })
+    
+    it('should handle getMediaDirectory errors with fallback', () => {
+      mockFileManager.getMediaDirectory.mockImplementation(() => {
+        throw new Error('Directory error')
+      })
+      
+      const mediaItem = {
+        id: 'video-1',
+        blob: new Blob(['video data']),
+        type: 'video/mp4',
+        mediaType: 'video' as const,
+        timestamp: Date.now()
+      }
+      
+      // Access private method
+      const createMediaReference = (migration as any).createMediaReference.bind(migration)
+      const reference = createMediaReference(mediaItem)
+      
+      expect(reference.relativePath).toBe('media/video/video-1.mp4')
+    })
+  })
+  
+  describe('getMediaTypeFromId', () => {
+    it('should identify media types from ID prefixes', () => {
+      // Access private method
+      const getMediaTypeFromId = (migration as any).getMediaTypeFromId.bind(migration)
+      
+      expect(getMediaTypeFromId('audio-0')).toBe('audio')
+      expect(getMediaTypeFromId('image-header')).toBe('image')
+      expect(getMediaTypeFromId('video-intro')).toBe('video')
+      expect(getMediaTypeFromId('caption-1')).toBe('caption')
+    })
+    
+    it('should handle caption patterns in ID', () => {
+      const getMediaTypeFromId = (migration as any).getMediaTypeFromId.bind(migration)
+      
+      expect(getMediaTypeFromId('subtitle-vtt-1')).toBe('caption')
+      expect(getMediaTypeFromId('english-caption')).toBe('caption')
+    })
+    
+    it('should default to audio for unknown patterns', () => {
+      const getMediaTypeFromId = (migration as any).getMediaTypeFromId.bind(migration)
+      
+      expect(getMediaTypeFromId('unknown-file')).toBe('audio')
+      expect(getMediaTypeFromId('file123')).toBe('audio')
+    })
+  })
+  
+  describe('getExtensionFromMimeType', () => {
+    it('should map common MIME types to extensions', () => {
+      // Access private method
+      const getExtensionFromMimeType = (migration as any).getExtensionFromMimeType.bind(migration)
+      
+      expect(getExtensionFromMimeType('audio/mpeg')).toBe('mp3')
+      expect(getExtensionFromMimeType('audio/mp3')).toBe('mp3')
+      expect(getExtensionFromMimeType('audio/wav')).toBe('wav')
+      expect(getExtensionFromMimeType('image/jpeg')).toBe('jpg')
+      expect(getExtensionFromMimeType('image/png')).toBe('png')
+      expect(getExtensionFromMimeType('image/gif')).toBe('gif')
+      expect(getExtensionFromMimeType('video/mp4')).toBe('mp4')
+      expect(getExtensionFromMimeType('text/vtt')).toBe('vtt')
+      expect(getExtensionFromMimeType('text/plain')).toBe('txt')
+    })
+    
+    it('should default to bin for unknown MIME types', () => {
+      const getExtensionFromMimeType = (migration as any).getExtensionFromMimeType.bind(migration)
+      
+      expect(getExtensionFromMimeType('application/octet-stream')).toBe('bin')
+      expect(getExtensionFromMimeType('unknown/type')).toBe('bin')
+    })
+  })
+  
+  describe('getAllMedia', () => {
+    it('should retrieve all media using wildcard topic', () => {
+      const mockMedia = [{ id: 'audio-0' }, { id: 'image-1' }]
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(mockMedia)
+      
+      // Access private method
+      const getAllMedia = (migration as any).getAllMedia.bind(migration)
+      
+      const result = getAllMedia()
+      
+      expect(mockPersistentStorage.getMediaForTopic).toHaveBeenCalledWith('*')
+    })
+    
+    it('should handle null response from storage', async () => {
+      mockPersistentStorage.getMediaForTopic.mockResolvedValue(null)
+      
+      // Access private method
+      const getAllMedia = (migration as any).getAllMedia.bind(migration)
+      const result = await getAllMedia()
+      
+      expect(result).toEqual([])
+    })
+  })
+})

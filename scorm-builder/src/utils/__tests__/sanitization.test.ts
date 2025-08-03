@@ -4,7 +4,7 @@ import {
   sanitizeForAttribute, 
   sanitizeForURL,
   createSanitizer
-} from './sanitization'
+} from '../sanitization'
 
 describe('Sanitization Utilities', () => {
   describe('sanitizeHTML', () => {
@@ -65,7 +65,7 @@ describe('Sanitization Utilities', () => {
     })
 
     it('should remove style tags by default', () => {
-      const dirty = '<style>body { display: none; }</style><p>Content</p>'
+      const dirty = '<style>body { display: none;}</style><p>Content</p>'
       const clean = sanitizeHTML(dirty)
       expect(clean).toBe('<p>Content</p>')
       expect(clean).not.toContain('<style>')

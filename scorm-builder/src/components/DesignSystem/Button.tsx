@@ -1,5 +1,6 @@
 import React from 'react'
 import './designSystem.css'
+import './transitions.css'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'tertiary' | 'success' | 'danger'
@@ -7,6 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   fullWidth?: boolean
   icon?: React.ReactNode
   children: React.ReactNode
+  loading?: boolean
 }
 
 const ButtonComponent: React.FC<ButtonProps> = ({
@@ -17,6 +19,7 @@ const ButtonComponent: React.FC<ButtonProps> = ({
   children,
   className = '',
   disabled,
+  loading,
   ...props
 }) => {
   const classes = [
@@ -25,17 +28,34 @@ const ButtonComponent: React.FC<ButtonProps> = ({
     `btn-${size}`,
     fullWidth && 'btn-full-width',
     disabled && 'btn-disabled',
+    'transition-all',
+    'button-press',
+    'hover-lift',
+    'focus-ring',
     className
   ].filter(Boolean).join(' ')
 
   return (
     <button
       className={classes}
-      disabled={disabled}
+      disabled={disabled || loading}
       {...props}
     >
-      {icon && <span className="btn-icon">{icon}</span>}
-      {children}
+      {loading ? (
+        <>
+          <span className="btn-icon animate-spin">⏳</span>
+          <span>Loading...</span>
+        </>
+      ) : (
+        <>
+          {icon && (
+            <span className="btn-icon">
+              {React.isValidElement(icon) ? icon : icon}
+            </span>
+          )}
+          {children}
+        </>
+      )}
     </button>
   )
 }

@@ -1,6 +1,6 @@
-import React from 'react'
+// Removed unused React import
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { FormField } from '../FormField'
 
 describe('FormField', () => {
@@ -38,7 +38,7 @@ describe('FormField', () => {
     })
 
     it('should generate unique id when not provided', () => {
-      const { container } = render(
+      render(
         <>
           <FormField label="Email 1" name="email1" />
           <FormField label="Email 2" name="email2" />

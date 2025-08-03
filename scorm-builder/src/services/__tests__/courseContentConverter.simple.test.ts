@@ -157,6 +157,9 @@ describe('courseContentConverter - Simple Tests', () => {
             explanation: 'Yes it is'
           }
         ]
+      ,
+        passMark: 80,
+        narration: null
       }
     }
     
@@ -185,7 +188,10 @@ describe('courseContentConverter - Simple Tests', () => {
           ]
         }
       ],
-      assessment: { questions: [] }
+      assessment: { questions: [] ,
+        passMark: 80,
+        narration: null
+      }
     }
     
     const result = convertToEnhancedCourseContent(multiModuleContent, basicMetadata)
@@ -205,7 +211,10 @@ describe('courseContentConverter - Simple Tests', () => {
           topics: [{ title: 'Topic', content: 'Content' }]
         }
       ],
-      assessment: { questions: [] }
+      assessment: { questions: [] ,
+        passMark: 80,
+        narration: null
+      }
     }
     
     const result = convertToEnhancedCourseContent(contentNoAssessment, basicMetadata)
@@ -229,6 +238,9 @@ describe('courseContentConverter - Simple Tests', () => {
             explanation: 'Paris is the capital'
           }
         ]
+      ,
+        passMark: 80,
+        narration: null
       }
     }
     
@@ -244,7 +256,10 @@ describe('courseContentConverter - Simple Tests', () => {
       welcomePage: { content: 'Welcome' },
       learningObjectivesPage: { objectives: [] },
       courseModules: [],
-      assessment: { questions: [] }
+      assessment: { questions: [] ,
+        passMark: 80,
+        narration: null
+      }
     }
     
     const customMetadata = {

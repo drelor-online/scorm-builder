@@ -1,6 +1,6 @@
-import React from 'react'
+// Removed unused React import
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen , waitFor } from '../../../test/testProviders'
 import { LoadingOverlay } from '../LoadingOverlay'
 import { Skeleton } from '../Skeleton'
 import { ProgressBar } from '../ProgressBar'

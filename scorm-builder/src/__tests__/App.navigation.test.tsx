@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from './../test/testProviders'
 import App from '../App'
-import { PersistentStorageProvider } from '../contexts/PersistentStorageContext'
-import { StepNavigationProvider } from '../contexts/StepNavigationContext'
-
 // Mock PageLayout to test navigation props
 vi.mock('../components/PageLayout', () => ({
   PageLayout: ({ children, currentStep, onStepClick }: any) => (
@@ -20,7 +17,7 @@ vi.mock('../components/PageLayout', () => ({
 }))
 
 // Mock other components to simplify testing
-vi.mock('../components/CourseSeedInputRefactored', () => ({
+vi.mock('../components/CourseSeedInput', () => ({
   CourseSeedInput: ({ onSubmit, onStepClick }: any) => (
     <div data-testid="page-layout">
       <div data-testid="current-step">0</div>
@@ -54,7 +51,7 @@ vi.mock('../components/AIPromptGenerator', () => ({
   )
 }))
 
-vi.mock('../components/JSONImportValidatorRefactored', () => ({
+vi.mock('../components/JSONImportValidator', () => ({
   JSONImportValidator: ({ onNext, onStepClick }: any) => (
     <div data-testid="page-layout">
       <div data-testid="current-step">2</div>
@@ -70,7 +67,7 @@ vi.mock('../components/JSONImportValidatorRefactored', () => ({
   )
 }))
 
-vi.mock('../components/MediaEnhancementWizardRefactored', () => ({
+vi.mock('../components/MediaEnhancementWizard', () => ({
   MediaEnhancementWizard: ({ onNext, onStepClick }: any) => (
     <div data-testid="page-layout">
       <div data-testid="current-step">3</div>
@@ -95,13 +92,7 @@ describe('App Navigation with StepNavigationContext', () => {
 
   describe('Step navigation restrictions', () => {
     it('should only allow navigation to visited steps', async () => {
-      const { container } = render(
-        <StepNavigationProvider>
-          <PersistentStorageProvider>
-            <App />
-          </PersistentStorageProvider>
-        </StepNavigationProvider>
-      )
+      render(<App />)
 
       // Initially on step 0 (seed)
       expect(screen.getByTestId('current-step')).toHaveTextContent('0')
@@ -140,13 +131,7 @@ describe('App Navigation with StepNavigationContext', () => {
     })
 
     it('should track all visited steps correctly', async () => {
-      render(
-        <StepNavigationProvider>
-          <PersistentStorageProvider>
-            <App />
-          </PersistentStorageProvider>
-        </StepNavigationProvider>
-      )
+      render(<App />)
 
       // Navigate through multiple steps
       // Step 0 -> 1

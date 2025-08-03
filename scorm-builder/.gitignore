@@ -24,6 +24,10 @@ dist-ssr
 *.sw?
 
 # Test artifacts
+test-results/
+playwright-report/
+coverage/
+.nyc_output/
 test-results/screenshots/
 test-results/visual-regression/actual/
 test-results/visual-regression/diff/
@@ -33,3 +37,22 @@ test-results/visual-regression/report/
 tests/bdd/screenshots/
 *-state.json
 test-debug-*.png
+
+# Debug and temporary files
+*.ps1
+fix-*.cjs
+run-e2e-tests.cjs
+extracted_index.html
+media-enhancement-mockups.html
+test-index.html
+*.backup
+*.bak
+*.tmp
+*.temp
+temp-extract/
+SCORM-Builder-Portable/
+dev-server.log
+
+# Keep important scripts
+!scripts/*.cjs
+!.eslintrc.cjs

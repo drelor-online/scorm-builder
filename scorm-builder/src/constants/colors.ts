@@ -1,65 +1,46 @@
+import { tokens } from '../components/DesignSystem/designTokens'
+
+// Re-export design token colors for backward compatibility
 export const COLORS = {
   // Primary colors
-  primary: '#3b82f6',
-  primaryHover: '#2563eb',
-  primaryDark: '#1d4ed8',
+  primary: tokens.colors.primary[500],
+  primaryHover: tokens.colors.primary[600],
+  primaryDark: tokens.colors.primary[700],
   
   // Secondary colors
-  secondary: '#6b7280',
-  secondaryHover: '#4b5563',
+  secondary: tokens.colors.secondary[500],
+  secondaryHover: tokens.colors.secondary[600],
   
   // Success/Error/Warning
-  success: '#10b981',
-  successDark: '#059669',
-  error: '#ef4444',
-  errorDark: '#dc2626',
-  warning: '#f59e0b',
-  warningDark: '#d97706',
+  success: tokens.colors.success[500],
+  successDark: tokens.colors.success[700],
+  error: tokens.colors.danger[500],
+  errorDark: tokens.colors.danger[600],
+  warning: tokens.colors.warning[500],
+  warningDark: tokens.colors.warning[600],
   
   // Neutral colors
-  background: '#18181b',
-  backgroundLight: '#27272a',
-  backgroundLighter: '#3f3f46',
-  backgroundDark: '#0a0a0b',
+  background: tokens.colors.background.secondary,
+  backgroundLight: tokens.colors.background.tertiary,
+  backgroundLighter: tokens.colors.background.quaternary,
+  backgroundDark: tokens.colors.background.primary,
   
-  text: '#e4e4e7',
-  textMuted: '#a1a1aa',
-  textDark: '#71717a',
+  text: tokens.colors.text.primary,
+  textMuted: tokens.colors.text.tertiary,
+  textDark: tokens.colors.text.quaternary,
   
-  border: '#3f3f46',
-  borderLight: '#52525b',
+  border: tokens.colors.border.default,
+  borderLight: tokens.colors.border.medium,
   
   // Activity type colors
-  activityColors: {
-    'multiple-choice': '#3b82f6',
-    'true-false': '#8b5cf6',
-    'fill-in-the-blank': '#10b981',
-    'drag-and-drop': '#f59e0b',
-    'scenario': '#ec4899'
-  },
+  activityColors: tokens.colors.activity,
   
   // Alert colors
   alertColors: {
-    info: {
-      bg: 'rgba(59, 130, 246, 0.1)',
-      border: 'rgba(59, 130, 246, 0.2)',
-      text: '#93c5fd'
-    },
-    warning: {
-      bg: 'rgba(251, 146, 60, 0.1)',
-      border: 'rgba(251, 146, 60, 0.2)',
-      text: '#fdba74'
-    },
-    success: {
-      bg: 'rgba(34, 197, 94, 0.1)',
-      border: 'rgba(34, 197, 94, 0.2)',
-      text: '#86efac'
-    },
-    error: {
-      bg: 'rgba(239, 68, 68, 0.1)',
-      border: 'rgba(239, 68, 68, 0.2)',
-      text: '#fca5a5'
-    }
+    info: tokens.colors.alert.info,
+    warning: tokens.colors.alert.warning,
+    success: tokens.colors.alert.success,
+    error: tokens.colors.alert.danger
   }
 } as const
 

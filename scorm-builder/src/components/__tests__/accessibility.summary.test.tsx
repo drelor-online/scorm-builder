@@ -8,7 +8,7 @@ describe('Accessibility Testing Summary', () => {
       'Button', 
       'Input',
       'PageLayout',
-      'CourseSeedInputRefactored',
+      'CourseSeedInput',
       'Toast'
     ]
     
@@ -23,7 +23,7 @@ describe('Accessibility Testing Summary', () => {
       'AutoSaveIndicator',
       'Alert',
       'Tooltip',
-      'JSONImportValidatorRefactored',
+      'JSONImportValidator',
       'MediaEnhancementWizard',
       'CoursePreview'
     ]

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Enhancement Mockup Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            background-color: #0a0e27;
+            color: #e2e8f0;
+        }
+        
+        #root {
+            width: 100%;
+            height: 100vh;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 24px;
+        }
+        
+        .error {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .error h1 {
+            color: #ef4444;
+            margin-bottom: 20px;
+        }
+        
+        .error button {
+            padding: 10px 20px;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .error button:hover {
+            background-color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading">Loading mockup viewer...</div>
+    </div>
+
+    <script type="module">
+        // Import React and ReactDOM from CDN
+        import React from 'https://esm.sh/react@18';
+        import ReactDOM from 'https://esm.sh/react-dom@18/client';
+        
+        // Create a simple component that loads the mockup viewer
+        const MockupApp = () => {
+            const [error, setError] = React.useState(null);
+            const [Component, setComponent] = React.useState(null);
+            
+            React.useEffect(() => {
+                // Try to load the mockup viewer component
+                const loadMockup = async () => {
+                    try {
+                        // Note: This approach might not work due to module loading restrictions
+                        // Alternative approach provided below
+                        const module = await import('/src/components/mockups/MediaEnhancementMockupViewer.tsx');
+                        setComponent(() => module.MediaEnhancementMockupViewer);
+                    } catch (err) {
+                        setError(err.message);
+                    }
+                };
+                
+                loadMockup();
+            }, []);
+            
+            if (error) {
+                return React.createElement('div', { className: 'error' },
+                    React.createElement('h1', null, 'Unable to load mockup viewer'),
+                    React.createElement('p', null, 'This standalone viewer requires the development server to be running.'),
+                    React.createElement('p', null, 'Please use the inline viewer method instead.'),
+                    React.createElement('button', { 
+                        onClick: () => window.location.href = '/' 
+                    }, 'Back to App')
+                );
+            }
+            
+            if (!Component) {
+                return React.createElement('div', { className: 'loading' }, 'Loading mockup viewer...');
+            }
+            
+            return React.createElement(Component);
+        };
+        
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(MockupApp));
+    </script>
+    
+    <!-- Alternative: Static mockup preview -->
+    <script>
+        // If module loading fails, show instructions
+        setTimeout(() => {
+            const rootEl = document.getElementById('root');
+            if (rootEl.querySelector('.loading')) {
+                rootEl.innerHTML = `
+                    <div class="error">
+                        <h1>Mockup Viewer</h1>
+                        <p>To view the Media Enhancement mockups, please use one of these methods:</p>
+                        
+                        <div style="text-align: left; max-width: 600px; margin: 20px 0;">
+                            <h3>Method 1: Browser Console (Easiest)</h3>
+                            <ol>
+                                <li>Go back to your main app</li>
+                                <li>Navigate to the Media Enhancement step</li>
+                                <li>Open browser console (F12)</li>
+                                <li>Paste this code:</li>
+                            </ol>
+                            <pre style="background: #1e293b; padding: 15px; border-radius: 8px; overflow-x: auto;">
+// Show mockup in a new window
+const win = window.open('', 'mockup', 'width=1400,height=900');
+win.document.write(\`
+<div id="mockup-root"></div>
+<script type="module">
+import React from 'https://esm.sh/react@18';
+import ReactDOM from 'https://esm.sh/react-dom@18/client';
+
+// Mockup component code would go here
+// For now, showing a placeholder
+const root = ReactDOM.createRoot(document.getElementById('mockup-root'));
+root.render(React.createElement('div', {
+    style: { padding: '20px', fontFamily: 'sans-serif' }
+}, 'Mockup viewer requires bundled components'));
+<\/script>
+\`);
+                            </pre>
+                        </div>
+                        
+                        <button onclick="window.location.href = '/'">Back to App</button>
+                    </div>
+                `;
+            }
+        }, 3000);
+    </script>
+</body>
+</html>

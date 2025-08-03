@@ -190,4 +190,4 @@ export const StorageMigrationDialog: React.FC<StorageMigrationDialogProps> = ({
       </div>
     </Modal>
   );
-};
+}

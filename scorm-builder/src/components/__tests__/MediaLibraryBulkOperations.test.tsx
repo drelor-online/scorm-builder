@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi } from 'vitest'
 import { MediaLibrary } from '../MediaLibrary'
 

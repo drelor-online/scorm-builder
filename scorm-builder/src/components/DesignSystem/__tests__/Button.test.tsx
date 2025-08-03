@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect, vi } from 'vitest'
-import { Button } from './Button'
+import { Button } from '../Button'
 
 describe('Button Component', () => {
   it('renders with children text', () => {
@@ -11,7 +12,7 @@ describe('Button Component', () => {
   it('applies primary variant styles by default', () => {
     render(<Button>Primary Button</Button>)
     const button = screen.getByRole('button')
-    expect(button).toHaveClass('btn', 'btn-primary', 'btn-medium')
+    expect(button).toHaveClass('btn', 'btn-primary', 'btn-medium', 'transition-all', 'button-press', 'hover-lift', 'focus-ring')
   })
 
   it('applies different variants correctly', () => {

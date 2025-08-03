@@ -1,5 +1,5 @@
-import { render, screen, act } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { render, screen } from '../../test/testProviders'
+import { describe, it, expect, act, vi, beforeEach, afterEach } from 'vitest'
 import { AutoSaveIndicatorConnected } from '../AutoSaveIndicatorConnected'
 
 // Mock the AutoSaveContext

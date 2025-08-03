@@ -1,7 +1,6 @@
-import React from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+// Removed unused React import
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent , waitFor } from '../../../test/testProviders'
 import { LoadingOverlay } from '../LoadingOverlay'
 
 // Mock LoadingSpinner since it's tested separately
@@ -108,7 +107,7 @@ describe('LoadingOverlay', () => {
     })
 
     it('should hide children from screen readers when loading', () => {
-      const { container } = render(
+      render(
         <LoadingOverlay isLoading={true}>
           <div>Content</div>
         </LoadingOverlay>
@@ -119,7 +118,7 @@ describe('LoadingOverlay', () => {
     })
 
     it('should not hide children from screen readers when not loading', () => {
-      const { container } = render(
+      render(
         <LoadingOverlay isLoading={false}>
           <div>Content</div>
         </LoadingOverlay>

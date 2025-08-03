@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect, vi } from 'vitest'
 import { NetworkStatusIndicator } from './NetworkStatusIndicator'
 
@@ -18,7 +18,7 @@ describe('NetworkStatusIndicator', () => {
       lastOnline: null
     })
 
-    const { container } = render(<NetworkStatusIndicator />)
+    render(<NetworkStatusIndicator />)
     
     expect(container.firstChild).toBeNull()
   })
@@ -52,7 +52,7 @@ describe('NetworkStatusIndicator', () => {
       lastOnline: null
     })
 
-    const { container } = render(<NetworkStatusIndicator />)
+    render(<NetworkStatusIndicator />)
     const indicator = container.firstChild as HTMLElement
     
     expect(indicator).toHaveClass('network-status-indicator')
@@ -95,7 +95,7 @@ describe('NetworkStatusIndicator', () => {
       lastOnline: null
     })
 
-    const { container } = render(<NetworkStatusIndicator className="custom-class" />)
+    render(<NetworkStatusIndicator className="custom-class" />)
     const indicator = container.firstChild as HTMLElement
     
     expect(indicator).toHaveClass('custom-class')

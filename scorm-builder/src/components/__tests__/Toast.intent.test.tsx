@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { Toast } from '../Toast'
 
@@ -140,7 +140,7 @@ describe('Toast - User Intent Tests', () => {
 
   describe('User wants proper positioning', () => {
     it('should position at bottom-right', () => {
-      const { container } = render(
+      render(
         <Toast
           message="Bottom-right positioned"
           type="info"

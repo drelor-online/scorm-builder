@@ -1,5 +1,5 @@
-import { renderHook, act } from '@testing-library/react'
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { renderHook } from '../../test/testProviders'
+import { describe, it, expect, act, vi, beforeEach, afterEach } from 'vitest'
 import { useNetworkStatus } from './useNetworkStatus'
 
 describe('useNetworkStatus', () => {

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, fireEvent } from '../../test/testProviders'
 import { AIPromptGenerator } from '../AIPromptGenerator'
 
 // Mock only what's necessary

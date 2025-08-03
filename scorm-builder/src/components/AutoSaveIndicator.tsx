@@ -55,7 +55,7 @@ export const AutoSaveIndicator: React.FC<AutoSaveIndicatorProps> = ({
             width: tokens.spacing.sm,
             height: tokens.spacing.sm,
             borderRadius: '50%',
-            backgroundColor: tokens.colors.success.main
+            backgroundColor: tokens.colors.success[500]
           }} />
           <span>Saved</span>
           {timeSinceLastSave !== 'Never' && (

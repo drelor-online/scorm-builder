@@ -1,6 +1,6 @@
-import React from 'react'
+// Removed unused React import
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { ProgressBar } from '../ProgressBar'
 
 describe('ProgressBar', () => {

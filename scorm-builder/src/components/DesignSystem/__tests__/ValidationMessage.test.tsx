@@ -1,6 +1,6 @@
-import React from 'react'
+// Removed unused React import
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { ValidationMessage } from '../ValidationMessage'
 
 describe('ValidationMessage', () => {
@@ -130,7 +130,7 @@ describe('ValidationMessage', () => {
       const types = ['required', 'email', 'minLength', 'maxLength', 'pattern', 'custom'] as const
       
       types.forEach(type => {
-        const { container } = render(
+        render(
           <ValidationMessage 
             type={type} 
             minLength={5} 

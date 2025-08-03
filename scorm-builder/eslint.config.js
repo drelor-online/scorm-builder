@@ -14,11 +14,17 @@ export default [
       'tests/**',
       'playwright-report/**',
       'test-results/**',
+      'test-output/**',
       'coverage/**',
       '**/*.mjs',
+      '**/*.cjs',
       'vite.config.*.ts',
       'vitest.config.ts',
-      'vite.config.ts'
+      'vite.config.ts',
+      'build-*.js',
+      'regenerate-debug.js',
+      'fix-scorm-package.ts',
+      'test-*.ts'
     ],
   },
   js.configs.recommended,

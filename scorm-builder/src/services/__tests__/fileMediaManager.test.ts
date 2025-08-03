@@ -3,9 +3,8 @@
  * Intent-based tests following TDD red-green-refactor approach
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FileMediaManager } from '../fileMediaManager';
-import { MediaReference } from '../../types/projectStructure';
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({

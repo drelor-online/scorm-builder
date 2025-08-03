@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import '@testing-library/jest-dom'
 
 // Test navigation button consistency
@@ -18,7 +18,7 @@ describe('Button Label Consistency', () => {
       
       components.forEach(comp => {
         if (comp.hasNext) {
-          const { container } = render(
+          render(
             <button className="btn-primary navigation-next">Next</button>
           )
           const nextButton = container.querySelector('.navigation-next')
@@ -28,7 +28,7 @@ describe('Button Label Consistency', () => {
     })
 
     it('should use "Back" for backward navigation in all steps', () => {
-      const { container } = render(
+      render(
         <div>
           <button className="btn-secondary navigation-back">Back</button>
           <button className="btn-secondary navigation-back">Back</button>
@@ -42,7 +42,7 @@ describe('Button Label Consistency', () => {
     })
 
     it('should position Next and Back buttons consistently', () => {
-      const { container } = render(
+      render(
         <div className="navigation-buttons">
           <button className="btn-secondary navigation-back">Back</button>
           <button className="btn-primary navigation-next">Next</button>
@@ -71,7 +71,7 @@ describe('Button Label Consistency', () => {
       ]
       
       actionButtons.forEach(({ action, label, class: btnClass }) => {
-        const { container } = render(
+        render(
           <button className={`btn ${btnClass} action-${action}`}>{label}</button>
         )
         const button = container.querySelector(`.action-${action}`)
@@ -84,7 +84,7 @@ describe('Button Label Consistency', () => {
       const badLabels = ['Project Save', 'Item Deletion', 'Module Addition', 'Content Editor']
       
       goodLabels.forEach(label => {
-        const { container } = render(<button className="btn">{label}</button>)
+        render(<button className="btn">{label}</button>)
         const button = container.querySelector('.btn')
         expect(button?.textContent).toMatch(/^(Save|Delete|Add|Edit|Remove|Create|Update|Cancel)/)
       })
@@ -112,7 +112,7 @@ describe('Button Label Consistency', () => {
     })
 
     it('should avoid using all caps', () => {
-      const { container } = render(
+      render(
         <div>
           <button className="btn">Save</button>
           <button className="btn">Next</button>
@@ -128,7 +128,7 @@ describe('Button Label Consistency', () => {
     })
 
     it('should keep labels concise (1-3 words)', () => {
-      const { container } = render(
+      render(
         <div>
           <button className="btn">Save</button>
           <button className="btn">Save Project</button>
@@ -146,7 +146,7 @@ describe('Button Label Consistency', () => {
 
   describe('Icon and Text Combinations', () => {
     it('should include descriptive text with icons', () => {
-      const { container } = render(
+      render(
         <button className="btn icon-button">
           <span className="icon">+</span>
           <span className="label">Add Item</span>
@@ -163,7 +163,7 @@ describe('Button Label Consistency', () => {
     })
 
     it('should position icons consistently before text', () => {
-      const { container } = render(
+      render(
         <button className="btn icon-button">
           <span className="icon">✓</span>
           <span className="label">Save</span>

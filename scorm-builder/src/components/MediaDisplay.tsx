@@ -1,5 +1,5 @@
 import React from 'react'
-import { useMedia } from '../contexts/MediaContext'
+import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import { LoadingSpinner } from './DesignSystem'
 
 interface MediaDisplayProps {
@@ -11,13 +11,50 @@ interface MediaDisplayProps {
 }
 
 export function MediaDisplay({ mediaId, alt, className, style, fallback }: MediaDisplayProps) {
-  const { getMediaUrl, isLoading } = useMedia()
+  const { createBlobUrl } = useUnifiedMedia()
+  const [mediaUrl, setMediaUrl] = React.useState<string | null>(null)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [mediaType, setMediaType] = React.useState<string | null>(null)
+  
+  React.useEffect(() => {
+    if (!mediaId) {
+      return
+    }
+    
+    async function loadMedia() {
+      setIsLoading(true)
+      try {
+        // mediaId is guaranteed to be defined here due to the check above
+        const url = await createBlobUrl(mediaId!)
+        if (url) {
+          setMediaUrl(url)
+          // Determine media type from URL or mediaId
+          // mediaId is guaranteed to be defined here
+          const id = mediaId!
+          if (id.includes('image')) {
+            setMediaType('image')
+          } else if (id.includes('video')) {
+            setMediaType('video')
+          } else if (id.includes('audio')) {
+            setMediaType('audio')
+          } else {
+            // Default to image
+            setMediaType('image')
+          }
+        }
+      } catch (error) {
+        console.warn('[MediaDisplay] Failed to load media:', mediaId, error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadMedia()
+  }, [mediaId, createBlobUrl])
   
   if (!mediaId) {
     return <>{fallback || null}</>
   }
-  
-  const url = getMediaUrl(mediaId)
   
   if (isLoading) {
     return (
@@ -27,39 +64,48 @@ export function MediaDisplay({ mediaId, alt, className, style, fallback }: Media
     )
   }
   
-  if (!url) {
+  if (!mediaUrl) {
     console.warn('[MediaDisplay] No URL found for media ID:', mediaId)
     return <>{fallback || <div>Media not found</div>}</>
   }
   
-  // Get media info from store to determine type
-  const { store } = useMedia()
-  const media = store.getMedia(mediaId)
-  
-  if (!media) {
-    return <>{fallback || <div>Media not found</div>}</>
-  }
-  
-  // For YouTube videos, use iframe
-  if (media.metadata.type === 'video' && media.metadata.embed_url) {
+  // For videos (including YouTube)
+  if (mediaType === 'video') {
+    // Check if it's a YouTube URL
+    if (mediaUrl.includes('youtube.com') || mediaUrl.includes('youtu.be')) {
+      // Extract video ID and create embed URL
+      const videoId = mediaUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1]
+      if (videoId) {
+        return (
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            className={className}
+            style={style}
+            title={alt || 'Video'}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        )
+      }
+    }
+    
+    // Regular video
     return (
-      <iframe
-        src={media.metadata.embed_url}
+      <video
+        src={mediaUrl || undefined}
         className={className}
         style={style}
-        title={media.metadata.title || alt || 'Video'}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
+        controls
       />
     )
   }
   
   // For images
-  if (media.metadata.type === 'image') {
+  if (mediaType === 'image') {
     return (
       <img
-        src={url}
-        alt={alt || media.metadata.title || 'Image'}
+        src={mediaUrl || undefined}
+        alt={alt || 'Image'}
         className={className}
         style={style}
       />
@@ -67,31 +113,17 @@ export function MediaDisplay({ mediaId, alt, className, style, fallback }: Media
   }
   
   // For audio
-  if (media.metadata.type === 'audio') {
+  if (mediaType === 'audio') {
     return (
       <audio
-        src={url}
-        controls
+        src={mediaUrl || undefined}
         className={className}
         style={style}
-        title={media.metadata.title || alt || 'Audio'}
+        controls
       />
     )
   }
   
-  // For regular videos
-  if (media.metadata.type === 'video') {
-    return (
-      <video
-        src={url}
-        controls
-        className={className}
-        style={style}
-        title={media.metadata.title || alt || 'Video'}
-      />
-    )
-  }
-  
-  // Unknown type
-  return <>{fallback || <div>Unknown media type</div>}</>
+  // Fallback
+  return <>{fallback || <div>Unsupported media type</div>}</>
 }

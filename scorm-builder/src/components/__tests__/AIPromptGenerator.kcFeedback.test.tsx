@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render } from '../../test/testProviders'
 import { AIPromptGenerator } from '../AIPromptGenerator'
 import { CourseSeedData } from '../../types/course'
 

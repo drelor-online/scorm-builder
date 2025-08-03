@@ -1,31 +1,91 @@
 /**
- * Manages blob URLs to persist them across component lifecycles
- * This prevents blob URLs from being lost when components unmount
+ * BlobURLManager - Enhanced blob URL lifecycle management
+ * 
+ * This utility provides proper blob URL tracking and cleanup to prevent memory leaks.
+ * It includes automatic cleanup on page unload and after specified timeouts.
  */
+
+import { logger } from './logger'
+
+interface BlobURLEntry {
+  url: string
+  createdAt: number
+  lastAccessed: number
+  refCount: number
+  size?: number
+  mediaId?: string
+  metadata?: Record<string, any>
+}
+
 class BlobUrlManager {
-  private urls: Map<string, string> = new Map()
-  private refCounts: Map<string, number> = new Map()
+  private urls: Map<string, string> = new Map() // key -> url (for backward compatibility)
+  private refCounts: Map<string, number> = new Map() // key -> refCount (for backward compatibility)
+  
+  // Enhanced tracking
+  private registry = new Map<string, BlobURLEntry>() // url -> entry
+  private keyToUrl = new Map<string, string>() // key -> url
+  private cleanupTimer: number | null = null
+  private readonly cleanupInterval = 30 * 60 * 1000 // 30 minutes
+  private readonly maxAge = 60 * 60 * 1000 // 1 hour
+  private readonly maxInactiveTime = 30 * 60 * 1000 // 30 minutes
+
+  constructor() {
+    // Setup automatic cleanup
+    this.startCleanupTimer()
+    
+    // Cleanup on page unload
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', this.cleanup)
+      window.addEventListener('pagehide', this.cleanup)
+    }
+  }
 
   /**
    * Create or retrieve a blob URL for a given key
    * @param key Unique identifier for this blob URL
    * @param blob The blob to create a URL for
+   * @param metadata Optional metadata to store with the URL
    * @returns The blob URL
    */
-  getOrCreateUrl(key: string, blob: Blob): string {
+  getOrCreateUrl(key: string, blob: Blob, metadata?: Record<string, any>): string {
     const existingUrl = this.urls.get(key)
     
     if (existingUrl) {
-      // Increment reference count
+      // Update access time
+      const entry = this.registry.get(existingUrl)
+      if (entry) {
+        entry.lastAccessed = Date.now()
+        entry.refCount++
+      }
+      
+      // Increment reference count (backward compatibility)
       const currentCount = this.refCounts.get(key) || 0
       this.refCounts.set(key, currentCount + 1)
+      
       return existingUrl
     }
 
     // Create new URL
     const url = URL.createObjectURL(blob)
+    const now = Date.now()
+    
+    // Store in both old and new structures
     this.urls.set(key, url)
     this.refCounts.set(key, 1)
+    
+    // Enhanced tracking
+    this.registry.set(url, {
+      url,
+      createdAt: now,
+      lastAccessed: now,
+      refCount: 1,
+      size: blob.size,
+      mediaId: key,
+      metadata
+    })
+    this.keyToUrl.set(key, url)
+    
+    logger.debug('[BlobURLManager] Created blob URL:', { key, url, size: blob.size })
     
     return url
   }
@@ -37,18 +97,27 @@ class BlobUrlManager {
    */
   releaseUrl(key: string): void {
     const refCount = this.refCounts.get(key) || 0
+    const url = this.urls.get(key)
     
     if (refCount <= 1) {
       // Last reference, revoke the URL
-      const url = this.urls.get(key)
       if (url) {
-        URL.revokeObjectURL(url)
+        this.revokeUrl(url)
         this.urls.delete(key)
         this.refCounts.delete(key)
+        this.keyToUrl.delete(key)
       }
     } else {
       // Decrement reference count
       this.refCounts.set(key, refCount - 1)
+      
+      // Update entry if exists
+      if (url) {
+        const entry = this.registry.get(url)
+        if (entry) {
+          entry.refCount--
+        }
+      }
     }
   }
 
@@ -67,16 +136,148 @@ class BlobUrlManager {
    * @returns The URL if it exists, undefined otherwise
    */
   getUrl(key: string): string | undefined {
-    return this.urls.get(key)
+    const url = this.urls.get(key)
+    
+    // Update access time if found
+    if (url) {
+      const entry = this.registry.get(url)
+      if (entry) {
+        entry.lastAccessed = Date.now()
+      }
+    }
+    
+    return url
+  }
+
+  /**
+   * Revoke a specific URL
+   */
+  private revokeUrl(url: string): void {
+    try {
+      URL.revokeObjectURL(url)
+      this.registry.delete(url)
+      logger.debug('[BlobURLManager] Revoked blob URL:', url)
+    } catch (error) {
+      logger.error('[BlobURLManager] Error revoking URL:', url, error)
+    }
+  }
+
+  /**
+   * Clean up old or inactive URLs
+   */
+  cleanupOldUrls(): void {
+    const now = Date.now()
+    const urlsToRevoke: string[] = []
+    
+    this.registry.forEach((entry, url) => {
+      const age = now - entry.createdAt
+      const inactiveTime = now - entry.lastAccessed
+      
+      // Clean up if too old or inactive
+      if (age > this.maxAge || (inactiveTime > this.maxInactiveTime && entry.refCount === 0)) {
+        urlsToRevoke.push(url)
+      }
+    })
+    
+    // Revoke old URLs
+    urlsToRevoke.forEach(url => {
+      const entry = this.registry.get(url)
+      if (entry && entry.mediaId) {
+        // Clean up from backward compatibility maps
+        this.urls.delete(entry.mediaId)
+        this.refCounts.delete(entry.mediaId)
+        this.keyToUrl.delete(entry.mediaId)
+      }
+      this.revokeUrl(url)
+    })
+    
+    if (urlsToRevoke.length > 0) {
+      logger.info('[BlobURLManager] Cleaned up', urlsToRevoke.length, 'old/inactive blob URLs')
+    }
+  }
+
+  /**
+   * Clean up all URLs (called on page unload)
+   */
+  cleanup = (): void => {
+    logger.info('[BlobURLManager] Cleaning up all blob URLs:', this.urls.size)
+    
+    // Revoke all URLs
+    this.registry.forEach((_, url) => {
+      try {
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        // Ignore errors during cleanup
+      }
+    })
+    
+    // Clear all maps
+    this.urls.clear()
+    this.refCounts.clear()
+    this.registry.clear()
+    this.keyToUrl.clear()
+    
+    // Stop cleanup timer
+    this.stopCleanupTimer()
   }
 
   /**
    * Clear all URLs (use with caution)
    */
   clearAll(): void {
-    this.urls.forEach(url => URL.revokeObjectURL(url))
-    this.urls.clear()
-    this.refCounts.clear()
+    this.cleanup()
+  }
+
+  /**
+   * Get statistics about blob URLs
+   */
+  getStats(): {
+    totalUrls: number
+    totalSize: number
+    averageAge: number
+    inactiveUrls: number
+  } {
+    const now = Date.now()
+    let totalSize = 0
+    let totalAge = 0
+    let inactiveCount = 0
+    
+    this.registry.forEach(entry => {
+      totalSize += entry.size || 0
+      totalAge += now - entry.createdAt
+      
+      if (now - entry.lastAccessed > this.maxInactiveTime) {
+        inactiveCount++
+      }
+    })
+    
+    return {
+      totalUrls: this.registry.size,
+      totalSize,
+      averageAge: this.registry.size > 0 ? totalAge / this.registry.size : 0,
+      inactiveUrls: inactiveCount
+    }
+  }
+
+  /**
+   * Start automatic cleanup timer
+   */
+  private startCleanupTimer(): void {
+    if (this.cleanupTimer === null && typeof window !== 'undefined') {
+      this.cleanupTimer = window.setInterval(() => {
+        this.cleanupOldUrls()
+      }, this.cleanupInterval)
+    }
+  }
+
+  /**
+   * Stop automatic cleanup timer
+   */
+  private stopCleanupTimer(): void {
+    if (this.cleanupTimer !== null) {
+      window.clearInterval(this.cleanupTimer)
+      this.cleanupTimer = null
+    }
   }
 }
 

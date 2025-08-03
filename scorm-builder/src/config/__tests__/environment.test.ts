@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getEnvironmentConfig, validateEnvironmentConfig, EnvironmentConfig } from '../environment'
 
 describe('Environment Configuration', () => {

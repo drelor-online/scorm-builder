@@ -1,5 +1,5 @@
-import { renderHook, waitFor, act } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { renderHook } from '../../test/testProviders'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ReactNode } from 'react'
 import { PersistentStorageProvider, useStorage } from '../PersistentStorageContext'
 

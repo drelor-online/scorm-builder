@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { generatePreviewHTML } from '../../services/previewGenerator'
 
 describe('Preview Navigation - Functional Tests', () => {
@@ -37,6 +37,9 @@ describe('Preview Navigation - Functional Tests', () => {
       ],
       assessment: {
         questions: []
+      ,
+        passMark: 80,
+        narration: null
       }
     }
     
@@ -111,6 +114,9 @@ describe('Preview Navigation - Functional Tests', () => {
       ],
       assessment: {
         questions: []
+      ,
+        passMark: 80,
+        narration: null
       }
     }
     
@@ -153,6 +159,9 @@ describe('Preview Navigation - Functional Tests', () => {
       topics: [],
       assessment: {
         questions: []
+      ,
+        passMark: 80,
+        narration: null
       }
     }
     

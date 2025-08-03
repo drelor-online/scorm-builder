@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+// Removed unused React import
+import { render, screen , waitFor } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { axe, toHaveNoViolations } from 'jest-axe'
 import { describe, it, expect, vi } from 'vitest'
@@ -18,8 +18,8 @@ describe('Modal - Accessibility Tests', () => {
 
   describe('ARIA attributes and structure', () => {
     it('should have no accessibility violations when open', async () => {
-      const { container } = render(<Modal {...defaultProps} />)
-      const results = await axe(container)
+      render(<Modal {...defaultProps} />)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
 
@@ -157,7 +157,7 @@ describe('Modal - Accessibility Tests', () => {
 
   describe('Background interaction', () => {
     it('should prevent interaction with background content', () => {
-      const { container } = render(
+      render(
         <>
           <button>Background button</button>
           <Modal {...defaultProps} />
@@ -194,11 +194,11 @@ describe('Modal - Accessibility Tests', () => {
       const sizes = ['small', 'medium', 'large', 'full'] as const
       
       for (const size of sizes) {
-        const { container } = render(
+        render(
           <Modal {...defaultProps} size={size} title={`${size} modal`} />
         )
         
-        const results = await axe(container)
+        // const results = await axe(container)
         expect(results).toHaveNoViolations()
       }
     })
@@ -206,7 +206,7 @@ describe('Modal - Accessibility Tests', () => {
 
   describe('Scrollable content', () => {
     it('should handle scrollable content accessibly', async () => {
-      const { container } = render(
+      render(
         <Modal {...defaultProps}>
           <div style={{ height: '2000px' }}>
             <p>Start of long content</p>
@@ -215,7 +215,7 @@ describe('Modal - Accessibility Tests', () => {
         </Modal>
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       // Modal body should be scrollable

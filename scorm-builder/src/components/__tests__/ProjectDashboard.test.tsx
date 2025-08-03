@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent , waitFor } from './../../test/testProviders'
 import { ProjectDashboard } from '../ProjectDashboard'
-import React from 'react'
+// Removed unused React import
 
 // Mock the storage context
 const mockCreateProject = vi.fn()

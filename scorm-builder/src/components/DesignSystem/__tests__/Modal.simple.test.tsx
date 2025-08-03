@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { Modal } from '../Modal'
 
 describe('Modal Component - Simple Tests', () => {
@@ -50,7 +50,7 @@ describe('Modal Component - Simple Tests', () => {
 
   it('should call onClose when overlay is clicked', () => {
     const onClose = vi.fn()
-    const { container } = render(
+    render(
       <Modal isOpen={true} onClose={onClose}>
         Content
       </Modal>

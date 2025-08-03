@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MediaEnhancementWizard } from '../MediaEnhancementWizardRefactored'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
+import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { CourseContent } from '../../types/aiPrompt'
 import * as searchService from '../../services/searchService'
 

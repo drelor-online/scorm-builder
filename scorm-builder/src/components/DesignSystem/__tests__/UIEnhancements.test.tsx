@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { Card } from '../Card'
 import { Button } from '../Button'
 import { Input } from '../Input'
@@ -9,7 +9,7 @@ import './setupTests'
 describe('UI Enhancement Tests', () => {
   describe('Card Component Enhancements', () => {
     it('should have subtle shadow for depth', () => {
-      const { container } = render(<Card>Test Content</Card>)
+      render(<Card>Test Content</Card>)
       const card = container.querySelector('.card')
       expect(card).toBeTruthy()
       const styles = window.getComputedStyle(card!)
@@ -18,7 +18,7 @@ describe('UI Enhancement Tests', () => {
     })
 
     it('should have smooth border transitions on hover', () => {
-      const { container } = render(<Card>Test Content</Card>)
+      render(<Card>Test Content</Card>)
       const card = container.querySelector('.card')
       expect(card).toBeTruthy()
       const styles = window.getComputedStyle(card!)

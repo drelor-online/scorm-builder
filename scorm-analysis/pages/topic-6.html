@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning from Experience: Incident Reporting</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body data-has-knowledge-check="true" style="margin: 0; padding: 0; box-sizing: border-box;">
+    <div class="content-layout">
+        <div class="text-section">
+            <h2>Why Reporting Matters</h2><p>A strong safety culture relies on learning from every incident, no matter how small. Reporting is not about placing blame; it's about gathering information to prevent recurrence. Both <strong>incidents</strong> (events that caused harm) and <strong>near-misses</strong> (events that could have caused harm but didn't) must be reported.</p><h3>What to Include in a Report:</h3><p>A good incident report is factual and objective. It should include the 5 W's:</p><ul><li><strong>Who:</strong> Who was involved? Who were the witnesses?</li><li><strong>What:</strong> What happened? Describe the sequence of events. What were the consequences?</li><li><strong>When:</strong> What was the exact date and time of the incident?</li><li><strong>Where:</strong> Where exactly did the incident occur? Be specific.</li><li><strong>Why:</strong> Why did it happen? This involves root cause analysis, looking beyond immediate causes to find underlying system failures.</li></ul><h3>The Value of Near-Miss Reporting:</h3><p>A near-miss is a free lesson. It provides all the information of an actual incident without the injury or damage. Reporting near-misses allows the organization to identify and fix a problem before it leads to a real accident. A high number of near-miss reports is often a sign of a healthy and proactive safety culture, not a dangerous workplace.</p>
+            
+            
+            <div class="knowledge-check-container">
+                <h3>Knowledge Check</h3>
+                <p class="kc-question">A high number of near-miss reports is a sign of a dangerous workplace.</p>
+                <div class="kc-options">
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-5" value="0" data-correct="1">
+                        <span class="option-text">True</span>
+                    </label>
+                    
+                    <label class="kc-option">
+                        <input type="radio" name="kc-topic-5" value="1" data-correct="1">
+                        <span class="option-text">False</span>
+                    </label>
+                </div>
+                <button class="kc-submit" onclick="parent.checkAnswer(5, 1, &quot;Correct!%20A%20high%20number%20of%20near-miss%20reports%20indicates%20a%20healthy%20safety%20culture%20where%20employees%20feel%20comfortable%20reporting%20potential%20problems%20before%20they%20lead%20to%20accidents.&quot;, &quot;Actually%2C%20the%20opposite%20is%20true.%20A%20high%20number%20of%20near-miss%20reports%20is%20a%20sign%20of%20a%20positive%20and%20proactive%20safety%20culture.%20It%20means%20people%20are%20engaged%20and%20reporting%20issues%20so%20they%20can%20be%20fixed.&quot;, event)">Submit Answer</button>
+                <div id="kc-feedback-topic-6" class="kc-feedback">
+                    <div class="feedback-text"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="media-panel">
+            
+            
+            
+            <div class="audio-player">
+                <audio id="audio-player-topic-6" src="../media/audio-7.mp3" preload="metadata">
+                    <track kind="captions" src="../media/caption-7.vtt" srclang="en" label="English" default>
+                </audio>
+                <div class="audio-main">
+                    <button class="play-pause" onclick="parent.toggleAudio('topic-6', event)">▶</button>
+                    <div class="audio-track">
+                        <div class="track-progress" onclick="parent.seekAudio(event, 'topic-6')">
+                            <div class="track-fill" id="track-fill-topic-6">
+                                <div class="track-handle"></div>
+                            </div>
+                        </div>
+                        <div class="track-time">
+                            <span id="current-time-topic-6">0:00</span>
+                            <span id="duration-topic-6">0:00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="audio-controls">
+                    <button class="audio-btn" onclick="parent.skip(-10, 'topic-6')">◀ 10s</button>
+                    <button class="audio-btn" id="speed-btn-topic-6" onclick="parent.changeSpeed('topic-6')">1x</button>
+                    <button class="audio-btn active" id="cc-btn-topic-6" onclick="parent.toggleCaptions('topic-6')">CC</button>
+                    <button class="audio-btn" onclick="parent.toggleVolume('topic-6', event)">🔊</button>
+                    <button class="audio-btn" onclick="parent.skip(10, 'topic-6')">10s ▶</button>
+                </div>
+                <div class="caption-display" id="caption-display-topic-6">
+                    <p id="caption-text-topic-6"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="lightbox-overlay" onclick="parent.closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-image" src="" alt="">
+            <button class="lightbox-close" onclick="parent.closeLightbox()">×</button>
+        </div>
+    </div>
+    
+    <!-- Navigation handled by main index.html sidebar and footer -->
+    
+    
+    <script>
+        // Disable next button on page load if knowledge check exists
+        window.addEventListener('load', function() {
+            // Try both in the parent frame and current frame
+            let nextBtn = parent.document.getElementById('next-btn');
+            if (!nextBtn) {
+                nextBtn = document.getElementById('next-btn');
+            }
+            
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.classList.add('disabled');
+                // Also set data attribute to track state
+                nextBtn.dataset.requiresAnswer = 'true';
+            }
+        });
+    </script>
+    
+    
+    <!-- Custom Alert Container -->
+    <div id="scorm-alert-container"></div>
+</body>
+</html>

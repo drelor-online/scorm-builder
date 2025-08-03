@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { Skeleton } from '../Skeleton'
 

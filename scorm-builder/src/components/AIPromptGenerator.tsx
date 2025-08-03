@@ -5,8 +5,8 @@ import { getButtonStyle } from '../styles/buttonStyles'
 import { Toast } from './Toast'
 import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
-import { CoursePreview } from './CoursePreview'
 import { tokens } from './DesignSystem/designTokens'
+import { Check, Copy } from 'lucide-react'
 
 interface AIPromptGeneratorProps {
   courseSeedData: CourseSeedData
@@ -35,6 +35,7 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
+  const [mounted, setMounted] = useState(false)
   // Removed history functionality per UX requirements
   
   // Navigation guard hook - we treat "has copied prompt" as a form change
@@ -47,16 +48,22 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   
   // Custom prompt state is tracked but not auto-saved to localStorage anymore
   
+  // Set mounted flag
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+  
   // Track when user copies the prompt
   useEffect(() => {
-    if (copied && !hasCopiedPrompt) {
+    if (mounted && copied && !hasCopiedPrompt) {
       setHasCopiedPrompt(true)
       // Tell the form changes hook that we have changes
       checkForChanges({ hasCopied: true })
     }
-  }, [copied, hasCopiedPrompt, checkForChanges])
+  }, [mounted, copied, hasCopiedPrompt, checkForChanges])
 
-  const generatePrompt = (): string => {
+  const generatePrompt = React.useCallback((): string => {
     if (customPrompt) return customPrompt
     // Only use topics from the textarea (customTopics)
     const topicsText = courseSeedData?.customTopics?.length > 0 
@@ -220,7 +227,7 @@ CRITICAL JSON FORMATTING RULES - MUST FOLLOW EXACTLY:
    - Replace any other non-ASCII characters with ASCII equivalents
 
 REMEMBER: The JSON must parse without any errors. Test mentally that all quotes are balanced and properly escaped.`
-  }
+  }, [customPrompt, courseSeedData])
 
   const handleCopy = async () => {
     const prompt = generatePrompt()
@@ -261,12 +268,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
     <AutoSaveIndicatorConnected />
   )
 
-  const coursePreviewElement = (
-    <CoursePreview 
-      courseContent={null}
-      courseSeedData={courseSeedData}
-    />
-  )
 
   return (
     <>
@@ -275,7 +276,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         title="AI Prompt Generator"
         description="Generate a comprehensive AI prompt based on your course configuration"
         autoSaveIndicator={autoSaveIndicator}
-        coursePreview={coursePreviewElement}
         onSettingsClick={onSettingsClick}
         onSave={onSave}
         onSaveAs={onSaveAs}
@@ -356,7 +356,15 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
           data-testid="copy-prompt-button"
           style={getButtonStyle(copied ? 'success' : 'tertiary', 'medium', { marginTop: '1rem' })}
         >
-          {copied ? '✓ Copied!' : '📋 Copy Prompt'}
+          {copied ? (
+            <>
+              <Check size={16} style={{ marginRight: '0.5rem' }} /> Copied!
+            </>
+          ) : (
+            <>
+              <Copy size={16} style={{ marginRight: '0.5rem' }} /> Copy Prompt
+            </>
+          )}
         </button>
       </FormSection>
 
@@ -401,3 +409,5 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
   </>
   )
 }
+
+export default AIPromptGenerator;

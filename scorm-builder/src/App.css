@@ -8,6 +8,48 @@
   --color-focus: #1967d2;
   --color-error: #d93025;
   --color-success: #188038;
+  
+  /* Dark theme colors for performance dashboard */
+  --color-bg-primary: #09090b;
+  --color-bg-secondary: #18181b;
+  --color-bg-tertiary: #27272a;
+  --color-text-primary: #f4f4f5;
+  --color-text-tertiary: #a1a1aa;
+  --color-border-default: #3f3f46;
+  --color-border-light: #27272a;
+  --color-border-medium: #52525b;
+  --color-border-dark: #71717a;
+  --color-warning: #f59e0b;
+  
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 0.75rem;
+  --spacing-lg: 1rem;
+  
+  /* Font sizes */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  
+  /* Font weights */
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  
+  /* Font families */
+  --font-family-mono: ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  /* Radius */
+  --radius-lg: 0.75rem;
+  
+  /* Shadows */
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Z-index */
+  --z-index-popover: 1060;
+  
+  /* Transitions */
+  --transition-normal: 200ms ease-in-out;
 }
 
 #root {

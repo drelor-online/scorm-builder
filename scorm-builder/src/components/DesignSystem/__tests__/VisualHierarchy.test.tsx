@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { Section, PageContainer, Card } from '../'
 import './setupTests'
 
 describe('Visual Hierarchy and Spacing Tests', () => {
   describe('Section Spacing', () => {
     it('should have consistent vertical spacing between sections', () => {
-      const { container } = render(
+      render(
         <PageContainer>
           <Section title="First Section">Content 1</Section>
           <Section title="Second Section">Content 2</Section>
@@ -32,7 +32,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
     })
 
     it('should have proper heading hierarchy', () => {
-      const { container } = render(
+      render(
         <Section title="Test Section">
           <h3>Subsection Title</h3>
           <p>Content paragraph</p>
@@ -56,7 +56,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
 
   describe('Card Visual Hierarchy', () => {
     it('should have elevated appearance with shadow', () => {
-      const { container } = render(
+      render(
         <Card title="Test Card">
           Card content
         </Card>
@@ -70,7 +70,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
     })
 
     it('should have hover state with increased elevation', () => {
-      const { container } = render(
+      render(
         <Card title="Test Card">
           Card content
         </Card>
@@ -83,7 +83,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
 
   describe('Content Spacing', () => {
     it('should have consistent paragraph spacing', () => {
-      const { container } = render(
+      render(
         <Section>
           <p>First paragraph</p>
           <p>Second paragraph</p>
@@ -106,7 +106,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
     })
 
     it('should have proper list spacing', () => {
-      const { container } = render(
+      render(
         <Section>
           <ul>
             <li>Item 1</li>
@@ -135,7 +135,7 @@ describe('Visual Hierarchy and Spacing Tests', () => {
 
   describe('Page Container Constraints', () => {
     it('should have maximum width for readability', () => {
-      const { container } = render(
+      render(
         <PageContainer>
           <Section>Content</Section>
         </PageContainer>

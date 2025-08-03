@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { LoadingSpinner } from '../LoadingSpinner'
 import { COLORS } from '../../../constants'
 
@@ -50,7 +50,7 @@ describe('LoadingSpinner Component - Simple Tests', () => {
   })
 
   it('should render fullscreen overlay when fullScreen is true', () => {
-    const { container } = render(<LoadingSpinner fullScreen />)
+    render(<LoadingSpinner fullScreen />)
     
     const overlay = container.firstChild as HTMLElement
     expect(overlay.style.position).toBe('fixed')
@@ -59,7 +59,7 @@ describe('LoadingSpinner Component - Simple Tests', () => {
   })
 
   it('should not render overlay when fullScreen is false', () => {
-    const { container } = render(<LoadingSpinner fullScreen={false} />)
+    render(<LoadingSpinner fullScreen={false} />)
     
     const spinner = container.firstChild as HTMLElement
     expect(spinner.style.position).not.toBe('fixed')

@@ -12,11 +12,17 @@ body, #root {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@import './styles/theme.css';
+
 body {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
+
 
 .skip-link {
   position: absolute;

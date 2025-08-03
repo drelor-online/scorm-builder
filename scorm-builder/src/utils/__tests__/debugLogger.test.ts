@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { debugLogger } from '../debugLogger'
 
 // Mock DOM elements
@@ -57,7 +57,7 @@ document.createElement = vi.fn((tag) => {
 
 document.body.appendChild = vi.fn()
 document.getElementById = vi.fn()
-document.querySelectorAll = vi.fn(() => [])
+document.querySelectorAll = vi.fn(() => [] as any as NodeListOf<Element>)
 document.addEventListener = vi.fn()
 
 describe('debugLogger', () => {

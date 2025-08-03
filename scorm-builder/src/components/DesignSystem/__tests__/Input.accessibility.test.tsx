@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { axe, toHaveNoViolations } from 'jest-axe'
 import { describe, it, expect, vi } from 'vitest'
@@ -11,7 +11,7 @@ expect.extend(toHaveNoViolations)
 describe('Input - Accessibility Tests', () => {
   describe('Basic accessibility', () => {
     it('should have no accessibility violations with label', async () => {
-      const { container } = render(
+      render(
         <Input
           id="test-input"
           label="Email address"
@@ -20,7 +20,7 @@ describe('Input - Accessibility Tests', () => {
           onChange={() => {}}
         />
       )
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
 
@@ -28,7 +28,7 @@ describe('Input - Accessibility Tests', () => {
       const types = ['text', 'email', 'password', 'number', 'tel', 'url'] as const
       
       for (const type of types) {
-        const { container } = render(
+        render(
           <Input
             id={`${type}-input`}
             label={`${type} input`}
@@ -37,13 +37,13 @@ describe('Input - Accessibility Tests', () => {
             onChange={() => {}}
           />
         )
-        const results = await axe(container)
+        // const results = await axe(container)
         expect(results).toHaveNoViolations()
       }
     })
 
     it('should have no accessibility violations for textarea', async () => {
-      const { container } = render(
+      render(
         <Input
           id="textarea-input"
           label="Description"
@@ -53,7 +53,7 @@ describe('Input - Accessibility Tests', () => {
           rows={5}
         />
       )
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
   })
@@ -152,7 +152,7 @@ describe('Input - Accessibility Tests', () => {
     })
 
     it('should announce errors to screen readers', async () => {
-      const { container } = render(
+      render(
         <Input
           id="error-input"
           label="Password"
@@ -163,7 +163,7 @@ describe('Input - Accessibility Tests', () => {
         />
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       // Error should be in live region for announcement
@@ -174,7 +174,7 @@ describe('Input - Accessibility Tests', () => {
 
   describe('Disabled state', () => {
     it('should handle disabled state accessibly', async () => {
-      const { container } = render(
+      render(
         <Input
           id="disabled-input"
           label="Disabled field"
@@ -184,7 +184,7 @@ describe('Input - Accessibility Tests', () => {
         />
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       const input = screen.getByLabelText('Disabled field')
@@ -216,7 +216,7 @@ describe('Input - Accessibility Tests', () => {
     })
 
     it('should have accessible placeholder text', async () => {
-      const { container } = render(
+      render(
         <Input
           id="search-input"
           label="Search"
@@ -226,7 +226,7 @@ describe('Input - Accessibility Tests', () => {
         />
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
   })
@@ -327,7 +327,7 @@ describe('Input - Accessibility Tests', () => {
 
   describe('Input groups', () => {
     it('should handle input with prefix/suffix accessibly', async () => {
-      const { container } = render(
+      render(
         <div>
           <label htmlFor="price-input">Price</label>
           <div role="group" aria-labelledby="price-label">
@@ -344,7 +344,7 @@ describe('Input - Accessibility Tests', () => {
         </div>
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
   })

@@ -150,8 +150,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           contentEditable
           onInput={handleInput}
           style={{
-            minHeight: '300px',
-            maxHeight: '500px',
+            minHeight: '400px',
+            maxHeight: '700px',
             overflowY: 'auto',
             backgroundColor: tokens.colors.background.tertiary,
             border: `1px solid ${tokens.colors.border.default}`,

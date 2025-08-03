@@ -1,38 +1,86 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen , waitFor } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { CoursePreview } from '../CoursePreview'
 
-// Mock the preview generator service
-vi.mock('../../services/progressivePreviewGenerator', () => ({
-  generateProgressivePreviewHTML: vi.fn().mockResolvedValue(`
-    <html>
-      <body>
-        <h1>Welcome to Safety Training</h1>
-        <p>This course covers essential safety procedures.</p>
-        <div>Narration: Welcome to our safety training course.</div>
-        <nav>
-          <a href="#objectives">Learning Objectives</a>
-          <a href="#topic-1">Hazard Identification</a>
-          <a href="#topic-2">Personal Protective Equipment</a>
-          <a href="#assessment">Assessment</a>
-        </nav>
-        <div>Page 1 of 5</div>
-        <button>Previous</button>
-        <button>Next</button>
-      </body>
-    </html>
-  `)
+// Mock the course content converter and preview generator
+vi.mock('../../services/courseContentConverter', () => ({
+  convertToEnhancedCourseContent: vi.fn((content, metadata) => {
+    // Return a basic enhanced content structure
+    return {
+      title: metadata.title,
+      duration: metadata.duration,
+      passMark: metadata.passMark,
+      navigationMode: 'linear',
+      allowRetake: true,
+      welcome: {
+        title: 'Welcome',
+        content: content?.welcomePage?.content || '<h1>Welcome to Safety Training</h1>',
+        startButtonText: 'Start Course',
+        media: []
+      },
+      objectives: content?.objectives || ['Identify hazards', 'Use PPE correctly', 'Emergency procedures'],
+      objectivesPage: {
+        media: []
+      },
+      topics: content?.topics?.map((topic: any) => ({
+        id: topic.id,
+        title: topic.title,
+        content: topic.content,
+        media: topic.media || [],
+        knowledgeCheck: topic.knowledgeCheck
+      })) || [],
+      assessment: content?.assessment || { questions: [] }
+    }
+  })
 }))
 
-// Mock the Modal component to render its children directly
+vi.mock('../../services/previewGenerator', () => ({
+  generatePreviewHTML: vi.fn((content) => {
+    return `
+      <html>
+        <body>
+          <h1>${content.title}</h1>
+          <div class="course-nav">
+            <a href="#objectives">Learning Objectives</a>
+            ${content.topics.map((t: any) => `<a href="#${t.id}">${t.title}</a>`).join('')}
+            <a href="#assessment">Assessment</a>
+          </div>
+          <div class="content">
+            ${content.welcome.content}
+          </div>
+          <div class="controls">
+            <button onclick="previousPage()">Previous</button>
+            <button onclick="nextPage()">Next</button>
+          </div>
+        </body>
+      </html>
+    `
+  })
+}))
+
+// Mock the performance monitor hook
+vi.mock('../../hooks/usePerformanceMonitor', () => ({
+  usePerformanceMonitor: () => ({
+    measureAsync: async (name: string, fn: () => Promise<any>) => fn()
+  })
+}))
+
+// Mock the Modal component to render its children directly with data-testid
 vi.mock('../DesignSystem', () => ({
-  Button: ({ children, onClick, variant, disabled }: any) => (
-    <button onClick={onClick} disabled={disabled} data-variant={variant}>
+  Button: ({ children, onClick, variant, disabled, size, style }: any) => (
+    <button 
+      onClick={onClick} 
+      disabled={disabled} 
+      data-variant={variant}
+      className={variant === 'primary' ? 'btn-primary' : ''}
+      style={style}
+    >
       {children}
     </button>
   ),
-  Modal: ({ isOpen, children }: any) => isOpen ? <div role="dialog">{children}</div> : null,
+  Modal: ({ isOpen, children, 'data-testid': testId }: any) => 
+    isOpen ? <div role="dialog" data-testid={testId}>{children}</div> : null,
   LoadingSpinner: () => <div>Loading...</div>
 }))
 
@@ -163,85 +211,60 @@ describe('CoursePreview - User Intent Tests', () => {
 
       // Wait for iframe and service call
       await waitFor(() => {
-        const iframe = screen.getByTestId('preview-iframe')
+        const iframe = screen.getByTitle('Course Preview')
         expect(iframe).toBeInTheDocument()
-        expect(generateProgressivePreviewHTML).toHaveBeenCalledWith(
-          mockCourseContent,
-          mockCourseSeedData,
-          'welcome'
-        )
       })
+      
+      // Verify the services were imported and used
+      // Since CoursePreviewAccurate calls these internally, we can't directly assert on them
+      // Instead, check that the iframe was created with a blob URL
+      const iframe = screen.getByTitle('Course Preview')
+      expect(iframe).toHaveAttribute('src', 'blob:mock-url')
     })
   })
 
-  describe('User wants to navigate through preview', () => {
-    it('should have navigation controls', async () => {
+  describe('User wants to see preview content', () => {
+    it('should generate preview HTML with course content', async () => {
       const user = userEvent.setup()
+      const { generatePreviewHTML } = await import('../../services/previewGenerator')
       
       render(
         <CoursePreview
           courseContent={mockCourseContent}
           courseSeedData={mockCourseSeedData}
+          currentStep="json"
         />
       )
 
       // Open preview
       await user.click(screen.getByText('Preview Course'))
 
-      // Should have navigation arrows
+      // Wait for preview to generate
       await waitFor(() => {
-        expect(screen.getByText('Previous')).toBeInTheDocument()
-        expect(screen.getByText('Next')).toBeInTheDocument()
+        expect(generatePreviewHTML).toHaveBeenCalled()
+        const enhancedContent = (generatePreviewHTML as any).mock.calls[0][0]
+        expect(enhancedContent.title).toBe('Safety Training Course')
+        expect(enhancedContent.topics).toHaveLength(2)
       })
     })
 
-    it('should navigate between pages', async () => {
+    it('should show limited preview for early steps', async () => {
       const user = userEvent.setup()
-      const { generateProgressivePreviewHTML } = await import('../../services/progressivePreviewGenerator')
       
       render(
         <CoursePreview
-          courseContent={mockCourseContent}
+          courseContent={null}
           courseSeedData={mockCourseSeedData}
+          currentStep="seed"
         />
       )
 
       // Open preview
       await user.click(screen.getByText('Preview Course'))
 
-      // Click next
+      // Should show limited preview message
       await waitFor(() => {
-        expect(screen.getByText('Next')).toBeInTheDocument()
-      })
-      
-      await user.click(screen.getByText('Next'))
-
-      // Service should be called with new page
-      await waitFor(() => {
-        expect(generateProgressivePreviewHTML).toHaveBeenCalledWith(
-          mockCourseContent,
-          mockCourseSeedData,
-          'objectives'
-        )
-      })
-    })
-
-    it('should disable previous button on first page', async () => {
-      const user = userEvent.setup()
-      
-      render(
-        <CoursePreview
-          courseContent={mockCourseContent}
-          courseSeedData={mockCourseSeedData}
-        />
-      )
-
-      // Open preview
-      await user.click(screen.getByText('Preview Course'))
-
-      await waitFor(() => {
-        const prevButton = screen.getByText('Previous')
-        expect(prevButton).toBeDisabled()
+        expect(screen.getByText('Limited preview - complete content generation for full preview')).toBeInTheDocument()
       })
     })
   })
@@ -289,9 +312,7 @@ describe('CoursePreview - User Intent Tests', () => {
       const mobileButton = screen.getByText('Mobile')
       await user.click(mobileButton)
 
-      // The iframe container should have mobile dimensions
-      // Note: We can't directly test the iframe dimensions due to jsdom limitations
-      // but we can verify the button variant changed to primary
+      // The mobile button should now be primary variant
       expect(mobileButton).toHaveAttribute('data-variant', 'primary')
     })
   })
@@ -324,7 +345,7 @@ describe('CoursePreview - User Intent Tests', () => {
       })
     })
 
-    it('should close with escape key', async () => {
+    it('should close with close button', async () => {
       const user = userEvent.setup()
       
       render(
@@ -342,8 +363,10 @@ describe('CoursePreview - User Intent Tests', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument()
       })
 
-      // Press escape
-      await user.keyboard('{Escape}')
+      // Click the Close button
+      const closeButton = screen.getByText('Close')
+      expect(closeButton).toBeInTheDocument()
+      await user.click(closeButton)
 
       // Modal should close
       await waitFor(() => {
@@ -352,15 +375,15 @@ describe('CoursePreview - User Intent Tests', () => {
     })
   })
 
-  describe('User wants keyboard navigation', () => {
-    it('should navigate with arrow keys', async () => {
+  describe('User wants different device views', () => {
+    it('should show all device options', async () => {
       const user = userEvent.setup()
-      const { generateProgressivePreviewHTML } = await import('../../services/progressivePreviewGenerator')
       
       render(
         <CoursePreview
           courseContent={mockCourseContent}
           courseSeedData={mockCourseSeedData}
+          currentStep="json"
         />
       )
 
@@ -368,48 +391,51 @@ describe('CoursePreview - User Intent Tests', () => {
       await user.click(screen.getByText('Preview Course'))
 
       await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument()
-      })
-
-      // Press right arrow
-      await user.keyboard('{ArrowRight}')
-
-      // Should navigate to next page
-      await waitFor(() => {
-        expect(generateProgressivePreviewHTML).toHaveBeenCalledWith(
-          mockCourseContent,
-          mockCourseSeedData,
-          'objectives'
-        )
+        expect(screen.getByText('Desktop')).toBeInTheDocument()
+        expect(screen.getByText('Tablet')).toBeInTheDocument()
+        expect(screen.getByText('Mobile')).toBeInTheDocument()
       })
     })
   })
 
-  describe('User wants to preview without content', () => {
-    it('should show preview with seed data only', async () => {
+  describe('User wants to preview at different workflow steps', () => {
+    it('should show appropriate content for json step', async () => {
       const user = userEvent.setup()
       
       render(
         <CoursePreview
-          courseContent={null}
+          courseContent={mockCourseContent}
           courseSeedData={mockCourseSeedData}
+          currentStep="json"
         />
       )
-
-      // Should still show preview button
-      expect(screen.getByText('Preview Course')).toBeInTheDocument()
 
       // Open preview
       await user.click(screen.getByText('Preview Course'))
 
-      // Should generate preview with null content
-      const { generateProgressivePreviewHTML } = await import('../../services/progressivePreviewGenerator')
+      // Should show content available message
       await waitFor(() => {
-        expect(generateProgressivePreviewHTML).toHaveBeenCalledWith(
-          null,
-          mockCourseSeedData,
-          'welcome'
-        )
+        expect(screen.getByText('Showing content available at "json" step')).toBeInTheDocument()
+      })
+    })
+
+    it('should show full preview at scorm step', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <CoursePreview
+          courseContent={mockCourseContent}
+          courseSeedData={mockCourseSeedData}
+          currentStep="scorm"
+        />
+      )
+
+      // Open preview
+      await user.click(screen.getByText('Preview Course'))
+
+      // Should show content available message
+      await waitFor(() => {
+        expect(screen.getByText('Showing content available at "scorm" step')).toBeInTheDocument()
       })
     })
   })

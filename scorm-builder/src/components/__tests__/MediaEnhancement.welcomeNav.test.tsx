@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MediaEnhancementWizard } from '../MediaEnhancementWizardRefactored'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
+import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { CourseContent } from '../../types/aiPrompt'
 
 describe('MediaEnhancementWizard - Welcome/Objectives Navigation', () => {
@@ -33,6 +33,10 @@ describe('MediaEnhancementWizard - Welcome/Objectives Navigation', () => {
         title: 'Topic 1',
         content: '<p>Topic 1 content here</p>',
         narration: 'Topic 1 narration',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
         imageKeywords: ['topic1'],
         imagePrompts: ['Topic 1 prompt'],
         videoSearchTerms: ['topic 1 video'],

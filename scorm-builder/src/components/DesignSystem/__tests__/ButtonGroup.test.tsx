@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { ButtonGroup } from './ButtonGroup'
 import { Button } from './Button'

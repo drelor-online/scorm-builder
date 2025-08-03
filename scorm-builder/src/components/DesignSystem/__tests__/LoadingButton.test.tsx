@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent , waitFor } from '../../../test/testProviders'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LoadingButton } from '../LoadingButton'
 
 // Mock the Button component

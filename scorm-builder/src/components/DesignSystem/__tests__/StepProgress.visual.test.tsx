@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { render } from '../../../test/testProviders'
 import { StepProgress } from '../StepProgress'
 import './setupTests'
 
@@ -13,7 +13,7 @@ describe('StepProgress Visual Enhancements', () => {
   ]
 
   it('should have clear visual distinction for active step', () => {
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     
@@ -29,7 +29,7 @@ describe('StepProgress Visual Enhancements', () => {
   })
 
   it('should have visible connectors between steps', () => {
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     
@@ -45,7 +45,7 @@ describe('StepProgress Visual Enhancements', () => {
   })
 
   it('should show completed steps with checkmark and distinct styling', () => {
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     
@@ -65,7 +65,7 @@ describe('StepProgress Visual Enhancements', () => {
   it('should have proper hover states for clickable steps', () => {
     // This test should check if steps become clickable when a click handler is provided
     // Since the current component doesn't support onStepClick, we'll test the default state
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     
@@ -80,7 +80,7 @@ describe('StepProgress Visual Enhancements', () => {
   })
 
   it('should have accessible step labels and ARIA attributes', () => {
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     
@@ -97,7 +97,7 @@ describe('StepProgress Visual Enhancements', () => {
   })
 
   it('should have sufficient contrast between text and background', () => {
-    const { container } = render(
+    render(
       <StepProgress steps={mockSteps} />
     )
     

@@ -20,6 +20,16 @@ export interface EnvironmentConfig {
   // Feature flags
   enableAnalytics?: boolean
   enableErrorReporting?: boolean
+  
+  // Debug logging control
+  debug: {
+    mediaRegistry: boolean
+    mediaStore: boolean
+    scormBuilder: boolean
+    audioNarration: boolean
+    autoSave: boolean
+    fileStorage: boolean
+  }
 }
 
 /**
@@ -44,7 +54,17 @@ export function getEnvironmentConfig(): EnvironmentConfig {
     
     // Feature flags
     enableAnalytics: import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
-    enableErrorReporting: import.meta.env.VITE_ENABLE_ERROR_REPORTING === 'true'
+    enableErrorReporting: import.meta.env.VITE_ENABLE_ERROR_REPORTING === 'true',
+    
+    // Debug logging control - disabled in production by default
+    debug: {
+      mediaRegistry: mode === 'development' && import.meta.env.VITE_DEBUG_MEDIA_REGISTRY !== 'false',
+      mediaStore: mode === 'development' && import.meta.env.VITE_DEBUG_MEDIA_STORE !== 'false',
+      scormBuilder: mode === 'development' && import.meta.env.VITE_DEBUG_SCORM_BUILDER !== 'false',
+      audioNarration: mode === 'development' && import.meta.env.VITE_DEBUG_AUDIO_NARRATION !== 'false',
+      autoSave: mode === 'development' && import.meta.env.VITE_DEBUG_AUTO_SAVE !== 'false',
+      fileStorage: mode === 'development' && import.meta.env.VITE_DEBUG_FILE_STORAGE !== 'false'
+    }
   }
 }
 

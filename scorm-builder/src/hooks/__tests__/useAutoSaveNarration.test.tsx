@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { describe, it, expect, act, vi, beforeEach } from 'vitest'
+import { renderHook, act } from '../../test/testProviders'
 import { useAutoSaveNarration } from '../useAutoSaveNarration'
-import React from 'react'
+// Removed unused React import
 
 // Create mocks
 const mockSaveContent = vi.fn()

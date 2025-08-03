@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { Card } from '../Card'
 
 describe('Card Component - Simple Tests', () => {
@@ -52,7 +52,7 @@ describe('Card Component - Simple Tests', () => {
   })
 
   it('should apply custom className', () => {
-    const { container } = render(
+    render(
       <Card className="custom-card">
         Custom styled card
       </Card>
@@ -62,7 +62,7 @@ describe('Card Component - Simple Tests', () => {
   })
 
   it('should handle noShadow prop', () => {
-    const { container } = render(
+    render(
       <Card noShadow>
         No shadow card
       </Card>
@@ -75,7 +75,7 @@ describe('Card Component - Simple Tests', () => {
     const handleMouseEnter = vi.fn()
     const handleMouseLeave = vi.fn()
     
-    const { container } = render(
+    render(
       <Card 
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -105,7 +105,7 @@ describe('Card Component - Simple Tests', () => {
   })
 
   it('should apply inline styles', () => {
-    const { container } = render(
+    render(
       <Card style={{ backgroundColor: 'red' }}>
         Styled card
       </Card>
@@ -116,7 +116,7 @@ describe('Card Component - Simple Tests', () => {
   })
 
   it('should use default values', () => {
-    const { container } = render(<Card>Default settings</Card>)
+    render(<Card>Default settings</Card>)
     
     const card = container.firstChild
     expect(card).toHaveClass('card')

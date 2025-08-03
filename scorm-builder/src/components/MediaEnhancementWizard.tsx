@@ -1129,6 +1129,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search images"
                       size="medium"
+                      style={{ padding: '0.75rem 1.25rem' }}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
@@ -1193,6 +1194,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search videos"
                       size="medium"
+                      style={{ padding: '0.75rem 1.25rem' }}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>

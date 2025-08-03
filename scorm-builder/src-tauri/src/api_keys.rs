@@ -61,9 +61,10 @@ fn get_or_create_key() -> Result<Vec<u8>, String> {
     }
 }
 
-pub fn save_api_keys(api_keys: &ApiKeys) -> Result<(), String> {
+#[tauri::command]
+pub fn save_api_keys(api_keys: ApiKeys) -> Result<(), String> {
     // Serialize API keys to JSON
-    let json = serde_json::to_string(api_keys)
+    let json = serde_json::to_string(&api_keys)
         .map_err(|e| format!("Failed to serialize API keys: {}", e))?;
     
     // Get or create encryption key
@@ -99,6 +100,7 @@ pub fn save_api_keys(api_keys: &ApiKeys) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
 pub fn load_api_keys() -> Result<ApiKeys, String> {
     let path = get_api_keys_path()?;
     
@@ -140,6 +142,7 @@ pub fn load_api_keys() -> Result<ApiKeys, String> {
     Ok(api_keys)
 }
 
+#[tauri::command]
 pub fn delete_api_keys() -> Result<(), String> {
     let path = get_api_keys_path()?;
     
@@ -164,7 +167,7 @@ mod tests {
         };
         
         // Save
-        save_api_keys(&api_keys).unwrap();
+        save_api_keys(api_keys.clone()).unwrap();
         
         // Load
         let loaded = load_api_keys().unwrap();

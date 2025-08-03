@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
-import { afterEach, vi } from 'vitest'
+import { beforeAll, afterAll, vi, afterEach } from 'vitest'
 
 // Cleanup after each test
 afterEach(() => {
@@ -36,9 +36,13 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }))
 
-// Mock Tauri API
+// Mock Tauri API with proper structure
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn().mockResolvedValue({}),
+}))
+
 vi.mock('@tauri-apps/api', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn().mockResolvedValue({}),
   dialog: {
     open: vi.fn(),
     save: vi.fn(),
@@ -60,6 +64,18 @@ global.localStorage = localStorageMock as any
 
 // Mock fetch
 global.fetch = vi.fn()
+
+// Mock URL.createObjectURL and URL.revokeObjectURL
+global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+global.URL.revokeObjectURL = vi.fn()
+
+// Mock window.__TAURI__ for Tauri API
+;(global as any).window.__TAURI__ = {
+  invoke: vi.fn().mockResolvedValue({}),
+  tauri: {
+    invoke: vi.fn().mockResolvedValue({}),
+  },
+}
 
 // Suppress console errors in tests
 const originalError = console.error

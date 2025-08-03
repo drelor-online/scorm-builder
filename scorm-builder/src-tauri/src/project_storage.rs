@@ -21,6 +21,8 @@ pub struct ProjectMetadata {
     pub name: String,
     pub created: DateTime<Utc>,
     pub last_modified: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -79,20 +81,9 @@ pub struct ScormConfig {
     pub passing_score: u8,
 }
 
-/// Get the default projects directory for the current platform
+/// Get the projects directory from settings or default
 pub fn get_projects_directory() -> Result<PathBuf, String> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| "Unable to find home directory".to_string())?;
-    
-    let projects_dir = home_dir.join("Documents").join("SCORM Projects");
-    
-    // Create directory if it doesn't exist
-    if !projects_dir.exists() {
-        fs::create_dir_all(&projects_dir)
-            .map_err(|e| format!("Failed to create projects directory: {}", e))?;
-    }
-    
-    Ok(projects_dir)
+    crate::settings::get_projects_directory()
 }
 
 /// Save a project file to disk
@@ -130,8 +121,10 @@ pub fn load_project_file(file_path: &Path) -> Result<ProjectFile, String> {
     let contents = fs::read_to_string(file_path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
     
-    let project: ProjectFile = serde_json::from_str(&contents)
+    let mut project: ProjectFile = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse project file: {}", e))?;
+
+    project.project.path = Some(file_path.to_string_lossy().to_string());
     
     Ok(project)
 }
@@ -218,12 +211,12 @@ mod tests {
 
     fn create_test_project() -> ProjectFile {
         ProjectFile {
-            version: "1.0".to_string(),
             project: ProjectMetadata {
                 id: format!("project_{}", Uuid::new_v4()),
                 name: "Test Project".to_string(),
                 created: Utc::now(),
                 last_modified: Utc::now(),
+                path: None,
             },
             course_data: CourseData {
                 title: "Test Course".to_string(),

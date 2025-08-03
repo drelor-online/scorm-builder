@@ -1,30 +1,34 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen , waitFor } from '../test/testProviders'
 import App from '../App'
-
 // Mock heavy components to test lazy loading
-vi.mock('../components/MediaEnhancementWizardRefactored', () => ({
+vi.mock('../components/MediaEnhancementWizard', () => ({
   MediaEnhancementWizard: () => <div>MediaEnhancementWizard</div>
 }))
 
-vi.mock('../components/AudioNarrationWizardRefactored', () => ({
+vi.mock('../components/AudioNarrationWizard', () => ({
   AudioNarrationWizard: () => <div>AudioNarrationWizard</div>
 }))
 
-vi.mock('../components/SCORMPackageBuilderRefactored', () => ({
+vi.mock('../components/SCORMPackageBuilder', () => ({
   SCORMPackageBuilder: () => <div>SCORMPackageBuilder</div>
 }))
 
+// Helper to render app with all required providers
+const renderAppWithProviders = () => {
+  return render(<App />)
+}
+
 describe('Bundle Optimization - Lazy Loading', () => {
   it('should render initial app without loading heavy components', () => {
-    render(<App />)
+    renderAppWithProviders()
     
     // Initial step should show course configuration
     expect(screen.getByRole('heading', { name: /course configuration/i })).toBeInTheDocument()
   })
 
   it('should lazy load components when needed', async () => {
-    const { container } = render(<App />)
+    const { container } = renderAppWithProviders()
     
     // Initially, heavy components shouldn't be in the DOM
     expect(container.innerHTML).not.toContain('MediaEnhancementWizard')
@@ -33,7 +37,7 @@ describe('Bundle Optimization - Lazy Loading', () => {
   })
 
   it('should maintain app functionality with lazy loading', async () => {
-    render(<App />)
+    renderAppWithProviders()
     
     // Check that the app renders correctly
     await waitFor(() => {

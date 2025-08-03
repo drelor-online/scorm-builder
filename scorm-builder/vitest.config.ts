@@ -1,6 +1,5 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { VitestReporter } from 'tdd-guard'
 import path from 'path'
 
 export default defineConfig({
@@ -14,7 +13,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
-    reporters: ['default', new VitestReporter()],
+    reporters: ['default'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

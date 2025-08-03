@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen , waitFor } from '../../../test/testProviders'
 import { FadeIn } from '../Transitions'
 import { SlideIn } from '../Transitions'
 import { ScaleIn } from '../Transitions'
@@ -114,7 +113,7 @@ describe('Smooth Transitions - User Intent Tests', () => {
 
   describe('User expects staggered animations for lists', () => {
     it('should stagger children animations', async () => {
-      const { container } = render(
+      render(
         <StaggerChildren show={true} staggerDelay={100}>
           <div>Item 1</div>
           <div>Item 2</div>

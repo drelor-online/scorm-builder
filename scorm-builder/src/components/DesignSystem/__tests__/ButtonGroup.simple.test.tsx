@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { ButtonGroup } from '../ButtonGroup'
 
 describe('ButtonGroup Component - Simple Tests', () => {
@@ -98,7 +98,7 @@ describe('ButtonGroup Component - Simple Tests', () => {
   })
 
   it('should apply wrap class when wrap is true', () => {
-    const { container } = render(
+    render(
       <ButtonGroup wrap={true}>
         <button>Test</button>
       </ButtonGroup>
@@ -108,7 +108,7 @@ describe('ButtonGroup Component - Simple Tests', () => {
   })
 
   it('should not apply wrap class when wrap is false', () => {
-    const { container } = render(
+    render(
       <ButtonGroup wrap={false}>
         <button>Test</button>
       </ButtonGroup>
@@ -118,7 +118,7 @@ describe('ButtonGroup Component - Simple Tests', () => {
   })
 
   it('should apply custom className', () => {
-    const { container } = render(
+    render(
       <ButtonGroup className="custom-group">
         <button>Test</button>
       </ButtonGroup>
@@ -128,7 +128,7 @@ describe('ButtonGroup Component - Simple Tests', () => {
   })
 
   it('should use default props', () => {
-    const { container } = render(
+    render(
       <ButtonGroup>
         <button>Test</button>
       </ButtonGroup>

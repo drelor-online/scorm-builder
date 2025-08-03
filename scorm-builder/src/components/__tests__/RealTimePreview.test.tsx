@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from './../../test/testProviders'
 import { RealTimePreview } from '../RealTimePreview'
-import React from 'react'
+// Removed unused React import
 
 // Mock the preview generator
 vi.mock('../../services/previewGenerator', () => ({

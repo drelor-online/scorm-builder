@@ -1,5 +1,5 @@
 import React from 'react'
-import { COLORS, SPACING } from '../../constants'
+import { tokens } from './designTokens'
 import './designSystem.css'
 
 export interface LoadingSpinnerProps {
@@ -7,13 +7,15 @@ export interface LoadingSpinnerProps {
   color?: string
   text?: string
   fullScreen?: boolean
+  className?: string
 }
 
 export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   size = 'medium',
-  color = COLORS.primary,
+  color = tokens.colors.primary[500],
   text,
-  fullScreen = false
+  fullScreen = false,
+  className = ''
 }) => {
   const sizes = {
     small: '1rem',
@@ -22,29 +24,29 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   }
 
   const spinner = (
-    <div className="loading-spinner-container" style={{
+    <div className={`loading-spinner-container ${className}`} style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: SPACING.md
+      gap: tokens.spacing.md
     }}>
       <div
-        className="loading-spinner"
+        className="loading-spinner animate-spin"
         style={{
           width: sizes[size],
           height: sizes[size],
-          border: `3px solid ${COLORS.backgroundLighter}`,
+          border: `3px solid ${tokens.colors.background.quaternary}`,
           borderTopColor: color,
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          borderRadius: '50%'
         }}
         role="status"
         aria-label="Loading"
       />
       {text && (
         <span style={{
-          color: COLORS.textMuted,
-          fontSize: size === 'small' ? '0.875rem' : '1rem'
+          color: tokens.colors.text.secondary,
+          fontSize: size === 'small' ? tokens.typography.fontSize.sm : tokens.typography.fontSize.base,
+          marginTop: tokens.spacing.sm
         }}>
           {text}
         </span>
@@ -54,38 +56,22 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 
   if (fullScreen) {
     return (
-      <div style={{
+      <div className="loading-spinner-fullscreen" style={{
         position: 'fixed',
         inset: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        zIndex: 1000
+        backgroundColor: tokens.colors.background.overlay,
+        zIndex: tokens.zIndex.modal,
+        backdropFilter: 'blur(4px)'
       }}>
-        {spinner}
+        <div className="animate-fadeIn">
+          {spinner}
+        </div>
       </div>
     )
   }
 
   return spinner
-}
-
-// Add CSS animation for spinner
-const spinnerStyles = `
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-`
-
-// Inject styles
-if (typeof document !== 'undefined') {
-  const styleElement = document.createElement('style')
-  styleElement.textContent = spinnerStyles
-  document.head.appendChild(styleElement)
 }

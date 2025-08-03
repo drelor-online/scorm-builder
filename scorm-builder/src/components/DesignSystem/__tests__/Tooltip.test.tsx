@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen , waitFor } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect } from 'vitest'
 import { Tooltip } from './Tooltip'

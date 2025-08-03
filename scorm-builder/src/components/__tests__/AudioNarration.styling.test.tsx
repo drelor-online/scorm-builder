@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { AudioNarrationWizard } from '../AudioNarrationWizardRefactored'
-import { CourseContent } from '../../types/aiPrompt'
+import { render, screen } from '../../test/testProviders'
+import { AudioNarrationWizard } from '../AudioNarrationWizard'
+import type { CourseContent } from '../../types/aiPrompt'
 
 describe('AudioNarrationWizard - Styling and Content Updates', () => {
   const mockCourseContent: CourseContent = {
@@ -43,7 +43,7 @@ describe('AudioNarrationWizard - Styling and Content Updates', () => {
 
   describe('Button Label Centering', () => {
     it('should have centered text for Audio Files section', () => {
-      const { container } = render(<AudioNarrationWizard {...defaultProps} />)
+      render(<AudioNarrationWizard {...defaultProps} />)
       
       // Find the Audio Files section
       const audioSection = screen.getByText('Audio Files (.zip)').closest('div')
@@ -54,7 +54,7 @@ describe('AudioNarrationWizard - Styling and Content Updates', () => {
     })
 
     it('should have centered text for Caption Files section', () => {
-      const { container } = render(<AudioNarrationWizard {...defaultProps} />)
+      render(<AudioNarrationWizard {...defaultProps} />)
       
       // Find the Caption Files section
       const captionSection = screen.getByText('Caption Files (.zip)').closest('div')
@@ -69,7 +69,7 @@ describe('AudioNarrationWizard - Styling and Content Updates', () => {
       
       // Find button groups and check their alignment
       const buttonGroups = container.querySelectorAll('.button-group-vertical')
-      buttonGroups.forEach(group => {
+      buttonGroups.forEach((group: Element) => {
         const style = group.getAttribute('style')
         expect(style).toBeTruthy()
         expect(style).toContain('align-items: center')

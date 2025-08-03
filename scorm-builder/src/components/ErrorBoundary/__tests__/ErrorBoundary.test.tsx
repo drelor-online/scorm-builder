@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { ErrorBoundary } from '../ErrorBoundary'
-import React from 'react'
+// Removed unused React import
 
 // Mock console.error to avoid noise in tests
 let consoleErrorSpy: any

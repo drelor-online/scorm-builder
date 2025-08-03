@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import React from 'react'
+import { describe, it, expect, act, vi, beforeEach } from 'vitest'
+import { renderHook } from '../../test/testProviders'
+// Removed unused React import
 import { useStepData } from '../useStepData'
 import { StepNavigationProvider, useStepNavigation } from '../../contexts/StepNavigationContext'
 

@@ -1,0 +1,780 @@
+// SCORM Navigation System - Generated from Rust Template
+// This ensures consistent behavior and verifiable output
+
+(function() {
+    'use strict';
+    
+    // Initialize navigation state
+    window.currentPage = window.currentPage || 'welcome';
+    window.completedPages = window.completedPages || new Set();
+    window.courseStructure = window.courseStructure || [];
+    window.knowledgeCheckAttempts = window.knowledgeCheckAttempts || {};
+    window.answeredQuestions = window.answeredQuestions || {};
+    
+    // Course structure from Rust
+    const COURSE_PAGES = [
+        'welcome',
+        {{#if has_objectives}}'objectives',{{/if}}
+        {{#each topics}}'{{this.id}}',{{/each}}
+        'assessment'
+    ];
+    
+    // Initialize course structure
+    window.courseStructure = COURSE_PAGES;
+    
+    // Knowledge check configuration
+    const PAGES_WITH_KNOWLEDGE_CHECKS = {
+        {{#each topics}}
+        {{#if this.has_knowledge_check}}
+        '{{this.id}}': true,
+        {{/if}}
+        {{/each}}
+    };
+    
+    // Navigation state management
+    function updateNavigationState() {
+        console.log('[SCORM Navigation] Updating navigation state');
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+        
+        // Update previous button
+        const prevButton = document.getElementById('prev-button');
+        if (prevButton) {
+            prevButton.disabled = currentIndex <= 0;
+        }
+        
+        // Update next button based on knowledge check completion
+        const nextButton = document.getElementById('next-button');
+        if (nextButton) {
+            const shouldBlock = shouldBlockNavigation();
+            nextButton.disabled = shouldBlock || currentIndex >= COURSE_PAGES.length - 1;
+            console.log('[SCORM Navigation] Next button state:', {
+                disabled: nextButton.disabled,
+                shouldBlock,
+                currentIndex,
+                currentPage: window.currentPage
+            });
+        }
+        
+        // Update sidebar navigation state
+        updateSidebarNavigationState();
+    }
+    
+    // Check if navigation should be blocked
+    function shouldBlockNavigation() {
+        const hasKnowledgeCheck = PAGES_WITH_KNOWLEDGE_CHECKS[window.currentPage];
+        if (!hasKnowledgeCheck) {
+            return false;
+        }
+        
+        // Check if all questions on current page are answered
+        const pageQuestions = document.querySelectorAll('.knowledge-check-container');
+        if (pageQuestions.length === 0) {
+            return false;
+        }
+        
+        // For fill-in-blank questions
+        const fillInBlanks = document.querySelectorAll('.kc-fill-blank');
+        for (let input of fillInBlanks) {
+            const questionId = input.id;
+            if (!window.answeredQuestions[questionId]) {
+                console.log('[SCORM Navigation] Blocking - unanswered fill-in-blank:', questionId);
+                return true;
+            }
+        }
+        
+        // For multiple choice questions
+        const mcQuestions = document.querySelectorAll('.kc-question');
+        for (let i = 0; i < mcQuestions.length; i++) {
+            const questionKey = `${window.currentPage}_q${i}`;
+            if (!window.answeredQuestions[questionKey]) {
+                console.log('[SCORM Navigation] Blocking - unanswered MC question:', questionKey);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // Update sidebar navigation state
+    function updateSidebarNavigationState() {
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+        const navItems = document.querySelectorAll('.nav-item');
+        
+        navItems.forEach((item, index) => {
+            if (index > currentIndex && shouldBlockForwardNavigation(currentIndex, index)) {
+                item.classList.add('nav-disabled');
+            } else {
+                item.classList.remove('nav-disabled');
+            }
+        });
+    }
+    
+    // Check if forward navigation should be blocked
+    function shouldBlockForwardNavigation(fromIndex, toIndex) {
+        // Check all pages between current and target
+        for (let i = fromIndex; i < toIndex; i++) {
+            const pageId = COURSE_PAGES[i];
+            if (PAGES_WITH_KNOWLEDGE_CHECKS[pageId]) {
+                const questionKey = `${pageId}_q0`;
+                if (!window.answeredQuestions[questionKey] && !window.answeredQuestions[`fill-blank-0`]) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Navigate to page
+    function navigateToPage(pageId) {
+        console.log('[SCORM Navigation] Navigating to:', pageId);
+        
+        const contentContainer = document.getElementById('content-container');
+        if (!contentContainer) {
+            console.error('[SCORM Navigation] Content container not found');
+            return;
+        }
+        
+        // Load page content
+        fetch(`pages/${pageId}.html`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to load page: ${pageId}`);
+                }
+                return response.text();
+            })
+            .then(html => {
+                contentContainer.innerHTML = html;
+                window.currentPage = pageId;
+                
+                // Initialize page-specific features
+                initializePageAudio(pageId);
+                initializeKnowledgeChecks();
+                
+                // Update navigation state after content loads
+                // This is CRITICAL - must happen after content is in DOM
+                updateNavigationState();
+                
+                // Update progress
+                updateProgress();
+                
+                // Update sidebar active state
+                updateSidebarActiveState();
+                
+                // Scroll to top
+                contentContainer.scrollTop = 0;
+            })
+            .catch(error => {
+                console.error('[SCORM Navigation] Error loading page:', error);
+                contentContainer.innerHTML = '<div class="error">Error loading content. Please refresh the page.</div>';
+            });
+    }
+    
+    // Handle next button click
+    function handleNext() {
+        console.log('[SCORM Navigation] Next button clicked');
+        
+        if (shouldBlockNavigation()) {
+            showNavigationBlockedAlert();
+            return;
+        }
+        
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+        if (currentIndex < COURSE_PAGES.length - 1) {
+            navigateToPage(COURSE_PAGES[currentIndex + 1]);
+        }
+    }
+    
+    // Handle previous button click
+    function handlePrevious() {
+        console.log('[SCORM Navigation] Previous button clicked');
+        
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+        if (currentIndex > 0) {
+            navigateToPage(COURSE_PAGES[currentIndex - 1]);
+        }
+    }
+    
+    // Handle sidebar navigation click
+    function handleSidebarClick(event) {
+        event.preventDefault();
+        
+        const targetPage = event.currentTarget.dataset.page;
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+        const targetIndex = COURSE_PAGES.indexOf(targetPage);
+        
+        console.log('[SCORM Navigation] Sidebar click:', {
+            currentPage: window.currentPage,
+            targetPage,
+            currentIndex,
+            targetIndex,
+            isForward: targetIndex > currentIndex
+        });
+        
+        // Check if trying to navigate forward
+        if (targetIndex > currentIndex) {
+            if (shouldBlockForwardNavigation(currentIndex, targetIndex)) {
+                console.log('[SCORM Navigation] Navigation BLOCKED - knowledge check not completed');
+                showNavigationBlockedAlert();
+                return;
+            }
+        }
+        
+        console.log('[SCORM Navigation] Navigation ALLOWED');
+        navigateToPage(targetPage);
+    }
+    
+    // Show navigation blocked alert
+    function showNavigationBlockedAlert() {
+        const message = 'Please complete the knowledge check on this page before proceeding.';
+        
+        // Create custom alert
+        const alertContainer = document.getElementById('scorm-alert-container');
+        if (alertContainer) {
+            const alert = document.createElement('div');
+            alert.className = 'scorm-alert scorm-alert-warning';
+            alert.textContent = message;
+            alertContainer.appendChild(alert);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        } else {
+            // Fallback to standard alert
+            alert(message);
+        }
+    }
+    
+    // Submit multiple choice handler
+    window.submitMultipleChoice = function(questionIndex) {
+        console.log('[SCORM Knowledge Check] Submit multiple choice:', questionIndex);
+        
+        // Get selected answer
+        const selectedInput = document.querySelector(`input[name="q${questionIndex}"]:checked`);
+        if (!selectedInput) {
+            // Show error if no answer selected
+            const feedbackElement = document.getElementById(`feedback-${questionIndex}`);
+            if (feedbackElement) {
+                feedbackElement.textContent = 'Please select an answer before submitting.';
+                feedbackElement.className = 'feedback incorrect';
+                feedbackElement.style.display = 'block';
+            }
+            return;
+        }
+        
+        const selectedValue = selectedInput.value;
+        const correctAnswer = selectedInput.dataset.correct;
+        const feedback = selectedInput.dataset.feedback;
+        const isCorrect = selectedValue === correctAnswer;
+        
+        console.log('[SCORM Knowledge Check] Answer submitted:', {
+            questionIndex,
+            selectedValue,
+            correctAnswer,
+            isCorrect
+        });
+        
+        // Add visual feedback to options
+        const allOptions = document.querySelectorAll(`input[name="q${questionIndex}"]`);
+        allOptions.forEach(input => {
+            const optionLabel = input.closest('.kc-option');
+            if (input.value === selectedValue && !isCorrect) {
+                // Highlight wrong answer in red
+                optionLabel.classList.add('incorrect-answer');
+            } else if (input.value === correctAnswer) {
+                // Highlight correct answer in green with flashing
+                optionLabel.classList.add('correct-answer');
+            }
+        });
+        
+        // Mark as answered
+        const questionKey = `${window.currentPage}_q${questionIndex}`;
+        window.answeredQuestions[questionKey] = true;
+        
+        // Show feedback
+        const feedbackElement = document.getElementById(`feedback-${questionIndex}`);
+        if (feedbackElement) {
+            if (isCorrect) {
+                feedbackElement.textContent = feedback || 'Correct!';
+                feedbackElement.className = 'feedback correct';
+            } else {
+                feedbackElement.textContent = `Incorrect. The correct answer is ${correctAnswer}.`;
+                feedbackElement.className = 'feedback incorrect';
+            }
+            feedbackElement.style.display = 'block';
+        }
+        
+        // Disable submit button
+        const submitButton = document.querySelector(`[data-question-index="${questionIndex}"]`);
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Answer Submitted';
+        }
+        
+        // Do NOT disable radio buttons - user should be able to review their answers
+        // This allows users to see what they selected and compare with the correct answer
+        
+        // Update navigation state
+        updateNavigationState();
+    };
+    
+    // Legacy handler for backward compatibility
+    window.checkMultipleChoice = window.submitMultipleChoice;
+    
+    window.checkFillInBlank = function(index, correctAnswer, correctFeedback, incorrectFeedback, event) {
+        if (event) event.preventDefault();
+        
+        const input = document.getElementById(`fill-blank-${index}`);
+        if (!input) {
+            console.error('[SCORM Knowledge Check] Fill-in-blank input not found:', index);
+            return;
+        }
+        
+        const userAnswer = input.value.trim().toLowerCase();
+        const isCorrect = userAnswer === correctAnswer.toLowerCase();
+        
+        console.log('[SCORM Knowledge Check] Fill-in-blank answered:', {
+            index,
+            userAnswer,
+            correctAnswer,
+            isCorrect
+        });
+        
+        // Mark as answered
+        window.answeredQuestions[`fill-blank-${index}`] = true;
+        
+        // Show feedback
+        const feedbackElement = document.getElementById(`feedback-${index}`);
+        if (feedbackElement) {
+            feedbackElement.textContent = isCorrect ? correctFeedback : incorrectFeedback;
+            feedbackElement.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
+            feedbackElement.style.display = 'block';
+        }
+        
+        // Update navigation state
+        updateNavigationState();
+    };
+    
+    // Initialize knowledge checks on page
+    function initializeKnowledgeChecks() {
+        console.log('[SCORM Navigation] Initializing knowledge checks');
+        
+        // Removed automatic submission on radio button change
+        // Users must now click the Submit button to submit their answer
+    }
+    
+    // Audio player state
+    window.audioPlayers = window.audioPlayers || {};
+    window.captionData = window.captionData || {};
+    
+    // Initialize page audio
+    function initializePageAudio(pageId) {
+        console.log('[SCORM Navigation] Initializing audio for page:', pageId);
+        const audio = document.getElementById(`topic-audio-${pageId}`);
+        if (audio) {
+            window.audioPlayers[pageId] = audio;
+            
+            // Load captions if available
+            const captionFile = audio.dataset.captionFile;
+            if (captionFile) {
+                loadCaptions(pageId, captionFile);
+            }
+        }
+    }
+    
+    // Advanced audio player functions
+    window.togglePlayPause = function(pageId) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        const playIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.play-icon');
+        const pauseIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.pause-icon');
+        
+        if (audio.paused) {
+            audio.play();
+            playIcon.style.display = 'none';
+            pauseIcon.style.display = 'inline';
+        } else {
+            audio.pause();
+            playIcon.style.display = 'inline';
+            pauseIcon.style.display = 'none';
+        }
+    };
+    
+    window.seekAudio = function(pageId, event) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        const progressContainer = event.currentTarget;
+        const clickX = event.offsetX;
+        const width = progressContainer.offsetWidth;
+        const percentage = clickX / width;
+        
+        audio.currentTime = percentage * audio.duration;
+    };
+    
+    window.skipBackward = function(pageId, seconds) {
+        const audio = window.audioPlayers[pageId];
+        if (audio) {
+            audio.currentTime = Math.max(0, audio.currentTime - seconds);
+        }
+    };
+    
+    window.skipForward = function(pageId, seconds) {
+        const audio = window.audioPlayers[pageId];
+        if (audio) {
+            audio.currentTime = Math.min(audio.duration, audio.currentTime + seconds);
+        }
+    };
+    
+    window.toggleMute = function(pageId) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        const volumeIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.volume-icon');
+        const muteIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.mute-icon');
+        
+        audio.muted = !audio.muted;
+        
+        if (audio.muted) {
+            volumeIcon.style.display = 'none';
+            muteIcon.style.display = 'inline';
+        } else {
+            volumeIcon.style.display = 'inline';
+            muteIcon.style.display = 'none';
+        }
+    };
+    
+    window.setVolume = function(pageId, event) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        const volumeSlider = event.currentTarget;
+        const clickX = event.offsetX;
+        const width = volumeSlider.offsetWidth;
+        const percentage = clickX / width;
+        
+        audio.volume = percentage;
+        
+        const volumeFill = document.getElementById(`volume-${pageId}`);
+        if (volumeFill) {
+            volumeFill.style.width = (percentage * 100) + '%';
+        }
+    };
+    
+    window.setPlaybackSpeed = function(pageId, speed) {
+        const audio = window.audioPlayers[pageId];
+        if (audio) {
+            audio.playbackRate = parseFloat(speed);
+        }
+    };
+    
+    window.toggleCaptions = function(pageId) {
+        const captionDisplay = document.getElementById(`caption-${pageId}`);
+        if (captionDisplay) {
+            captionDisplay.style.display = captionDisplay.style.display === 'none' ? 'flex' : 'none';
+        }
+    };
+    
+    window.onAudioLoaded = function(pageId) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        const durationElement = document.getElementById(`duration-${pageId}`);
+        if (durationElement) {
+            durationElement.textContent = formatTime(audio.duration);
+        }
+    };
+    
+    window.onAudioTimeUpdate = function(pageId) {
+        const audio = window.audioPlayers[pageId];
+        if (!audio) return;
+        
+        // Update current time
+        const currentTimeElement = document.getElementById(`current-time-${pageId}`);
+        if (currentTimeElement) {
+            currentTimeElement.textContent = formatTime(audio.currentTime);
+        }
+        
+        // Update progress bar
+        const progressBar = document.getElementById(`progress-${pageId}`);
+        if (progressBar && audio.duration) {
+            const percentage = (audio.currentTime / audio.duration) * 100;
+            progressBar.style.width = percentage + '%';
+        }
+        
+        // Update captions
+        updateCaptions(pageId, audio.currentTime);
+    };
+    
+    window.onAudioEnded = function(pageId) {
+        const playIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.play-icon');
+        const pauseIcon = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.pause-icon');
+        
+        playIcon.style.display = 'inline';
+        pauseIcon.style.display = 'none';
+    };
+    
+    // Helper functions
+    function formatTime(seconds) {
+        if (isNaN(seconds)) return '0:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    function loadCaptions(pageId, captionFile) {
+        fetch(captionFile)
+            .then(response => response.text())
+            .then(text => {
+                window.captionData[pageId] = parseWebVTT(text);
+            })
+            .catch(error => {
+                console.error('[SCORM Audio] Error loading captions:', error);
+            });
+    }
+    
+    function parseWebVTT(vttText) {
+        const lines = vttText.split('\n');
+        const captions = [];
+        let i = 0;
+        
+        // Skip header
+        while (i < lines.length && !lines[i].includes('-->')) {
+            i++;
+        }
+        
+        while (i < lines.length) {
+            if (lines[i].includes('-->')) {
+                const timeLine = lines[i];
+                const [start, end] = timeLine.split('-->');
+                
+                let text = '';
+                i++;
+                while (i < lines.length && lines[i].trim() !== '') {
+                    text += lines[i] + ' ';
+                    i++;
+                }
+                
+                captions.push({
+                    start: parseVTTTime(start.trim()),
+                    end: parseVTTTime(end.trim()),
+                    text: text.trim()
+                });
+            }
+            i++;
+        }
+        
+        return captions;
+    }
+    
+    function parseVTTTime(timeStr) {
+        const parts = timeStr.split(':');
+        const seconds = parseFloat(parts[2]);
+        const minutes = parseInt(parts[1]);
+        const hours = parseInt(parts[0]);
+        
+        return hours * 3600 + minutes * 60 + seconds;
+    }
+    
+    function updateCaptions(pageId, currentTime) {
+        const captions = window.captionData[pageId];
+        if (!captions) return;
+        
+        const captionDisplay = document.getElementById(`caption-${pageId}`);
+        if (!captionDisplay || captionDisplay.style.display === 'none') return;
+        
+        const currentCaption = captions.find(caption => 
+            currentTime >= caption.start && currentTime <= caption.end
+        );
+        
+        if (currentCaption) {
+            captionDisplay.textContent = currentCaption.text;
+        } else {
+            captionDisplay.textContent = '';
+        }
+    }
+    
+    // Update progress
+    function updateProgress() {
+        const totalPages = COURSE_PAGES.length;
+        const currentIndex = COURSE_PAGES.indexOf(window.currentPage) + 1;
+        const percentage = Math.round((currentIndex / totalPages) * 100);
+        
+        console.log('[SCORM Navigation] Progress update:', {
+            currentIndex,
+            totalPages,
+            percentage
+        });
+        
+        // Update progress circle
+        const progressText = document.querySelector('.progress-circle-text');
+        if (progressText) {
+            progressText.textContent = `${percentage}%`;
+        }
+        
+        const progressCircle = document.querySelector('.progress-circle-fill');
+        if (progressCircle) {
+            const circumference = 2 * Math.PI * 45; // radius = 45
+            const offset = circumference - (percentage / 100) * circumference;
+            progressCircle.style.strokeDashoffset = offset;
+        }
+    }
+    
+    // Update sidebar active state
+    function updateSidebarActiveState() {
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            if (item.dataset.page === window.currentPage) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+    
+    // Initialize navigation
+    function initializeNavigation() {
+        console.log('[SCORM Navigation] Initializing navigation system');
+        
+        // Setup navigation buttons
+        const nextButton = document.getElementById('next-button');
+        const prevButton = document.getElementById('prev-button');
+        
+        if (nextButton) {
+            nextButton.addEventListener('click', handleNext);
+        }
+        
+        if (prevButton) {
+            prevButton.addEventListener('click', handlePrevious);
+        }
+        
+        // Setup sidebar navigation
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', handleSidebarClick);
+        });
+        
+        // Load initial page
+        navigateToPage(window.currentPage);
+    }
+    
+    // Submit assessment
+    window.submitAssessment = function() {
+        console.log('[SCORM Navigation] Submitting assessment');
+        
+        const questions = document.querySelectorAll('.question-container');
+        let score = 0;
+        let answered = 0;
+        
+        questions.forEach((container, index) => {
+            const selectedInput = container.querySelector('input[type="radio"]:checked');
+            if (selectedInput) {
+                answered++;
+                const correct = selectedInput.dataset.correct;
+                const selected = selectedInput.value;
+                
+                if (correct === selected) {
+                    score++;
+                }
+                
+                // Show feedback
+                const feedbackElement = document.getElementById(`assessment-feedback-${index}`);
+                if (feedbackElement) {
+                    feedbackElement.textContent = selectedInput.dataset.feedback || 
+                        (correct === selected ? 'Correct!' : 'Incorrect');
+                    feedbackElement.className = correct === selected ? 'feedback correct' : 'feedback incorrect';
+                    feedbackElement.style.display = 'block';
+                }
+            }
+        });
+        
+        if (answered < questions.length) {
+            alert('Please answer all questions before submitting.');
+            return;
+        }
+        
+        const percentage = Math.round((score / questions.length) * 100);
+        console.log('[SCORM Navigation] Assessment score:', percentage);
+        
+        // Mark assessment as completed
+        window.completedPages.add('assessment');
+        
+        // Update SCORM score
+        if (window.API) {
+            window.API.SetValue('cmi.core.score.raw', percentage.toString());
+            window.API.SetValue('cmi.core.score.min', '0');
+            window.API.SetValue('cmi.core.score.max', '100');
+            window.API.SetValue('cmi.core.lesson_status', percentage >= {{pass_mark}} ? 'passed' : 'failed');
+            window.API.Commit();
+        }
+        
+        // Show result
+        alert(`Assessment complete! Your score: ${percentage}%${percentage >= {{pass_mark}} ? ' - Passed!' : ' - Failed'}`);
+    };
+    
+    // Lightbox functionality
+    window.openLightbox = function(src, alt) {
+        console.log('[SCORM Lightbox] Opening lightbox:', { src, alt });
+        
+        // Create lightbox if it doesn't exist
+        let lightbox = document.getElementById('lightbox-modal');
+        if (!lightbox) {
+            lightbox = document.createElement('div');
+            lightbox.id = 'lightbox-modal';
+            lightbox.className = 'lightbox-modal';
+            lightbox.innerHTML = `
+                <div class="lightbox-overlay" onclick="window.closeLightbox()"></div>
+                <div class="lightbox-content">
+                    <button class="lightbox-close" onclick="window.closeLightbox()">×</button>
+                    <img id="lightbox-image" src="" alt="" />
+                    <div class="lightbox-caption"></div>
+                </div>
+            `;
+            document.body.appendChild(lightbox);
+        }
+        
+        // Set image and caption
+        const lightboxImage = document.getElementById('lightbox-image');
+        const caption = lightbox.querySelector('.lightbox-caption');
+        if (lightboxImage && caption) {
+            lightboxImage.src = src;
+            lightboxImage.alt = alt;
+            caption.textContent = alt;
+        }
+        
+        // Show lightbox
+        lightbox.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        // Add escape key handler
+        document.addEventListener('keydown', handleLightboxEscape);
+    };
+    
+    window.closeLightbox = function() {
+        console.log('[SCORM Lightbox] Closing lightbox');
+        
+        const lightbox = document.getElementById('lightbox-modal');
+        if (lightbox) {
+            lightbox.classList.remove('active');
+            document.body.style.overflow = '';
+            
+            // Remove escape key handler
+            document.removeEventListener('keydown', handleLightboxEscape);
+        }
+    };
+    
+    function handleLightboxEscape(e) {
+        if (e.key === 'Escape') {
+            window.closeLightbox();
+        }
+    }
+    
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeNavigation);
+    } else {
+        initializeNavigation();
+    }
+})();

@@ -93,3 +93,47 @@ export const templateTopics: TemplateTopics = {
     'Organizational Development'
   ]
 }
+
+export interface CourseContent {
+  welcomePage: Page;
+  learningObjectivesPage: Page;
+  topics: Topic[];
+  assessment: Assessment;
+}
+
+export interface Page {
+  id: string;
+  title: string;
+  content: string;
+  narration: string;
+  imageKeywords: string[];
+  imagePrompts: string[];
+  videoSearchTerms: string[];
+  duration: number;
+}
+
+export interface Topic extends Page {
+  knowledgeCheck: KnowledgeCheck;
+}
+
+export interface Assessment {
+  questions: AssessmentQuestion[];
+  passMark: number;
+  narration: string;
+}
+
+export interface KnowledgeCheck {
+  questions: AssessmentQuestion[];
+}
+
+export interface AssessmentQuestion {
+  id: string;
+  type: 'multiple-choice' | 'true-false' | 'fill-in-the-blank';
+  question: string;
+  options?: string[];
+  correctAnswer: string;
+  feedback: {
+    correct: string;
+    incorrect: string;
+  };
+}

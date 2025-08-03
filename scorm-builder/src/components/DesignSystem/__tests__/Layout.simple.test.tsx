@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { PageContainer, Section, Flex, Grid } from '../Layout'
 
 describe('Layout Components - Simple Tests', () => {
@@ -15,7 +15,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <PageContainer className="custom-container">
           Content
         </PageContainer>
@@ -63,7 +63,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <Section className="custom-section">
           Content
         </Section>
@@ -113,7 +113,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply align classes', () => {
-      const { container } = render(
+      render(
         <Flex align="center">Content</Flex>
       )
       
@@ -121,7 +121,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply justify classes', () => {
-      const { container } = render(
+      render(
         <Flex justify="space-between">Content</Flex>
       )
       
@@ -129,7 +129,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply wrap class when true', () => {
-      const { container } = render(
+      render(
         <Flex wrap={true}>Content</Flex>
       )
       
@@ -137,7 +137,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply custom style', () => {
-      const { container } = render(
+      render(
         <Flex style={{ backgroundColor: 'red' }}>Content</Flex>
       )
       
@@ -146,7 +146,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <Flex className="custom-flex">Content</Flex>
       )
       
@@ -155,7 +155,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should use default props', () => {
-      const { container } = render(<Flex>Content</Flex>)
+      render(<Flex>Content</Flex>)
       
       const flex = container.firstChild
       expect(flex).toHaveClass('flex')
@@ -190,7 +190,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply responsive column classes', () => {
-      const { container } = render(
+      render(
         <Grid cols={{ sm: 1, md: 2, lg: 3 }}>Content</Grid>
       )
       
@@ -214,7 +214,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <Grid className="custom-grid">Content</Grid>
       )
       
@@ -223,7 +223,7 @@ describe('Layout Components - Simple Tests', () => {
     })
 
     it('should use default props', () => {
-      const { container } = render(<Grid>Content</Grid>)
+      render(<Grid>Content</Grid>)
       
       const grid = container.firstChild
       expect(grid).toHaveClass('grid')

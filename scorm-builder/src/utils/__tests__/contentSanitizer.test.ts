@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { sanitizeContent, sanitizeContentItem } from '../contentSanitizer'
 
 // Mock DOMPurify

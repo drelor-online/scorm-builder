@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { describe, it, expect, act, vi, beforeEach } from 'vitest'
+import { render, screen } from '../../test/testProviders'
 import React, { useContext } from 'react'
 import { StepNavigationProvider, useStepNavigation } from '../StepNavigationContext'
-import { PersistentStorageProvider } from '../PersistentStorageContext'
-
 // Mock the usePersistentStorage hook
 vi.mock('../../hooks/usePersistentStorage', () => ({
   usePersistentStorage: vi.fn(() => ({
@@ -51,13 +49,7 @@ describe('StepNavigationContext', () => {
 
   // Helper function to wrap components with necessary providers
   const renderWithProviders = (ui: React.ReactElement, initialStep = 0) => {
-    return render(
-      <PersistentStorageProvider>
-        <StepNavigationProvider initialStep={initialStep}>
-          {ui}
-        </StepNavigationProvider>
-      </PersistentStorageProvider>
-    )
+    return render({ui})
   }
 
   describe('Step Navigation State Management', () => {

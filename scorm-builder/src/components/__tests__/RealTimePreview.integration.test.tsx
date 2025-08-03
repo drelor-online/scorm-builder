@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
 import { CoursePreview } from '../CoursePreview'
-import React from 'react'
+// Removed unused React import
 
 // Mock PersistentStorageContext
 const mockSaveCourseMetadata = vi.fn()
@@ -59,6 +59,8 @@ describe('RealTimePreview Integration - Functional Navigation', () => {
         id: 'topic-1',
         title: 'First Topic',
         content: 'This is the first topic'
+      ,
+        duration: 5
       }]
     }
     
@@ -117,6 +119,8 @@ describe('RealTimePreview Integration - Functional Navigation', () => {
         id: 'real-topic',
         title: 'Real Topic',
         content: 'Real topic content'
+      ,
+        duration: 5
       }]
     }
     

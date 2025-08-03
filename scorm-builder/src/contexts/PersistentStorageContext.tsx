@@ -28,14 +28,14 @@ interface PersistentStorageContextValue {
   saveAudioSettings: (settings: any) => Promise<void>
   getAudioSettings: () => Promise<any>
   saveScormConfig: (config: any) => Promise<void>
-  getScormConfig: () => Promise<any>
-  deleteProject: (projectId: string, filePath?: string) => Promise<void>
-  exportProject: () => Promise<Blob>
-  importProjectFromZip: (zipBlob: Blob) => Promise<void>
-  getCurrentProjectId: () => string | null
-  setProjectsDirectory: (directory: string) => void
-  migrateFromLocalStorage: () => Promise<any[]>
-  clearRecentFilesCache: () => Promise<void>
+  getScormConfig: () => Promise<any>;
+  deleteProject: (projectId: string) => Promise<void>;
+  exportProject: () => Promise<Blob>;
+  importProjectFromZip: (zipBlob: Blob) => Promise<void>;
+  getCurrentProjectId: () => string | null;
+  setProjectsDirectory: (directory: string) => void;
+  migrateFromLocalStorage: () => Promise<any[]>;
+  clearRecentFilesCache: () => Promise<void>;
 }
 
 const PersistentStorageContext = createContext<PersistentStorageContextValue | null>(null)

@@ -1,0 +1,79 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: scorm-builder/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd scorm-builder
+        npm ci
+    
+    - name: Run tests with coverage
+      run: |
+        cd scorm-builder
+        npm run test:coverage
+    
+    - name: Generate coverage report
+      run: |
+        cd scorm-builder
+        npm run coverage:report
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./scorm-builder/coverage
+        fail_ci_if_error: true
+        flags: unittests
+        name: codecov-scorm-builder
+    
+    - name: Check coverage threshold
+      run: |
+        cd scorm-builder/scripts
+        node check-coverage-threshold.js
+    
+    - name: Comment PR with coverage
+      uses: actions/github-script@v6
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          const fs = require('fs');
+          const coverage = JSON.parse(fs.readFileSync('scorm-builder/coverage-analysis.json', 'utf8'));
+          
+          const comment = `## 📊 Test Coverage Report
+          
+          **Overall Coverage**: ${coverage.tested}/${coverage.total} files (${((coverage.tested/coverage.total) * 100).toFixed(1)}%)
+          
+          ### Coverage by Category:
+          ${Object.entries(coverage.byCategory)
+            .filter(([key]) => key !== 'byCategory')
+            .map(([category, data]) => `- **${category}**: ${data.tested}/${data.total} (${((data.tested/data.total) * 100).toFixed(1)}%)`)
+            .join('\n')}
+          
+          ### Coverage Requirements:
+          - ✅ Minimum threshold: 85%
+          - ${coverage.tested/coverage.total >= 0.85 ? '✅' : '❌'} Current coverage: ${((coverage.tested/coverage.total) * 100).toFixed(1)}%
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

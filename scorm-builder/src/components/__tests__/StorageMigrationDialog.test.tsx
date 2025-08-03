@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders';
 import React from 'react';
 import { StorageMigrationDialog } from '../StorageMigrationDialog';
 import { StorageRefactorMigration } from '../../services/storageRefactorMigration';
@@ -21,8 +21,7 @@ global.indexedDB = {} as any;
 
 describe('StorageMigrationDialog', () => {
   let mockMigration: any;
-  const mockOnClose = vi.fn();
-  const mockOnComplete = vi.fn();
+  // const mockOnClose = vi.fn();const mockOnComplete = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();

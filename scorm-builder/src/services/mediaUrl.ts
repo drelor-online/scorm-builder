@@ -23,26 +23,28 @@ export class MediaUrlService {
     }
     
     try {
-      // Check if this is an SVG by reading metadata
+      // Check if this is an SVG by getting the media with metadata
       let isSvg = false
+      let mediaData: any = null
       try {
-        const metadataJson = await invoke<string>('read_file', {
+        // Use get_media to retrieve both data and metadata
+        mediaData = await invoke<any>('get_media', {
           projectId: projectId,
-          relativePath: `media/${mediaId}.json`
+          mediaId: mediaId
         })
-        const metadataBase64 = JSON.parse(atob(metadataJson))
-        isSvg = metadataBase64.mime_type === 'image/svg+xml'
+        isSvg = mediaData?.metadata?.mime_type === 'image/svg+xml'
       } catch (e) {
-        // Metadata not found or invalid
+        // Media not found
+        logger.error('[MediaUrlService] Failed to get media:', e)
+        return null
       }
       
       // For SVG files, use data URL instead of asset protocol
-      if (isSvg) {
+      if (isSvg && mediaData) {
         try {
-          const base64Content = await invoke<string>('read_file', {
-            projectId: projectId,
-            relativePath: `media/${mediaId}.bin`
-          })
+          // Convert byte array to base64
+          const uint8Array = new Uint8Array(mediaData.data)
+          const base64Content = btoa(String.fromCharCode(...uint8Array))
           
           // Create a data URL for SVG
           const url = `data:image/svg+xml;base64,${base64Content}`
@@ -66,17 +68,7 @@ export class MediaUrlService {
       const mediaDir = await join(projectsDir, projectId, 'media')
       const filePath = await join(mediaDir, `${mediaId}.bin`)
       
-      // First verify the file exists
-      try {
-        await invoke('read_file', {
-          projectId: projectId,
-          relativePath: `media/${mediaId}.bin`
-        })
-      } catch (error) {
-        logger.error('[MediaUrlService] File does not exist:', filePath)
-        return null
-      }
-      
+      // We already verified the file exists by successfully calling get_media above
       // Convert to a URL that Tauri can serve
       const url = convertFileSrc(filePath)
       

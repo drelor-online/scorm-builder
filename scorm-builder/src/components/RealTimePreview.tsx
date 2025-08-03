@@ -15,10 +15,27 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const mediaUrlsRef = useRef<string[]>([])
   
   useEffect(() => {
     generatePreview()
   }, [storage.currentProjectId])
+  
+  // Cleanup URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Revoke preview URL
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl)
+      }
+      
+      // Revoke all media URLs
+      mediaUrlsRef.current.forEach(url => {
+        URL.revokeObjectURL(url)
+      })
+      mediaUrlsRef.current = []
+    }
+  }, [previewUrl])
   
   async function generatePreview() {
     if (!storage.isInitialized || !storage.currentProjectId) {
@@ -28,6 +45,12 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
     try {
       setLoading(true)
       setError(null)
+      
+      // Clean up old media URLs before generating new ones
+      mediaUrlsRef.current.forEach(url => {
+        URL.revokeObjectURL(url)
+      })
+      mediaUrlsRef.current = []
       
       // Get course metadata
       const metadata = await storage.getCourseMetadata()
@@ -57,28 +80,37 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
           media: [] as any[]
         },
         topics: [],
-        assessment: { questions: [] }
+        assessment: { questions: [] ,
+      passMark: 80,
+      narration: null
+    }
       }
       
       // Load media for welcome page
       const welcomeMedia = await storage.getMediaForTopic('welcome')
       for (const media of welcomeMedia) {
         if (media.mediaType === 'image') {
+          const imageUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(imageUrl)
           courseContent.welcome.media.push({
             id: media.id,
             type: 'image',
             title: media.metadata?.title || 'Image',
-            url: URL.createObjectURL(media.blob),
+            url: imageUrl,
             blob: media.blob
           })
         } else if (media.mediaType === 'audio') {
           (courseContent.welcome as any).audioFile = media.metadata?.fileName || 'welcome-audio.mp3'
           ;(courseContent.welcome as any).audioBlob = media.blob
-          ;(courseContent.welcome as any).audioUrl = URL.createObjectURL(media.blob)
+          const audioUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(audioUrl)
+          ;(courseContent.welcome as any).audioUrl = audioUrl
         } else if (media.mediaType === 'caption' || (media.mediaType === 'video' && media.metadata?.isCaption)) {
           (courseContent.welcome as any).captionFile = media.metadata?.fileName || 'welcome-captions.vtt'
           ;(courseContent.welcome as any).captionBlob = media.blob
-          ;(courseContent.welcome as any).captionUrl = URL.createObjectURL(media.blob)
+          const captionUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(captionUrl)
+          ;(courseContent.welcome as any).captionUrl = captionUrl
         }
       }
       
@@ -86,21 +118,27 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
       const objectivesMedia = await storage.getMediaForTopic('objectives')
       for (const media of objectivesMedia) {
         if (media.mediaType === 'image') {
-          (courseContent.learningObjectivesPage as any).media.push({
+          const imageUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(imageUrl)
+          ;(courseContent.learningObjectivesPage as any).media.push({
             id: media.id,
             type: 'image',
             title: media.metadata?.title || 'Image',
-            url: URL.createObjectURL(media.blob),
+            url: imageUrl,
             blob: media.blob
           })
         } else if (media.mediaType === 'audio') {
           (courseContent.learningObjectivesPage as any).audioFile = media.metadata?.fileName || 'objectives-audio.mp3'
           ;(courseContent.learningObjectivesPage as any).audioBlob = media.blob
-          ;(courseContent.learningObjectivesPage as any).audioUrl = URL.createObjectURL(media.blob)
+          const audioUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(audioUrl)
+          ;(courseContent.learningObjectivesPage as any).audioUrl = audioUrl
         } else if (media.mediaType === 'caption' || (media.mediaType === 'video' && media.metadata?.isCaption)) {
           (courseContent.learningObjectivesPage as any).captionFile = media.metadata?.fileName || 'objectives-captions.vtt'
           ;(courseContent.learningObjectivesPage as any).captionBlob = media.blob
-          ;(courseContent.learningObjectivesPage as any).captionUrl = URL.createObjectURL(media.blob)
+          const captionUrl = URL.createObjectURL(media.blob)
+          mediaUrlsRef.current.push(captionUrl)
+          ;(courseContent.learningObjectivesPage as any).captionUrl = captionUrl
         }
       }
       
@@ -125,21 +163,27 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
             const topicMedia = await storage.getMediaForTopic(topicId)
             for (const media of topicMedia) {
               if (media.mediaType === 'image') {
+                const imageUrl = URL.createObjectURL(media.blob)
+                mediaUrlsRef.current.push(imageUrl)
                 topic.media.push({
                   id: media.id,
                   type: 'image',
                   title: media.metadata?.title || 'Image',
-                  url: URL.createObjectURL(media.blob),
+                  url: imageUrl,
                   blob: media.blob
                 })
               } else if (media.mediaType === 'audio') {
                 topic.audioFile = media.metadata?.fileName || `${topicId}-audio.mp3`
                 topic.audioBlob = media.blob
-                ;(topic as any).audioUrl = URL.createObjectURL(media.blob)
+                const audioUrl = URL.createObjectURL(media.blob)
+                mediaUrlsRef.current.push(audioUrl)
+                ;(topic as any).audioUrl = audioUrl
               } else if (media.mediaType === 'caption' || (media.mediaType === 'video' && media.metadata?.isCaption)) {
                 topic.captionFile = media.metadata?.fileName || `${topicId}-captions.vtt`
                 topic.captionBlob = media.blob
-                ;(topic as any).captionUrl = URL.createObjectURL(media.blob)
+                const captionUrl = URL.createObjectURL(media.blob)
+                mediaUrlsRef.current.push(captionUrl)
+                ;(topic as any).captionUrl = captionUrl
               }
             }
             
@@ -303,3 +347,5 @@ export function RealTimePreview({ embedded = false }: RealTimePreviewProps = {})
     </div>
   )
 }
+
+export default RealTimePreview;

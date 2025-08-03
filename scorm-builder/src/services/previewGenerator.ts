@@ -1,5 +1,5 @@
-import { type EnhancedCourseContent } from './spaceEfficientScormGenerator'
-import { generateEnhancedMainCss } from './spaceEfficientScormGeneratorEnhanced'
+import { type EnhancedCourseContent } from '../types/scorm'
+// import { generateEnhancedMainCss } from './spaceEfficientScormGeneratorEnhanced' // DEPRECATED
 
 export async function generatePreviewHTML(courseContent: EnhancedCourseContent): Promise<string> {
   const totalSections = 2 + courseContent.topics.length + 1 // welcome, objectives, topics, assessment
@@ -12,7 +12,73 @@ export async function generatePreviewHTML(courseContent: EnhancedCourseContent):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${courseContent.title} - Preview</title>
     <style>
-${generateEnhancedMainCss()}
+/* Main CSS for preview - extracted from deprecated generator */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #333;
+  line-height: 1.6;
+  background-color: #f5f5f5;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 250px;
+  background-color: #fff;
+  box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  background-color: #f5f5f5;
+}
+
+.content-container {
+  max-width: 900px;
+  margin: 0 auto;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 3rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+h1, h2, h3 { 
+  color: #241f20;
+  margin-bottom: 1rem;
+}
+
+.btn-primary {
+  background-color: #8fbb40;
+  color: white;
+  padding: 0.75rem 2rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #7ba235;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
     </style>
 </head>
 <body>
@@ -80,17 +146,19 @@ ${generateEnhancedMainCss()}
                 <p>${courseContent.welcome.content}</p>
                 ${courseContent.welcome.media && courseContent.welcome.media.length > 0 ? `
                 <div class="welcome-media">
-                    <img src="${courseContent.welcome.media[0].url || '#'}" alt="${courseContent.welcome.media[0].title}" style="cursor: pointer;" />
+                    ${courseContent.welcome.media.map((media: any) => {
+                        if (media.type === 'image' && media.url) {
+                            return `<img src="${media.url}" alt="${media.title || 'Image'}" style="cursor: pointer;" />`
+                        }
+                        return ''
+                    }).join('')}
                 </div>` : ''}
-                ${(courseContent.welcome as any).audioFile && (courseContent.welcome as any).audioUrl ? `
+                ${(courseContent.welcome as any).audioFile || (courseContent.welcome as any).audioUrl ? `
                 <div class="audio-player">
                     <div class="audio-label">Audio Narration</div>
-                    <audio id="audio-player-welcome" src="${(courseContent.welcome as any).audioUrl}" preload="metadata">
-                        ${(courseContent.welcome as any).captionFile && (courseContent.welcome as any).captionUrl ? `<track kind="captions" src="${(courseContent.welcome as any).captionUrl}" srclang="en" label="English">` : ''}
+                    <audio id="audio-player-welcome" src="${(courseContent.welcome as any).audioUrl || ''}" controls>
+                        ${((courseContent.welcome as any).captionFile || (courseContent.welcome as any).captionUrl) ? `<track kind="captions" src="${(courseContent.welcome as any).captionUrl || ''}" srclang="en" label="English">` : ''}
                     </audio>
-                    <div class="audio-controls">
-                        <button class="audio-btn">▶ Play</button>
-                    </div>
                 </div>` : ''}
             </div>
         </div>
@@ -101,15 +169,12 @@ ${generateEnhancedMainCss()}
                 <div class="objectives-content">
                     <ul>${courseContent.objectives.map(obj => `<li>${obj}</li>`).join('')}</ul>
                 </div>
-                ${(courseContent.objectivesPage as any)?.audioFile && (courseContent.objectivesPage as any)?.audioUrl ? `
+                ${(courseContent.objectivesPage as any)?.audioFile || (courseContent.objectivesPage as any)?.audioUrl ? `
                 <div class="audio-player">
                     <div class="audio-label">Audio Narration</div>
-                    <audio id="audio-player-objectives" src="${(courseContent.objectivesPage as any).audioUrl}" preload="metadata">
-                        ${(courseContent.objectivesPage as any).captionFile && (courseContent.objectivesPage as any).captionUrl ? `<track kind="captions" src="${(courseContent.objectivesPage as any).captionUrl}" srclang="en" label="English">` : ''}
+                    <audio id="audio-player-objectives" src="${(courseContent.objectivesPage as any)?.audioUrl || ''}" controls>
+                        ${((courseContent.objectivesPage as any)?.captionFile || (courseContent.objectivesPage as any)?.captionUrl) ? `<track kind="captions" src="${(courseContent.objectivesPage as any)?.captionUrl || ''}" srclang="en" label="English">` : ''}
                     </audio>
-                    <div class="audio-controls">
-                        <button class="audio-btn">▶ Play</button>
-                    </div>
                 </div>` : ''}
             </div>
         </div>
@@ -124,18 +189,36 @@ ${generateEnhancedMainCss()}
                     ${topic.knowledgeCheck ? `
                     <div class="knowledge-check" id="knowledge-check-${index}">
                         <h3>Knowledge Check</h3>
-                        <p class="kc-question">${topic.knowledgeCheck.question}</p>
-                        <div class="kc-options">
-                            ${topic.knowledgeCheck.options?.map((opt, i) => `
-                            <label class="kc-option">
-                                <input type="radio" name="kc-${index}" value="${i}" />
-                                <span class="kc-option-text">${opt}</span>
-                            </label>`).join('') || ''}
-                        </div>
-                        <button class="kc-submit" onclick="checkAnswer(${index}, ${topic.knowledgeCheck.correctAnswer})">
-                            Submit Answer
-                        </button>
-                        <div class="kc-feedback" id="kc-feedback-${index}"></div>
+                        ${(() => {
+                            // Handle both single question and multiple questions format
+                            const questions = topic.knowledgeCheck.questions || [{
+                                question: topic.knowledgeCheck.question,
+                                options: topic.knowledgeCheck.options,
+                                correctAnswer: topic.knowledgeCheck.correctAnswer,
+                                type: topic.knowledgeCheck.type || 'multiple-choice'
+                            }]
+                            
+                            return questions.map((q: any, qIndex: number) => `
+                            <div class="kc-question-block">
+                                <p class="kc-question">${q.question || q.blank || ''}</p>
+                                ${q.type === 'fill-in-the-blank' ? `
+                                    <input type="text" class="kc-fill-blank" id="kc-answer-${index}-${qIndex}" placeholder="Enter your answer" />
+                                ` : `
+                                    <div class="kc-options">
+                                        ${(q.options || []).map((opt: string, i: number) => `
+                                        <label class="kc-option">
+                                            <input type="radio" name="kc-${index}-${qIndex}" value="${i}" />
+                                            <span class="kc-option-text">${opt}</span>
+                                        </label>`).join('')}
+                                    </div>
+                                `}
+                                <button class="kc-submit" onclick="checkAnswer(${index}, ${qIndex}, '${q.correctAnswer}')">
+                                    Submit Answer
+                                </button>
+                                <div class="kc-feedback" id="kc-feedback-${index}-${qIndex}"></div>
+                            </div>
+                            `).join('')
+                        })()}
                     </div>` : ''}
                 </div>
                 
@@ -151,15 +234,12 @@ ${generateEnhancedMainCss()}
                             ).join('')}
                     </div>` : ''}
                     
-                    ${topic.audioFile && (topic as any).audioUrl ? `
+                    ${topic.audioFile || (topic as any).audioUrl ? `
                     <div class="audio-player">
                         <div class="audio-label">Audio Narration</div>
-                        <audio id="audio-player-topic-${index + 1}" src="${(topic as any).audioUrl}" preload="metadata">
-                            ${topic.captionFile && (topic as any).captionUrl ? `<track kind="captions" src="${(topic as any).captionUrl}" srclang="en" label="English">` : ''}
+                        <audio id="audio-player-topic-${index + 1}" src="${(topic as any).audioUrl || ''}" controls>
+                            ${(topic.captionFile || (topic as any).captionUrl) ? `<track kind="captions" src="${(topic as any).captionUrl || ''}" srclang="en" label="English">` : ''}
                         </audio>
-                        <div class="audio-controls">
-                            <button class="audio-btn">▶ Play</button>
-                        </div>
                     </div>` : ''}
                 </div>
             </div>
@@ -168,7 +248,30 @@ ${generateEnhancedMainCss()}
         <div id="content-assessment">
             <div class="assessment-container">
                 <h1>Final Assessment</h1>
-                <p>Assessment content would appear here</p>
+                ${courseContent.assessment && courseContent.assessment.questions && courseContent.assessment.questions.length > 0 ? `
+                <p>You must score at least ${courseContent.passMark || 80}% to pass this assessment.</p>
+                <div class="assessment-questions">
+                    ${courseContent.assessment.questions.map((q: any, qIndex: number) => `
+                    <div class="assessment-question">
+                        <h3>Question ${qIndex + 1}</h3>
+                        <p class="question-text">${q.question}</p>
+                        ${q.type === 'fill-in-the-blank' ? `
+                            <input type="text" class="answer-input" id="assessment-answer-${qIndex}" placeholder="Enter your answer" />
+                        ` : `
+                            <div class="answer-options">
+                                ${(q.options || []).map((opt: string, i: number) => `
+                                <label class="answer-option">
+                                    <input type="radio" name="assessment-q-${qIndex}" value="${i}" />
+                                    <span class="option-text">${opt}</span>
+                                </label>`).join('')}
+                            </div>
+                        `}
+                    </div>
+                    `).join('')}
+                    <button class="submit-assessment" onclick="submitAssessment()">Submit Assessment</button>
+                    <div class="assessment-feedback" id="assessment-feedback"></div>
+                </div>
+                ` : '<p>No assessment questions available.</p>'}
             </div>
         </div>
     </div>
@@ -246,8 +349,18 @@ function toggleFullscreen() {
     }
 }
 
-function checkAnswer(index, correctAnswer) {
-    alert('In preview mode - answer checking disabled');
+function checkAnswer(topicIndex, questionIndex, correctAnswer) {
+    const feedbackEl = document.getElementById('kc-feedback-' + topicIndex + '-' + questionIndex);
+    if (feedbackEl) {
+        feedbackEl.innerHTML = '<p style="color: #16a34a;">In preview mode - answer checking disabled</p>';
+    }
+}
+
+function submitAssessment() {
+    const feedbackEl = document.getElementById('assessment-feedback');
+    if (feedbackEl) {
+        feedbackEl.innerHTML = '<p style="color: #16a34a;">In preview mode - assessment submission disabled</p>';
+    }
 }
 
 // Initialize

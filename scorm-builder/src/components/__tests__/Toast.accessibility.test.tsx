@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { axe, toHaveNoViolations } from 'jest-axe'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -27,7 +27,7 @@ describe('Toast - Accessibility Tests', () => {
 
   describe('Basic accessibility', () => {
     it('should render without accessibility violations', () => {
-      const { container } = render(<Toast {...defaultProps} type="info" />)
+      render(<Toast {...defaultProps} type="info" />)
       
       // Basic checks instead of full axe scan
       const toast = container.firstChild as HTMLElement
@@ -41,7 +41,7 @@ describe('Toast - Accessibility Tests', () => {
 
   describe('ARIA attributes', () => {
     it('should have role and aria-live for announcements', () => {
-      const { container } = render(<Toast {...defaultProps} />)
+      render(<Toast {...defaultProps} />)
       
       // The toast container should be announced to screen readers
       const toast = container.firstChild as HTMLElement
@@ -140,7 +140,7 @@ describe('Toast - Accessibility Tests', () => {
 
   describe('Focus management', () => {
     it('should not steal focus when toast appears', () => {
-      const { container } = render(
+      render(
         <div>
           <button id="test-button">Test Button</button>
           <Toast {...defaultProps} />
@@ -156,7 +156,7 @@ describe('Toast - Accessibility Tests', () => {
 
   describe('Position and visibility', () => {
     it('should be positioned fixed at bottom right', () => {
-      const { container } = render(<Toast {...defaultProps} />)
+      render(<Toast {...defaultProps} />)
       const toast = container.firstChild as HTMLElement
       
       expect(toast.style.position).toBe('fixed')
@@ -165,7 +165,7 @@ describe('Toast - Accessibility Tests', () => {
     })
 
     it('should have high z-index to appear above other content', () => {
-      const { container } = render(<Toast {...defaultProps} />)
+      render(<Toast {...defaultProps} />)
       const toast = container.firstChild as HTMLElement
       
       expect(toast.style.zIndex).toBe('1000')
@@ -174,7 +174,7 @@ describe('Toast - Accessibility Tests', () => {
 
   describe('Content constraints', () => {
     it('should have max width to prevent overly wide toasts', () => {
-      const { container } = render(
+      render(
         <Toast 
           {...defaultProps} 
           message="This is a very long message that should be constrained to a reasonable width for better readability"

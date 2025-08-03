@@ -502,3 +502,5 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
     </>
   )
 }
+
+export default TemplateEditor;

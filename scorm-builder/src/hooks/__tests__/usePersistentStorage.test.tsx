@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { describe, it, expect, act, beforeEach } from 'vitest'
+import { renderHook, act , waitFor } from '../../test/testProviders'
 import 'fake-indexeddb/auto'
 import { usePersistentStorage } from '../usePersistentStorage'
 

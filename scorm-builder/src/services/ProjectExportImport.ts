@@ -60,6 +60,56 @@ export interface ImportResult {
 
 const SUPPORTED_VERSION = '1.0.0'
 
+// List of sensitive field names to strip from exports
+const SENSITIVE_FIELDS = [
+  'apikey', 'api_key', 'apiKey', 'API_KEY',
+  'password', 'passwd', 'pwd', 'pass',
+  'token', 'accesstoken', 'access_token', 'accessToken',
+  'secret', 'secretkey', 'secret_key', 'secretKey',
+  'privatekey', 'private_key', 'privateKey',
+  'credential', 'credentials',
+  'auth', 'authorization',
+  'googleImageApiKey', 'googleCseId', 'youtubeApiKey',
+  'google_image_api_key', 'google_cse_id', 'youtube_api_key'
+]
+
+/**
+ * Recursively remove sensitive fields from an object
+ */
+function stripSensitiveData(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => stripSensitiveData(item))
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: any = {}
+    
+    for (const [key, value] of Object.entries(obj)) {
+      const lowerKey = key.toLowerCase()
+      
+      // Check if key contains any sensitive keywords
+      const isSensitive = SENSITIVE_FIELDS.some(sensitive => 
+        lowerKey === sensitive.toLowerCase() || 
+        lowerKey.includes(sensitive.toLowerCase())
+      )
+      
+      if (!isSensitive) {
+        cleaned[key] = stripSensitiveData(value)
+      } else {
+        console.warn(`[ProjectExport] Stripped sensitive field from export: ${key}`)
+      }
+    }
+    
+    return cleaned
+  }
+  
+  return obj
+}
+
 async function base64ToBlob(base64: string, mimeType: string): Promise<Blob> {
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -78,8 +128,9 @@ export async function exportProject(
     // Add manifest
     zip.file('manifest.json', JSON.stringify(projectData.metadata, null, 2))
     
-    // Add course data
-    zip.file('course-data.json', JSON.stringify(projectData.courseData, null, 2))
+    // Strip sensitive data and add course data
+    const sanitizedCourseData = stripSensitiveData(projectData.courseData)
+    zip.file('course-data.json', JSON.stringify(sanitizedCourseData, null, 2))
     
     // Create media folders
     const mediaFolder = zip.folder('media')

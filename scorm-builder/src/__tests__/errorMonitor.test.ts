@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach, SpyInstance } from 'vitest'
+import { describe, it, expect, MockInstance, vi, beforeEach, afterEach } from 'vitest'
 
 describe('Error Monitor', () => {
-  let consoleErrorSpy: SpyInstance
-  let consoleWarnSpy: SpyInstance
-  let consoleLogSpy: SpyInstance
+  let consoleErrorSpy: MockInstance
+  let consoleWarnSpy: MockInstance
+  let consoleLogSpy: MockInstance
   let errorEventListener: ((event: ErrorEvent) => void) | null = null
   let unhandledRejectionListener: ((event: Event) => void) | null = null
-  let addEventListenerSpy: SpyInstance
+  let addEventListenerSpy: MockInstance
 
   beforeEach(() => {
     // Mock console methods

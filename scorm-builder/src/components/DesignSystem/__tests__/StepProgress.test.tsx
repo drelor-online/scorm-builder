@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { StepProgress, Step } from '../StepProgress'
 
@@ -22,7 +22,7 @@ describe('StepProgress', () => {
     })
 
     it('should apply custom className', () => {
-      const { container } = render(
+      render(
         <StepProgress steps={defaultSteps} className="custom-progress" />
       )
       
@@ -48,7 +48,7 @@ describe('StepProgress', () => {
 
   describe('Accessibility', () => {
     it('should have proper ARIA attributes', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       const progressBar = container.firstChild as HTMLElement
       expect(progressBar).toHaveAttribute('role', 'progressbar')
@@ -64,7 +64,7 @@ describe('StepProgress', () => {
         { label: 'Step 3', status: 'completed' }
       ]
       
-      const { container } = render(<StepProgress steps={steps} />)
+      render(<StepProgress steps={steps} />)
       
       const progressBar = container.firstChild as HTMLElement
       expect(progressBar).toHaveAttribute('aria-valuenow', '3') // Last step when no active
@@ -103,7 +103,7 @@ describe('StepProgress', () => {
     })
 
     it('should apply correct status classes', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       const stepItems = container.querySelectorAll('.step-progress-item')
       expect(stepItems[0]).toHaveClass('step-completed')
@@ -115,7 +115,7 @@ describe('StepProgress', () => {
 
   describe('Progress Fill', () => {
     it('should calculate progress correctly', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       const progressFill = container.querySelector('.step-progress-fill')
       // 1 completed step out of 3 transitions (4 steps - 1)
@@ -129,7 +129,7 @@ describe('StepProgress', () => {
         { label: 'Step 3', status: 'pending' }
       ]
       
-      const { container } = render(<StepProgress steps={steps} />)
+      render(<StepProgress steps={steps} />)
       
       const progressFill = container.querySelector('.step-progress-fill')
       expect(progressFill).toHaveStyle({ width: '0%' })
@@ -142,7 +142,7 @@ describe('StepProgress', () => {
         { label: 'Step 3', status: 'completed' }
       ]
       
-      const { container } = render(<StepProgress steps={steps} />)
+      render(<StepProgress steps={steps} />)
       
       const progressFill = container.querySelector('.step-progress-fill')
       // 3 completed steps / 2 transitions = 150%
@@ -154,7 +154,7 @@ describe('StepProgress', () => {
         { label: 'Only Step', status: 'active' }
       ]
       
-      const { container } = render(<StepProgress steps={steps} />)
+      render(<StepProgress steps={steps} />)
       
       const progressFill = container.querySelector('.step-progress-fill')
       // 0 / 0 = NaN, which becomes 0%
@@ -164,7 +164,7 @@ describe('StepProgress', () => {
 
   describe('Data Attributes', () => {
     it('should set data-status on step items', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       const stepItems = container.querySelectorAll('.step-progress-item')
       expect(stepItems[0]).toHaveAttribute('data-status', 'completed')
@@ -174,7 +174,7 @@ describe('StepProgress', () => {
     })
 
     it('should set data-status on step labels', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       const stepLabels = container.querySelectorAll('.step-progress-label span[data-status]')
       expect(stepLabels[0]).toHaveAttribute('data-status', 'completed')
@@ -236,7 +236,7 @@ describe('StepProgress', () => {
         { label: 'Step 3', status: 'pending' }
       ]
       
-      const { container } = render(<StepProgress steps={steps} />)
+      render(<StepProgress steps={steps} />)
       
       const progressBar = container.firstChild as HTMLElement
       // Should use first active step
@@ -246,7 +246,7 @@ describe('StepProgress', () => {
 
   describe('CSS Classes', () => {
     it('should apply all expected CSS classes', () => {
-      const { container } = render(<StepProgress steps={defaultSteps} />)
+      render(<StepProgress steps={defaultSteps} />)
       
       expect(container.querySelector('.step-progress')).toBeInTheDocument()
       expect(container.querySelector('.step-progress-track')).toBeInTheDocument()
@@ -270,7 +270,7 @@ describe('StepProgress', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty steps array', () => {
-      const { container } = render(<StepProgress steps={[]} />)
+      render(<StepProgress steps={[]} />)
       
       const progressBar = container.firstChild as HTMLElement
       expect(progressBar).toHaveAttribute('aria-valuenow', '0')

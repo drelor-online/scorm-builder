@@ -49,6 +49,10 @@ describe('courseContentConverter - User Intent Tests', () => {
             title: 'Variables and Data Types',
             content: '<h2>Variables</h2><p>Variables store data values.</p>',
             narration: 'Variables are containers for storing data values.',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
             imageKeywords: ['variables'],
             imagePrompts: [],
             videoSearchTerms: ['python variables'],
@@ -95,7 +99,7 @@ describe('courseContentConverter - User Intent Tests', () => {
       // Should convert welcome page
       expect(result.welcome.title).toBe('Welcome to Python Programming')
       expect(result.welcome.content).toContain('Learn Python from scratch')
-      expect(result.welcome.audioFile).toBe('0000-welcome.mp3')
+      expect(result.welcome.audioFile).toBe('audio-0.mp3')
       expect(result.welcome.media).toHaveLength(1)
       expect(result.welcome.media![0].title).toBe('Python Logo')
 
@@ -107,7 +111,7 @@ describe('courseContentConverter - User Intent Tests', () => {
       // Should convert topics
       expect(result.topics).toHaveLength(1)
       expect(result.topics[0].title).toBe('Variables and Data Types')
-      expect(result.topics[0].audioFile).toBe('0001-variables-and-data-types.mp3')
+      expect(result.topics[0].audioFile).toBe('audio-2.mp3')
       
       // Should include knowledge checks
       expect(result.topics[0].knowledgeCheck).toBeDefined()
@@ -200,9 +204,9 @@ describe('courseContentConverter - User Intent Tests', () => {
       const result = convertToEnhancedCourseContent(content, mockMetadata)
 
       // Should sanitize filenames
-      expect(result.welcome.audioFile).toBe('0000-welcome.mp3')
-      expect(result.objectivesPage!.audioFile).toBe('0001-objectives.mp3')
-      expect(result.topics[0].audioFile).toBe('0001-topic-1-introduction.mp3')
+      expect(result.welcome.audioFile).toBe('audio-0.mp3')
+      expect(result.objectivesPage!.audioFile).toBe('audio-1.mp3')
+      expect(result.topics[0].audioFile).toBe('audio-2.mp3')
     })
   })
 
@@ -390,7 +394,10 @@ describe('courseContentConverter - User Intent Tests', () => {
           duration: 1
         },
         topics: [],
-        assessment: { questions: [], passMark: 80, narration: null }
+        assessment: { questions: [],
+        passMark: 80,
+        narration: null
+      }
       }
 
       const result = convertToEnhancedCourseContent(content, mockMetadata)
@@ -432,7 +439,10 @@ describe('courseContentConverter - User Intent Tests', () => {
           duration: 1
         },
         topics: [],
-        assessment: { questions: [], passMark: 80, narration: null }
+        assessment: { questions: [],
+        passMark: 80,
+        narration: null
+      }
       }
 
       const result = convertToEnhancedCourseContent(content, mockMetadata)

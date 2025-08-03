@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ProjectDashboard } from './components/ProjectDashboard'
 import { ProjectLoadingDialog } from './components/ProjectLoadingDialog'
 import { PersistentStorageProvider, useStorage } from './contexts/PersistentStorageContext'
+import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { handleFileAssociation } from './utils/fileAssociation'
 import { DebugInfo } from './components/DebugInfo'
 import { ErrorNotification, showError, showInfo } from './components/ErrorNotification'
@@ -94,8 +95,9 @@ function DashboardContent() {
         setLoadingProgress(progress as any)
       })
       
+      // Don't close the dialog yet - wait for media to load
+      // The dialog will close when progress reaches 100%
       setShowDashboard(false)
-      showInfo('Project opened successfully')
     } catch (err: any) {
       if (err.message === 'UNSAVED_CHANGES') {
         // Store the pending project ID to open after saving/discarding
@@ -109,10 +111,20 @@ function DashboardContent() {
           onClick: () => handleProjectSelected(projectId)
         })
       }
-    } finally {
       setIsLoadingProject(false)
     }
   }
+
+  // Monitor loading progress to close dialog only when truly complete
+  useEffect(() => {
+    if (isLoadingProject && loadingProgress.percent === 100 && loadingProgress.phase === 'finalizing') {
+      // Give a small delay to ensure smooth transition
+      setTimeout(() => {
+        setIsLoadingProject(false)
+        showInfo('Project opened successfully')
+      }, 300)
+    }
+  }, [isLoadingProject, loadingProgress])
   
   const checkForCrashRecovery = async () => {
     try {
@@ -172,16 +184,17 @@ function DashboardContent() {
         .then(() => {
           if (storage.currentProjectId) {
             setShowDashboard(false)
-            showInfo('Project opened successfully')
+            // Don't show success message yet - wait for 100% completion
           }
         })
         .catch((error: any) => {
           setError(error.message)
           setTimeout(() => setError(null), 5000)
+          setIsLoadingProject(false)
         })
         .finally(() => {
           setPendingFilePath(null)
-          setIsLoadingProject(false)
+          // Don't set loading to false here - wait for 100% completion
         })
     } else if (pendingProjectId) {
       // If there's a pending project ID to open, try opening it now
@@ -193,15 +206,16 @@ function DashboardContent() {
       })
         .then(() => {
           setShowDashboard(false)
-          showInfo('Project opened successfully')
+          // Don't show success message yet - wait for 100% completion
         })
         .catch((error: any) => {
           setError(error.message)
           setTimeout(() => setError(null), 5000)
+          setIsLoadingProject(false)
         })
         .finally(() => {
           setPendingProjectId(null)
-          setIsLoadingProject(false)
+          // Don't set loading to false here - wait for 100% completion
         })
     }
   }
@@ -283,6 +297,14 @@ function DashboardContent() {
       )}
       {showDashboard ? (
         <ProjectDashboard onProjectSelected={handleProjectSelected} />
+      ) : storage.currentProjectId ? (
+        <UnifiedMediaProvider projectId={storage.currentProjectId}>
+          <App 
+            onBackToDashboard={handleBackToDashboard}
+            pendingProjectId={pendingProjectId}
+            onPendingProjectHandled={() => setPendingProjectId(null)}
+          />
+        </UnifiedMediaProvider>
       ) : (
         <App 
           onBackToDashboard={handleBackToDashboard}

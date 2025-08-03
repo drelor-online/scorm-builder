@@ -1,7 +1,70 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
+import { describe, it, expect, vi } from 'vitest'
 import { CoursePreview } from '../CoursePreview'
 import type { CourseContent } from '../../types/aiPrompt'
+
+// Mock the services
+vi.mock('../../services/courseContentConverter', () => ({
+  convertToEnhancedCourseContent: vi.fn((content, metadata) => {
+    return {
+      title: metadata.title,
+      duration: metadata.duration,
+      passMark: metadata.passMark,
+      navigationMode: 'linear',
+      allowRetake: true,
+      welcome: {
+        title: 'Welcome',
+        content: content?.welcomePage?.content || 'Welcome to the course',
+        startButtonText: 'Start Course',
+        media: []
+      },
+      objectives: content?.objectives || [],
+      objectivesPage: {
+        media: []
+      },
+      topics: content?.topics?.map((topic: any) => ({
+        id: topic.id,
+        title: topic.title,
+        content: topic.content,
+        media: topic.media || [],
+        knowledgeCheck: topic.knowledgeCheck
+      })) || [],
+      assessment: content?.assessment || { questions: [] }
+    }
+  })
+}))
+
+vi.mock('../../services/previewGenerator', () => ({
+  generatePreviewHTML: vi.fn((content) => {
+    return `<html><body><h1>${content.title}</h1><p>Preview content</p></body></html>`
+  })
+}))
+
+vi.mock('../../hooks/usePerformanceMonitor', () => ({
+  usePerformanceMonitor: () => ({
+    measureAsync: async (name: string, fn: () => Promise<any>) => fn()
+  })
+}))
+
+// Mock the DesignSystem components
+vi.mock('../DesignSystem', () => ({
+  Button: ({ children, onClick, variant, disabled }: any) => (
+    <button 
+      onClick={onClick} 
+      disabled={disabled} 
+      data-variant={variant}
+      className={variant === 'primary' ? 'btn-primary' : ''}
+    >
+      {children}
+    </button>
+  ),
+  Modal: ({ isOpen, children, 'data-testid': testId }: any) => 
+    isOpen ? (
+      <div role="dialog" data-testid={testId}>
+        {children}
+      </div>
+    ) : null
+}))
 
 describe('CoursePreview', () => {
   const mockCourseContent: CourseContent = {
@@ -132,6 +195,7 @@ describe('CoursePreview', () => {
       <CoursePreview 
         courseContent={mockCourseContent}
         courseSeedData={mockCourseSeedData}
+        currentStep="json"
       />
     )
 
@@ -142,17 +206,19 @@ describe('CoursePreview', () => {
       // The preview modal should be open
       expect(screen.getByTestId('course-preview-modal')).toBeInTheDocument()
       // Check for the iframe that contains the preview
-      expect(screen.getByTestId('preview-iframe')).toBeInTheDocument()
-      // Check that we're on page 1
-      expect(screen.getByText('Page 1 of 5')).toBeInTheDocument()
+      const iframe = screen.getByTitle('Course Preview')
+      expect(iframe).toBeInTheDocument()
+      // Check for the step indicator
+      expect(screen.getByText('Showing content available at "json" step')).toBeInTheDocument()
     })
   })
 
-  it('should navigate between topics', async () => {
+  it('should show device switching options', async () => {
     render(
       <CoursePreview 
         courseContent={mockCourseContent}
         courseSeedData={mockCourseSeedData}
+        currentStep="json"
       />
     )
 
@@ -160,25 +226,18 @@ describe('CoursePreview', () => {
     fireEvent.click(previewButton)
 
     await waitFor(() => {
-      // Check for page navigation (Welcome is page 1, Learning Objectives is page 2, etc.)
-      expect(screen.getByText('Page 1 of 5')).toBeInTheDocument()
+      // Check for device buttons
+      expect(screen.getByText('Desktop')).toBeInTheDocument()
+      expect(screen.getByText('Tablet')).toBeInTheDocument()
+      expect(screen.getByText('Mobile')).toBeInTheDocument()
     })
 
-    const nextButton = screen.getByRole('button', { name: /next/i })
-    fireEvent.click(nextButton)
+    // Click tablet button
+    const tabletButton = screen.getByText('Tablet')
+    fireEvent.click(tabletButton)
 
-    await waitFor(() => {
-      // Should now be on page 2 (Learning Objectives)
-      expect(screen.getByText('Page 2 of 5')).toBeInTheDocument()
-    })
-    
-    // Click next again to get to first topic
-    fireEvent.click(nextButton)
-    
-    await waitFor(() => {
-      // Should now be on page 3 (First topic)
-      expect(screen.getByText('Page 3 of 5')).toBeInTheDocument()
-    })
+    // Tablet button should have primary variant
+    expect(tabletButton).toHaveAttribute('data-variant', 'primary')
   })
 
   it('should close preview modal when close button is clicked', async () => {
@@ -186,6 +245,7 @@ describe('CoursePreview', () => {
       <CoursePreview 
         courseContent={mockCourseContent}
         courseSeedData={mockCourseSeedData}
+        currentStep="json"
       />
     )
 
@@ -196,53 +256,55 @@ describe('CoursePreview', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
 
-    // Get all close buttons and click the footer one (with text "Close")
-    const closeButtons = screen.getAllByRole('button', { name: /close/i })
-    const footerCloseButton = closeButtons.find(btn => btn.textContent === 'Close')
-    expect(footerCloseButton).toBeInTheDocument()
-    fireEvent.click(footerCloseButton!)
+    // Close button should be available (from CoursePreviewAccurate)
+    const closeButtons = screen.getAllByText('Close')
+    // Click the last close button (from CoursePreviewAccurate)
+    fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 
-  it('should disable navigation buttons appropriately', async () => {
-    render(
+  it('should handle different workflow steps', async () => {
+    // Test with seed step (limited preview)
+    const { rerender } = render(
       <CoursePreview 
-        courseContent={mockCourseContent}
+        courseContent={null}
         courseSeedData={mockCourseSeedData}
+        currentStep="seed"
       />
     )
 
-    const previewButton = screen.getByRole('button', { name: /preview course/i })
+    let previewButton = screen.getByRole('button', { name: /preview course/i })
     fireEvent.click(previewButton)
 
     await waitFor(() => {
-      const prevButton = screen.getByRole('button', { name: /previous/i })
-      const nextButton = screen.getByRole('button', { name: /next/i })
-      
-      // On first page, previous should be disabled
-      expect(prevButton).toBeDisabled()
-      expect(nextButton).not.toBeDisabled()
+      expect(screen.getByText('Limited preview - complete content generation for full preview')).toBeInTheDocument()
     })
 
-    // Navigate to last page - we have 5 pages total (welcome, objectives, 2 topics, assessment)
-    const nextButton = screen.getByRole('button', { name: /next/i })
-    // Click 4 times to get to the last page
-    fireEvent.click(nextButton) // to page 2
-    fireEvent.click(nextButton) // to page 3
-    fireEvent.click(nextButton) // to page 4
-    fireEvent.click(nextButton) // to page 5
+    // Close modal - get all close buttons and click the last one
+    const closeButtons = screen.getAllByText('Close')
+    fireEvent.click(closeButtons[closeButtons.length - 1])
 
     await waitFor(() => {
-      expect(screen.getByText('Page 5 of 5')).toBeInTheDocument()
-      const prevButton = screen.getByRole('button', { name: /previous/i })
-      const nextButtonDisabled = screen.getByRole('button', { name: /next/i })
-      
-      // On last page, next should be disabled
-      expect(prevButton).not.toBeDisabled()
-      expect(nextButtonDisabled).toBeDisabled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    // Test with json step (content preview)
+    rerender(
+      <CoursePreview 
+        courseContent={mockCourseContent}
+        courseSeedData={mockCourseSeedData}
+        currentStep="json"
+      />
+    )
+
+    previewButton = screen.getByRole('button', { name: /preview course/i })
+    fireEvent.click(previewButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Showing content available at "json" step')).toBeInTheDocument()
     })
   })
 })

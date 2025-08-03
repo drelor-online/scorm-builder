@@ -1,17 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { Button } from './DesignSystem/Button'
 import { Card } from './DesignSystem/Card'
 import { Modal } from './DesignSystem/Modal'
 import { LoadingSpinner } from './DesignSystem/LoadingSpinner'
 import { Tooltip } from './DesignSystem/Tooltip'
+import { Icon } from './DesignSystem/Icons'
 import { formatDistanceToNow } from 'date-fns'
 import { showError, showInfo, showSuccess } from './ErrorNotification'
 import { open } from '@tauri-apps/plugin-dialog'
+import { invoke } from '@tauri-apps/api/core'
+import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap } from 'lucide-react'
+import './DesignSystem/transitions.css'
+import { runFullAutomation } from '../utils/fullWorkflowAutomation'
+import { startRecording, stopRecording } from '../utils/ManualTestRecorder'
+import { envConfig } from '../config/environment'
 
 interface Project {
   id: string
   name: string
+  path?: string
   created: string
   lastAccessed?: string
   last_modified?: string
@@ -62,6 +71,10 @@ function formatProjectDate(project: Project): string {
 
 export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   const storage = useStorage()
+  const { measureAsync } = usePerformanceMonitor({
+    componentName: 'ProjectDashboard',
+    trackRenders: false
+  })
   const [projects, setProjects] = useState<Project[]>([])
   const [recentProjects, setRecentProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,6 +87,9 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   const [exportingProjectId, setExportingProjectId] = useState<string | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set())
+  const [runningAutomation, setRunningAutomation] = useState(false)
+  const [showAutomationMenu, setShowAutomationMenu] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
   
   useEffect(() => {
     if (storage.isInitialized) {
@@ -82,82 +98,61 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   }, [storage.isInitialized])
   
   useEffect(() => {
-    // Load default folder from localStorage
-    const savedFolder = localStorage.getItem('defaultProjectFolder')
-    setDefaultFolder(savedFolder)
-  }, [])
-  
-  async function handleChangeDefaultFolder() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Default Project Folder'
-      })
-      
-      if (selected && typeof selected === 'string') {
-        // Save to localStorage
-        localStorage.setItem('defaultProjectFolder', selected)
-        setDefaultFolder(selected)
-        
-        // Update FileStorage to use the new directory
-        storage.setProjectsDirectory(selected)
-        
-        // Add the selected folder to the allowed scope
-        try {
-          // The folder picker dialog automatically adds the selected path to the scope
-          // when using tauri-plugin-dialog, so we don't need to do anything else
-          showInfo('Default folder updated successfully')
-          
-          // Reload projects from the new directory
-          await loadProjects()
-        } catch (scopeError) {
-          console.error('Failed to add folder to scope:', scopeError)
-          // Still update the folder even if scope fails
+    // Load default folder from backend settings
+    async function loadDefaultFolder() {
+      try {
+        // First try to get from backend
+        const settings = await invoke<any>('get_app_settings')
+        if (settings?.projects_directory) {
+          setDefaultFolder(settings.projects_directory)
+          localStorage.setItem('defaultProjectsFolder', settings.projects_directory)
+        } else {
+          // Fall back to localStorage
+          const savedFolder = localStorage.getItem('defaultProjectsFolder')
+          setDefaultFolder(savedFolder)
         }
+      } catch (error) {
+        console.error('Failed to load default folder:', error)
+        // Fall back to localStorage
+        const savedFolder = localStorage.getItem('defaultProjectsFolder')
+        setDefaultFolder(savedFolder)
       }
-    } catch (error) {
-      console.error('Failed to select folder:', error)
-      showError('Failed to select folder')
     }
-  }
-  
-  function handleClearDefaultFolder() {
-    localStorage.removeItem('defaultProjectFolder')
-    setDefaultFolder(null)
-    showInfo('Default folder cleared')
-  }
+    loadDefaultFolder()
+  }, [])
   
   async function loadProjects() {
     if (!storage.isInitialized) return
     
     try {
       setLoading(true)
-      const projectList = await storage.listProjects()
-      const recentList = await storage.getRecentProjects()
+      await measureAsync('loadProjects', async () => {
+        const projectList = await storage.listProjects()
+        const recentList = await storage.getRecentProjects()
+        
+        // Validate project data before setting
+        const validProjects = projectList.filter(project => {
+          if (!project || !project.id || !project.name) {
+            console.warn('Invalid project data:', project)
+            return false
+          }
+          return true
+        })
       
-      // Validate project data before setting
-      const validProjects = projectList.filter(project => {
-        if (!project || !project.id || !project.name) {
-          console.warn('Invalid project data:', project)
-          return false
-        }
-        return true
+        // Separate recent projects from the main list
+        const recentIds = recentList.map((p: any) => p.id)
+        const mainProjects = validProjects.filter(p => !recentIds.includes(p.id))
+        const validRecentProjects = recentList.filter((project: any) => {
+          if (!project || !project.id || !project.name) {
+            console.warn('Invalid recent project data:', project)
+            return false
+          }
+          return true
+        }).slice(0, 5) // Show only top 5 recent projects
+        
+        setProjects(mainProjects)
+        setRecentProjects(validRecentProjects)
       })
-      
-      // Separate recent projects from the main list
-      const recentIds = recentList.map((p: any) => p.id)
-      const mainProjects = validProjects.filter(p => !recentIds.includes(p.id))
-      const validRecentProjects = recentList.filter((project: any) => {
-        if (!project || !project.id || !project.name) {
-          console.warn('Invalid recent project data:', project)
-          return false
-        }
-        return true
-      }).slice(0, 5) // Show only top 5 recent projects
-      
-      setProjects(mainProjects)
-      setRecentProjects(validRecentProjects)
     } catch (error) {
       console.error('Failed to load projects:', error)
       setProjects([]) // Set empty array on error
@@ -223,8 +218,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       setNewProjectName('')
       showInfo('Project created successfully')
       
-      console.log('[ProjectDashboard] Calling onProjectSelected with id:', project.id)
-      onProjectSelected(project.id)
+      console.log('[ProjectDashboard] Calling onProjectSelected with path:', project.path)
+      onProjectSelected(project.path)
     } catch (error) {
       console.error('[ProjectDashboard] handleCreateProject error:', error)
       
@@ -245,15 +240,17 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
   
-  async function handleOpenProject(projectId: string) {
+  async function handleOpenProject(projectIdOrPath: string, projectPath?: string) {
     try {
-      console.log('Opening project:', projectId)
-      onProjectSelected(projectId)
+      // Use path if available, otherwise use ID (for backward compatibility)
+      const pathToOpen = projectPath || projectIdOrPath;
+      console.log('Opening project:', pathToOpen)
+      onProjectSelected(pathToOpen)
     } catch (error) {
       console.error('Failed to open project:', error)
       showError('Failed to open project', {
         label: 'Retry',
-        onClick: () => handleOpenProject(projectId)
+        onClick: () => handleOpenProject(projectIdOrPath, projectPath)
       })
     }
   }
@@ -270,9 +267,9 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
   
-  async function handleDeleteProject(projectId: string, filePath?: string) {
+  async function handleDeleteProject(projectId: string) {
     try {
-      await storage.deleteProject(projectId, filePath)
+      await storage.deleteProject(projectId)
       await loadProjects()
       setDeleteConfirm(null)
     } catch (error) {
@@ -431,11 +428,11 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             // Find the project by name to get its ID
             const allProjects = [...projects, ...recentProjects]
             const project = allProjects.find(p => p.name === projectName)
-            if (project) {
-              onProjectSelected(project.id)
+            if (project && project.path) {
+              onProjectSelected(project.path)
             } else {
-              // If we can't find the project, show error
-              showError('Unable to open project: Could not find project in list')
+              // If we have the file path, use it directly
+              onProjectSelected(filePath)
             }
           } catch (innerError) {
             showError('Unable to open project: Could not determine project ID')
@@ -446,6 +443,69 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       }
     } else {
       showError('Please drop a .scormproj file')
+    }
+  }
+
+  async function handleChangeDefaultFolder() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Default Projects Folder'
+      })
+      
+      if (selected && typeof selected === 'string') {
+        // Update the backend settings
+        await storage.setProjectsDirectory(selected)
+        
+        // Update local state
+        setDefaultFolder(selected)
+        
+        // Store in localStorage for quick access
+        localStorage.setItem('defaultProjectsFolder', selected)
+        
+        // Reload projects from the new directory
+        await loadProjects()
+        
+        showSuccess(`Default folder set to: ${selected}`)
+      }
+    } catch (error) {
+      console.error('Failed to change default folder:', error)
+      showError(`Failed to change default folder: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  function handleClearDefaultFolder() {
+    setDefaultFolder(null)
+    localStorage.removeItem('defaultProjectsFolder')
+    showInfo('Default folder cleared')
+  }
+
+  async function handleRunAutomation() {
+    if (runningAutomation) return
+    
+    try {
+      setRunningAutomation(true)
+      showInfo('Starting automation test...')
+      
+      const result = await runFullAutomation({
+        showProgress: true,
+        scenario: 'standard',
+        keepProject: false
+      })
+      
+      if (result.success) {
+        showSuccess(`Automation completed successfully in ${(result.duration / 1000).toFixed(1)}s`)
+        // Reload projects to show any changes
+        await loadProjects()
+      } else {
+        showError(`Automation failed: ${result.errors.join(', ')}`)
+      }
+    } catch (error) {
+      console.error('Automation error:', error)
+      showError(`Automation error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setRunningAutomation(false)
     }
   }
   
@@ -509,10 +569,48 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             <Button 
               variant="primary"
               onClick={() => setShowNewProjectDialog(true)}
+              data-testid="new-project-button"
             >
               Create New Project
             </Button>
           </Tooltip>
+          
+          {/* Manual Recording Button - Only show in development */}
+          {envConfig.isDevelopment && (
+            <Tooltip content={isRecording ? "Stop recording your actions" : "Record your manual testing session"} position="bottom">
+              <Button
+                onClick={() => {
+                  if (isRecording) {
+                    stopRecording()
+                    setIsRecording(false)
+                    showSuccess('Recording stopped. Report generated and downloaded.')
+                  } else {
+                    startRecording({
+                      autoScreenshot: true,
+                      capturePerformance: true,
+                      annotationsEnabled: true
+                    })
+                    setIsRecording(true)
+                    showInfo('Recording started! Use the app normally. Press Ctrl+Shift+S for screenshots.')
+                  }
+                }}
+                variant={isRecording ? "danger" : "secondary"}
+                data-testid="manual-recording-button"
+              >
+                {isRecording ? (
+                  <>
+                    <span style={{ color: '#ef4444', marginRight: '0.5rem' }}>●</span>
+                    Stop Recording
+                  </>
+                ) : (
+                  <>
+                    <span style={{ marginRight: '0.5rem' }}>🎬</span>
+                    Record Session
+                  </>
+                )}
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip content="Enable bulk export mode" position="bottom">
             <Button 
               variant="secondary"
@@ -540,7 +638,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               }}
               style={{ padding: '0.5rem', minWidth: 'auto' }}
             >
-              🔄
+              <Icon icon={RefreshCw} size="sm" className={loading ? 'animate-spin' : ''} />
             </Button>
           </Tooltip>
         </div>
@@ -588,16 +686,17 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       {recentProjects.length > 0 && (
         <div className="recent-section" style={{ marginBottom: '3rem' }}>
           <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>Recent Projects</h2>
-          <div className="projects-grid recent-grid" style={{ 
+          <div className="projects-grid recent-grid stagger-children" style={{ 
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
             gap: '1.5rem'
           }}>
-            {recentProjects.map(project => (
+            {recentProjects.map((project, index) => (
               <Card 
                 key={`recent-${project.id}`}
                 data-testid="recent-project-card"
-                className="project-card recent-card"
+                className="project-card recent-card animate-fadeInUp"
+                style={{ animationDelay: `${index * 0.05}s` }}
                 role="article"
                 aria-label={`Project: ${project.name}`}
               >
@@ -655,7 +754,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                           whiteSpace: 'nowrap',
                           cursor: 'help'
                         }}>
-                          📁 {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
+                          <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
                         </p>
                       </Tooltip>
                     )}
@@ -673,7 +772,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                       <Button
                         variant="primary"
                         size="small"
-                        onClick={() => handleOpenProject(project.id)}
+                        onClick={() => handleOpenProject(project.id, project.path)}
                         aria-label={`Open project ${project.name}`}
                       >
                         Open
@@ -722,19 +821,19 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
           </p>
           <div className="empty-state-features">
             <div className="feature">
-              <span className="feature-icon">📝</span>
+              <span className="feature-icon"><Icon icon={FileText} size="lg" /></span>
               <span>Build interactive courses with AI assistance</span>
             </div>
             <div className="feature">
-              <span className="feature-icon">🎨</span>
+              <span className="feature-icon"><Icon icon={Palette} size="lg" /></span>
               <span>Add images, videos, and narration to engage learners</span>
             </div>
             <div className="feature">
-              <span className="feature-icon">📊</span>
+              <span className="feature-icon"><Icon icon={BarChart3} size="lg" /></span>
               <span>Create assessments with automatic scoring</span>
             </div>
             <div className="feature">
-              <span className="feature-icon">📦</span>
+              <span className="feature-icon"><Icon icon={Package} size="lg" /></span>
               <span>Export SCORM packages ready for any LMS</span>
             </div>
           </div>
@@ -763,16 +862,17 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
           {projects.length > 0 && (
             <>
               <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>All Projects</h2>
-              <div className="projects-grid" style={{
+              <div className="projects-grid stagger-children" style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                 gap: '1.5rem'
               }}>
-          {projects.map(project => (
+          {projects.map((project, index) => (
             <Card 
               key={project.id}
               data-testid="project-card"
-              className="project-card"
+              className="project-card animate-fadeInUp"
+              style={{ animationDelay: `${index * 0.05}s` }}
               role="article"
               aria-label={`Project: ${project.name}`}
             >
@@ -814,7 +914,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                         whiteSpace: 'nowrap',
                         cursor: 'help'
                       }}>
-                        📁 {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
+                        <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
                       </p>
                     </Tooltip>
                   )}
@@ -901,6 +1001,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             onKeyPress={(e) => e.key === 'Enter' && handleCreateProject()}
             autoFocus
             aria-label="Project title"
+            data-testid="project-name-input"
             style={{
               width: 'calc(100% - 2rem)',
               padding: '0.75rem',
@@ -929,6 +1030,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                 handleCreateProject()
               }}
               disabled={!newProjectName.trim()}
+              data-testid="create-project-confirm"
             >
               Create
             </Button>
@@ -952,7 +1054,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             </Button>
             <Button
               variant="danger"
-              onClick={() => deleteConfirm && handleDeleteProject(deleteConfirm.id, deleteConfirm.path)}
+              onClick={() => deleteConfirm && handleDeleteProject(deleteConfirm.path || deleteConfirm.id)}
             >
               Delete
             </Button>

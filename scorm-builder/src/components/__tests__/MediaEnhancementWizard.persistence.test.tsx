@@ -1,9 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { MediaEnhancementWizard } from '../MediaEnhancementWizardRefactored'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { CourseContent } from '../../types/aiPrompt'
-import { PersistentStorageProvider } from '../../contexts/PersistentStorageContext'
-
 // Mock the PersistentStorageContext
 const mockStorage = {
   isInitialized: true,
@@ -54,6 +52,10 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
       title: 'Test Topic 1',
       content: '<p>Test content 1</p>',
       narration: 'Test narration',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
       imageKeywords: ['test'],
       imagePrompts: ['test prompt'],
       videoSearchTerms: ['test video'],
@@ -128,15 +130,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
         metadata: { topicId: 'welcome' }
       }])
 
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Wait for component to load media
       await waitFor(() => {
@@ -162,15 +160,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
           metadata: { topicId: 'topic-1' }
         }])
 
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Navigate to topic 1
       fireEvent.click(screen.getByText('Next Topic →'))
@@ -190,15 +184,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
     it('should save media blob when file is uploaded', async () => {
       const file = new File(['test image content'], 'test.jpg', { type: 'image/jpeg' })
       
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Upload file
       const chooseFileButton = screen.getByText('Choose File')
@@ -246,9 +236,7 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
         }
       ])
 
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
@@ -257,9 +245,7 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
               googleCseId: 'test-cse',
               youtubeApiKey: 'test-youtube'
             }}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Enter search query
       const searchInput = screen.getByPlaceholderText('Search for images...')
@@ -300,15 +286,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
     it('should update content with media reference instead of full blob', async () => {
       const file = new File(['test image'], 'test.jpg', { type: 'image/jpeg' })
       
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       const fileInput = document.querySelector('input[type="file"]')
       Object.defineProperty(fileInput, 'files', {
@@ -338,15 +320,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
 
   describe('Navigation with media persistence', () => {
     it('should preserve media selections when navigating between topics', async () => {
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Upload media to welcome page
       const file1 = new File(['welcome image'], 'welcome.jpg', { type: 'image/jpeg' })
@@ -377,15 +355,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
     it('should save media references when moving to next step', async () => {
       const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
       
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Add media
       const fileInput = document.querySelector('input[type="file"]')
@@ -433,15 +407,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
         }
       ])
 
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Wait for library items to load
       await waitFor(() => {
@@ -457,15 +427,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
     })
 
     it('should save uploaded files to both library and persistent storage', async () => {
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Switch to library
       fireEvent.click(screen.getByText('Media Library'))
@@ -501,15 +467,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
     it('should handle storage errors gracefully', async () => {
       mockStorage.storeMedia.mockRejectedValueOnce(new Error('Storage full'))
       
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
       const fileInput = document.querySelector('input[type="file"]')
@@ -529,15 +491,11 @@ describe('MediaEnhancementWizard - Persistent Storage', () => {
       // Mock storage not initialized
       mockStorage.isInitialized = false
       
-      render(
-        <PersistentStorageProvider>
-          <MediaEnhancementWizard
+      render(<MediaEnhancementWizard
             courseContent={mockCourseContent}
             onNext={mockOnNext}
             onBack={mockOnBack}
-          />
-        </PersistentStorageProvider>
-      )
+          />)
 
       // Verify it still works with localStorage - check for page counter
       expect(screen.getByText(/Page 1 of \d+/)).toBeInTheDocument()

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent , waitFor } from '../../../test/testProviders'
 import { SearchInput } from '../SearchInput'
 
 // Mock the hooks
@@ -207,7 +207,7 @@ describe('SearchInput Component - Simple Tests', () => {
   })
 
   it('should apply custom className', () => {
-    const { container } = render(
+    render(
       <SearchInput onSearch={mockOnSearch} className="custom-search" />
     )
     

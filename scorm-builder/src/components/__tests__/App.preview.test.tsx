@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
 import '@testing-library/jest-dom'
 import App from '../../App'
 import React from 'react'
@@ -31,7 +31,7 @@ vi.mock('../RealTimePreview', () => ({
 
 // Mock CoursePreview to avoid circular dependencies
 vi.mock('../CoursePreview', () => ({
-  CoursePreview: ({ courseContent }: any) => {
+  CoursePreview: () => {
     const [isOpen, setIsOpen] = React.useState(false)
     return (
       <>
@@ -47,7 +47,7 @@ vi.mock('../CoursePreview', () => ({
 }))
 
 // Mock other components
-vi.mock('../CourseSeedInputRefactored', () => ({
+vi.mock('../CourseSeedInput', () => ({
   CourseSeedInput: ({ onSubmit }: any) => (
     <div>
       <button onClick={() => onSubmit({ courseTitle: 'Test', difficulty: 1, customTopics: [], template: 'None', templateTopics: [] })}>
@@ -67,9 +67,8 @@ vi.mock('../AIPromptGenerator', () => ({
   )
 }))
 
-vi.mock('../JSONImportValidatorRefactored', () => ({
+vi.mock('../JSONImportValidator', () => ({
   JSONImportValidator: ({ onNext, initialData }: any) => {
-    const React = require('react')
     const { CoursePreview } = require('../CoursePreview')
     
     // Simulate having valid course content
@@ -81,6 +80,8 @@ vi.mock('../JSONImportValidatorRefactored', () => ({
         id: 'topic-1',
         title: 'Topic 1',
         content: 'Topic content'
+      ,
+        duration: 5
       }]
     }
     

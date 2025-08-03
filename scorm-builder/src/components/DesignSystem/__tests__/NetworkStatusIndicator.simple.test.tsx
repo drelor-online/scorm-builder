@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '../../../test/testProviders'
 import { NetworkStatusIndicator } from '../NetworkStatusIndicator'
 
 // Mock the useNetworkStatus hook
@@ -20,7 +20,7 @@ describe('NetworkStatusIndicator Component - Simple Tests', () => {
       lastOnline: null
     })
 
-    const { container } = render(<NetworkStatusIndicator />)
+    render(<NetworkStatusIndicator />)
     
     expect(container.firstChild).toBeNull()
   })
@@ -127,7 +127,7 @@ describe('NetworkStatusIndicator Component - Simple Tests', () => {
       lastOnline: null
     })
 
-    const { container } = render(
+    render(
       <NetworkStatusIndicator className="custom-indicator" />
     )
     
@@ -152,7 +152,7 @@ describe('NetworkStatusIndicator Component - Simple Tests', () => {
       lastOnline: null
     })
 
-    const { container } = render(<NetworkStatusIndicator />)
+    render(<NetworkStatusIndicator />)
     
     expect(container.firstChild).toHaveClass('offline')
   })

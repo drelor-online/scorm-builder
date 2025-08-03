@@ -1,61 +1,134 @@
 // Design tokens for consistent styling across the application
 export const tokens = {
-  // Colors
+  // Colors - Single source of truth
   colors: {
+    // Brand colors
     primary: {
-      main: '#3b82f6',
-      hover: '#2563eb',
-      active: '#1d4ed8',
+      50: '#eff6ff',
+      100: '#dbeafe',
+      200: '#bfdbfe',
+      300: '#93c5fd',
+      400: '#60a5fa',
+      500: '#3b82f6',  // Main
+      600: '#2563eb',  // Hover
+      700: '#1d4ed8',  // Active
+      800: '#1e40af',
+      900: '#1e3a8a',
     },
     secondary: {
-      main: 'transparent',
-      hover: '#3f3f46',
-      active: '#52525b',
-      border: '#52525b',
-      text: '#d4d4d8',
-    },
-    tertiary: {
-      main: '#52525b',
-      hover: '#71717a',
-      active: '#6b7280',
-    },
-    success: {
-      main: '#16a34a',
-      hover: '#15803d',
-      active: '#14532d',
-    },
-    danger: {
-      main: '#dc2626',
-      hover: '#b91c1c',
-      active: '#991b1b',
-    },
-    background: {
-      primary: '#09090b',
-      secondary: '#18181b',
-      tertiary: '#27272a',
-      card: '#18181b',
-    },
-    text: {
-      primary: '#f4f4f5',
-      secondary: '#d4d4d8',
-      tertiary: '#a1a1aa',
-      muted: '#71717a',
-    },
-    border: {
-      default: '#3f3f46',
-      light: '#27272a',
-      dark: '#52525b',
-    },
-    gray: {
+      50: '#fafafa',
       100: '#f4f4f5',
       200: '#e4e4e7',
       300: '#d4d4d8',
       400: '#a1a1aa',
-      500: '#71717a',
-      600: '#52525b',
-      700: '#3f3f46',
+      500: '#71717a',  // Main
+      600: '#52525b',  // Hover
+      700: '#3f3f46',  // Active
       800: '#27272a',
-      900: '#18181b'
+      900: '#18181b',
+    },
+    success: {
+      50: '#f0fdf4',
+      100: '#dcfce7',
+      200: '#bbf7d0',
+      300: '#86efac',
+      400: '#4ade80',
+      500: '#22c55e',  // Main
+      600: '#16a34a',  // Hover
+      700: '#15803d',  // Active
+      800: '#166534',
+      900: '#14532d',
+    },
+    danger: {
+      50: '#fef2f2',
+      100: '#fee2e2',
+      200: '#fecaca',
+      300: '#fca5a5',
+      400: '#f87171',
+      500: '#ef4444',  // Main
+      600: '#dc2626',  // Hover
+      700: '#b91c1c',  // Active
+      800: '#991b1b',
+      900: '#7f1d1d',
+    },
+    warning: {
+      50: '#fffbeb',
+      100: '#fef3c7',
+      200: '#fde68a',
+      300: '#fcd34d',
+      400: '#fbbf24',
+      500: '#f59e0b',  // Main
+      600: '#d97706',  // Hover
+      700: '#b45309',  // Active
+      800: '#92400e',
+      900: '#78350f',
+    },
+    info: {
+      50: '#eff6ff',
+      100: '#dbeafe',
+      200: '#bfdbfe',
+      300: '#93c5fd',
+      400: '#60a5fa',
+      500: '#3b82f6',  // Main (same as primary)
+      600: '#2563eb',  // Hover
+      700: '#1d4ed8',  // Active
+      800: '#1e40af',
+      900: '#1e3a8a',
+    },
+    // Background colors
+    background: {
+      primary: '#09090b',      // Main app background
+      secondary: '#18181b',    // Card backgrounds
+      tertiary: '#27272a',     // Elevated surfaces
+      quaternary: '#3f3f46',   // Hover states
+      overlay: 'rgba(0, 0, 0, 0.75)',  // Modal overlays
+    },
+    // Text colors
+    text: {
+      primary: '#f4f4f5',      // Main text
+      secondary: '#d4d4d8',    // Secondary text
+      tertiary: '#a1a1aa',     // Muted text
+      quaternary: '#71717a',   // Very muted text
+      inverse: '#09090b',      // Text on light backgrounds
+    },
+    // Border colors
+    border: {
+      light: '#27272a',        // Subtle borders
+      default: '#3f3f46',      // Default borders
+      medium: '#52525b',       // Emphasized borders
+      dark: '#71717a',         // Strong borders
+      focus: '#3b82f6',        // Focus rings
+    },
+    // Special purpose colors
+    activity: {
+      'multiple-choice': '#3b82f6',
+      'true-false': '#8b5cf6',
+      'fill-in-the-blank': '#10b981',
+      'drag-and-drop': '#f59e0b',
+      'scenario': '#ec4899'
+    },
+    // Alert/notification colors with opacity
+    alert: {
+      info: {
+        background: 'rgba(59, 130, 246, 0.1)',
+        border: 'rgba(59, 130, 246, 0.2)',
+        text: '#93c5fd'
+      },
+      success: {
+        background: 'rgba(34, 197, 94, 0.15)',
+        border: 'rgba(34, 197, 94, 0.3)',
+        text: '#ffffff'  // White text for maximum contrast on green
+      },
+      warning: {
+        background: 'rgba(245, 158, 11, 0.1)',
+        border: 'rgba(245, 158, 11, 0.2)',
+        text: '#fcd34d'
+      },
+      danger: {
+        background: 'rgba(239, 68, 68, 0.1)',
+        border: 'rgba(239, 68, 68, 0.2)',
+        text: '#fca5a5'
+      }
     }
   },
   

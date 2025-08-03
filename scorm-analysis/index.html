@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%; margin: 0; padding: 0;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Gas Safety</title>
+    <link href="https://fonts.googleapis.com/css2?family=Century+Gothic:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        /* Ensure full height in Moodle iframe */
+        html, body {
+            height: 100% !important;
+            min-height: 800px !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        
+        /* Target Moodle's SCORM player specifically */
+        @media screen {
+            html, body {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+            }
+        }
+        
+        /* Force expansion in iframe context */
+        html:has(body) {
+            min-height: 100vh !important;
+        }
+        
+        /* Override any Moodle constraints */
+        body > * {
+            height: 100% !important;
+            min-height: 800px !important;
+        }
+    </style>
+</head>
+<body style="height: 100%; margin: 0; padding: 0;">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="progress-circle-container">
+                <svg class="progress-circle" width="120" height="120" viewBox="0 0 120 120">
+                    <circle class="progress-circle-bg" cx="60" cy="60" r="54" fill="none" stroke="#e9ecef" stroke-width="8"/>
+                    <circle class="progress-circle-fill" cx="60" cy="60" r="54" fill="none" stroke="#8fbb40" stroke-width="8"
+                            stroke-dasharray="339.292" stroke-dashoffset="339.292"
+                            transform="rotate(-90 60 60)"/>
+                    <text class="progress-circle-text" x="60" y="60" text-anchor="middle" dy=".3em" font-size="28" font-weight="bold" fill="#241f20">
+                        <tspan id="progress-percentage">0</tspan><tspan font-size="20">%</tspan>
+                    </text>
+                </svg>
+                <div class="progress-label">Course Progress</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" id="nav-welcome" data-page="welcome">
+                <span class="nav-number">1.</span> Welcome
+            </a>
+            <a href="#" class="nav-item" id="nav-objectives" data-page="objectives">
+                <span class="nav-number">2.</span> Objectives
+            </a>
+            
+            <a href="#" class="nav-item" id="nav-topic-1" data-page="topic-1">
+                <span class="nav-number">3.</span> Core Principles of Natural Gas Safety
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-2" data-page="topic-2">
+                <span class="nav-number">4.</span> Recognizing and Identifying Gas Hazards
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-3" data-page="topic-3">
+                <span class="nav-number">5.</span> Evaluating and Mitigating Risks
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-4" data-page="topic-4">
+                <span class="nav-number">6.</span> Essential PPE for Gas-Related Work
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-5" data-page="topic-5">
+                <span class="nav-number">7.</span> Responding to Natural Gas Emergencies
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-6" data-page="topic-6">
+                <span class="nav-number">8.</span> Learning from Experience: Incident Reporting
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-7" data-page="topic-7">
+                <span class="nav-number">9.</span> Navigating Gas Safety Regulations
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-8" data-page="topic-8">
+                <span class="nav-number">10.</span> Striving for a Safer Tomorrow
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-9" data-page="topic-9">
+                <span class="nav-number">11.</span> Empowerment Through Training and Drills
+            </a>
+            <a href="#" class="nav-item" id="nav-topic-10" data-page="topic-10">
+                <span class="nav-number">12.</span> Building a Proactive Safety Culture
+            </a>
+            <a href="#" class="nav-item" id="nav-assessment" data-page="assessment">
+                <span class="nav-number">13.</span> Assessment
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-area">
+        <div class="top-bar">
+            <h1 class="chapter-info" id="current-title">Welcome</h1>
+            <button class="fullscreen-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        </div>
+
+        <div class="content-container">
+            <div id="content-area">
+                <!-- Content will be loaded here dynamically -->
+            </div>
+        </div>
+
+        <footer class="nav-footer">
+            <button class="nav-btn" id="prev-btn" onclick="navigatePrevious()" disabled>◀ Previous Topic</button>
+            <button class="nav-btn" id="next-btn" onclick="navigateNext()">Next Topic ▶</button>
+        </footer>
+    </main>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close">&times;</span>
+        <img id="lightbox-image" src="" alt="">
+    </div>
+    
+    <!-- Alert Container for Navigation Blocking Notifications -->
+    <div id="scorm-alert-container"></div>
+    
+    <script src="scripts/scorm-api.js"></script>
+    <script src="scripts/navigation.js"></script>
+    
+    <!-- Moodle iframe height fix -->
+    <script>
+        // Force full viewport height
+        function forceFullHeight() {
+            // Set body to full viewport
+            document.body.style.height = '100vh';
+            document.body.style.minHeight = '800px';
+            document.documentElement.style.height = '100vh';
+            document.documentElement.style.minHeight = '800px';
+            
+            // Try to expand the iframe from inside
+            if (window.frameElement) {
+                try {
+                    window.frameElement.style.width = '100%';
+                    window.frameElement.style.height = '100vh';
+                    window.frameElement.style.minHeight = '800px';
+                    window.frameElement.style.position = 'absolute';
+                    window.frameElement.style.top = '0';
+                    window.frameElement.style.left = '0';
+                    window.frameElement.style.right = '0';
+                    window.frameElement.style.bottom = '0';
+                } catch (e) {
+                    console.log('Cannot modify iframe styles from inside');
+                }
+            }
+            
+            // Notify parent window about desired size
+            if (window.parent && window.parent !== window) {
+                try {
+                    // Try multiple methods to communicate with parent
+                    window.parent.postMessage({
+                        type: 'setHeight',
+                        height: Math.max(800, window.innerHeight, document.body.scrollHeight)
+                    }, '*');
+                    
+                    // Try SCORM-specific resize
+                    if (window.parent.resizeIframe) {
+                        window.parent.resizeIframe('100%', '800px');
+                    }
+                    
+                    // Try Moodle-specific resize
+                    if (window.parent.M && window.parent.M.mod_scorm && window.parent.M.mod_scorm.resize) {
+                        window.parent.M.mod_scorm.resize();
+                    }
+                } catch (e) {
+                    console.log('Could not communicate with parent window:', e);
+                }
+            }
+        }
+        
+        // Run immediately
+        forceFullHeight();
+        
+        // Run on various events
+        window.addEventListener('load', forceFullHeight);
+        window.addEventListener('DOMContentLoaded', forceFullHeight);
+        window.addEventListener('resize', forceFullHeight);
+        
+        // Run periodically for the first few seconds
+        let attempts = 0;
+        const interval = setInterval(function() {
+            forceFullHeight();
+            attempts++;
+            if (attempts > 10) {
+                clearInterval(interval);
+            }
+        }, 500);
+    </script>
+    
+    <!-- Image Lightbox -->
+    <div id="image-lightbox" class="lightbox-overlay" onclick="closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-image" src="" alt="">
+            <button class="lightbox-close" onclick="closeLightbox()">×</button>
+        </div>
+    </div>
+</body>
+</html>

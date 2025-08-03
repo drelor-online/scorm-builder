@@ -1,0 +1,24 @@
+
+> scorm-builder@0.1.0 build
+> tsc && vite build 2
+
+src/__tests__/behavior/app/mediaEnhancementBlank.behavior.test.tsx(77,34): error TS2322: Type '{ children: Element; value: any; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/__tests__/behavior/app/mediaEnhancementBlank.behavior.test.tsx(79,12): error TS2741: Property 'projectId' is missing in type '{ children: ReactNode; }' but required in type 'MediaProviderProps'.
+src/__tests__/behavior/app/mediaEnhancementBlank.behavior.test.tsx(139,34): error TS2322: Type '{ children: Element; value: any; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/__tests__/behavior/app/mediaEnhancementBlank.behavior.test.tsx(141,12): error TS2741: Property 'projectId' is missing in type '{ children: ReactNode; }' but required in type 'MediaProviderProps'.
+src/__tests__/behavior/mediaEnhancement/imageSearchPagination.behavior.test.tsx(77,9): error TS2322: Type '{ pages: { welcome: { id: string; type: string; title: string; content: string; narration: string; media: { images: never[]; videos: never[]; }; }; }; }' is not assignable to type 'CourseContentUnion'.
+src/__tests__/behavior/mediaEnhancement/imageSearchPagination.behavior.test.tsx(94,11): error TS2353: Object literal may only specify known properties, and 'google' does not exist in type '{ googleImageApiKey: string; googleCseId: string; youtubeApiKey: string; }'.
+src/__tests__/behavior/mediaEnhancement/imageSearchPagination.behavior.test.tsx(154,9): error TS2322: Type '{ pages: { welcome: { id: string; type: string; title: string; content: string; narration: string; media: { images: never[]; videos: never[]; }; }; }; }' is not assignable to type 'CourseContentUnion'.
+src/__tests__/behavior/mediaEnhancement/imageSearchPagination.behavior.test.tsx(171,11): error TS2353: Object literal may only specify known properties, and 'google' does not exist in type '{ googleImageApiKey: string; googleCseId: string; youtubeApiKey: string; }'.
+src/__tests__/behavior/mediaEnhancement/imageSearchParamOrder.behavior.test.tsx(64,9): error TS2322: Type '{ pages: { welcome: { id: string; type: "welcome"; title: string; content: string; narration: string; media: { images: never[]; videos: never[]; }; }; }; }' is not assignable to type 'CourseContentUnion'.
+src/__tests__/behavior/mediaEnhancement/imageSearchParamOrder.behavior.test.tsx(81,11): error TS2353: Object literal may only specify known properties, and 'google' does not exist in type '{ googleImageApiKey: string; googleCseId: string; youtubeApiKey: string; }'.
+src/__tests__/behavior/navigation/topBar.behavior.test.tsx(76,27): error TS2339: Property 'getProjectData' does not exist on type 'FileStorage'.
+src/__tests__/behavior/navigation/topBar.behavior.test.tsx(81,27): error TS2341: Property 'hasUnsavedChanges' is private and only accessible within class 'FileStorage'.
+src/__tests__/behavior/navigation/topBar.behavior.test.tsx(168,60): error TS2345: Argument of type '{ id: string; filePath: string; }' is not assignable to parameter of type 'void'.
+src/__tests__/behavior/projectDashboard/projectCreation.behavior.test.tsx(39,27): error TS2339: Property 'getDefaultProjectsDir' does not exist on type 'FileStorage'.
+src/__tests__/behavior/projectDashboard/projectCreation.behavior.test.tsx(48,9): error TS2353: Object literal may only specify known properties, and 'filePath' does not exist in type 'ProjectMetadata'.
+src/__tests__/behavior/projectDashboard/projectCreation.behavior.test.tsx(94,7): error TS2353: Object literal may only specify known properties, and 'filePath' does not exist in type 'ProjectMetadata'.
+src/__tests__/behavior/projectDashboard/projectCreation.behavior.test.tsx(236,9): error TS2353: Object literal may only specify known properties, and 'filePath' does not exist in type 'ProjectMetadata'.
+src/__tests__/behavior/projectDashboard/projectList.behavior.test.tsx(94,27): e

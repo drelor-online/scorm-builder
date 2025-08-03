@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+cd scorm-builder
+
+echo "🧪 Running tests..."
+npm test -- --run
+
+echo "📊 Checking coverage..."
+npm run coverage:report
+npm run coverage:check
+
+echo "🔍 Running linter..."
+npm run lint
+
+echo "📐 Checking types..."
+npm run typecheck
+
+echo "✅ All checks passed!"

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { EmptyState } from '../EmptyState'
 
 describe('EmptyState Component - Simple Tests', () => {
@@ -83,7 +83,7 @@ describe('EmptyState Component - Simple Tests', () => {
   })
 
   it('should apply custom className', () => {
-    const { container } = render(
+    render(
       <EmptyState 
         title="Custom"
         className="custom-empty-state"
@@ -112,7 +112,7 @@ describe('EmptyState Component - Simple Tests', () => {
   })
 
   it('should apply base empty-state class', () => {
-    const { container } = render(
+    render(
       <EmptyState icon={<span>📭</span>} title="Default" />
     )
 

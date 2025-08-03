@@ -1,0 +1,205 @@
+<div class="content-wrapper">
+    <div class="topic-header">
+        <h2>{{title}}</h2>
+    </div>
+    
+    <div class="two-column-layout">
+        <!-- Left Column: Content and Knowledge Check -->
+        <div class="content-column">
+            <div class="topic-text">
+                {{{content}}}
+            </div>
+            
+            {{#if has_knowledge_check}}
+            <div class="knowledge-check-container">
+                <h3>Knowledge Check</h3>
+                <!-- DEBUG: has_knowledge_check={{has_knowledge_check}} -->
+                <!-- DEBUG: First question type={{#each knowledge_check_questions}}{{#if @first}}{{type}}{{/if}}{{/each}} -->
+                
+                {{#each knowledge_check_questions}}
+                {{#eq type "multiple-choice"}}
+                <div class="kc-question-wrapper" data-question-index="{{index}}">
+                    <p class="kc-question">{{text}}</p>
+                    <div class="kc-options">
+                        {{#each options}}
+                        <label class="kc-option">
+                            <input type="radio" 
+                                   name="q{{../index}}" 
+                                   value="{{this}}"
+                                   data-correct="{{../correct_answer}}"
+                                   data-feedback="{{../explanation}}">
+                            <span>{{this}}</span>
+                        </label>
+                        {{/each}}
+                    </div>
+                    <button class="kc-submit" 
+                            data-question-index="{{index}}"
+                            onclick="window.submitMultipleChoice({{index}})">
+                        Submit Answer
+                    </button>
+                    <div id="feedback-{{index}}" class="feedback"></div>
+                </div>
+                {{else}}
+                    {{#eq type "true-false"}}
+                    <div class="kc-question-wrapper" data-question-index="{{index}}">
+                        <p class="kc-question">{{text}}</p>
+                        <div class="kc-options">
+                            <label class="kc-option">
+                                <input type="radio" 
+                                       name="q{{index}}" 
+                                       value="true"
+                                       data-correct="{{correct_answer}}"
+                                       data-feedback="{{explanation}}">
+                                <span>True</span>
+                            </label>
+                            <label class="kc-option">
+                                <input type="radio" 
+                                       name="q{{index}}" 
+                                       value="false"
+                                       data-correct="{{correct_answer}}"
+                                       data-feedback="{{explanation}}">
+                                <span>False</span>
+                            </label>
+                        </div>
+                        <button class="kc-submit" 
+                                data-question-index="{{index}}"
+                                onclick="window.submitMultipleChoice({{index}})">
+                            Submit Answer
+                        </button>
+                        <div id="feedback-{{index}}" class="feedback"></div>
+                    </div>
+                    {{else}}
+                        {{#eq type "fill-in-the-blank"}}
+                    <div class="kc-question-wrapper">
+                        <p class="kc-question">{{text}}</p>
+                        <div class="kc-input-group">
+                            <input type="text" 
+                                   id="fill-blank-{{index}}" 
+                                   class="kc-fill-blank" 
+                                   placeholder="Type your answer here">
+                            <button class="kc-submit" 
+                                    onclick="window.checkFillInBlank({{index}}, '{{correct_answer}}', '{{explanation}}', 'Not quite. Try again!', event)">
+                                Submit
+                            </button>
+                        </div>
+                        <div id="feedback-{{index}}" class="feedback"></div>
+                    </div>
+                        {{/eq}}
+                    {{/eq}}
+                {{/eq}}
+                {{else}}
+                <!-- DEBUG: No questions found in knowledge_check_questions array -->
+                {{/each}}
+            </div>
+            {{else}}
+            <!-- DEBUG: has_knowledge_check is false or undefined -->
+            {{/if}}
+        </div>
+        
+        <!-- Right Column: Media and Audio -->
+        <div class="content-column media-column">
+            {{#or image_url media}}
+            <div class="media-container">
+                {{#if image_url}}
+                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" />
+                {{/if}}
+                {{#each media}}
+                {{#eq type "image"}}
+                <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" />
+                {{else}}
+                    {{#eq type "video"}}
+                        {{#if is_youtube}}
+                        <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                            <iframe 
+                                src="{{embed_url}}" 
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                        {{else}}
+                        <video controls class="topic-video">
+                            <source src="{{url}}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        {{/if}}
+                    {{/eq}}
+                {{/eq}}
+                {{/each}}
+            </div>
+            {{/or}}
+            
+            <!-- Debug: audio_file = {{audio_file}} -->
+            {{#if audio_file}}
+            <div class="advanced-audio-player">
+                <div class="audio-controls">
+                    <button class="audio-play-pause" onclick="window.togglePlayPause('{{id}}')">
+                        <span class="play-icon">▶</span>
+                        <span class="pause-icon" style="display:none">❚❚</span>
+                    </button>
+                    
+                    <div class="audio-progress-container" onclick="window.seekAudio('{{id}}', event)">
+                        <div class="audio-progress" id="progress-{{id}}"></div>
+                    </div>
+                    
+                    <div class="audio-time">
+                        <span id="current-time-{{id}}">0:00</span> / 
+                        <span id="duration-{{id}}">0:00</span>
+                    </div>
+                </div>
+                
+                <div class="audio-secondary-controls">
+                    <button class="audio-button" onclick="window.skipBackward('{{id}}', 10)">
+                        ⏪ 10s
+                    </button>
+                    
+                    <button class="audio-button" onclick="window.skipForward('{{id}}', 10)">
+                        10s ⏩
+                    </button>
+                    
+                    <div class="audio-volume-container">
+                        <button class="audio-button" onclick="window.toggleMute('{{id}}')">
+                            <span class="volume-icon">🔊</span>
+                            <span class="mute-icon" style="display:none">🔇</span>
+                        </button>
+                        <div class="audio-volume-slider" onclick="window.setVolume('{{id}}', event)">
+                            <div class="audio-volume-fill" id="volume-{{id}}"></div>
+                        </div>
+                    </div>
+                    
+                    <select class="audio-speed-selector" onchange="window.setPlaybackSpeed('{{id}}', this.value)">
+                        <option value="0.5">0.5x</option>
+                        <option value="0.75">0.75x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="1.25">1.25x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="2">2x</option>
+                    </select>
+                    
+                    {{#if caption_file}}
+                    <button class="audio-button" onclick="window.toggleCaptions('{{id}}')">
+                        <span class="caption-icon">CC</span>
+                    </button>
+                    {{/if}}
+                </div>
+                
+                <!-- Hidden audio element -->
+                <audio id="topic-audio-{{id}}" 
+                       src="{{audio_file}}" 
+                       {{#if caption_file}}data-caption-file="{{caption_file}}"{{/if}}
+                       onloadedmetadata="window.onAudioLoaded('{{id}}')"
+                       ontimeupdate="window.onAudioTimeUpdate('{{id}}')"
+                       onended="window.onAudioEnded('{{id}}')">
+                    Your browser does not support the audio element.
+                </audio>
+                
+                {{#if caption_file}}
+                <div class="caption-display" id="caption-{{id}}" style="display:none;">
+                    <!-- Captions will be loaded here -->
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+        </div>
+    </div>
+</div>

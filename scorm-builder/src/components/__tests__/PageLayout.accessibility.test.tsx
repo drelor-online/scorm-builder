@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { axe, toHaveNoViolations } from 'jest-axe'
 import { describe, it, expect, vi } from 'vitest'
@@ -18,13 +18,13 @@ describe('PageLayout - Accessibility Tests', () => {
 
   describe('Basic accessibility', () => {
     it('should have no accessibility violations', async () => {
-      const { container } = render(<PageLayout {...defaultProps} />)
-      const results = await axe(container)
+      render(<PageLayout {...defaultProps} />)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
 
     it('should have no violations with all optional props', async () => {
-      const { container } = render(
+      render(
         <PageLayout
           {...defaultProps}
           onSettingsClick={vi.fn()}
@@ -35,7 +35,7 @@ describe('PageLayout - Accessibility Tests', () => {
           actions={<button>Custom Action</button>}
         />
       )
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
   })
@@ -174,7 +174,7 @@ describe('PageLayout - Accessibility Tests', () => {
 
   describe('Action buttons', () => {
     it('should have accessible action buttons', async () => {
-      const { container } = render(
+      render(
         <PageLayout
           {...defaultProps}
           onSettingsClick={vi.fn()}
@@ -184,7 +184,7 @@ describe('PageLayout - Accessibility Tests', () => {
         />
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       // Check button labels
@@ -218,14 +218,14 @@ describe('PageLayout - Accessibility Tests', () => {
         </div>
       )
       
-      const { container } = render(
+      render(
         <PageLayout
           {...defaultProps}
           actions={customActions}
         />
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       const actionGroup = screen.getByRole('group', { name: 'Page actions' })
@@ -239,8 +239,8 @@ describe('PageLayout - Accessibility Tests', () => {
       window.innerWidth = 375
       window.innerHeight = 667
       
-      const { container } = render(<PageLayout {...defaultProps} />)
-      const results = await axe(container)
+      render(<PageLayout {...defaultProps} />)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
   })

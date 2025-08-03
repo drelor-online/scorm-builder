@@ -1,24 +1,9 @@
 {
   "total": 128,
-  "tested": 95,
+  "tested": 112,
   "untested": [
-    "App.dashboard.tsx",
-    "components\\DebugInfo.tsx",
-    "components\\DesignSystem\\index.ts",
-    "components\\ErrorBoundary\\index.ts",
-    "components\\ErrorNotification.tsx",
-    "components\\MediaDisplay.tsx",
-    "components\\ProjectLoadingDialog.tsx",
-    "components\\RichTextEditor.tsx",
-    "components\\SCORMPackageBuilderLazy.tsx",
-    "components\\TestChecklist.tsx",
     "main.tsx",
     "mocks\\mockTauriAPI.ts",
-    "services\\mediaIdMigration.ts",
-    "services\\mediaUrl.ts",
-    "services\\MockFileStorage.ts",
-    "services\\previewGenerator.ts",
-    "services\\scormPlayerPreview.ts",
     "styles\\buttonStyles.ts",
     "test-main.tsx",
     "types\\aiPrompt.ts",
@@ -31,18 +16,14 @@
     "utils\\browserE2ETests.ts",
     "utils\\dynamicImports.ts",
     "utils\\e2eTests.ts",
-    "utils\\fileAssociation.ts",
     "utils\\performanceMonitor.ts",
-    "utils\\testRunner.ts",
-    "utils\\windowTitle.ts"
+    "utils\\testRunner.ts"
   ],
   "byCategory": {
     "App.dashboard.tsx": {
       "total": 1,
-      "tested": 0,
-      "untested": [
-        "App.dashboard.tsx"
-      ]
+      "tested": 1,
+      "untested": []
     },
     "App.lazy.tsx": {
       "total": 1,
@@ -56,18 +37,8 @@
     },
     "components": {
       "total": 56,
-      "tested": 47,
-      "untested": [
-        "components\\DebugInfo.tsx",
-        "components\\DesignSystem\\index.ts",
-        "components\\ErrorBoundary\\index.ts",
-        "components\\ErrorNotification.tsx",
-        "components\\MediaDisplay.tsx",
-        "components\\ProjectLoadingDialog.tsx",
-        "components\\RichTextEditor.tsx",
-        "components\\SCORMPackageBuilderLazy.tsx",
-        "components\\TestChecklist.tsx"
-      ]
+      "tested": 56,
+      "untested": []
     },
     "config": {
       "total": 2,
@@ -110,14 +81,8 @@
     },
     "services": {
       "total": 21,
-      "tested": 16,
-      "untested": [
-        "services\\mediaIdMigration.ts",
-        "services\\mediaUrl.ts",
-        "services\\MockFileStorage.ts",
-        "services\\previewGenerator.ts",
-        "services\\scormPlayerPreview.ts"
-      ]
+      "tested": 21,
+      "untested": []
     },
     "styles": {
       "total": 1,
@@ -147,16 +112,14 @@
     },
     "utils": {
       "total": 13,
-      "tested": 5,
+      "tested": 7,
       "untested": [
         "utils\\automatedUITests.ts",
         "utils\\browserE2ETests.ts",
         "utils\\dynamicImports.ts",
         "utils\\e2eTests.ts",
-        "utils\\fileAssociation.ts",
         "utils\\performanceMonitor.ts",
-        "utils\\testRunner.ts",
-        "utils\\windowTitle.ts"
+        "utils\\testRunner.ts"
       ]
     }
   }

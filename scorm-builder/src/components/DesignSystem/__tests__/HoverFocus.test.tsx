@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
+import { render } from '../../../test/testProviders'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Card } from '../Card'
@@ -11,7 +11,7 @@ describe('Hover and Focus States', () => {
       const variants = ['primary', 'secondary', 'tertiary', 'success', 'danger'] as const
       
       variants.forEach(variant => {
-        const { container } = render(
+        render(
           <Button variant={variant}>Test Button</Button>
         )
         
@@ -30,7 +30,7 @@ describe('Hover and Focus States', () => {
     })
 
     it('should have smooth hover transitions', () => {
-      const { container } = render(
+      render(
         <Button variant="primary">Hover me</Button>
       )
       
@@ -44,7 +44,7 @@ describe('Hover and Focus States', () => {
 
   describe('Input hover and focus states', () => {
     it('should have visible focus indicator with ring', () => {
-      const { container } = render(
+      render(
         <Input placeholder="Test input" />
       )
       
@@ -58,7 +58,7 @@ describe('Hover and Focus States', () => {
     })
 
     it('should have smooth focus transition', () => {
-      const { container } = render(
+      render(
         <Input placeholder="Test input" />
       )
       
@@ -72,7 +72,7 @@ describe('Hover and Focus States', () => {
 
   describe('Card hover states', () => {
     it('should elevate on hover with transform', () => {
-      const { container } = render(
+      render(
         <Card>
           <p>Card content</p>
         </Card>
@@ -116,7 +116,7 @@ describe('Hover and Focus States', () => {
 
   describe('Disabled state interactions', () => {
     it('should not have hover effects when disabled', () => {
-      const { container } = render(
+      render(
         <Button disabled>Disabled Button</Button>
       )
       
@@ -132,7 +132,7 @@ describe('Hover and Focus States', () => {
 
   describe('Keyboard navigation', () => {
     it('should have visible focus indicators for keyboard navigation', () => {
-      const { container } = render(
+      render(
         <div>
           <Button>First</Button>
           <Button>Second</Button>

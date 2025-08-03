@@ -1,7 +1,7 @@
-import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Pagination } from '../Pagination'
 
 // Mock the Button and Flex components
@@ -289,7 +289,7 @@ describe('Pagination', () => {
 
   describe('Style Application', () => {
     it('should apply pagination container styles', () => {
-      const { container } = render(<Pagination {...defaultProps} />)
+      render(<Pagination {...defaultProps} />)
       
       const paginationContainer = container.querySelector('.pagination-container')
       expect(paginationContainer).toHaveStyle({
@@ -300,7 +300,7 @@ describe('Pagination', () => {
     })
 
     it('should apply page number styles', () => {
-      const { container } = render(<Pagination {...defaultProps} />)
+      render(<Pagination {...defaultProps} />)
       
       // Find the span that contains the page number
       const pageSpan = container.querySelector('span')

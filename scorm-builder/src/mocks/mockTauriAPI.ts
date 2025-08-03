@@ -1,6 +1,8 @@
 // Mock Tauri API for testing
 // This provides a browser-compatible implementation of Tauri APIs
 
+import { generateProjectId } from '../utils/idGenerator'
+
 const mockStorage: {
   projects: Record<string, any>;
   currentProjectId: string | null;
@@ -37,7 +39,7 @@ const mockTauriAPI = {
         return fileId;
         
       case 'create_project':
-        const projectId = Date.now().toString();
+        const projectId = generateProjectId();
         const project = {
           id: projectId,
           name: args?.name || 'Untitled Project',
@@ -101,7 +103,7 @@ const mockTauriAPI = {
   },
   
   event: {
-    listen: (event: string, handler: Function) => {
+    listen: (event: string, _handler: Function) => {
       console.log('[Mock Tauri] Event listener registered:', event);
       return Promise.resolve(() => {
         console.log('[Mock Tauri] Event listener unregistered:', event);

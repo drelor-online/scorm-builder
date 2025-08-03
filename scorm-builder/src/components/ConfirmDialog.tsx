@@ -28,11 +28,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const getTitleColor = () => {
     switch (variant) {
       case 'danger':
-        return tokens.colors.danger.main
+        return tokens.colors.danger[500]
       case 'warning':
-        return '#fbbf24'
+        return tokens.colors.warning[400]
       case 'info':
-        return tokens.colors.primary.main
+        return tokens.colors.info[500]
       default:
         return tokens.colors.text.primary
     }

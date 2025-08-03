@@ -70,7 +70,6 @@ interface PageLayoutProps {
   description?: string
   actions?: React.ReactNode
   autoSaveIndicator?: React.ReactNode
-  coursePreview?: React.ReactNode
   isGenerating?: boolean
   onSettingsClick?: () => void
   onSave?: () => void
@@ -92,7 +91,6 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
   title,
   description,
   autoSaveIndicator,
-  coursePreview,
   isGenerating,
   onSettingsClick,
   onSave,
@@ -131,6 +129,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   type="button"
                   style={commonButtons.headerButton}
                   aria-label="Open project"
+                  data-testid="open-button"
                 >
                   Open
                 </button>
@@ -186,23 +185,19 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   type="button"
                   style={commonButtons.headerButton}
                   aria-label="Application settings"
+                  data-testid="settings-button"
                 >
                   Settings
                 </button>
               </Tooltip>
             </div>
             
-            {/* Right group: CoursePreview, Back, Next/Generate */}
+            {/* Right group: Back, Next/Generate */}
             <div data-testid="top-bar-right" style={{
               display: 'flex',
               gap: '0.5rem',
               alignItems: 'center'
             }}>
-              {coursePreview && (
-                <div data-testid="course-preview">
-                  {coursePreview}
-                </div>
-              )}
               {onBack && currentStep > 0 && (
                 <Tooltip content="Go to previous step" position="bottom">
                   <button 

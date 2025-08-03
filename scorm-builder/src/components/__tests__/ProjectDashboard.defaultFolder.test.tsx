@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+// Removed unused React import
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProjectDashboard } from '../ProjectDashboard'
 

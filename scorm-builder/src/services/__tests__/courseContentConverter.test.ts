@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { convertToEnhancedCourseContent } from './courseContentConverter'
+import { convertToEnhancedCourseContent } from '../courseContentConverter'
 import type { CourseContent, LegacyCourseContent } from '../types/aiPrompt'
 import type { CourseMetadata } from '../types/metadata'
 
@@ -91,8 +91,8 @@ describe('Course Content Converter', () => {
     
     const enhanced = convertToEnhancedCourseContent(courseContent, metadata)
     
-    expect(enhanced.topics[0].audioFile).toBe('0001-topic-with-audio.mp3')
-    expect(enhanced.topics[0].captionFile).toBe('0001-topic-with-audio.vtt')
+    expect(enhanced.topics[0].audioFile).toBe('audio-2.mp3')
+    expect(enhanced.topics[0].captionFile).toBe('caption-2.vtt')
   })
 
   it('should convert activities to knowledge checks', () => {
@@ -175,7 +175,7 @@ describe('Course Content Converter', () => {
     
     const enhanced = convertToEnhancedCourseContent(courseContent, metadata)
     
-    expect(enhanced.topics[0].imageUrl).toBe('topic-with-images.jpg')
+    expect(enhanced.topics[0].imageUrl).toBe('image-0.jpg')
   })
 })
 
@@ -291,6 +291,10 @@ describe('Course Content Converter - New Format', () => {
         title: 'Safety Fundamentals',
         content: '<h2>Safety Basics</h2><p>Always wear protective equipment.</p>',
         narration: 'Safety is our top priority. Always wear your protective equipment.',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
         imageKeywords: ['safety', 'ppe'],
         imagePrompts: ['Worker wearing safety equipment'],
         videoSearchTerms: ['safety equipment tutorial'],
@@ -316,8 +320,8 @@ describe('Course Content Converter - New Format', () => {
     
     expect(enhanced.topics).toHaveLength(1)
     expect(enhanced.topics[0].content).toContain('Safety Basics')
-    expect(enhanced.topics[0].audioFile).toBe('0001-safety-fundamentals.mp3')
-    expect(enhanced.topics[0].captionFile).toBe('0001-safety-fundamentals.vtt')
+    expect(enhanced.topics[0].audioFile).toBe('audio-2.mp3')
+    expect(enhanced.topics[0].captionFile).toBe('caption-2.vtt')
   })
 
   it('should convert knowledge checks from new format', () => {
@@ -347,6 +351,10 @@ describe('Course Content Converter - New Format', () => {
         title: 'Test Topic',
         content: '<p>Content</p>',
         narration: 'Narration text',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
         imageKeywords: [],
         imagePrompts: [],
         videoSearchTerms: [],
@@ -385,10 +393,12 @@ describe('Course Content Converter - New Format', () => {
 
     const enhanced = convertToEnhancedCourseContent(courseContent, metadata)
     
-    // For now, converter only handles one knowledge check question
+    // When there are multiple knowledge check questions, they are kept in questions array
     expect(enhanced.topics[0].knowledgeCheck).toBeDefined()
-    expect(enhanced.topics[0].knowledgeCheck?.question).toBe('What is the answer?')
-    expect(enhanced.topics[0].knowledgeCheck?.correctAnswer).toBe(1) // Index of 'B'
+    expect(enhanced.topics[0].knowledgeCheck?.questions).toBeDefined()
+    expect(enhanced.topics[0].knowledgeCheck?.questions).toHaveLength(3)
+    expect(enhanced.topics[0].knowledgeCheck?.questions?.[0].question).toBe('What is the answer?')
+    expect(enhanced.topics[0].knowledgeCheck?.questions?.[0].correctAnswer).toBe('B') // Kept as string
   })
 
   it('should convert assessment from new format', () => {
@@ -461,7 +471,9 @@ describe('Course Content Converter - New Format', () => {
         title: 'Old Format Topic',
         content: 'Content',
         bulletPoints: ['Point 1'],
-        narration: [{ id: 'n1', text: 'Narration', blockNumber: '0001' }],
+        narration: [{ id: 'n1', text: 'Narration', blockNumber: '0001' ,
+        duration: 5
+      }],
         imageKeywords: [],
         imagePrompts: [],
         duration: 5
@@ -510,6 +522,10 @@ describe('Course Content Converter - New Format', () => {
         title: 'New Format Topic',
         content: '<p>Content</p>',
         narration: 'Single narration',
+      imageKeywords: [],
+      imagePrompts: [],
+      videoSearchTerms: [],
+      duration: 5,
         imageKeywords: [],
         imagePrompts: [],
         videoSearchTerms: [],

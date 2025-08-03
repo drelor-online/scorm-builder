@@ -1,274 +1,232 @@
-import { useEffect, useCallback, useState } from 'react'
-import { fileStorage } from '../services/FileStorage'
+import { useEffect, useCallback, useState } from 'react';
+import { MockFileStorage } from '../services/MockFileStorage';
+import { FileStorage } from '../services/FileStorage';
+import { isTauriEnvironment } from '../config/environment';
+
+// Use real FileStorage in Tauri environment, MockFileStorage for browser
+const fileStorage = isTauriEnvironment() ? new FileStorage() : new MockFileStorage();
 
 export function usePersistentStorage() {
-  // Check if fileStorage is already initialized (e.g., from HMR)
-  const [isInitialized, setIsInitialized] = useState(fileStorage.isInitialized)
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(fileStorage.getCurrentProjectId())
-  const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const MAX_RETRIES = 3
-  
-  // Initialize storage singleton with retry logic
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    let mounted = true
-    let retryTimeout: NodeJS.Timeout
-    
-    async function initWithRetry() {
-      // Skip if already initialized
-      if (fileStorage.isInitialized) {
-        console.log('[usePersistentStorage] FileStorage already initialized, skipping init')
-        setIsInitialized(true)
-        setCurrentProjectId(fileStorage.getCurrentProjectId())
-        setError(null)
-        return
-      }
-      
+    async function initialize() {
       try {
-        console.log('[usePersistentStorage] Initializing FileStorage...')
-        await fileStorage.initialize()
-        if (mounted) {
-          console.log('[usePersistentStorage] FileStorage initialized:', fileStorage.isInitialized)
-          setIsInitialized(fileStorage.isInitialized)
-          setCurrentProjectId(fileStorage.getCurrentProjectId())
-          setError(null)
-        }
+        await fileStorage.initialize();
+        setIsInitialized(true);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to initialize storage'
-        console.error(`Storage initialization failed (attempt ${retryCount + 1}/${MAX_RETRIES}):`, errorMessage)
-        
-        if (mounted) {
-          setError(errorMessage)
-          setIsInitialized(false)
-          
-          // Retry with exponential backoff
-          if (retryCount < MAX_RETRIES) {
-            const delay = Math.min(1000 * Math.pow(2, retryCount), 10000) // Max 10 seconds
-            console.log(`Retrying storage initialization in ${delay}ms...`)
-            retryTimeout = setTimeout(() => {
-              setRetryCount(prev => prev + 1)
-            }, delay)
-          }
-        }
+        setError(err instanceof Error ? err.message : 'Failed to initialize storage');
       }
     }
-    
-    initWithRetry()
-    
-    return () => {
-      mounted = false
-      if (retryTimeout) clearTimeout(retryTimeout)
-    }
-  }, [retryCount])
-  
-  // Subscribe to FileStorage state changes
-  useEffect(() => {
-    if (!isInitialized) return
-    
-    const unsubscribe = fileStorage.addStateChangeListener((state) => {
-      setCurrentProjectId(state.projectId)
-    })
-    
-    return unsubscribe
-  }, [isInitialized])
-  
-  const createProject = useCallback(async (name: string, defaultFolder?: string) => {
+    initialize();
+  }, []);
+
+  const createProject = useCallback(async (name: string) => {
+    const project = await fileStorage.createProject(name);
+    setCurrentProjectId(project.id);
+    return project;
+  }, []);
+
+  const openProject = useCallback(async (projectId: string, onProgress?: (progress: any) => void) => {
     try {
-      console.log('[usePersistentStorage] createProject called with:', name, defaultFolder)
-      const project = await fileStorage.createProject(name, defaultFolder)
-      console.log('[usePersistentStorage] createProject returned:', project)
-      setCurrentProjectId(project.id)
+      // Report initial phase
+      onProgress?.({ phase: 'loading', percent: 5, message: 'Opening project file...' });
       
-      // Log state change for debug monitoring
-      if ((window as any).__debugLogStateChange) {
-        (window as any).__debugLogStateChange('project', { 
-          action: 'create', 
-          projectId: project.id, 
-          name 
-        })
+      // Load project metadata
+      onProgress?.({ phase: 'loading', percent: 10, message: 'Reading project metadata...' });
+      await fileStorage.openProject(projectId);
+      
+      // Report media loading phase
+      onProgress?.({ phase: 'media', percent: 20, message: 'Initializing media store...' });
+      
+      // Load media through MediaRegistry (which will handle the actual loading)
+      // The MediaRegistry.loadProject will be called by MediaProvider
+      // We just need to simulate the progress here based on what we know
+      
+      // Media loading is now handled by MediaRegistry
+      // Report media loading phase for UI consistency
+      onProgress?.({ 
+        phase: 'media', 
+        percent: 70, 
+        message: 'Loading media files...'
+      });
+      
+      // Small delay to show media loading progress
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Report content loading phase
+      onProgress?.({ phase: 'content', percent: 75, message: 'Loading course structure...' });
+      const courseContent = await fileStorage.getContent('course-content');
+      
+      onProgress?.({ phase: 'content', percent: 80, message: 'Loading topic content...' });
+      // Count topics if available
+      const topicCount = courseContent?.topics?.length || 0;
+      if (topicCount > 0) {
+        onProgress?.({ phase: 'content', percent: 82, message: `Loading ${topicCount} topic${topicCount > 1 ? 's' : ''}...` });
       }
       
-      return project
+      onProgress?.({ phase: 'content', percent: 85, message: 'Loading assessment data...' });
+      // Course metadata is loaded automatically with the project
+      
+      onProgress?.({ phase: 'content', percent: 90, message: 'Preparing user interface...' });
+      
+      // Report finalizing phase
+      onProgress?.({ phase: 'finalizing', percent: 95, message: 'Finalizing workspace setup...' });
+      
+      setCurrentProjectId(projectId);
+      
+      // Small delay to ensure smooth transition
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Complete
+      onProgress?.({ phase: 'finalizing', percent: 100, message: 'Project ready!' });
     } catch (error) {
-      console.error('[usePersistentStorage] createProject error:', error)
-      throw error
+      console.error('Failed to open project:', error);
+      throw error;
     }
-  }, [])
-  
-  const openProject = useCallback(async (projectId: string, onProgress?: (progress: { phase: string; percent: number; message: string; itemsLoaded?: number; totalItems?: number }) => void) => {
-    await fileStorage.openProject(projectId, onProgress)
-    setCurrentProjectId(fileStorage.getCurrentProjectId())
-    
-    // Log state change for debug monitoring
-    if ((window as any).__debugLogStateChange) {
-      (window as any).__debugLogStateChange('project', { 
-        action: 'open', 
-        projectId 
-      })
-    }
-  }, [])
-  
+  }, []);
+
   const openProjectFromFile = useCallback(async () => {
-    await fileStorage.openProjectFromFile()
-    setCurrentProjectId(fileStorage.getCurrentProjectId())
-  }, [])
-  
-  const openProjectFromPath = useCallback(async (filePath: string, options?: { skipUnsavedCheck?: boolean; onProgress?: (progress: { phase: string; percent: number; message: string; itemsLoaded?: number; totalItems?: number }) => void }) => {
-    await fileStorage.openProjectFromPath(filePath, options)
-    setCurrentProjectId(fileStorage.getCurrentProjectId())
-  }, [])
-  
+    const project = await fileStorage.loadProjectFromFile();
+    if (project) {
+      setCurrentProjectId(project.id);
+    }
+  }, []);
+
   const saveProject = useCallback(async () => {
-    await fileStorage.saveProject()
-  }, [])
-  
-  const saveProjectAs = useCallback(async () => {
-    await fileStorage.saveProjectAs()
-  }, [])
-  
+    await fileStorage.saveProject();
+  }, []);
+
   const listProjects = useCallback(async () => {
-    return fileStorage.listProjects()
-  }, [])
-  
-  const getRecentProjects = useCallback(async () => {
-    return fileStorage.getRecentProjects()
-  }, [])
-  
-  const checkForRecovery = useCallback(async () => {
-    return fileStorage.checkForRecovery()
-  }, [])
-  
-  const recoverFromBackup = useCallback(async (backupPath: string) => {
-    await fileStorage.recoverFromBackup(backupPath)
-    setCurrentProjectId(fileStorage.getCurrentProjectId())
-  }, [])
-  
-  const storeMedia = useCallback(async (
-    id: string,
-    blob: Blob,
-    mediaType: 'image' | 'video' | 'audio' | 'caption',
-    metadata?: Record<string, any>
-  ) => {
-    return fileStorage.storeMedia(id, blob, mediaType, metadata)
-  }, [])
-  
-  const storeYouTubeVideo = useCallback(async (
-    id: string,
-    youtubeUrl: string,
-    metadata?: Record<string, any>
-  ) => {
-    return fileStorage.storeYouTubeVideo(id, youtubeUrl, metadata)
-  }, [])
-  
-  const getMedia = useCallback(async (id: string) => {
-    return fileStorage.getMedia(id)
-  }, [])
-  
-  const getMediaForTopic = useCallback(async (topicId: string) => {
-    return fileStorage.getMediaForTopic(topicId)
-  }, [])
-  
-  const saveContent = useCallback(async (id: string, content: any) => {
-    await fileStorage.saveContent(id, content)
-    
-    // Log state change for debug monitoring
-    if ((window as any).__debugLogStateChange) {
-      (window as any).__debugLogStateChange('content', { 
-        action: 'save', 
-        contentId: id,
-        contentType: content?.topicId ? 'topic' : 'unknown'
-      })
-    }
-  }, [])
-  
-  const getContent = useCallback(async (id: string) => {
-    return fileStorage.getContent(id)
-  }, [])
-  
-  const saveCourseMetadata = useCallback(async (metadata: any) => {
-    return fileStorage.saveCourseMetadata(metadata)
-  }, [])
-  
-  const getCourseMetadata = useCallback(async () => {
-    return fileStorage.getCourseMetadata()
-  }, [])
-  
-  const saveAiPrompt = useCallback(async (prompt: string) => {
-    return fileStorage.saveAiPrompt(prompt)
-  }, [])
-  
-  const getAiPrompt = useCallback(async () => {
-    return fileStorage.getAiPrompt()
-  }, [])
-  
-  const saveAudioSettings = useCallback(async (settings: any) => {
-    return fileStorage.saveAudioSettings(settings)
-  }, [])
-  
-  const getAudioSettings = useCallback(async () => {
-    return fileStorage.getAudioSettings()
-  }, [])
-  
-  const saveScormConfig = useCallback(async (config: any) => {
-    return fileStorage.saveScormConfig(config)
-  }, [])
-  
-  const getScormConfig = useCallback(async () => {
-    return fileStorage.getScormConfig()
-  }, [])
-  
-  const deleteProject = useCallback(async (projectId: string, filePath?: string) => {
-    await fileStorage.deleteProject(projectId, filePath)
+    return fileStorage.listProjects();
+  }, []);
+
+  const deleteProject = useCallback(async (projectId: string) => {
+    await fileStorage.deleteProject(projectId);
     if (currentProjectId === projectId) {
-      setCurrentProjectId(null)
+      setCurrentProjectId(null);
     }
-  }, [currentProjectId])
-  
+  }, [currentProjectId]);
+
+  const storeMedia = useCallback(
+    async (id: string, blob: Blob, mediaType: 'image' | 'video' | 'audio' | 'caption', metadata?: Record<string, any>) => {
+      // Ensure required MediaMetadata fields are present
+      const fullMetadata = {
+        page_id: metadata?.page_id || '',
+        original_name: metadata?.original_name || 'unknown',
+        ...metadata,
+        type: mediaType
+      };
+      await fileStorage.storeMedia(id, blob, mediaType, fullMetadata);
+    },
+    []
+  );
+
+  const storeYouTubeVideo = useCallback(
+    async (id: string, youtubeUrl: string, metadata?: Record<string, any>) => {
+      await fileStorage.storeYouTubeVideo(id, youtubeUrl, metadata);
+    },
+    []
+  );
+
+  const getMediaForTopic = useCallback(async (topicId: string) => {
+    return fileStorage.getMediaForTopic(topicId);
+  }, []);
+
+  const getContent = useCallback(async (id: string) => {
+    return fileStorage.getContent(id);
+  }, []);
+
+  const saveContent = useCallback(async (id: string, content: any) => {
+    await fileStorage.saveContent(id, content);
+  }, []);
+
+  const getCourseMetadata = useCallback(async () => {
+    return fileStorage.courseData;
+  }, []);
+
+  const getRecentProjects = useCallback(async () => {
+    return fileStorage.getRecentProjects();
+  }, []);
+
+  const checkForRecovery = useCallback(async () => {
+    return fileStorage.checkForRecovery();
+  }, []);
+
+  const recoverFromBackup = useCallback(async (backupPath: string) => {
+    await fileStorage.recoverFromBackup(backupPath);
+  }, []);
+
+  const saveProjectAs = useCallback(async () => {
+    await fileStorage.saveProjectAs();
+  }, []);
+
   const exportProject = useCallback(async () => {
-    return fileStorage.exportProject()
-  }, [])
-  
-  const migrateFromLocalStorage = useCallback(async () => {
-    return fileStorage.migrateFromLocalStorage()
-  }, [])
-  
-  const clearRecentFilesCache = useCallback(async () => {
-    return fileStorage.clearRecentFilesCache()
-  }, [])
-  
+    return fileStorage.exportProject();
+  }, []);
+
   const importProjectFromZip = useCallback(async (zipBlob: Blob) => {
-    await fileStorage.importProjectFromZip(zipBlob)
-    setCurrentProjectId(fileStorage.getCurrentProjectId())
-  }, [])
-  
+    await fileStorage.importProjectFromZip(zipBlob);
+  }, []);
+
   const getCurrentProjectId = useCallback(() => {
-    return fileStorage.getCurrentProjectId()
-  }, [])
-  
+    return fileStorage.currentProjectId;
+  }, []);
+
   const setProjectsDirectory = useCallback((directory: string) => {
-    fileStorage.setProjectsDirectory(directory)
-  }, [])
-  
-  // Force re-initialization (for debugging)
-  const forceInitialize = useCallback(async () => {
-    console.log('[usePersistentStorage] Force initializing storage...')
-    try {
-      await fileStorage.initialize()
-      setIsInitialized(fileStorage.isInitialized)
-      setCurrentProjectId(fileStorage.getCurrentProjectId())
-      setError(null)
-      console.log('[usePersistentStorage] Force initialization complete:', fileStorage.isInitialized)
-    } catch (err) {
-      console.error('[usePersistentStorage] Force initialization failed:', err)
-      setError(err instanceof Error ? err.message : 'Failed to initialize')
-    }
-  }, [])
-  
-  // Expose for debugging
-  if (typeof window !== 'undefined') {
-    (window as any).__forceInitStorage = forceInitialize
-  }
-  
+    fileStorage.setProjectsDirectory(directory);
+  }, []);
+
+  const migrateFromLocalStorage = useCallback(async () => {
+    return fileStorage.migrateFromLocalStorage();
+  }, []);
+
+  const clearRecentFilesCache = useCallback(async () => {
+    await fileStorage.clearRecentFilesCache();
+  }, []);
+
+  // Add missing methods from interface
+  const openProjectFromPath = useCallback(async (filePath: string, options?: any) => {
+    await fileStorage.openProjectFromPath(filePath, options);
+    setCurrentProjectId(fileStorage.currentProjectId);
+  }, []);
+
+  const getMedia = useCallback(async (id: string) => {
+    // getMedia should delegate to getMediaUrl
+    return fileStorage.getMediaUrl(id);
+  }, []);
+
+  const saveCourseMetadata = useCallback(async (metadata: any) => {
+    // Update course data with new metadata
+    fileStorage.updateCourseData(metadata);
+  }, []);
+
+  const saveAiPrompt = useCallback(async (prompt: string) => {
+    await fileStorage.saveContent('aiPrompt', prompt);
+  }, []);
+
+  const getAiPrompt = useCallback(async () => {
+    return fileStorage.getContent('aiPrompt');
+  }, []);
+
+  const saveAudioSettings = useCallback(async (settings: any) => {
+    await fileStorage.saveContent('audioSettings', settings);
+  }, []);
+
+  const getAudioSettings = useCallback(async () => {
+    return fileStorage.getContent('audioSettings');
+  }, []);
+
+  const saveScormConfig = useCallback(async (config: any) => {
+    await fileStorage.saveContent('scormConfig', config);
+  }, []);
+
+  const getScormConfig = useCallback(async () => {
+    return fileStorage.getContent('scormConfig');
+  }, []);
+
   return {
     isInitialized,
     currentProjectId,
@@ -303,6 +261,6 @@ export function usePersistentStorage() {
     getCurrentProjectId,
     setProjectsDirectory,
     migrateFromLocalStorage,
-    clearRecentFilesCache
-  }
+    clearRecentFilesCache,
+  };
 }

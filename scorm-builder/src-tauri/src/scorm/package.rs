@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 use zip::write::FileOptions;
@@ -15,6 +15,12 @@ pub struct PackageContent {
 pub struct Resource {
     pub path: String,
     pub content: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StreamableResource {
+    pub zip_path: String,
+    pub file_path: PathBuf,
 }
 
 pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Result<(), String> {
@@ -62,12 +68,57 @@ pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Res
             .map_err(|e| format!("Failed to write resource {}: {}", resource.path, e))?;
     }
     
-    // Write SCORM API JavaScript file
-    let scorm_api_js = include_str!("../../assets/scorm_api.js");
-    zip.start_file("scorm_api.js", options)
-        .map_err(|e| format!("Failed to start SCORM API file: {}", e))?;
-    zip.write_all(scorm_api_js.as_bytes())
-        .map_err(|e| format!("Failed to write SCORM API: {}", e))?;
+    zip.finish()
+        .map_err(|e| format!("Failed to finish ZIP file: {}", e))?;
+    
+    Ok(())
+}
+
+pub fn create_scorm_package_streaming(
+    manifest: &str,
+    html_content: &str,
+    resources: &[Resource],
+    streamable_resources: &[StreamableResource],
+    output_path: &Path,
+) -> Result<(), String> {
+    use crate::scorm::generator::stream_file_to_zip;
+    
+    let file = std::fs::File::create(output_path)
+        .map_err(|e| format!("Failed to create output file: {}", e))?;
+    
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+    
+    // Write manifest file (only if not already provided by JavaScript)
+    if !manifest.is_empty() {
+        zip.start_file("imsmanifest.xml", options)
+            .map_err(|e| format!("Failed to start manifest file: {}", e))?;
+        zip.write_all(manifest.as_bytes())
+            .map_err(|e| format!("Failed to write manifest content: {}", e))?;
+    }
+    
+    // Write main HTML file (only if not already provided by JavaScript)
+    if !html_content.is_empty() {
+        zip.start_file("index.html", options)
+            .map_err(|e| format!("Failed to start HTML file: {}", e))?;
+        zip.write_all(html_content.as_bytes())
+            .map_err(|e| format!("Failed to write HTML content: {}", e))?;
+    }
+    
+    // Write in-memory resources
+    for resource in resources {
+        zip.start_file(&resource.path, options)
+            .map_err(|e| format!("Failed to start resource file {}: {}", resource.path, e))?;
+        zip.write_all(&resource.content)
+            .map_err(|e| format!("Failed to write resource {}: {}", resource.path, e))?;
+    }
+    
+    // Stream file resources directly from disk
+    for resource in streamable_resources {
+        stream_file_to_zip(&mut zip, &resource.file_path, &resource.zip_path)?;
+    }
     
     zip.finish()
         .map_err(|e| format!("Failed to finish ZIP file: {}", e))?;

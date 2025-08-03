@@ -2,7 +2,7 @@
  * Migration utilities for updating old block-number based IDs to new numeric IDs
  */
 
-import { generateMediaId, getPageIndex } from './idGenerator'
+import { generateMediaId, MediaType } from '../utils/idGenerator'
 
 /**
  * Map old block number to new numeric ID
@@ -35,8 +35,10 @@ export function migrateMediaId(oldId: string): string {
   if (!mapping) return oldId // Unknown block number
   
   // Generate new ID based on mapping
-  const pageIndex = getPageIndex(mapping.page, mapping.topicIndex)
-  return generateMediaId(mediaType as 'audio' | 'caption' | 'image', pageIndex)
+  const pageId = mapping.page === 'topic' && mapping.topicIndex !== undefined 
+    ? `topic-${mapping.topicIndex}` 
+    : mapping.page
+  return generateMediaId(mediaType as MediaType, pageId)
 }
 
 /**

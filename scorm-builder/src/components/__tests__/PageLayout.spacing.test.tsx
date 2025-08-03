@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../test/testProviders'
 import { describe, it, expect, vi } from 'vitest'
 import { PageLayout } from '../PageLayout'
 
@@ -10,7 +10,7 @@ describe('PageLayout - Window Edge Spacing', () => {
 
   describe('User wants comfortable spacing from window edges', () => {
     it('should have proper margins on desktop to prevent content from touching window edges', () => {
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}
@@ -40,7 +40,7 @@ describe('PageLayout - Window Edge Spacing', () => {
     })
 
     it('should have a maximum width to improve readability on wide screens', () => {
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}
@@ -68,7 +68,7 @@ describe('PageLayout - Window Edge Spacing', () => {
     })
 
     it('should center content when screen is wider than max-width', () => {
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}
@@ -107,7 +107,7 @@ describe('PageLayout - Window Edge Spacing', () => {
         })),
       })
 
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}
@@ -131,7 +131,7 @@ describe('PageLayout - Window Edge Spacing', () => {
     })
 
     it('should maintain spacing for header and footer areas', () => {
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}
@@ -171,7 +171,7 @@ describe('PageLayout - Window Edge Spacing', () => {
       ]
 
       pages.forEach(({ title, step }) => {
-        const { container } = render(
+        render(
           <PageLayout
             currentStep={step}
             totalSteps={7}
@@ -202,7 +202,7 @@ describe('PageLayout - Window Edge Spacing', () => {
 
   describe('User wants better visual hierarchy', () => {
     it('should have comfortable vertical spacing between sections', () => {
-      const { container } = render(
+      render(
         <PageLayout
           currentStep={1}
           totalSteps={7}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { Card } from './Card'
 
@@ -19,13 +19,13 @@ describe('Card Component', () => {
   })
 
   it('applies default padding', () => {
-    const { container } = render(<Card>Content</Card>)
+    render(<Card>Content</Card>)
     const card = container.firstChild
     expect(card).toHaveClass('card')
   })
 
   it('applies different padding sizes', () => {
-    const { container, rerender } = render(<Card padding="small">Content</Card>)
+    const { rerender  } = render(<Card padding="small">Content</Card>)
     expect(container.firstChild).toHaveClass('card-padding-small')
     
     rerender(<Card padding="large">Content</Card>)
@@ -33,12 +33,12 @@ describe('Card Component', () => {
   })
 
   it('applies custom className', () => {
-    const { container } = render(<Card className="custom-card">Content</Card>)
+    render(<Card className="custom-card">Content</Card>)
     expect(container.firstChild).toHaveClass('custom-card')
   })
 
   it('renders with no shadow when specified', () => {
-    const { container } = render(<Card noShadow>Content</Card>)
+    render(<Card noShadow>Content</Card>)
     expect(container.firstChild).toHaveClass('card-no-shadow')
   })
 })

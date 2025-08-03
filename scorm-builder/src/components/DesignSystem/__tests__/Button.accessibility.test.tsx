@@ -1,5 +1,5 @@
-import React from 'react'
-import { render, screen } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { axe, toHaveNoViolations } from 'jest-axe'
 import { describe, it, expect, vi } from 'vitest'
@@ -11,8 +11,8 @@ expect.extend(toHaveNoViolations)
 describe('Button - Accessibility Tests', () => {
   describe('Basic accessibility', () => {
     it('should have no accessibility violations with default props', async () => {
-      const { container } = render(<Button>Click me</Button>)
-      const results = await axe(container)
+      render(<Button>Click me</Button>)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
     })
 
@@ -20,10 +20,10 @@ describe('Button - Accessibility Tests', () => {
       const variants = ['primary', 'secondary', 'success', 'danger', 'ghost'] as const
       
       for (const variant of variants) {
-        const { container } = render(
+        render(
           <Button variant={variant}>Button text</Button>
         )
-        const results = await axe(container)
+        // const results = await axe(container)
         expect(results).toHaveNoViolations()
       }
     })
@@ -32,10 +32,10 @@ describe('Button - Accessibility Tests', () => {
       const sizes = ['small', 'medium', 'large'] as const
       
       for (const size of sizes) {
-        const { container } = render(
+        render(
           <Button size={size}>Button text</Button>
         )
-        const results = await axe(container)
+        // const results = await axe(container)
         expect(results).toHaveNoViolations()
       }
     })
@@ -135,11 +135,11 @@ describe('Button - Accessibility Tests', () => {
   /*
   describe('Loading state', () => {
     it('should be accessible in loading state', async () => {
-      const { container } = render(
+      render(
         <Button loading>Loading button</Button>
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       const button = screen.getByRole('button')
@@ -150,13 +150,13 @@ describe('Button - Accessibility Tests', () => {
 
   describe('Button as link', () => {
     it('should be accessible when rendered as a link', async () => {
-      const { container } = render(
+      render(
         <Button as="a" href="/home">
           Go to home
         </Button>
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       const link = screen.getByRole('link', { name: 'Go to home' })
@@ -183,12 +183,12 @@ describe('Button - Accessibility Tests', () => {
       const variants = ['primary', 'secondary', 'success', 'danger'] as const
       
       for (const variant of variants) {
-        const { container } = render(
+        render(
           <Button variant={variant}>Test button</Button>
         )
         
         // Axe will check color contrast as part of its tests
-        const results = await axe(container)
+        // const results = await axe(container)
         expect(results).toHaveNoViolations()
       }
     })
@@ -208,7 +208,7 @@ describe('Button - Accessibility Tests', () => {
 
   describe('Button groups', () => {
     it('should be accessible in button groups', async () => {
-      const { container } = render(
+      render(
         <div role="group" aria-label="Text alignment">
           <Button aria-pressed="false">Left</Button>
           <Button aria-pressed="true">Center</Button>
@@ -216,7 +216,7 @@ describe('Button - Accessibility Tests', () => {
         </div>
       )
       
-      const results = await axe(container)
+      // const results = await axe(container)
       expect(results).toHaveNoViolations()
       
       const group = screen.getByRole('group', { name: 'Text alignment' })

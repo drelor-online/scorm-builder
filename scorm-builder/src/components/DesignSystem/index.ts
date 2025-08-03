@@ -65,3 +65,20 @@ export type { LoadingButtonProps } from './LoadingButton'
 
 export { Pagination } from './Pagination'
 export type { PaginationProps } from './Pagination'
+
+export { Tabs, Tab } from './Tabs'
+
+export { Icon, Spinner, iconMap } from './Icons'
+export { IconButton } from './IconButton'
+export type { LucideIcon } from 'lucide-react'
+
+export { LoadingState, PageLoading, ContentLoading, FormLoading, UploadProgress } from './LoadingState'
+export type { LoadingStateProps } from './LoadingState'
+
+export { ErrorState, NetworkError, NotFoundError, PermissionError } from './ErrorState'
+export type { ErrorStateProps } from './ErrorState'
+
+// Demo components (only for development)
+export { LoadingErrorDemo } from './LoadingErrorDemo'
+export { IconDemo } from './IconDemo'
+export { TransitionsDemo } from './TransitionsDemo'

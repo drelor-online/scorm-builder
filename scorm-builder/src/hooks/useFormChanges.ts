@@ -34,10 +34,9 @@ export function useFormChanges(options: UseFormChangesOptions = {}) {
   // Attempt navigation with guard
   const attemptNavigation = (navigationCallback: () => void) => {
     if (hasChanges) {
-      const shouldNavigate = window.confirm('You have unsaved changes. Are you sure you want to leave?')
-      if (shouldNavigate) {
-        navigationCallback()
-      }
+      // Store the pending navigation and show warning
+      setPendingNavigation(() => navigationCallback)
+      setShowNavigationWarning(true)
       if (onNavigationAttempt) {
         onNavigationAttempt()
       }

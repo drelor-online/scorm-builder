@@ -1,11 +1,11 @@
-import React from 'react'
-import { render } from '@testing-library/react'
+// Removed unused React import
+import { render } from '../../test/testProviders'
 import '@testing-library/jest-dom'
 
 describe('Padding Fixes Tests', () => {
   describe('Button spacing improvements', () => {
     it('should have adequate spacing between buttons in groups', () => {
-      const { container } = render(
+      render(
         <div className="button-group button-group-gap-medium">
           <button>Button 1</button>
           <button>Button 2</button>
@@ -17,7 +17,7 @@ describe('Padding Fixes Tests', () => {
     })
 
     it('should have proper spacing in modal footers', () => {
-      const { container } = render(
+      render(
         <div className="modal-footer" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
           <button>Cancel</button>
           <button>Confirm</button>
@@ -32,7 +32,7 @@ describe('Padding Fixes Tests', () => {
 
   describe('Form field spacing improvements', () => {
     it('should have consistent vertical spacing between form fields', () => {
-      const { container } = render(
+      render(
         <div className="form-section">
           <div className="input-wrapper" style={{ marginBottom: '1.5rem' }}>
             <input type="text" />
@@ -53,7 +53,7 @@ describe('Padding Fixes Tests', () => {
 
   describe('Section padding improvements', () => {
     it('should have adequate padding in page sections', () => {
-      const { container } = render(
+      render(
         <section className="section" style={{ padding: '2rem 0' }}>
           <h2>Section Title</h2>
           <p>Section content</p>
@@ -68,7 +68,7 @@ describe('Padding Fixes Tests', () => {
 
   describe('Card padding enhancements', () => {
     it('should use enhanced padding for complex content', () => {
-      const { container } = render(
+      render(
         <div className="card enhanced-padding">
           <h3>Card Title</h3>
           <p>Card content with multiple elements</p>
@@ -83,7 +83,7 @@ describe('Padding Fixes Tests', () => {
 
   describe('Action bar spacing', () => {
     it('should have proper spacing between action buttons', () => {
-      const { container } = render(
+      render(
         <div className="action-bar" style={{ display: 'flex', gap: '1rem' }}>
           <button>Action 1</button>
           <button>Action 2</button>
@@ -99,7 +99,7 @@ describe('Padding Fixes Tests', () => {
 
   describe('Touch target sizes', () => {
     it('should have minimum height for interactive elements', () => {
-      const { container } = render(
+      render(
         <button style={{ minHeight: '44px', padding: '0.75rem 1.5rem' }}>
           Click Me
         </button>

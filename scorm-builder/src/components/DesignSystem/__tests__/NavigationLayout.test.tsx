@@ -1,12 +1,12 @@
-import React from 'react'
-import { render, screen, within } from '@testing-library/react'
+// Removed unused React import
+import { render, screen } from '../../../test/testProviders'
 import '@testing-library/jest-dom'
 
 // Test for navigation stepper position
 describe('Navigation Layout', () => {
   describe('Stepper Position', () => {
     it('should position the stepper at the top of the page below the header', () => {
-      const { container } = render(
+      render(
         <div className="app-container">
           <header className="app-header">
             <button>Open</button>
@@ -41,7 +41,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should maintain stepper visibility when scrolling', () => {
-      const { container } = render(
+      render(
         <div className="app-container">
           <div className="stepper-container sticky">
             <div className="stepper">
@@ -56,7 +56,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have proper spacing between header and stepper', () => {
-      const { container } = render(
+      render(
         <div className="app-container">
           <header className="app-header">Header</header>
           <div className="stepper-container">Stepper</div>
@@ -100,7 +100,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should position navigation buttons consistently', () => {
-      const { container } = render(
+      render(
         <div className="page-container">
           <div className="navigation-buttons">
             <button className="btn-secondary navigation-back">Back</button>
@@ -121,7 +121,7 @@ describe('Navigation Layout', () => {
 
   describe('Card Padding and Spacing', () => {
     it('should have increased padding inside cards', () => {
-      const { container } = render(
+      render(
         <div className="card enhanced-padding">
           <h2>Card Title</h2>
           <p>Card content</p>
@@ -136,7 +136,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have consistent spacing between cards', () => {
-      const { container } = render(
+      render(
         <div className="card-grid">
           <div className="card">Card 1</div>
           <div className="card">Card 2</div>
@@ -152,7 +152,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have proper spacing for nested content in cards', () => {
-      const { container } = render(
+      render(
         <div className="card enhanced-padding">
           <div className="card-section">Section 1</div>
           <div className="card-section">Section 2</div>
@@ -171,7 +171,7 @@ describe('Navigation Layout', () => {
 
   describe('Narration Block Button Design', () => {
     it('should have improved visual hierarchy for narration buttons', () => {
-      const { container } = render(
+      render(
         <div className="narration-block">
           <button className="narration-add-button">
             <span className="icon">+</span>
@@ -190,7 +190,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have proper spacing between narration buttons', () => {
-      const { container } = render(
+      render(
         <div className="narration-actions">
           <button className="narration-button">Add Text</button>
           <button className="narration-button">Add Code</button>
@@ -208,7 +208,7 @@ describe('Navigation Layout', () => {
 
   describe('Image Grid Aspect Ratios', () => {
     it('should maintain consistent aspect ratios in image grid', () => {
-      const { container } = render(
+      render(
         <div className="image-grid">
           <div className="image-item">
             <img src="test1.jpg" alt="Test 1" />
@@ -229,7 +229,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have consistent image sizing in grid', () => {
-      const { container } = render(
+      render(
         <div className="image-grid">
           <div className="image-item">
             <img src="test.jpg" alt="Test" />
@@ -248,7 +248,7 @@ describe('Navigation Layout', () => {
 
   describe('Button Visual Hierarchy', () => {
     it('should use color to indicate button importance', () => {
-      const { container } = render(
+      render(
         <div>
           <button className="btn btn-primary">Primary Action</button>
           <button className="btn btn-secondary">Secondary Action</button>
@@ -281,7 +281,7 @@ describe('Navigation Layout', () => {
     })
 
     it('should have consistent button sizing', () => {
-      const { container } = render(
+      render(
         <button className="btn btn-primary">Action</button>
       )
 

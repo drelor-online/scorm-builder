@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test/testProviders'
 import { describe, it, expect } from 'vitest'
 import { PageContainer, Section, Flex, Grid } from './Layout'
 
@@ -10,12 +10,12 @@ describe('Layout Components', () => {
     })
 
     it('applies max width constraint', () => {
-      const { container } = render(<PageContainer>Content</PageContainer>)
+      render(<PageContainer>Content</PageContainer>)
       expect(container.firstChild).toHaveClass('page-container')
     })
 
     it('applies custom className', () => {
-      const { container } = render(<PageContainer className="custom">Content</PageContainer>)
+      render(<PageContainer className="custom">Content</PageContainer>)
       expect(container.firstChild).toHaveClass('custom')
     })
   })
@@ -33,14 +33,14 @@ describe('Layout Components', () => {
     })
 
     it('applies different spacing', () => {
-      const { container } = render(<Section spacing="large">Content</Section>)
+      render(<Section spacing="large">Content</Section>)
       expect(container.firstChild).toHaveClass('section-spacing-large')
     })
   })
 
   describe('Flex', () => {
     it('renders children in flex container', () => {
-      const { container } = render(
+      render(
         <Flex>
           <div>Item 1</div>
           <div>Item 2</div>
@@ -50,31 +50,31 @@ describe('Layout Components', () => {
     })
 
     it('applies different directions', () => {
-      const { container } = render(<Flex direction="column">Content</Flex>)
+      render(<Flex direction="column">Content</Flex>)
       expect(container.firstChild).toHaveClass('flex-column')
     })
 
     it('applies gap sizes', () => {
-      const { container } = render(<Flex gap="large">Content</Flex>)
+      render(<Flex gap="large">Content</Flex>)
       expect(container.firstChild).toHaveClass('flex-gap-large')
     })
 
     it('applies alignment and justification', () => {
-      const { container } = render(
+      render(
         <Flex align="center" justify="space-between">Content</Flex>
       )
       expect(container.firstChild).toHaveClass('flex-align-center', 'flex-justify-space-between')
     })
 
     it('wraps content when specified', () => {
-      const { container } = render(<Flex wrap>Content</Flex>)
+      render(<Flex wrap>Content</Flex>)
       expect(container.firstChild).toHaveClass('flex-wrap')
     })
   })
 
   describe('Grid', () => {
     it('renders children in grid container', () => {
-      const { container } = render(
+      render(
         <Grid>
           <div>Item 1</div>
           <div>Item 2</div>
@@ -84,17 +84,17 @@ describe('Layout Components', () => {
     })
 
     it('applies different column counts', () => {
-      const { container } = render(<Grid cols={3}>Content</Grid>)
+      render(<Grid cols={3}>Content</Grid>)
       expect(container.firstChild).toHaveClass('grid-cols-3')
     })
 
     it('applies gap sizes', () => {
-      const { container } = render(<Grid gap="large">Content</Grid>)
+      render(<Grid gap="large">Content</Grid>)
       expect(container.firstChild).toHaveClass('grid-gap-large')
     })
 
     it('applies responsive columns', () => {
-      const { container } = render(<Grid cols={{ sm: 1, md: 2, lg: 3 }}>Content</Grid>)
+      render(<Grid cols={{ sm: 1, md: 2, lg: 3 }}>Content</Grid>)
       expect(container.firstChild).toHaveClass('grid-cols-sm-1', 'grid-cols-md-2', 'grid-cols-lg-3')
     })
   })

@@ -1,5 +1,6 @@
 import React from 'react'
 import { tokens } from './designTokens'
+import './transitions.css'
 
 export interface AlertProps {
   variant?: 'info' | 'success' | 'warning' | 'error'
@@ -14,24 +15,24 @@ export const Alert: React.FC<AlertProps> = ({
 }) => {
   const variants = {
     info: {
-      backgroundColor: 'rgba(63, 63, 70, 0.5)',
-      borderColor: tokens.colors.secondary.border,
-      color: tokens.colors.gray[300]
+      backgroundColor: tokens.colors.alert.info.background,
+      borderColor: tokens.colors.alert.info.border,
+      color: tokens.colors.alert.info.text
     },
     success: {
-      backgroundColor: 'rgba(34, 197, 94, 0.1)',
-      borderColor: '#22c55e',
-      color: '#86efac'
+      backgroundColor: tokens.colors.alert.success.background,
+      borderColor: tokens.colors.alert.success.border,
+      color: tokens.colors.alert.success.text
     },
     warning: {
-      backgroundColor: 'rgba(251, 191, 36, 0.1)',
-      borderColor: '#fbbf24',
-      color: '#fde68a'
+      backgroundColor: tokens.colors.alert.warning.background,
+      borderColor: tokens.colors.alert.warning.border,
+      color: tokens.colors.alert.warning.text
     },
     error: {
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
-      borderColor: '#ef4444',
-      color: '#fca5a5'
+      backgroundColor: tokens.colors.alert.danger.background,
+      borderColor: tokens.colors.alert.danger.border,
+      color: tokens.colors.alert.danger.text
     }
   }
 
@@ -40,14 +41,17 @@ export const Alert: React.FC<AlertProps> = ({
   return (
     <div 
       role="alert"
-      className={`alert alert-${variant} ${className}`}
+      className={`alert alert-${variant} ${className} animate-fadeInDown notification-slide`}
       style={{
-        padding: tokens.spacing.lg,
+        padding: `${tokens.spacing.lg} ${tokens.spacing.xl}`,
+        marginTop: tokens.spacing.lg,
+        marginBottom: tokens.spacing.xl,
         borderRadius: tokens.borderRadius.md,
         border: `1px solid ${variantStyles.borderColor}`,
         backgroundColor: variantStyles.backgroundColor,
         color: variantStyles.color,
-        fontSize: tokens.typography.fontSize.sm
+        fontSize: tokens.typography.fontSize.sm,
+        lineHeight: tokens.typography.lineHeight.relaxed
       }}
     >
       {children}

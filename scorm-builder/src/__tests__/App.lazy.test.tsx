@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen , waitFor } from './../test/testProviders'
 import App from '../App.lazy'
 
 // Mock the lazy loaded components
-vi.mock('@/components/CourseSeedInputRefactored', () => ({
+vi.mock('@/components/CourseSeedInput', () => ({
   CourseSeedInput: vi.fn(() => <div data-testid="course-seed-input">CourseSeedInput</div>)
 }))
 
@@ -12,11 +11,11 @@ vi.mock('@/components/AIPromptGenerator', () => ({
   AIPromptGenerator: vi.fn(() => <div data-testid="ai-prompt-generator">AIPromptGenerator</div>)
 }))
 
-vi.mock('@/components/JSONImportValidatorRefactored', () => ({
+vi.mock('@/components/JSONImportValidator', () => ({
   JSONImportValidator: vi.fn(() => <div data-testid="json-import-validator">JSONImportValidator</div>)
 }))
 
-vi.mock('./components/MediaEnhancementWizardRefactored', () => ({
+vi.mock('./components/MediaEnhancementWizard', () => ({
   MediaEnhancementWizard: vi.fn(() => <div data-testid="media-enhancement-wizard">MediaEnhancementWizard</div>)
 }))
 
@@ -38,7 +37,7 @@ describe('App with Lazy Loading', () => {
   })
 
   it('should show loading state while component is being loaded', async () => {
-    const { container } = render(<App />)
+    render(<App />)
     
     // Should show loading component initially
     expect(screen.getByText(/Loading component.../i)).toBeInTheDocument()
@@ -53,7 +52,7 @@ describe('App with Lazy Loading', () => {
   })
 
   it('should lazy load components only when needed', async () => {
-    const { rerender } = render(<App />)
+    render(<App />);
     
     // Wait for initial component
     await waitFor(() => {
@@ -100,13 +99,7 @@ describe('App with Lazy Loading', () => {
     vi.useFakeTimers()
     
     // Mock dynamic imports
-    const importSpy = vi.spyOn(global, 'import' as any).mockImplementation((path: string) => {
-      if (path.includes('spaceEfficientScormGenerator')) {
-        return Promise.resolve({ generateSpaceEfficientSCORM12Buffer: vi.fn() })
-      }
-      if (path.includes('courseContentConverter')) {
-        return Promise.resolve({ convertToEnhancedCourseContent: vi.fn() })
-      }
+    const importSpy = vi.spyOn(global, 'import' as any).mockImplementation(() => {
       return Promise.resolve({})
     })
     

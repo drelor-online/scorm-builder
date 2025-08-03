@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Button, Flex } from './DesignSystem'
+import { Card, Button, Flex, IconButton } from './DesignSystem'
+import { Check, X, ArrowRight, Edit2 } from 'lucide-react'
 import { logMemoryUsage } from '../utils/testRunner'
 
 interface TestItem {
@@ -259,37 +260,41 @@ export const TestChecklist: React.FC = () => {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <Button
-                    size="small"
-                    variant={test.status === 'pass' ? 'success' : 'primary'}
+                  <IconButton
+                    size="sm"
+                    icon={Check}
+                    variant={test.status === 'pass' ? 'success' : 'secondary'}
                     onClick={() => updateTestStatus(test.id, 'pass')}
-                  >
-                    ✓
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={test.status === 'fail' ? 'danger' : 'primary'}
+                    tooltip="Mark as passed"
+                    ariaLabel="Mark test as passed"
+                  />
+                  <IconButton
+                    size="sm"
+                    icon={X}
+                    variant={test.status === 'fail' ? 'danger' : 'secondary'}
                     onClick={() => updateTestStatus(test.id, 'fail')}
-                  >
-                    ✗
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={test.status === 'skip' ? 'secondary' : 'primary'}
+                    tooltip="Mark as failed"
+                    ariaLabel="Mark test as failed"
+                  />
+                  <IconButton
+                    size="sm"
+                    icon={ArrowRight}
+                    variant={test.status === 'skip' ? 'primary' : 'secondary'}
                     onClick={() => updateTestStatus(test.id, 'skip')}
-                  >
-                    →
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="secondary"
+                    tooltip="Skip test"
+                    ariaLabel="Skip test"
+                  />
+                  <IconButton
+                    size="sm"
+                    icon={Edit2}
+                    variant="ghost"
                     onClick={() => {
                       setShowNotes(test.id)
                       setNoteText(test.notes || '')
                     }}
-                  >
-                    📝
-                  </Button>
+                    tooltip="Add notes"
+                    ariaLabel="Add notes to test"
+                  />
                 </div>
               </Flex>
 
