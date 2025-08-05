@@ -57,6 +57,10 @@ pub struct Question {
     pub correct_answer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correct_feedback: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incorrect_feedback: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

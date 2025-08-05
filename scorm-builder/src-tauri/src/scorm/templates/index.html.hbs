@@ -41,15 +41,30 @@
     
     <!-- Main Content Area -->
     <main class="main-area">
-        <!-- Fullscreen Toggle -->
-        <button class="fullscreen-toggle" onclick="toggleFullscreen()">
-            <span class="fullscreen-icon">⛶</span>
-            <span class="exit-fullscreen-icon" style="display:none">✕</span>
-        </button>
-        
         <!-- Header -->
         <header class="header">
             <h1>{{course_title}}</h1>
+            
+            <!-- Header Toolbar -->
+            <div class="header-toolbar">
+                <!-- Audio Autoplay Toggle -->
+                <button class="audio-autoplay-toggle" onclick="toggleAudioAutoplay()" title="Toggle audio autoplay">
+                    <span class="autoplay-icon">🔊</span>
+                    <span class="autoplay-label">Autoplay</span>
+                </button>
+                
+                <!-- Exit Course Button -->
+                <button class="exit-course-button" onclick="exitCourse()" title="Exit Course">
+                    <span class="exit-icon">🚪</span>
+                    <span class="exit-label">Exit Course</span>
+                </button>
+                
+                <!-- Fullscreen Toggle -->
+                <button class="fullscreen-toggle" onclick="toggleFullscreen()">
+                    <span class="fullscreen-icon">⛶</span>
+                    <span class="exit-fullscreen-icon" style="display:none">✕</span>
+                </button>
+            </div>
         </header>
         
         <!-- Content Container -->
@@ -93,6 +108,47 @@
                 window.API.LMSFinish("");
             }
         });
+        
+        // Exit course functionality
+        function exitCourse() {
+            if (confirm('Are you sure you want to exit the course? Your progress has been saved.')) {
+                if (window.API) {
+                    try {
+                        // Set session time if available
+                        if (window.getSessionTime) {
+                            const sessionTime = window.getSessionTime();
+                            window.API.LMSSetValue('cmi.core.session_time', sessionTime);
+                            console.log('[SCORM] Session time:', sessionTime);
+                        }
+                        
+                        // Set exit status for proper session termination
+                        window.API.LMSSetValue('cmi.core.exit', 'suspend');
+                        console.log('[SCORM] Set exit status to suspend');
+                        
+                        // Commit any pending data
+                        window.API.LMSCommit('');
+                        console.log('[SCORM] Final commit before exit');
+                        
+                        // Properly close the SCORM session
+                        const result = window.API.LMSFinish('');
+                        console.log('[SCORM] LMSFinish result:', result);
+                        
+                        // Some LMSs handle window closing, others need manual close
+                        setTimeout(() => {
+                            window.close();
+                            // Fallback if window.close() doesn't work
+                            window.location.href = 'about:blank';
+                        }, 500);
+                    } catch (e) {
+                        console.error('[SCORM] Error during exit:', e);
+                        window.close();
+                    }
+                } else {
+                    // No SCORM API, just close
+                    window.close();
+                }
+            }
+        }
         
         // Fullscreen toggle functionality
         function toggleFullscreen() {

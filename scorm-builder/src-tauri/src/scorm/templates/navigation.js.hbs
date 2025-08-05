@@ -4,12 +4,100 @@
 (function() {
     'use strict';
     
+    // Session time tracking
+    const sessionStartTime = new Date();
+    
+    // Calculate session time in SCORM format (HH:MM:SS.SS)
+    window.getSessionTime = function() {
+        const now = new Date();
+        const elapsedMs = now - sessionStartTime;
+        const totalSeconds = Math.floor(elapsedMs / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const centiseconds = Math.floor((elapsedMs % 1000) / 10);
+        
+        const pad = (num, size) => num.toString().padStart(size, '0');
+        return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)}.${pad(centiseconds, 2)}`;
+    }
+    
+    // SCORM API Detection and Initialization
+    function findSCORMAPI(win) {
+        let attempts = 0;
+        while ((!win.API && !win.API_1484_11) && (win.parent) && (win.parent != win) && (attempts <= 7)) {
+            attempts++;
+            win = win.parent;
+        }
+        // Return whichever API was found (SCORM 1.2 or 2004)
+        return win.API || win.API_1484_11;
+    }
+    
+    // Initialize SCORM API
+    window.API = window.API || findSCORMAPI(window);
+    if (!window.API) {
+        console.warn('[SCORM] No LMS API found - running in standalone mode');
+    } else {
+        console.log('[SCORM] LMS API detected successfully');
+        // Initialize lesson
+        try {
+            window.API.LMSInitialize('');
+            window.API.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+            window.API.LMSCommit('');
+        } catch (e) {
+            console.error('[SCORM] Failed to initialize:', e);
+        }
+        
+        // Initialize lesson location
+        try {
+            window.API.LMSSetValue('cmi.core.lesson_location', 'course-start');
+            window.API.LMSCommit('');
+        } catch (e) {
+            console.warn('[SCORM] Could not set initial lesson location:', e);
+        }
+        
+        // Set up beforeunload handler to properly close SCORM session
+        window.addEventListener('beforeunload', function(e) {
+            console.log('[SCORM] Page unloading - saving data');
+            try {
+                // Set session time
+                const sessionTime = window.getSessionTime();
+                window.API.LMSSetValue('cmi.core.session_time', sessionTime);
+                console.log('[SCORM] Session time:', sessionTime);
+                
+                // Save current location
+                if (window.currentPage) {
+                    window.API.LMSSetValue('cmi.core.lesson_location', window.currentPage);
+                }
+                
+                // Try to save any pending data
+                window.API.LMSCommit('');
+                
+                // Use sendBeacon for modern browsers (works even when page is closing)
+                if (navigator.sendBeacon && window.API) {
+                    const data = new FormData();
+                    data.append('action', 'scorm_finish');
+                    data.append('session_id', window.API.LMSGetValue('cmi.core.session_id') || '');
+                    
+                    // This will complete even if page closes
+                    navigator.sendBeacon(window.location.href, data);
+                }
+                
+                // Traditional approach as fallback
+                window.API.LMSFinish('');
+            } catch (error) {
+                console.error('[SCORM] Error during unload:', error);
+            }
+        });
+    }
+    
     // Initialize navigation state
     window.currentPage = window.currentPage || 'welcome';
     window.completedPages = window.completedPages || new Set();
     window.courseStructure = window.courseStructure || [];
     window.knowledgeCheckAttempts = window.knowledgeCheckAttempts || {};
     window.answeredQuestions = window.answeredQuestions || {};
+    window.assessmentAttempts = window.assessmentAttempts || 0;
+    window.assessmentData = window.assessmentData || { attempts: 0, scores: [], lastAnswers: {} };
     
     // Course structure from Rust
     const COURSE_PAGES = [
@@ -72,24 +160,59 @@
             return false;
         }
         
-        // For fill-in-blank questions
+        // Check for fill-in-blank questions
         const fillInBlanks = document.querySelectorAll('.kc-fill-blank');
-        for (let input of fillInBlanks) {
-            const questionId = input.id;
+        let hasFillInBlanks = fillInBlanks.length > 0;
+        let fillInBlanksAnswered = true;
+        
+        for (let i = 0; i < fillInBlanks.length; i++) {
+            const questionId = `${window.currentPage}_fill-blank-${i}`;
             if (!window.answeredQuestions[questionId]) {
                 console.log('[SCORM Navigation] Blocking - unanswered fill-in-blank:', questionId);
-                return true;
+                fillInBlanksAnswered = false;
+                break;
             }
         }
         
-        // For multiple choice questions
-        const mcQuestions = document.querySelectorAll('.kc-question');
+        // Check for multiple choice questions (including true/false)
+        // But exclude fill-in-blank questions which also have .kc-question class
+        const allQuestions = document.querySelectorAll('.kc-question');
+        const fillInBlankQuestions = document.querySelectorAll('.kc-question-wrapper[data-question-index] .kc-fill-blank');
+        const mcQuestions = [];
+        
+        // Filter out fill-in-blank questions
+        allQuestions.forEach((q, index) => {
+            const wrapper = q.closest('.kc-question-wrapper');
+            if (!wrapper || !wrapper.querySelector('.kc-fill-blank')) {
+                mcQuestions.push(q);
+            }
+        });
+        
+        let hasMCQuestions = mcQuestions.length > 0;
+        let mcQuestionsAnswered = true;
+        
         for (let i = 0; i < mcQuestions.length; i++) {
             const questionKey = `${window.currentPage}_q${i}`;
             if (!window.answeredQuestions[questionKey]) {
                 console.log('[SCORM Navigation] Blocking - unanswered MC question:', questionKey);
-                return true;
+                mcQuestionsAnswered = false;
+                break;
             }
+        }
+        
+        // If page has only fill-in-blanks, check only those
+        if (hasFillInBlanks && !hasMCQuestions) {
+            return !fillInBlanksAnswered;
+        }
+        
+        // If page has only MC questions, check only those
+        if (hasMCQuestions && !hasFillInBlanks) {
+            return !mcQuestionsAnswered;
+        }
+        
+        // If page has both types, both must be answered
+        if (hasFillInBlanks && hasMCQuestions) {
+            return !fillInBlanksAnswered || !mcQuestionsAnswered;
         }
         
         return false;
@@ -115,8 +238,13 @@
         for (let i = fromIndex; i < toIndex; i++) {
             const pageId = COURSE_PAGES[i];
             if (PAGES_WITH_KNOWLEDGE_CHECKS[pageId]) {
-                const questionKey = `${pageId}_q0`;
-                if (!window.answeredQuestions[questionKey] && !window.answeredQuestions[`fill-blank-0`]) {
+                // Check if this page has unanswered multiple choice questions
+                const mcQuestionKey = `${pageId}_q0`;
+                // Check if this page has unanswered fill-in-blank questions
+                const fillBlankKey = `${pageId}_fill-blank-0`;
+                
+                // Block if either type of question is not answered
+                if (!window.answeredQuestions[mcQuestionKey] && !window.answeredQuestions[fillBlankKey]) {
                     return true;
                 }
             }
@@ -249,6 +377,9 @@
     window.submitMultipleChoice = function(questionIndex) {
         console.log('[SCORM Knowledge Check] Submit multiple choice:', questionIndex);
         
+        // Get question wrapper to read feedback data
+        const questionWrapper = document.querySelector(`[data-question-index="${questionIndex}"]`);
+        
         // Get selected answer
         const selectedInput = document.querySelector(`input[name="q${questionIndex}"]:checked`);
         if (!selectedInput) {
@@ -263,8 +394,8 @@
         }
         
         const selectedValue = selectedInput.value;
-        const correctAnswer = selectedInput.dataset.correct;
-        const feedback = selectedInput.dataset.feedback;
+        const correctAnswer = questionWrapper ? questionWrapper.dataset.correctAnswer : '';
+        const feedback = questionWrapper ? questionWrapper.dataset.feedback : '';
         const isCorrect = selectedValue === correctAnswer;
         
         console.log('[SCORM Knowledge Check] Answer submitted:', {
@@ -294,18 +425,27 @@
         // Show feedback
         const feedbackElement = document.getElementById(`feedback-${questionIndex}`);
         if (feedbackElement) {
+            // Get custom feedback from data attributes
+            const correctFeedback = questionWrapper ? questionWrapper.dataset.correctFeedback : '';
+            const incorrectFeedback = questionWrapper ? questionWrapper.dataset.incorrectFeedback : '';
+            
             if (isCorrect) {
-                feedbackElement.textContent = feedback || 'Correct!';
+                feedbackElement.textContent = correctFeedback || feedback || 'Correct!';
                 feedbackElement.className = 'feedback correct';
             } else {
-                feedbackElement.textContent = `Incorrect. The correct answer is ${correctAnswer}.`;
+                // Use custom incorrect feedback if available, otherwise show the correct answer
+                if (incorrectFeedback && incorrectFeedback !== 'Not quite. Try again!') {
+                    feedbackElement.textContent = incorrectFeedback;
+                } else {
+                    feedbackElement.textContent = `Incorrect. The correct answer is ${correctAnswer}.`;
+                }
                 feedbackElement.className = 'feedback incorrect';
             }
             feedbackElement.style.display = 'block';
         }
         
         // Disable submit button
-        const submitButton = document.querySelector(`[data-question-index="${questionIndex}"]`);
+        const submitButton = document.querySelector(`button[data-question-index="${questionIndex}"]`);
         if (submitButton) {
             submitButton.disabled = true;
             submitButton.textContent = 'Answer Submitted';
@@ -340,8 +480,8 @@
             isCorrect
         });
         
-        // Mark as answered
-        window.answeredQuestions[`fill-blank-${index}`] = true;
+        // Mark as answered with page-specific ID
+        window.answeredQuestions[`${window.currentPage}_fill-blank-${index}`] = true;
         
         // Show feedback
         const feedbackElement = document.getElementById(`feedback-${index}`);
@@ -349,6 +489,195 @@
             feedbackElement.textContent = isCorrect ? correctFeedback : incorrectFeedback;
             feedbackElement.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
             feedbackElement.style.display = 'block';
+        }
+        
+        // Update navigation state
+        updateNavigationState();
+    };
+    
+    // New function that reads from data attributes to avoid JavaScript escaping issues
+    window.submitFillInBlank = function(index, event) {
+        if (event) event.preventDefault();
+        
+        const wrapper = document.querySelector(`[data-question-index="${index}"]`);
+        const input = document.getElementById(`fill-blank-${index}`);
+        
+        if (!input || !wrapper) {
+            console.error('[SCORM Knowledge Check] Fill-in-blank elements not found:', index);
+            return;
+        }
+        
+        const userAnswer = input.value.trim().toLowerCase();
+        const correctAnswer = (wrapper.dataset.correctAnswer || '').toLowerCase();
+        const isCorrect = userAnswer === correctAnswer;
+        
+        // Debug: Log all data attributes
+        console.log('[SCORM Knowledge Check] Data attributes:', {
+            correctAnswer: wrapper.dataset.correctAnswer,
+            correctFeedback: wrapper.dataset.correctFeedback,
+            incorrectFeedback: wrapper.dataset.incorrectFeedback
+        });
+        
+        console.log('[SCORM Knowledge Check] Fill-in-blank submitted:', {
+            index,
+            userAnswer,
+            correctAnswer,
+            isCorrect
+        });
+        
+        // Mark as answered with page-specific ID
+        window.answeredQuestions[`${window.currentPage}_fill-blank-${index}`] = true;
+        
+        // Get feedback from data attributes
+        const correctFeedback = wrapper.dataset.correctFeedback || 'Correct!';
+        const incorrectFeedback = wrapper.dataset.incorrectFeedback || 'Not quite. Try again!';
+        
+        console.log('[SCORM Knowledge Check] Selected feedback:', isCorrect ? correctFeedback : incorrectFeedback);
+        
+        // Show feedback
+        const feedbackElement = document.getElementById(`feedback-${index}`);
+        if (feedbackElement) {
+            feedbackElement.textContent = isCorrect ? correctFeedback : incorrectFeedback;
+            feedbackElement.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
+            feedbackElement.style.display = 'block';
+        }
+        
+        // Disable submit button
+        const submitButton = wrapper.querySelector('.kc-submit');
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Answer Submitted';
+        }
+        
+        // Update navigation state
+        updateNavigationState();
+    };
+    
+    // Submit all knowledge checks on the page at once
+    window.submitAllKnowledgeChecks = function() {
+        console.log('[SCORM Navigation] Submitting all knowledge checks on page');
+        
+        const knowledgeCheckContainer = document.querySelector('.knowledge-check-container');
+        if (!knowledgeCheckContainer) {
+            console.error('[SCORM Navigation] Knowledge check container not found');
+            return;
+        }
+        
+        // Find all question wrappers
+        const questions = knowledgeCheckContainer.querySelectorAll('.kc-question-wrapper');
+        let allAnswered = true;
+        
+        questions.forEach((wrapper, index) => {
+            // Check if it's a multiple choice or true/false question
+            const radioInputs = wrapper.querySelectorAll('input[type="radio"]');
+            if (radioInputs.length > 0) {
+                // Check if any radio is selected
+                const selectedInput = wrapper.querySelector('input[type="radio"]:checked');
+                if (!selectedInput) {
+                    allAnswered = false;
+                    return;
+                }
+                
+                // Submit the multiple choice question
+                const selectedValue = selectedInput.value;
+                const correctAnswer = wrapper.dataset.correctAnswer || '';
+                const isCorrect = selectedValue === correctAnswer;
+                
+                console.log('[SCORM Knowledge Check] MC/TF question:', {
+                    index,
+                    selectedValue,
+                    correctAnswer,
+                    isCorrect
+                });
+                
+                // Highlight selected answer
+                const allOptions = wrapper.querySelectorAll('input[type="radio"]');
+                allOptions.forEach(input => {
+                    const optionLabel = input.closest('.kc-option');
+                    optionLabel.classList.remove('correct-answer', 'incorrect-answer');
+                    
+                    if (input.value === selectedValue && !isCorrect) {
+                        optionLabel.classList.add('incorrect-answer');
+                    }
+                    
+                    // Highlight correct answer when incorrect answer is selected
+                    if (!isCorrect && input.value === correctAnswer) {
+                        optionLabel.classList.add('correct-answer');
+                    }
+                    
+                    // Highlight correct answer when it's selected
+                    if (isCorrect && input.value === selectedValue) {
+                        optionLabel.classList.add('correct-answer');
+                    }
+                });
+                
+                // Mark as answered
+                const questionKey = `${window.currentPage}_q${index}`;
+                window.answeredQuestions[questionKey] = true;
+                
+                // Show feedback
+                const feedbackElement = wrapper.querySelector('.feedback');
+                if (feedbackElement) {
+                    const correctFeedback = wrapper.dataset.correctFeedback || 'Correct!';
+                    const incorrectFeedback = wrapper.dataset.incorrectFeedback || 'Not quite. Try again!';
+                    
+                    feedbackElement.textContent = isCorrect ? correctFeedback : incorrectFeedback;
+                    feedbackElement.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
+                    feedbackElement.style.display = 'block';
+                }
+                
+                // Disable radio buttons after submission
+                radioInputs.forEach(input => input.disabled = true);
+            }
+            
+            // Check if it's a fill-in-blank question
+            const fillInput = wrapper.querySelector('.kc-fill-blank');
+            if (fillInput) {
+                const userAnswer = fillInput.value.trim();
+                if (!userAnswer) {
+                    allAnswered = false;
+                    return;
+                }
+                
+                const correctAnswer = (wrapper.dataset.correctAnswer || '').toLowerCase();
+                const isCorrect = userAnswer.toLowerCase() === correctAnswer;
+                
+                console.log('[SCORM Knowledge Check] Fill-in-blank:', {
+                    index,
+                    userAnswer,
+                    correctAnswer,
+                    isCorrect
+                });
+                
+                // Mark as answered
+                window.answeredQuestions[`${window.currentPage}_fill-blank-${index}`] = true;
+                
+                // Show feedback
+                const feedbackElement = wrapper.querySelector('.feedback');
+                if (feedbackElement) {
+                    const correctFeedback = wrapper.dataset.correctFeedback || 'Correct!';
+                    const incorrectFeedback = wrapper.dataset.incorrectFeedback || 'Not quite. Try again!';
+                    
+                    feedbackElement.textContent = isCorrect ? correctFeedback : incorrectFeedback;
+                    feedbackElement.className = isCorrect ? 'feedback correct' : 'feedback incorrect';
+                    feedbackElement.style.display = 'block';
+                }
+                
+                // Disable input after submission
+                fillInput.disabled = true;
+            }
+        });
+        
+        if (!allAnswered) {
+            alert('Please answer all questions before submitting.');
+            return;
+        }
+        
+        // Disable submit button
+        const submitButton = knowledgeCheckContainer.querySelector('.kc-submit');
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'All Answers Submitted';
         }
         
         // Update navigation state
@@ -378,6 +707,33 @@
             const captionFile = audio.dataset.captionFile;
             if (captionFile) {
                 loadCaptions(pageId, captionFile);
+            }
+            
+            // Check autoplay preference
+            const autoplayEnabled = localStorage.getItem('audioAutoplay') === 'true';
+            if (autoplayEnabled) {
+                console.log('[SCORM Audio] Autoplay enabled, attempting to play audio');
+                // Attempt to play audio
+                audio.play().then(() => {
+                    console.log('[SCORM Audio] Autoplay started successfully');
+                    // Update play/pause button to show pause icon
+                    const playPauseBtn = document.querySelector(`#topic-audio-${pageId}`).parentElement.querySelector('.audio-play-pause');
+                    if (playPauseBtn) {
+                        const playIcon = playPauseBtn.querySelector('.play-icon');
+                        const pauseIcon = playPauseBtn.querySelector('.pause-icon');
+                        if (playIcon && pauseIcon) {
+                            playIcon.style.display = 'none';
+                            pauseIcon.style.display = 'inline';
+                        }
+                        // Update button state
+                        playPauseBtn.setAttribute('data-playing', 'true');
+                        playPauseBtn.innerHTML = '⏸';
+                    }
+                }).catch(error => {
+                    console.log('[SCORM Audio] Autoplay blocked:', error);
+                    // Show notification that user interaction is required
+                    showAutoplayBlockedNotification();
+                });
             }
         }
     }
@@ -634,9 +990,36 @@
         });
     }
     
+    
+    // Load assessment data from SCORM
+    function loadAssessmentData() {
+        window.assessmentData = {
+            attempts: 0,
+            scores: [],
+            lastAnswers: {}
+        };
+        
+        if (window.API) {
+            try {
+                const suspendData = window.API.LMSGetValue('cmi.suspend_data');
+                if (suspendData) {
+                    const data = JSON.parse(suspendData);
+                    window.assessmentData.attempts = data.assessmentAttempts || 0;
+                    window.assessmentData.scores = data.attemptHistory || [];
+                    window.assessmentData.lastAnswers = data.lastAnswers || {};
+                }
+            } catch (e) {
+                console.log('[SCORM Navigation] No previous assessment data found');
+            }
+        }
+    }
+    
     // Initialize navigation
     function initializeNavigation() {
         console.log('[SCORM Navigation] Initializing navigation system');
+        
+        // Load any saved assessment data from SCORM
+        loadAssessmentData();
         
         // Setup navigation buttons
         const nextButton = document.getElementById('next-button');
@@ -661,12 +1044,19 @@
     }
     
     // Submit assessment
-    window.submitAssessment = function() {
+    window.submitAssessment = async function() {
         console.log('[SCORM Navigation] Submitting assessment');
         
         const questions = document.querySelectorAll('.question-container');
         let score = 0;
         let answered = 0;
+        const passingScore = {{pass_mark}};
+        const currentAnswers = {};
+        
+        // Increment attempt counter
+        window.assessmentData.attempts++;
+        
+        // Save attempts data to SCORM later after we collect all answers
         
         questions.forEach((container, index) => {
             const selectedInput = container.querySelector('input[type="radio"]:checked');
@@ -674,21 +1064,78 @@
                 answered++;
                 const correct = selectedInput.dataset.correct;
                 const selected = selectedInput.value;
+                const isCorrect = correct === selected;
                 
-                if (correct === selected) {
+                // Store answer for tracking
+                currentAnswers[index] = { selected, correct, isCorrect };
+                
+                if (isCorrect) {
                     score++;
                 }
                 
-                // Show feedback
+                // Visual indicators for correct/incorrect - only mark user's selection
+                const allOptions = container.querySelectorAll('.kc-option');
+                allOptions.forEach(option => {
+                    const input = option.querySelector('input[type="radio"]');
+                    if (input.value === selected) {
+                        // Only mark the user's selected answer
+                        if (isCorrect) {
+                            option.classList.add('correct-answer');
+                        } else {
+                            option.classList.add('incorrect-answer');
+                        }
+                    }
+                    // Never reveal which option is correct if not selected
+                });
+                
+                // Get custom feedback from question container data attributes
+                const correctFeedback = container.dataset.correctFeedback || '';
+                const incorrectFeedback = container.dataset.incorrectFeedback || '';
+                const explanation = container.dataset.explanation || '';
+                
+                // Debug logging
+                console.log('[SCORM Assessment] Feedback data:', {
+                    questionIndex: index,
+                    correctFeedback,
+                    incorrectFeedback,
+                    explanation,
+                    containerDataset: container.dataset
+                });
+                
+                // Use explanation as fallback if no specific feedback
+                const actualCorrectFeedback = correctFeedback || explanation || 'Correct!';
+                const actualIncorrectFeedback = incorrectFeedback || explanation || 'Please review the relevant course material for this topic.';
+                
+                // Show feedback conditionally
                 const feedbackElement = document.getElementById(`assessment-feedback-${index}`);
                 if (feedbackElement) {
-                    feedbackElement.textContent = selectedInput.dataset.feedback || 
-                        (correct === selected ? 'Correct!' : 'Incorrect');
-                    feedbackElement.className = correct === selected ? 'feedback correct' : 'feedback incorrect';
+                    // Show detailed feedback only on second incorrect attempt
+                    if (window.assessmentData.attempts >= 2) {
+                        // Show full custom feedback after second attempt
+                        if (isCorrect) {
+                            feedbackElement.textContent = actualCorrectFeedback;
+                            feedbackElement.className = 'feedback correct';
+                        } else {
+                            feedbackElement.textContent = actualIncorrectFeedback;
+                            feedbackElement.className = 'feedback incorrect';
+                        }
+                    } else {
+                        // Just indicate right/wrong for first attempt
+                        if (isCorrect) {
+                            feedbackElement.textContent = '✓ Correct';
+                            feedbackElement.className = 'feedback correct';
+                        } else {
+                            feedbackElement.textContent = '✗ Incorrect';
+                            feedbackElement.className = 'feedback incorrect';
+                        }
+                    }
                     feedbackElement.style.display = 'block';
                 }
             }
         });
+        
+        // Store answers for potential review
+        window.assessmentData.lastAnswers = currentAnswers;
         
         if (answered < questions.length) {
             alert('Please answer all questions before submitting.');
@@ -698,20 +1145,242 @@
         const percentage = Math.round((score / questions.length) * 100);
         console.log('[SCORM Navigation] Assessment score:', percentage);
         
-        // Mark assessment as completed
-        window.completedPages.add('assessment');
-        
-        // Update SCORM score
+        // Report score to SCORM with Moodle-specific sequence
         if (window.API) {
-            window.API.SetValue('cmi.core.score.raw', percentage.toString());
-            window.API.SetValue('cmi.core.score.min', '0');
-            window.API.SetValue('cmi.core.score.max', '100');
-            window.API.SetValue('cmi.core.lesson_status', percentage >= {{pass_mark}} ? 'passed' : 'failed');
-            window.API.Commit();
+            try {
+                console.log('[SCORM] Starting Moodle-specific score submission');
+                console.log('[SCORM] Score to report:', percentage);
+                
+                // CRITICAL FOR MOODLE: Set lesson location first
+                const locationResult = window.API.LMSSetValue('cmi.core.lesson_location', 'assessment-completed');
+                console.log('[SCORM] Set lesson_location result:', locationResult);
+                
+                // Handle zero score bug in Moodle
+                const scoreString = percentage === 0 ? '0.0' : percentage.toString();
+                
+                // MOODLE SEQUENCE: Set raw score BEFORE min/max
+                let rawResult = window.API.LMSSetValue('cmi.core.score.raw', scoreString);
+                console.log('[SCORM] Set score.raw result:', rawResult);
+                
+                // Small delay for Moodle processing
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // Now set min/max
+                const minResult = window.API.LMSSetValue('cmi.core.score.min', '0');
+                console.log('[SCORM] Set score.min result:', minResult);
+                
+                const maxResult = window.API.LMSSetValue('cmi.core.score.max', '100');
+                console.log('[SCORM] Set score.max result:', maxResult);
+                
+                // Single commit after all values are set
+                let commitResult = window.API.LMSCommit('');
+                console.log('[SCORM] Commit result:', commitResult);
+                
+                // Wait before verification
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Verify score was set (may still return empty in Moodle)
+                try {
+                    const savedScore = window.API.LMSGetValue('cmi.core.score.raw');
+                    console.log('[SCORM] Verification - saved score:', savedScore || '(empty - normal for Moodle)');
+                    
+                    // If empty, try setting again with different approach
+                    if (!savedScore || savedScore === '') {
+                        console.log('[SCORM] Moodle returned empty score, trying alternative approach');
+                        
+                        // Alternative: Set score as scaled value
+                        const scaledScore = Math.round((percentage / 100) * 100);
+                        window.API.LMSSetValue('cmi.core.score.raw', scaledScore.toString());
+                        window.API.LMSCommit('');
+                    }
+                } catch (verifyError) {
+                    console.warn('[SCORM] Score verification error (normal for some Moodle versions):', verifyError);
+                }
+                
+                // Double-check with error code
+                const errorCode = window.API.LMSGetLastError();
+                if (errorCode !== '0' && errorCode !== 0) {
+                    console.warn('[SCORM] LMS reported error:', errorCode, window.API.LMSGetErrorString(errorCode));
+                }
+            } catch (e) {
+                console.error('[SCORM] Error reporting score:', e);
+                // Try simplified fallback
+                try {
+                    console.log('[SCORM] Attempting simplified score submission');
+                    window.API.LMSSetValue('cmi.core.score.raw', percentage.toString());
+                    window.API.LMSSetValue('cmi.core.lesson_location', 'assessment');
+                    window.API.LMSCommit('');
+                } catch (fallbackError) {
+                    console.error('[SCORM] Fallback also failed:', fallbackError);
+                }
+            }
+        } else {
+            console.warn('[SCORM] No API available for score reporting');
         }
         
-        // Show result
-        alert(`Assessment complete! Your score: ${percentage}%${percentage >= {{pass_mark}} ? ' - Passed!' : ' - Failed'}`);
+        // Save assessment data to SCORM
+        window.assessmentData.scores.push(percentage);
+        if (window.API) {
+            const suspendData = JSON.stringify({
+                assessmentAttempts: window.assessmentData.attempts,
+                attemptHistory: window.assessmentData.scores,
+                lastAnswers: currentAnswers,
+                timestamp: new Date().toISOString()
+            });
+            window.API.LMSSetValue('cmi.suspend_data', suspendData);
+            window.API.LMSCommit('');
+        }
+        
+        // Don't hide submit button - allow resubmission
+        const submitButton = document.querySelector('.submit-assessment');
+        if (submitButton) {
+            // Change button text to indicate resubmission is possible
+            if (percentage < passingScore && window.assessmentData.attempts < 2) {
+                submitButton.textContent = 'Submit Again';
+            } else if (percentage >= passingScore) {
+                submitButton.style.display = 'none';
+            }
+        }
+        
+        // Show results section
+        const resultsDiv = document.getElementById('assessment-results');
+        if (resultsDiv) {
+            resultsDiv.style.display = 'block';
+            
+            // Update score display
+            const scoreText = document.getElementById('score-percentage');
+            if (scoreText) {
+                scoreText.textContent = `${percentage}%`;
+            }
+            
+            // Update score circle
+            const scoreCircle = document.getElementById('score-circle-fill');
+            if (scoreCircle) {
+                const circumference = 2 * Math.PI * 50; // radius = 50
+                const offset = circumference - (percentage / 100) * circumference;
+                scoreCircle.style.strokeDasharray = circumference;
+                scoreCircle.style.strokeDashoffset = offset;
+                scoreCircle.style.stroke = percentage >= passingScore ? '#28a745' : '#dc3545';
+            }
+            
+            // Update message and actions
+            const scoreMessage = document.getElementById('score-message');
+            const retryButton = document.getElementById('retry-button');
+            const completionMessage = document.getElementById('completion-message');
+            
+            if (percentage >= passingScore) {
+                // Passed
+                if (scoreMessage) {
+                    scoreMessage.textContent = `Excellent work! You passed with ${percentage}%.`;
+                    scoreMessage.className = 'score-message success';
+                }
+                if (retryButton) retryButton.style.display = 'none';
+                if (completionMessage) completionMessage.style.display = 'block';
+                
+                // Mark as completed
+                window.completedPages.add('assessment');
+                
+                // Update SCORM status to completed and passed
+                if (window.API) {
+                    try {
+                        // For SCORM 1.2, use 'passed' status (no cmi.success_status)
+                        window.API.LMSSetValue('cmi.core.lesson_status', 'passed');
+                        window.API.LMSCommit('');
+                        console.log('[SCORM] Assessment passed - status updated');
+                        
+                        // Don't set exit or call LMSFinish here - let user exit when ready
+                    } catch (e) {
+                        console.error('[SCORM] Error updating passed status:', e);
+                    }
+                }
+            } else {
+                // Failed - show different messages based on attempt number
+                if (scoreMessage) {
+                    if (window.assessmentData.attempts === 1) {
+                        scoreMessage.textContent = `You scored ${percentage}%. A score of ${passingScore}% or higher is required to pass. You can adjust your answers and submit again.`;
+                    } else {
+                        scoreMessage.textContent = `You scored ${percentage}%. Review the feedback above to help improve your score.`;
+                    }
+                    scoreMessage.className = 'score-message error';
+                }
+                // Never show retry button - we allow direct resubmission
+                if (retryButton) retryButton.style.display = 'none';
+                if (completionMessage) completionMessage.style.display = 'none';
+                
+                // Update SCORM status - mark as failed
+                if (window.API) {
+                    try {
+                        // For SCORM 1.2, use 'failed' status when score is below passing
+                        window.API.LMSSetValue('cmi.core.lesson_status', 'failed');
+                        window.API.LMSCommit('');
+                        console.log('[SCORM] Assessment failed - status updated to failed');
+                        
+                        // Don't automatically finish on final attempt - user controls exit
+                    } catch (e) {
+                        console.error('[SCORM] Error updating failed status:', e);
+                    }
+                }
+            }
+        } else {
+            // Fallback to alert if results div not found
+            alert(`Assessment complete! Your score: ${percentage}%${percentage >= passingScore ? ' - Passed!' : ' - Failed'}`);
+        }
+        
+        // Completion tracking already handled above
+    };
+    
+    // Retry assessment function
+    window.retryAssessment = function() {
+        console.log('[SCORM Navigation] Retrying assessment - Attempt #' + (window.assessmentData.attempts + 1));
+        
+        // Only clear selections if attempts < 3, otherwise keep wrong answers to fix
+        if (window.assessmentData.attempts < 3) {
+            // Clear all selections for fresh attempt
+            const inputs = document.querySelectorAll('.question-container input[type="radio"]');
+            inputs.forEach(input => {
+                input.checked = false;
+            });
+            
+            // Clear all feedback
+            const feedbacks = document.querySelectorAll('.question-container .feedback');
+            feedbacks.forEach(feedback => {
+                feedback.style.display = 'none';
+                feedback.textContent = '';
+            });
+        } else {
+            // Keep incorrect answers visible, only clear correct ones
+            Object.entries(window.assessmentData.lastAnswers).forEach(([index, answer]) => {
+                if (answer.isCorrect) {
+                    // Clear correct answers for re-entry
+                    const container = document.querySelectorAll('.question-container')[index];
+                    if (container) {
+                        const inputs = container.querySelectorAll('input[type="radio"]');
+                        inputs.forEach(input => input.checked = false);
+                        
+                        const feedback = document.getElementById(`assessment-feedback-${index}`);
+                        if (feedback) {
+                            feedback.style.display = 'none';
+                        }
+                    }
+                }
+                // Keep incorrect answers and their feedback visible
+            });
+        }
+        
+        // Hide results section
+        const resultsDiv = document.getElementById('assessment-results');
+        if (resultsDiv) {
+            resultsDiv.style.display = 'none';
+        }
+        
+        // Show submit button again
+        const submitButton = document.querySelector('.submit-assessment');
+        if (submitButton) {
+            submitButton.style.display = 'inline-block';
+        }
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
     };
     
     // Lightbox functionality
@@ -771,10 +1440,56 @@
         }
     }
     
+    // Audio autoplay functions
+    window.toggleAudioAutoplay = function() {
+        const current = localStorage.getItem('audioAutoplay') === 'true';
+        const newValue = !current;
+        localStorage.setItem('audioAutoplay', newValue.toString());
+        updateAutoplayToggle();
+        
+        console.log('[SCORM Audio] Autoplay toggled:', newValue);
+    };
+    
+    function updateAutoplayToggle() {
+        const toggle = document.querySelector('.audio-autoplay-toggle');
+        const enabled = localStorage.getItem('audioAutoplay') === 'true';
+        if (toggle) {
+            toggle.classList.toggle('enabled', enabled);
+            toggle.setAttribute('aria-pressed', enabled.toString());
+            toggle.title = enabled ? 'Disable audio autoplay' : 'Enable audio autoplay';
+        }
+    }
+    
+    function showAutoplayBlockedNotification() {
+        const alertContainer = document.getElementById('scorm-alert-container');
+        if (alertContainer) {
+            const alert = document.createElement('div');
+            alert.className = 'scorm-alert scorm-alert-info';
+            alert.innerHTML = `
+                <span>Audio autoplay was blocked by your browser. Click play to start audio.</span>
+                <button onclick="this.parentElement.remove()" class="alert-close">×</button>
+            `;
+            alertContainer.appendChild(alert);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alert.parentElement) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+    }
+    
     // Start when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeNavigation);
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeNavigation();
+            // Initialize autoplay toggle
+            updateAutoplayToggle();
+        });
     } else {
         initializeNavigation();
+        // Initialize autoplay toggle
+        updateAutoplayToggle();
     }
 })();
