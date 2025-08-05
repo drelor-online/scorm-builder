@@ -226,12 +226,6 @@ impl EnhancedScormGenerator {
                     .map_err(|e| format!("Failed to write assessment.html: {}", e))?;
             }
             
-            // Add SCORM API
-            let scorm_api = include_str!("../../assets/scorm_api.js");
-            zip.start_file("scripts/scorm_api.js", options)
-                .map_err(|e| format!("Failed to create scorm_api.js: {}", e))?;
-            zip.write_all(scorm_api.as_bytes())
-                .map_err(|e| format!("Failed to write scorm_api.js: {}", e))?;
             
             // Add manifest
             let manifest = self.generate_simple_manifest(&request)?;
@@ -269,7 +263,6 @@ impl EnhancedScormGenerator {
             <file href="index.html"/>
             <file href="styles/main.css"/>
             <file href="scripts/navigation.js"/>
-            <file href="scripts/scorm_api.js"/>
 "#);
         
         // Add page files
