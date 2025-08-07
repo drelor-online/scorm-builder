@@ -1,7 +1,9 @@
-use handlebars::{Handlebars, Helper, Context, RenderContext, Output, HelperResult, Renderable};
+use handlebars::{Context, Handlebars, Helper, HelperResult, Output, RenderContext, Renderable};
 use serde_json::json;
 
-use super::generator_enhanced::{GenerateScormRequest, Topic, WelcomePage, ObjectivesPage, Assessment};
+use super::generator_enhanced::{
+    Assessment, GenerateScormRequest, ObjectivesPage, Topic, WelcomePage,
+};
 
 pub struct HtmlGenerator<'a> {
     handlebars: Handlebars<'a>,
@@ -20,47 +22,50 @@ impl<'a> HtmlGenerator<'a> {
             format!("media/{}", path)
         }
     }
-    
+
     pub fn new() -> Result<Self, String> {
         let mut handlebars = Handlebars::new();
-        
+
         // Register helpers
         handlebars.register_helper("eq", Box::new(eq_helper));
         handlebars.register_helper("or", Box::new(or_helper));
         handlebars.register_helper("is_youtube", Box::new(is_youtube_helper));
         handlebars.register_helper("extract_youtube_id", Box::new(extract_youtube_id_helper));
         handlebars.register_helper("add", Box::new(add_helper));
-        
+
         // Load templates
         let index_template = include_str!("templates/index.html.hbs");
         let topic_template = include_str!("templates/topic.html.hbs");
         let welcome_template = include_str!("templates/welcome.html.hbs");
         let objectives_template = include_str!("templates/objectives.html.hbs");
         let assessment_template = include_str!("templates/assessment.html.hbs");
-        
+
         handlebars
             .register_template_string("index", index_template)
             .map_err(|e| format!("Failed to register index template: {}", e))?;
-        
+
         handlebars
             .register_template_string("topic", topic_template)
             .map_err(|e| format!("Failed to register topic template: {}", e))?;
-            
+
         handlebars
             .register_template_string("welcome", welcome_template)
             .map_err(|e| format!("Failed to register welcome template: {}", e))?;
-            
+
         handlebars
             .register_template_string("objectives", objectives_template)
             .map_err(|e| format!("Failed to register objectives template: {}", e))?;
-            
+
         handlebars
             .register_template_string("assessment", assessment_template)
             .map_err(|e| format!("Failed to register assessment template: {}", e))?;
-        
-        Ok(Self { handlebars, has_objectives: false })
+
+        Ok(Self {
+            handlebars,
+            has_objectives: false,
+        })
     }
-    
+
     pub fn generate_index_html(&self, request: &GenerateScormRequest) -> Result<String, String> {
         let data = json!({
             "course_title": request.course_title,
@@ -70,45 +75,57 @@ impl<'a> HtmlGenerator<'a> {
                 "title": t.title
             })).collect::<Vec<_>>()
         });
-        
+
         self.handlebars
             .render("index", &data)
             .map_err(|e| format!("Failed to render index template: {}", e))
     }
-    
+
     pub fn generate_welcome_page(&self, welcome: &WelcomePage) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating welcome page");
-        eprintln!("[HTML Generator] Welcome has audio_file: {}", welcome.audio_file.is_some());
+        eprintln!(
+            "[HTML Generator] Welcome has audio_file: {}",
+            welcome.audio_file.is_some()
+        );
         eprintln!("[HTML Generator] Welcome has media: {:?}", welcome.media);
-        
+
         // Process media items to ensure URLs are prefixed with media/
         let processed_media = welcome.media.as_ref().map(|media_items| {
-            media_items.iter().map(|item| {
-                let mut url = item.url.clone();
-                // If URL doesn't start with http/https, prefix with media/
-                if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("media/") {
-                    url = format!("media/{}", url);
-                }
-                
-                // Determine if this is a YouTube video
-                let is_youtube = item.is_youtube.unwrap_or_else(|| {
-                    item.embed_url.as_ref().map(|embed| {
-                        embed.contains("youtube.com") || embed.contains("youtu.be")
-                    }).unwrap_or(false) || 
-                    url.contains("youtube.com") || 
-                    url.contains("youtu.be")
-                });
-                
-                json!({
-                    "type": item.media_type,
-                    "url": url,
-                    "title": item.title,
-                    "embed_url": item.embed_url,
-                    "is_youtube": is_youtube
+            media_items
+                .iter()
+                .map(|item| {
+                    let mut url = item.url.clone();
+                    // If URL doesn't start with http/https, prefix with media/
+                    if !url.starts_with("http://")
+                        && !url.starts_with("https://")
+                        && !url.starts_with("media/")
+                    {
+                        url = format!("media/{}", url);
+                    }
+
+                    // Determine if this is a YouTube video
+                    let is_youtube = item.is_youtube.unwrap_or_else(|| {
+                        item.embed_url
+                            .as_ref()
+                            .map(|embed| {
+                                embed.contains("youtube.com") || embed.contains("youtu.be")
+                            })
+                            .unwrap_or(false)
+                            || url.contains("youtube.com")
+                            || url.contains("youtu.be")
+                    });
+
+                    json!({
+                        "type": item.media_type,
+                        "url": url,
+                        "title": item.title,
+                        "embed_url": item.embed_url,
+                        "is_youtube": is_youtube
+                    })
                 })
-            }).collect::<Vec<_>>()
+                .collect::<Vec<_>>()
         });
-        
+
         let data = json!({
             "title": welcome.title,
             "content": welcome.content.replace('\n', "<br>"),
@@ -120,44 +137,56 @@ impl<'a> HtmlGenerator<'a> {
             "media": processed_media,
             "id": "welcome"  // Add ID for audio player
         });
-        
+
         self.handlebars
             .render("welcome", &data)
             .map_err(|e| format!("Failed to render welcome template: {}", e))
     }
-    
+
     pub fn generate_objectives_page(&self, objectives: &ObjectivesPage) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating objectives page");
-        eprintln!("[HTML Generator] Objectives has audio_file: {}", objectives.audio_file.is_some());
-        
+        eprintln!(
+            "[HTML Generator] Objectives has audio_file: {}",
+            objectives.audio_file.is_some()
+        );
+
         // Process media items to ensure URLs are prefixed with media/
         let processed_media = objectives.media.as_ref().map(|media_items| {
-            media_items.iter().map(|item| {
-                let mut url = item.url.clone();
-                // If URL doesn't start with http/https, prefix with media/
-                if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("media/") {
-                    url = format!("media/{}", url);
-                }
-                
-                // Determine if this is a YouTube video
-                let is_youtube = item.is_youtube.unwrap_or_else(|| {
-                    item.embed_url.as_ref().map(|embed| {
-                        embed.contains("youtube.com") || embed.contains("youtu.be")
-                    }).unwrap_or(false) || 
-                    url.contains("youtube.com") || 
-                    url.contains("youtu.be")
-                });
-                
-                json!({
-                    "type": item.media_type,
-                    "url": url,
-                    "title": item.title,
-                    "embed_url": item.embed_url,
-                    "is_youtube": is_youtube
+            media_items
+                .iter()
+                .map(|item| {
+                    let mut url = item.url.clone();
+                    // If URL doesn't start with http/https, prefix with media/
+                    if !url.starts_with("http://")
+                        && !url.starts_with("https://")
+                        && !url.starts_with("media/")
+                    {
+                        url = format!("media/{}", url);
+                    }
+
+                    // Determine if this is a YouTube video
+                    let is_youtube = item.is_youtube.unwrap_or_else(|| {
+                        item.embed_url
+                            .as_ref()
+                            .map(|embed| {
+                                embed.contains("youtube.com") || embed.contains("youtu.be")
+                            })
+                            .unwrap_or(false)
+                            || url.contains("youtube.com")
+                            || url.contains("youtu.be")
+                    });
+
+                    json!({
+                        "type": item.media_type,
+                        "url": url,
+                        "title": item.title,
+                        "embed_url": item.embed_url,
+                        "is_youtube": is_youtube
+                    })
                 })
-            }).collect::<Vec<_>>()
+                .collect::<Vec<_>>()
         });
-        
+
         let data = json!({
             "objectives": objectives.objectives,
             "audio_file": objectives.audio_file.as_ref().map(|f| Self::ensure_media_path(f)),
@@ -165,86 +194,119 @@ impl<'a> HtmlGenerator<'a> {
             "media": processed_media,
             "id": "objectives"  // Add ID for audio player
         });
-        
+
         self.handlebars
             .render("objectives", &data)
             .map_err(|e| format!("Failed to render objectives template: {}", e))
     }
-    
+
     pub fn generate_topic_page(&self, topic: &Topic) -> Result<String, String> {
         // Use eprintln! for debugging - it goes to stderr which might be visible
         eprintln!("[HTML Generator] Processing topic: {}", topic.id);
-        eprintln!("[HTML Generator] Topic has knowledge_check: {}", topic.knowledge_check.is_some());
-        eprintln!("[HTML Generator] Topic has audio_file: {}", topic.audio_file.is_some());
-        eprintln!("[HTML Generator] Topic has caption_file: {}", topic.caption_file.is_some());
-        
+        eprintln!(
+            "[HTML Generator] Topic has knowledge_check: {}",
+            topic.knowledge_check.is_some()
+        );
+        eprintln!(
+            "[HTML Generator] Topic has audio_file: {}",
+            topic.audio_file.is_some()
+        );
+        eprintln!(
+            "[HTML Generator] Topic has caption_file: {}",
+            topic.caption_file.is_some()
+        );
+
         // Prepare knowledge check questions with proper indexing
         let kc_questions = if let Some(kc) = &topic.knowledge_check {
-            eprintln!("[HTML Generator] Knowledge check enabled: {}, questions: {}", kc.enabled, kc.questions.len());
-            
+            eprintln!(
+                "[HTML Generator] Knowledge check enabled: {}, questions: {}",
+                kc.enabled,
+                kc.questions.len()
+            );
+
             // Debug print each question
             for (i, q) in kc.questions.iter().enumerate() {
-                eprintln!("[HTML Generator] Question {}: type={}, text={}", i, q.question_type, q.text);
+                eprintln!(
+                    "[HTML Generator] Question {}: type={}, text={}",
+                    i, q.question_type, q.text
+                );
                 eprintln!("[HTML Generator]   - correct_answer: {}", q.correct_answer);
                 eprintln!("[HTML Generator]   - options: {:?}", q.options);
             }
-            
+
             if kc.enabled {
-                kc.questions.iter().enumerate().map(|(index, q)| {
-                    let mut question_data = json!({
-                        "type": q.question_type,  // This is now "type" not "question_type" for template compatibility
-                        "text": q.text,
-                        "index": index,
-                        "correct_answer": q.correct_answer,
-                        "explanation": q.explanation.as_deref().unwrap_or(""),
-                    });
-                    
-                    // Add type-specific fields
-                    match q.question_type.as_str() {
-                        "multiple-choice" | "true-false" => {
-                            question_data["options"] = json!(q.options.as_ref().unwrap_or(&Vec::new()));
-                            // Add feedback for all question types
-                            question_data["correct_feedback"] = json!(
-                                q.correct_feedback.as_deref()
+                kc.questions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, q)| {
+                        let mut question_data = json!({
+                            "type": q.question_type,  // This is now "type" not "question_type" for template compatibility
+                            "text": q.text,
+                            "index": index,
+                            "correct_answer": q.correct_answer,
+                            "explanation": q.explanation.as_deref().unwrap_or(""),
+                        });
+
+                        // Add type-specific fields
+                        match q.question_type.as_str() {
+                            "multiple-choice" | "true-false" => {
+                                question_data["options"] =
+                                    json!(q.options.as_ref().unwrap_or(&Vec::new()));
+                                // Add feedback for all question types
+                                question_data["correct_feedback"] = json!(q
+                                    .correct_feedback
+                                    .as_deref()
                                     .or(q.explanation.as_deref())
-                                    .unwrap_or("Correct!")
-                            );
-                            question_data["incorrect_feedback"] = json!(
-                                q.incorrect_feedback.as_deref()
-                                    .unwrap_or("Not quite. Try again!")
-                            );
-                        }
-                        "fill-in-the-blank" => {
-                            // Use the actual feedback fields from the question
-                            question_data["correct_feedback"] = json!(
-                                q.correct_feedback.as_deref()
+                                    .unwrap_or("Correct!"));
+                                question_data["incorrect_feedback"] = json!(q
+                                    .incorrect_feedback
+                                    .as_deref()
+                                    .unwrap_or("Not quite. Try again!"));
+                            }
+                            "fill-in-the-blank" => {
+                                // Use the actual feedback fields from the question
+                                question_data["correct_feedback"] = json!(q
+                                    .correct_feedback
+                                    .as_deref()
                                     .or(q.explanation.as_deref())
-                                    .unwrap_or("Correct!")
-                            );
-                            question_data["incorrect_feedback"] = json!(
-                                q.incorrect_feedback.as_deref()
-                                    .unwrap_or("Not quite. Try again!")
-                            );
+                                    .unwrap_or("Correct!"));
+                                question_data["incorrect_feedback"] = json!(q
+                                    .incorrect_feedback
+                                    .as_deref()
+                                    .unwrap_or("Not quite. Try again!"));
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                    
-                    eprintln!("[HTML Generator] Prepared question data: {}", serde_json::to_string_pretty(&question_data).unwrap());
-                    question_data
-                }).collect::<Vec<_>>()
+
+                        eprintln!(
+                            "[HTML Generator] Prepared question data: {}",
+                            serde_json::to_string_pretty(&question_data).unwrap()
+                        );
+                        question_data
+                    })
+                    .collect::<Vec<_>>()
             } else {
                 Vec::new()
             }
         } else {
             Vec::new()
         };
-        
-        eprintln!("[HTML Generator] Total prepared KC questions: {}", kc_questions.len());
-        
+
+        eprintln!(
+            "[HTML Generator] Total prepared KC questions: {}",
+            kc_questions.len()
+        );
+
         // Debug: Force audio file to test template
-        let audio_file_path = topic.audio_file.as_ref().map(|f| Self::ensure_media_path(f));
-        eprintln!("[HTML Generator] Audio file path for template: {:?}", audio_file_path);
-        
+        let audio_file_path = topic
+            .audio_file
+            .as_ref()
+            .map(|f| Self::ensure_media_path(f));
+        eprintln!(
+            "[HTML Generator] Audio file path for template: {:?}",
+            audio_file_path
+        );
+
         let data = json!({
             "id": topic.id,
             "title": topic.title,
@@ -258,7 +320,7 @@ impl<'a> HtmlGenerator<'a> {
                 .filter(|url| {
                     // Skip URLs that look like broken paths (e.g., "media/image-X.jpg")
                     !url.contains(".jpg") && !url.contains(".jpeg") && !url.contains(".png") && !url.contains(".gif")
-                    || url.starts_with("http://") || url.starts_with("https://") 
+                    || url.starts_with("http://") || url.starts_with("https://")
                     || url.starts_with("media/image-") && !url.contains(".")
                 })
                 .map(|f| Self::ensure_media_path(f)),
@@ -269,16 +331,16 @@ impl<'a> HtmlGenerator<'a> {
                     if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("media/") {
                         url = format!("media/{}", url);
                     }
-                    
+
                     // Determine if this is a YouTube video
                     let is_youtube = item.is_youtube.unwrap_or_else(|| {
                         item.embed_url.as_ref().map(|embed| {
                             embed.contains("youtube.com") || embed.contains("youtu.be")
-                        }).unwrap_or(false) || 
-                        url.contains("youtube.com") || 
+                        }).unwrap_or(false) ||
+                        url.contains("youtube.com") ||
                         url.contains("youtu.be")
                     });
-                    
+
                     json!({
                         "type": item.media_type,
                         "url": url,
@@ -289,30 +351,50 @@ impl<'a> HtmlGenerator<'a> {
                 }).collect::<Vec<_>>()
             })
         });
-        
-        eprintln!("[HTML Generator] Template data: has_knowledge_check={}, kc_questions_count={}", 
-            !kc_questions.is_empty(), kc_questions.len());
-        eprintln!("[HTML Generator] Audio file: {:?}", topic.audio_file.as_ref().map(|f| Self::ensure_media_path(f)));
-        eprintln!("[HTML Generator] Full template data: {}", serde_json::to_string_pretty(&data).unwrap());
-        
+
+        eprintln!(
+            "[HTML Generator] Template data: has_knowledge_check={}, kc_questions_count={}",
+            !kc_questions.is_empty(),
+            kc_questions.len()
+        );
+        eprintln!(
+            "[HTML Generator] Audio file: {:?}",
+            topic
+                .audio_file
+                .as_ref()
+                .map(|f| Self::ensure_media_path(f))
+        );
+        eprintln!(
+            "[HTML Generator] Full template data: {}",
+            serde_json::to_string_pretty(&data).unwrap()
+        );
+
         // Render template and debug the result
-        let rendered_html = self.handlebars
+        let rendered_html = self
+            .handlebars
             .render("topic", &data)
             .map_err(|e| format!("Failed to render topic template: {}", e))?;
-            
+
         // Check if knowledge check was rendered
         if !kc_questions.is_empty() {
             if rendered_html.contains("kc-question-wrapper") {
-                eprintln!("[HTML Generator] SUCCESS: Knowledge check questions were rendered in HTML");
+                eprintln!(
+                    "[HTML Generator] SUCCESS: Knowledge check questions were rendered in HTML"
+                );
             } else {
-                eprintln!("[HTML Generator] ERROR: Knowledge check questions NOT found in rendered HTML!");
-                eprintln!("[HTML Generator] First 500 chars of HTML: {}", &rendered_html.chars().take(500).collect::<String>());
+                eprintln!(
+                    "[HTML Generator] ERROR: Knowledge check questions NOT found in rendered HTML!"
+                );
+                eprintln!(
+                    "[HTML Generator] First 500 chars of HTML: {}",
+                    &rendered_html.chars().take(500).collect::<String>()
+                );
             }
         }
-        
+
         Ok(rendered_html)
     }
-    
+
     pub fn generate_assessment_page(&self, assessment: &Assessment) -> Result<String, String> {
         let data = json!({
             "assessment": {
@@ -330,12 +412,12 @@ impl<'a> HtmlGenerator<'a> {
                 })).collect::<Vec<_>>()
             }
         });
-        
+
         self.handlebars
             .render("assessment", &data)
             .map_err(|e| format!("Failed to render assessment template: {}", e))
     }
-    
+
     pub fn with_objectives(mut self, has_objectives: bool) -> Self {
         self.has_objectives = has_objectives;
         self
@@ -352,15 +434,20 @@ fn eq_helper<'reg, 'rc>(
 ) -> HelperResult {
     let param1 = h.param(0).map(|v| v.value());
     let param2 = h.param(1).map(|v| v.value());
-    
+
     let result = match (param1, param2) {
         (Some(v1), Some(v2)) => {
-            eprintln!("[eq_helper] Comparing: {:?} == {:?} => {}", v1, v2, v1 == v2);
+            eprintln!(
+                "[eq_helper] Comparing: {:?} == {:?} => {}",
+                v1,
+                v2,
+                v1 == v2
+            );
             v1 == v2
         }
         _ => false,
     };
-    
+
     // For block helpers, we need to render the template block if the condition is true
     if result {
         if let Some(ref template) = h.template() {
@@ -372,7 +459,7 @@ fn eq_helper<'reg, 'rc>(
             template.render(r, ctx, rc, out)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -385,7 +472,7 @@ fn or_helper<'reg, 'rc>(
     out: &mut dyn Output,
 ) -> HelperResult {
     let mut result = false;
-    
+
     // Check if any parameter is truthy
     for i in 0.. {
         if let Some(param) = h.param(i) {
@@ -407,7 +494,7 @@ fn or_helper<'reg, 'rc>(
             break;
         }
     }
-    
+
     // For block helpers, render the template block if condition is true
     if result {
         if let Some(ref template) = h.template() {
@@ -419,7 +506,7 @@ fn or_helper<'reg, 'rc>(
             template.render(r, ctx, rc, out)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -440,7 +527,7 @@ fn is_youtube_helper<'reg, 'rc>(
     } else {
         false
     };
-    
+
     // For block helpers, render the template block if condition is true
     if is_youtube {
         if let Some(ref template) = h.template() {
@@ -452,7 +539,7 @@ fn is_youtube_helper<'reg, 'rc>(
             template.render(r, ctx, rc, out)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -469,7 +556,8 @@ fn extract_youtube_id_helper<'reg, 'rc>(
             // Handle youtube.com/watch?v=ID format
             if let Some(start) = url_str.find("watch?v=") {
                 let id_start = start + 8;
-                let id_end = url_str[id_start..].find('&')
+                let id_end = url_str[id_start..]
+                    .find('&')
                     .map(|i| id_start + i)
                     .unwrap_or(url_str.len());
                 out.write(&url_str[id_start..id_end])?;
@@ -477,14 +565,15 @@ fn extract_youtube_id_helper<'reg, 'rc>(
             // Handle youtu.be/ID format
             else if let Some(start) = url_str.find("youtu.be/") {
                 let id_start = start + 9;
-                let id_end = url_str[id_start..].find('?')
+                let id_end = url_str[id_start..]
+                    .find('?')
                     .map(|i| id_start + i)
                     .unwrap_or(url_str.len());
                 out.write(&url_str[id_start..id_end])?;
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -496,13 +585,9 @@ fn add_helper<'reg, 'rc>(
     _: &mut RenderContext<'reg, 'rc>,
     out: &mut dyn Output,
 ) -> HelperResult {
-    let param1 = h.param(0)
-        .and_then(|v| v.value().as_u64())
-        .unwrap_or(0);
-    let param2 = h.param(1)
-        .and_then(|v| v.value().as_u64())
-        .unwrap_or(0);
-    
+    let param1 = h.param(0).and_then(|v| v.value().as_u64()).unwrap_or(0);
+    let param2 = h.param(1).and_then(|v| v.value().as_u64()).unwrap_or(0);
+
     out.write(&format!("{}", param1 + param2))?;
     Ok(())
 }

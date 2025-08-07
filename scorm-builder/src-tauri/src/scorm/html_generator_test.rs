@@ -17,9 +17,9 @@ fn test_generate_welcome_page_html() {
             }]
         }
     });
-    
+
     let html = generate_welcome_page_html(&course_content["welcomePage"]);
-    
+
     // Verify the HTML contains expected elements
     assert!(html.contains("<h1>Welcome to the Course</h1>"));
     assert!(html.contains("This is a comprehensive course on Rust programming."));
@@ -47,9 +47,9 @@ fn test_generate_objectives_page_html() {
             "captionId": "caption-1"
         }
     });
-    
+
     let html = generate_objectives_page_html(&course_content["learningObjectivesPage"]);
-    
+
     // Verify the HTML contains expected elements
     assert!(html.contains("<h2>Learning Objectives</h2>"));
     assert!(html.contains("Understand Rust ownership system"));
@@ -85,23 +85,23 @@ fn test_generate_topic_page_html() {
             "title": "Rust Logo"
         }]
     });
-    
+
     let html = generate_topic_page_html(&topic, 0);
-    
+
     println!("Generated HTML:\n{}", html);
-    
+
     // Verify the HTML contains expected elements
     assert!(html.contains("<h1>Introduction to Rust</h1>"));
     assert!(html.contains("What is Rust?"));
     assert!(html.contains("Rust is a systems programming language."));
     assert!(html.contains("Rust provides memory safety without garbage collection."));
-    
+
     // Check knowledge check rendering
     assert!(html.contains("What does Rust provide?"));
     assert!(html.contains("Memory safety"));
     assert!(html.contains("Garbage collection"));
     assert!(html.contains("data-correct=\"0\"")); // First option is correct
-    
+
     // Check media
     assert!(html.contains("<img"));
     assert!(html.contains("src=\"media/image-1.png\""));
@@ -131,20 +131,20 @@ fn test_generate_assessment_page_html() {
         ],
         "passMark": 80
     });
-    
+
     let html = generate_assessment_page_html(&assessment);
-    
+
     // Verify the HTML contains expected elements
     assert!(html.contains("<h1>Assessment</h1>"));
     assert!(html.contains("What is Rust?"));
     assert!(html.contains("A programming language"));
     assert!(html.contains("data-correct=\"0\""));
-    
+
     assert!(html.contains("Rust requires garbage collection."));
     assert!(html.contains("True"));
     assert!(html.contains("False"));
     assert!(html.contains("data-correct=\"1\"")); // False is correct
-    
+
     assert!(html.contains("data-pass-mark=\"80\""));
 }
 
@@ -176,7 +176,7 @@ fn test_generate_complete_scorm_html() {
             "passMark": 80
         }
     });
-    
+
     let metadata = crate::scorm::generator::CourseMetadata {
         title: "Test Course".to_string(),
         description: "Test Description".to_string(),
@@ -184,9 +184,9 @@ fn test_generate_complete_scorm_html() {
         version: None,
         scorm_version: None,
     };
-    
+
     let html = generate_complete_scorm_html(&course_content, &metadata);
-    
+
     // Verify the HTML structure
     assert!(html.contains("<!DOCTYPE html>"));
     assert!(html.contains("<html"));
@@ -194,13 +194,13 @@ fn test_generate_complete_scorm_html() {
     assert!(html.contains("<title>Test Course</title>"));
     assert!(html.contains("<script src=\"scorm_api.js\"></script>"));
     assert!(html.contains("<body>"));
-    
+
     // Verify navigation
     assert!(html.contains("id=\"nav-welcome\""));
     assert!(html.contains("id=\"nav-objectives\""));
     assert!(html.contains("id=\"nav-topic-0\""));
     assert!(html.contains("id=\"nav-assessment\""));
-    
+
     // Verify pages
     assert!(html.contains("id=\"page-welcome\""));
     assert!(html.contains("id=\"page-objectives\""));
@@ -210,9 +210,6 @@ fn test_generate_complete_scorm_html() {
 
 // Import the functions we're testing (these don't exist yet, so tests will fail)
 use crate::scorm::html_generator::{
-    generate_welcome_page_html,
-    generate_objectives_page_html,
-    generate_topic_page_html,
-    generate_assessment_page_html,
-    generate_complete_scorm_html
+    generate_assessment_page_html, generate_complete_scorm_html, generate_objectives_page_html,
+    generate_topic_page_html, generate_welcome_page_html,
 };

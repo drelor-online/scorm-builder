@@ -1,48 +1,61 @@
-use serde_json::Value;
 use crate::scorm::generator::CourseMetadata;
+use serde_json::Value;
 
 pub fn generate_welcome_page_html(welcome: &Value) -> String {
-    let title = welcome.get("title").and_then(|v| v.as_str()).unwrap_or("Welcome");
-    let content = welcome.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let title = welcome
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Welcome");
+    let content = welcome
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let audio_id = welcome.get("audioId").and_then(|v| v.as_str());
     let caption_id = welcome.get("captionId").and_then(|v| v.as_str());
-    
-    let mut html = format!(r#"
+
+    let mut html = format!(
+        r#"
 <div class="page-content">
     <h1>{}</h1>
     <div class="content">
         {}
     </div>
-"#, title, content);
-    
+"#,
+        title, content
+    );
+
     // Add media if present
     if let Some(media_array) = welcome.get("media").and_then(|v| v.as_array()) {
         for media in media_array {
             let media_type = media.get("type").and_then(|v| v.as_str()).unwrap_or("");
             let media_id = media.get("id").and_then(|v| v.as_str()).unwrap_or("");
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             match media_type {
                 "image" => {
-                    let extension = if media_id.contains("image-0") { ".jpg" } else { ".png" };
+                    let extension = if media_id.contains("image-0") {
+                        ".jpg"
+                    } else {
+                        ".png"
+                    };
                     html.push_str(&format!(
                         r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#, 
+"#,
                         media_id, extension, media_title
                     ));
-                },
+                }
                 "video" => {
                     html.push_str(&format!(
                         r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#, 
+"#,
                         media_id
                     ));
-                },
+                }
                 _ => {}
             }
         }
     }
-    
+
     // Add audio narration if present
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
@@ -50,53 +63,63 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
         <source src="media/{}.mp3" type="audio/mpeg">
         <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
     </audio>
-"#, 
+"#,
             audio, caption
         ));
     }
-    
+
     html.push_str("</div>\n");
     html
 }
 
 pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
-    let content = objectives_page.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let content = objectives_page
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let audio_id = objectives_page.get("audioId").and_then(|v| v.as_str());
     let caption_id = objectives_page.get("captionId").and_then(|v| v.as_str());
-    
-    let mut html = format!(r#"
+
+    let mut html = format!(
+        r#"
 <div class="page-content">
     {}
-"#, content);
-    
+"#,
+        content
+    );
+
     // Add media if present
     if let Some(media_array) = objectives_page.get("media").and_then(|v| v.as_array()) {
         for media in media_array {
             let media_type = media.get("type").and_then(|v| v.as_str()).unwrap_or("");
             let media_id = media.get("id").and_then(|v| v.as_str()).unwrap_or("");
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             match media_type {
                 "image" => {
-                    let extension = if media_id.contains("objectives") { ".jpg" } else { ".png" };
+                    let extension = if media_id.contains("objectives") {
+                        ".jpg"
+                    } else {
+                        ".png"
+                    };
                     html.push_str(&format!(
                         r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#, 
+"#,
                         media_id, extension, media_title
                     ));
-                },
+                }
                 "video" => {
                     html.push_str(&format!(
                         r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#, 
+"#,
                         media_id
                     ));
-                },
+                }
                 _ => {}
             }
         }
     }
-    
+
     // Add audio narration if present
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
@@ -104,117 +127,151 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
         <source src="media/{}.mp3" type="audio/mpeg">
         <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
     </audio>
-"#, 
+"#,
             audio, caption
         ));
     }
-    
+
     html.push_str("</div>\n");
     html
 }
 
 pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
-    let title = topic.get("title").and_then(|v| v.as_str()).unwrap_or("Topic");
+    let title = topic
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Topic");
     let content = topic.get("content").and_then(|v| v.as_str()).unwrap_or("");
     let audio_id = topic.get("audioId").and_then(|v| v.as_str());
     let caption_id = topic.get("captionId").and_then(|v| v.as_str());
-    
-    let mut html = format!(r#"
+
+    let mut html = format!(
+        r#"
 <div class="page-content">
     <h1>{}</h1>
     <div class="content">
         {}
     </div>
-"#, title, content);
-    
+"#,
+        title, content
+    );
+
     // Add sections if present
     if let Some(sections) = topic.get("sections").and_then(|v| v.as_array()) {
         for section in sections {
             if let Some(section_content) = section.get("content").and_then(|v| v.as_str()) {
-                html.push_str(&format!(r#"    <div class="section">
+                html.push_str(&format!(
+                    r#"    <div class="section">
         {}
     </div>
-"#, section_content));
+"#,
+                    section_content
+                ));
             }
         }
     }
-    
+
     // Add media if present
     if let Some(media_array) = topic.get("media").and_then(|v| v.as_array()) {
         for media in media_array {
             let media_type = media.get("type").and_then(|v| v.as_str()).unwrap_or("");
             let media_id = media.get("id").and_then(|v| v.as_str()).unwrap_or("");
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             match media_type {
                 "image" => {
-                    let extension = if media_id.contains("logo") { ".png" } 
-                                  else if media_id.contains("image-1") { ".png" }
-                                  else { ".jpg" };
+                    let extension = if media_id.contains("logo") {
+                        ".png"
+                    } else if media_id.contains("image-1") {
+                        ".png"
+                    } else {
+                        ".jpg"
+                    };
                     html.push_str(&format!(
                         r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#, 
+"#,
                         media_id, extension, media_title
                     ));
-                },
+                }
                 "video" => {
                     html.push_str(&format!(
                         r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#, 
+"#,
                         media_id
                     ));
-                },
+                }
                 _ => {}
             }
         }
     }
-    
+
     // Add knowledge check if present
     if let Some(kc) = topic.get("knowledgeCheck").and_then(|v| v.as_object()) {
-        html.push_str(r#"    <div class="knowledge-check">
+        html.push_str(
+            r#"    <div class="knowledge-check">
         <h3>Knowledge Check</h3>
-"#);
-        
+"#,
+        );
+
         let question = kc.get("question").and_then(|v| v.as_str()).unwrap_or("");
-        let kc_type = kc.get("type").and_then(|v| v.as_str()).unwrap_or("multiple-choice");
-        let correct_answer = kc.get("correctAnswer").and_then(|v| v.as_str()).unwrap_or("");
+        let kc_type = kc
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("multiple-choice");
+        let correct_answer = kc
+            .get("correctAnswer")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let explanation = kc.get("explanation").and_then(|v| v.as_str()).unwrap_or("");
-        
-        html.push_str(&format!(r#"        <div class="question">
+
+        html.push_str(&format!(
+            r#"        <div class="question">
             <p>{}</p>
-"#, question));
-        
+"#,
+            question
+        ));
+
         if kc_type == "multiple-choice" {
             if let Some(options) = kc.get("options").and_then(|v| v.as_array()) {
                 html.push_str(r#"            <div class="options">"#);
                 for (i, option) in options.iter().enumerate() {
                     let option_text = option.as_str().unwrap_or("");
                     let is_correct = option_text == correct_answer;
-                    
-                    html.push_str(&format!(r#"
+
+                    html.push_str(&format!(
+                        r#"
                 <label class="option">
                     <input type="radio" name="kc-question" value="{}" {} />
                     <span>{}</span>
-                </label>"#, 
+                </label>"#,
                         i,
-                        if is_correct { format!(r#"data-correct="{}""#, i) } else { String::new() },
+                        if is_correct {
+                            format!(r#"data-correct="{}""#, i)
+                        } else {
+                            String::new()
+                        },
                         option_text
                     ));
                 }
-                html.push_str(r#"
-            </div>"#);
+                html.push_str(
+                    r#"
+            </div>"#,
+                );
             }
         }
-        
-        html.push_str(&format!(r#"
+
+        html.push_str(&format!(
+            r#"
             <div class="explanation" style="display:none;">
                 <p>{}</p>
             </div>
         </div>
     </div>
-"#, explanation));
+"#,
+            explanation
+        ));
     }
-    
+
     // Add audio narration if present
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
@@ -222,107 +279,159 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
         <source src="media/{}.mp3" type="audio/mpeg">
         <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
     </audio>
-"#, 
+"#,
             audio, caption
         ));
     }
-    
+
     html.push_str("</div>\n");
     html
 }
 
 pub fn generate_assessment_page_html(assessment: &Value) -> String {
-    let pass_mark = assessment.get("passMark").and_then(|v| v.as_u64()).unwrap_or(80);
-    
-    let mut html = format!(r#"
+    let pass_mark = assessment
+        .get("passMark")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(80);
+
+    let mut html = format!(
+        r#"
 <div class="page-content" data-pass-mark="{}">
     <h1>Assessment</h1>
     <div class="assessment-questions">
-"#, pass_mark);
-    
+"#,
+        pass_mark
+    );
+
     // Add questions if present
     if let Some(questions) = assessment.get("questions").and_then(|v| v.as_array()) {
         for (q_index, question) in questions.iter().enumerate() {
-            let q_type = question.get("type").and_then(|v| v.as_str()).unwrap_or("multiple-choice");
-            let q_text = question.get("question").and_then(|v| v.as_str()).unwrap_or("");
+            let q_type = question
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("multiple-choice");
+            let q_text = question
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let default_id = format!("q{}", q_index + 1);
-            let q_id = question.get("id").and_then(|v| v.as_str()).unwrap_or(&default_id);
-            let explanation = question.get("explanation").and_then(|v| v.as_str()).unwrap_or("");
-            
-            html.push_str(&format!(r#"        <div class="question" data-question-id="{}">
+            let q_id = question
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&default_id);
+            let explanation = question
+                .get("explanation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            html.push_str(&format!(
+                r#"        <div class="question" data-question-id="{}">
             <p>{}</p>
-"#, q_id, q_text));
-            
+"#,
+                q_id, q_text
+            ));
+
             match q_type {
                 "multiple-choice" => {
                     if let Some(options) = question.get("options").and_then(|v| v.as_array()) {
-                        let correct_answer = question.get("correctAnswer").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                        
+                        let correct_answer = question
+                            .get("correctAnswer")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize;
+
                         html.push_str(r#"            <div class="options">"#);
                         for (i, option) in options.iter().enumerate() {
                             let option_text = option.as_str().unwrap_or("");
                             let is_correct = i == correct_answer;
-                            
-                            html.push_str(&format!(r#"
+
+                            html.push_str(&format!(
+                                r#"
                 <label class="option">
                     <input type="radio" name="q-{}" value="{}" {} />
                     <span>{}</span>
                 </label>"#,
                                 q_id,
                                 i,
-                                if is_correct { format!(r#"data-correct="{}""#, i) } else { String::new() },
+                                if is_correct {
+                                    format!(r#"data-correct="{}""#, i)
+                                } else {
+                                    String::new()
+                                },
                                 option_text
                             ));
                         }
-                        html.push_str(r#"
-            </div>"#);
+                        html.push_str(
+                            r#"
+            </div>"#,
+                        );
                     }
-                },
+                }
                 "true-false" => {
-                    let correct_answer = question.get("correctAnswer").and_then(|v| v.as_bool()).unwrap_or(false);
-                    
+                    let correct_answer = question
+                        .get("correctAnswer")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+
                     html.push_str(r#"            <div class="options">"#);
                     // True option
-                    html.push_str(&format!(r#"
+                    html.push_str(&format!(
+                        r#"
                 <label class="option">
                     <input type="radio" name="q-{}" value="0" {} />
                     <span>True</span>
                 </label>"#,
                         q_id,
-                        if correct_answer { "" } else { r#"data-correct="0""# }
+                        if correct_answer {
+                            ""
+                        } else {
+                            r#"data-correct="0""#
+                        }
                     ));
                     // False option
-                    html.push_str(&format!(r#"
+                    html.push_str(&format!(
+                        r#"
                 <label class="option">
                     <input type="radio" name="q-{}" value="1" {} />
                     <span>False</span>
                 </label>"#,
                         q_id,
-                        if !correct_answer { r#"data-correct="1""# } else { "" }
+                        if !correct_answer {
+                            r#"data-correct="1""#
+                        } else {
+                            ""
+                        }
                     ));
-                    html.push_str(r#"
-            </div>"#);
-                },
+                    html.push_str(
+                        r#"
+            </div>"#,
+                    );
+                }
                 _ => {}
             }
-            
-            html.push_str(&format!(r#"
+
+            html.push_str(&format!(
+                r#"
             <div class="explanation" style="display:none;">
                 <p>{}</p>
             </div>
         </div>
-"#, explanation));
+"#,
+                explanation
+            ));
         }
     }
-    
-    html.push_str(r#"    </div>
+
+    html.push_str(
+        r#"    </div>
 </div>
-"#);
+"#,
+    );
     html
 }
 
 pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMetadata) -> String {
-    let mut html = format!(r#"<!DOCTYPE html>
+    let mut html = format!(
+        r#"<!DOCTYPE html>
 <html lang="en" style="height: 100%; margin: 0; padding: 0;">
 <head>
     <meta charset="UTF-8">
@@ -369,85 +478,125 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
     <div class="navigation">
         <button id="nav-welcome" class="nav-btn active" onclick="showPage('welcome')">Welcome</button>
         <button id="nav-objectives" class="nav-btn" onclick="showPage('objectives')">Objectives</button>
-"#, metadata.title);
-    
+"#,
+        metadata.title
+    );
+
     // Add topic navigation buttons
     if let Some(topics) = course_content.get("topics").and_then(|v| v.as_array()) {
         for (i, topic) in topics.iter().enumerate() {
             let default_title = format!("Topic {}", i + 1);
-            let topic_title = topic.get("title").and_then(|v| v.as_str()).unwrap_or(&default_title);
+            let topic_title = topic
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&default_title);
             html.push_str(&format!(
                 r#"        <button id="nav-topic-{}" class="nav-btn" onclick="showPage('topic-{}')">{}</button>
 "#, i, i, topic_title
             ));
         }
     }
-    
+
     // Add assessment button if present
-    if course_content.get("assessment").and_then(|v| v.as_object()).is_some() {
+    if course_content
+        .get("assessment")
+        .and_then(|v| v.as_object())
+        .is_some()
+    {
         html.push_str(r#"        <button id="nav-assessment" class="nav-btn" onclick="showPage('assessment')">Assessment</button>
 "#);
     }
-    
-    html.push_str(r#"    </div>
+
+    html.push_str(
+        r#"    </div>
     
     <div class="content-container">
-"#);
-    
+"#,
+    );
+
     // Generate welcome page
-    if let Some(_welcome) = course_content.get("welcomePage").and_then(|v| v.as_object()) {
-        html.push_str(r#"        <div id="page-welcome" class="page-content active">
-"#);
+    if let Some(_welcome) = course_content
+        .get("welcomePage")
+        .and_then(|v| v.as_object())
+    {
+        html.push_str(
+            r#"        <div id="page-welcome" class="page-content active">
+"#,
+        );
         let welcome_html = generate_welcome_page_html(course_content.get("welcomePage").unwrap());
         // Remove the outer div wrapper since we're adding our own
-        let welcome_content = welcome_html.trim_start_matches("<div class=\"page-content\">\n")
+        let welcome_content = welcome_html
+            .trim_start_matches("<div class=\"page-content\">\n")
             .trim_end_matches("</div>\n");
         html.push_str(&format!("            {}", welcome_content));
-        html.push_str(r#"        </div>
-"#);
+        html.push_str(
+            r#"        </div>
+"#,
+        );
     }
-    
+
     // Generate objectives page
-    if let Some(_objectives) = course_content.get("learningObjectivesPage").and_then(|v| v.as_object()) {
-        html.push_str(r#"        <div id="page-objectives" class="page-content">
-"#);
-        let objectives_html = generate_objectives_page_html(course_content.get("learningObjectivesPage").unwrap());
+    if let Some(_objectives) = course_content
+        .get("learningObjectivesPage")
+        .and_then(|v| v.as_object())
+    {
+        html.push_str(
+            r#"        <div id="page-objectives" class="page-content">
+"#,
+        );
+        let objectives_html =
+            generate_objectives_page_html(course_content.get("learningObjectivesPage").unwrap());
         // Remove the outer div wrapper
-        let objectives_content = objectives_html.trim_start_matches("<div class=\"page-content\">\n")
+        let objectives_content = objectives_html
+            .trim_start_matches("<div class=\"page-content\">\n")
             .trim_end_matches("</div>\n");
         html.push_str(&format!("            {}", objectives_content));
-        html.push_str(r#"        </div>
-"#);
+        html.push_str(
+            r#"        </div>
+"#,
+        );
     }
-    
+
     // Generate topic pages
     if let Some(topics) = course_content.get("topics").and_then(|v| v.as_array()) {
         for (i, topic) in topics.iter().enumerate() {
-            html.push_str(&format!(r#"        <div id="page-topic-{}" class="page-content">
-"#, i));
+            html.push_str(&format!(
+                r#"        <div id="page-topic-{}" class="page-content">
+"#,
+                i
+            ));
             let topic_html = generate_topic_page_html(topic, i);
             // Remove the outer div wrapper
-            let topic_content = topic_html.trim_start_matches("<div class=\"page-content\">\n")
+            let topic_content = topic_html
+                .trim_start_matches("<div class=\"page-content\">\n")
                 .trim_end_matches("</div>\n");
             html.push_str(&format!("            {}", topic_content));
-            html.push_str(r#"        </div>
-"#);
+            html.push_str(
+                r#"        </div>
+"#,
+            );
         }
     }
-    
+
     // Generate assessment page
     if let Some(_assessment) = course_content.get("assessment").and_then(|v| v.as_object()) {
-        html.push_str(r#"        <div id="page-assessment" class="page-content">
-"#);
-        let assessment_html = generate_assessment_page_html(course_content.get("assessment").unwrap());
+        html.push_str(
+            r#"        <div id="page-assessment" class="page-content">
+"#,
+        );
+        let assessment_html =
+            generate_assessment_page_html(course_content.get("assessment").unwrap());
         // Remove the outer div wrapper
-        let assessment_content = assessment_html.trim_start_matches("<div class=\"page-content\" data-pass-mark=\"80\">\n")
+        let assessment_content = assessment_html
+            .trim_start_matches("<div class=\"page-content\" data-pass-mark=\"80\">\n")
             .trim_end_matches("</div>\n");
         html.push_str(&format!("            {}", assessment_content));
-        html.push_str(r#"        </div>
-"#);
+        html.push_str(
+            r#"        </div>
+"#,
+        );
     }
-    
+
     html.push_str(r#"    </div>
     
     <!-- Moodle iframe height fix -->
@@ -564,7 +713,7 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
     </script>
 </body>
 </html>"#);
-    
+
     html
 }
 

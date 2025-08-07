@@ -1,12 +1,12 @@
-pub mod manifest;
-pub mod package;
 pub mod generator;
-pub mod html_generator;
-pub mod navigation_generator;
-pub mod style_generator;
-pub mod output_validator;
 pub mod generator_enhanced;
+pub mod html_generator;
 pub mod html_generator_enhanced;
+pub mod manifest;
+pub mod navigation_generator;
+pub mod output_validator;
+pub mod package;
+pub mod style_generator;
 
 #[cfg(test)]
 mod tests {

@@ -1,16 +1,15 @@
+use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use chrono::{DateTime, Utc};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 // Global mutex map for file locking
-static FILE_LOCKS: Lazy<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
+static FILE_LOCKS: Lazy<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProjectFile {
@@ -112,61 +111,65 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
     // Get or create a lock for this specific file
     let file_path_buf = file_path.to_path_buf();
     let file_lock = {
-        let mut locks = FILE_LOCKS.lock().map_err(|e| format!("Failed to acquire lock map: {}", e))?;
-        locks.entry(file_path_buf.clone())
+        let mut locks = FILE_LOCKS
+            .lock()
+            .map_err(|e| format!("Failed to acquire lock map: {}", e))?;
+        locks
+            .entry(file_path_buf.clone())
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     };
-    
+
     // Acquire the lock for this specific file
     let _guard = match file_lock.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
             // If the lock is poisoned, we still want to save, so we recover
-            eprintln!("Warning: Lock was poisoned for file: {}", file_path.display());
+            eprintln!(
+                "Warning: Lock was poisoned for file: {}",
+                file_path.display()
+            );
             poisoned.into_inner()
         }
     };
-    
+
     // Update last modified timestamp
     let mut project = project.clone();
     project.project.last_modified = Utc::now();
-    
+
     // Ensure data consistency before saving
     ensure_data_consistency(&mut project);
-    
+
     // Serialize to pretty JSON
     let json = serde_json::to_string_pretty(&project)
         .map_err(|e| format!("Failed to serialize project: {}", e))?;
-    
+
     // Create parent directory if needed
     if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
-    
+
     // Write to a temporary file first, then rename (atomic operation)
     let temp_path = file_path.with_extension("scormproj.tmp");
-    
+
     {
         let mut file = fs::File::create(&temp_path)
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
-        
+
         file.write_all(json.as_bytes())
             .map_err(|e| format!("Failed to write temp file: {}", e))?;
-        
+
         file.sync_all()
             .map_err(|e| format!("Failed to sync temp file: {}", e))?;
     }
-    
+
     // Atomic rename to prevent partial writes
-    fs::rename(&temp_path, file_path)
-        .map_err(|e| {
-            // Clean up temp file if rename fails
-            let _ = fs::remove_file(&temp_path);
-            format!("Failed to rename temp file to final location: {}", e)
-        })?;
-    
+    fs::rename(&temp_path, file_path).map_err(|e| {
+        // Clean up temp file if rename fails
+        let _ = fs::remove_file(&temp_path);
+        format!("Failed to rename temp file to final location: {}", e)
+    })?;
+
     Ok(())
 }
 
@@ -175,24 +178,24 @@ pub fn load_project_file(file_path: &Path) -> Result<ProjectFile, String> {
     if !file_path.exists() {
         return Err(format!("Project file not found: {}", file_path.display()));
     }
-    
-    let contents = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    
+
+    let contents =
+        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
     let mut project: ProjectFile = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse project file: {}", e))?;
 
     project.project.path = Some(file_path.to_string_lossy().to_string());
-    
+
     Ok(project)
 }
 
 /// List all project files in the projects directory
 pub fn list_project_files() -> Result<Vec<PathBuf>, String> {
     let projects_dir = get_projects_directory()?;
-    
+
     let mut project_files = Vec::new();
-    
+
     if let Ok(entries) = fs::read_dir(&projects_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -201,14 +204,14 @@ pub fn list_project_files() -> Result<Vec<PathBuf>, String> {
             }
         }
     }
-    
+
     // Sort by modification time (newest first)
     project_files.sort_by(|a, b| {
         let a_time = fs::metadata(a).and_then(|m| m.modified()).ok();
         let b_time = fs::metadata(b).and_then(|m| m.modified()).ok();
         b_time.cmp(&a_time)
     });
-    
+
     Ok(project_files)
 }
 
@@ -217,24 +220,23 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
     if !file_path.exists() {
         return Err(format!("Project file not found: {}", file_path.display()));
     }
-    
+
     // Try to load the project to get its ID for folder deletion
     let project_id = match load_project_file(file_path) {
         Ok(project) => Some(project.project.id),
-        Err(_) => None
+        Err(_) => None,
     };
-    
+
     // Delete the main project file
-    fs::remove_file(file_path)
-        .map_err(|e| format!("Failed to delete project file: {}", e))?;
-    
+    fs::remove_file(file_path).map_err(|e| format!("Failed to delete project file: {}", e))?;
+
     // Delete the backup file if it exists
     let backup_path = file_path.with_extension("scormproj.backup");
     if backup_path.exists() {
         fs::remove_file(&backup_path)
             .map_err(|e| format!("Failed to delete backup file: {}", e))?;
     }
-    
+
     // Delete the project folder if it exists
     // First try with the project ID (UUID-based folder)
     if let Some(id) = project_id {
@@ -246,7 +248,7 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
             }
         }
     }
-    
+
     // Also try with the file stem (legacy folder naming)
     if let Some(file_stem) = file_path.file_stem() {
         if let Some(parent) = file_path.parent() {
@@ -257,7 +259,7 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -271,20 +273,20 @@ fn ensure_data_consistency(project: &mut ProjectFile) {
                 .filter_map(|t| t.as_str())
                 .map(|s| s.to_string())
                 .collect();
-            
+
             project.course_data.topics = topics.clone();
-            
+
             // Also update course title if present
             if let Some(title) = seed_data.get("courseTitle").and_then(|t| t.as_str()) {
                 project.course_data.title = title.to_string();
             }
-            
+
             // Update difficulty if present
             if let Some(difficulty) = seed_data.get("difficulty").and_then(|d| d.as_u64()) {
                 project.course_data.difficulty = difficulty as u8;
             }
-            
-            // Update template if present  
+
+            // Update template if present
             if let Some(template) = seed_data.get("template").and_then(|t| t.as_str()) {
                 project.course_data.template = template.to_string();
             }
@@ -345,13 +347,13 @@ mod tests {
     fn test_save_and_load_project_file() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_project.scormproj");
-        
+
         let project = create_test_project();
-        
+
         // Save project
         save_project_file(&project, &file_path).unwrap();
         assert!(file_path.exists());
-        
+
         // Load project
         let loaded_project = load_project_file(&file_path).unwrap();
         assert_eq!(loaded_project.project.name, project.project.name);
@@ -362,15 +364,15 @@ mod tests {
     fn test_project_file_includes_all_data() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("complete_project.scormproj");
-        
+
         let mut project = create_test_project();
-        
+
         // Add AI prompt
         project.ai_prompt = Some(AiPromptData {
             prompt: "Test prompt".to_string(),
             generated_at: Utc::now(),
         });
-        
+
         // Add media
         project.media.images.push(MediaItem {
             id: "img_123".to_string(),
@@ -379,28 +381,31 @@ mod tests {
             relative_path: Some("media/images/test.jpg".to_string()),
             metadata: None,
         });
-        
+
         project.media.videos.push(VideoItem {
             id: "vid_123".to_string(),
             youtube_url: "https://youtube.com/watch?v=123".to_string(),
             metadata: None,
         });
-        
+
         // Save and load
         save_project_file(&project, &file_path).unwrap();
         let loaded = load_project_file(&file_path).unwrap();
-        
+
         // Verify all data
         assert!(loaded.ai_prompt.is_some());
         assert_eq!(loaded.media.images.len(), 1);
         assert_eq!(loaded.media.videos.len(), 1);
-        assert_eq!(loaded.media.videos[0].youtube_url, "https://youtube.com/watch?v=123");
+        assert_eq!(
+            loaded.media.videos[0].youtube_url,
+            "https://youtube.com/watch?v=123"
+        );
     }
 
     #[test]
     fn test_list_project_files() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create multiple project files
         for i in 0..3 {
             let mut project = create_test_project();
@@ -408,10 +413,10 @@ mod tests {
             let file_path = temp_dir.path().join(format!("project_{}.scormproj", i));
             save_project_file(&project, &file_path).unwrap();
         }
-        
+
         // Also create a non-project file
         fs::write(temp_dir.path().join("other.txt"), "test").unwrap();
-        
+
         // Mock the projects directory for testing
         // In real implementation, we'd need to mock get_projects_directory()
         // For now, we'll test the filtering logic separately
@@ -423,29 +428,29 @@ mod tests {
         let file_path = temp_dir.path().join("delete_test.scormproj");
         let backup_path = temp_dir.path().join("delete_test.scormproj.backup");
         let project_folder = temp_dir.path().join("delete_test");
-        
+
         let mut project = create_test_project();
         // Set a specific ID for testing UUID folder deletion
         project.project.id = "test-uuid-123".to_string();
         save_project_file(&project, &file_path).unwrap();
         assert!(file_path.exists());
-        
+
         // Create a backup file and project folders to test deletion
         fs::write(&backup_path, "backup content").unwrap();
         fs::create_dir(&project_folder).unwrap();
         fs::write(project_folder.join("test.txt"), "test content").unwrap();
-        
+
         // Also create UUID-based folder to simulate media storage
         let uuid_folder = temp_dir.path().join("test-uuid-123");
         fs::create_dir(&uuid_folder).unwrap();
         fs::write(uuid_folder.join("media.png"), "media content").unwrap();
-        
+
         assert!(backup_path.exists());
         assert!(project_folder.exists());
         assert!(uuid_folder.exists());
-        
+
         delete_project_file(&file_path).unwrap();
-        
+
         // Verify all are deleted
         assert!(!file_path.exists());
         assert!(!backup_path.exists());
