@@ -10,6 +10,7 @@ import { generateMediaId, type MediaType } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { mediaUrlService } from './mediaUrl'
+import { BlobURLManager } from '../utils/BlobUrlManager'
 
 export interface MediaMetadata {
   size?: number
@@ -672,8 +673,8 @@ export class MediaService {
   /**
    * Delete media from file system
    */
-  async deleteMedia(mediaId: string): Promise<boolean> {
-    debugLogger.info('MediaService.deleteMedia', 'Deleting media', { mediaId })
+  async deleteMedia(projectId: string, mediaId: string): Promise<boolean> {
+    debugLogger.info('MediaService.deleteMedia', 'Deleting media', { projectId, mediaId })
     
     try {
       // Call FileStorage to delete from backend
@@ -682,6 +683,10 @@ export class MediaService {
       if (deleted) {
         // Remove from cache only if deletion succeeded
         this.mediaCache.delete(mediaId)
+        // Revoke blob URL if it exists
+        const blobManager = BlobURLManager.getInstance()
+        blobManager.revokeObjectURL(mediaId)
+        
         debugLogger.info('MediaService.deleteMedia', 'Media deleted successfully', { mediaId })
         logger.info('[MediaService] Deleted media:', mediaId)
         return true
@@ -694,6 +699,189 @@ export class MediaService {
       debugLogger.error('MediaService.deleteMedia', 'Failed to delete media', { mediaId, error })
       logger.error('[MediaService] Failed to delete media:', error)
       return false
+    }
+  }
+
+  /**
+   * Delete all media for a specific topic
+   */
+  async deleteMediaForTopic(projectId: string, topicId: string): Promise<void> {
+    debugLogger.info('MediaService.deleteMediaForTopic', 'Deleting media for topic', { projectId, topicId })
+    
+    try {
+      // List all media for the project
+      const allMedia = await this.fileStorage.listMedia()
+      
+      // Filter media for this topic
+      const topicMedia = allMedia.filter((media: any) => 
+        media.topicId === topicId || media.metadata?.topicId === topicId
+      )
+      
+      // Delete each media item
+      for (const media of topicMedia) {
+        await this.deleteMedia(projectId, media.id)
+      }
+      
+      // Revoke all blob URLs for the topic
+      const blobManager = BlobURLManager.getInstance()
+      blobManager.revokeAllForTopic(topicId)
+      
+      debugLogger.info('MediaService.deleteMediaForTopic', 'Deleted media for topic', { 
+        projectId, 
+        topicId, 
+        count: topicMedia.length 
+      })
+    } catch (error) {
+      debugLogger.error('MediaService.deleteMediaForTopic', 'Failed to delete media for topic', { 
+        projectId, 
+        topicId, 
+        error 
+      })
+      throw error
+    }
+  }
+
+  /**
+   * Delete all media in a project
+   */
+  async deleteAllMedia(projectId: string): Promise<void> {
+    debugLogger.info('MediaService.deleteAllMedia', 'Deleting all media', { projectId })
+    
+    try {
+      // List all media
+      const allMedia = await this.fileStorage.listMedia()
+      
+      // Delete each media item
+      for (const media of allMedia) {
+        await this.deleteMedia(projectId, media.id)
+      }
+      
+      // Clear cache and revoke all blob URLs
+      this.mediaCache.clear()
+      const blobManager = BlobURLManager.getInstance()
+      blobManager.revokeAll()
+      
+      debugLogger.info('MediaService.deleteAllMedia', 'Deleted all media', { 
+        projectId, 
+        count: allMedia.length 
+      })
+    } catch (error) {
+      debugLogger.error('MediaService.deleteAllMedia', 'Failed to delete all media', { projectId, error })
+      throw error
+    }
+  }
+
+  /**
+   * Bulk delete media with error handling
+   */
+  async bulkDeleteMedia(
+    projectId: string, 
+    mediaIds: string[], 
+    options: { batchSize?: number } = {}
+  ): Promise<{ succeeded: string[], failed: Array<{ id: string, error: string }> }> {
+    const { batchSize = 10 } = options
+    const succeeded: string[] = []
+    const failed: Array<{ id: string, error: string }> = []
+    
+    debugLogger.info('MediaService.bulkDeleteMedia', 'Starting bulk delete', { 
+      projectId, 
+      count: mediaIds.length,
+      batchSize 
+    })
+    
+    // Process in batches
+    for (let i = 0; i < mediaIds.length; i += batchSize) {
+      const batch = mediaIds.slice(i, i + batchSize)
+      
+      // Process batch in parallel
+      const results = await Promise.allSettled(
+        batch.map(mediaId => this.deleteMedia(projectId, mediaId))
+      )
+      
+      results.forEach((result, index) => {
+        const mediaId = batch[index]
+        if (result.status === 'fulfilled' && result.value) {
+          succeeded.push(mediaId)
+        } else {
+          failed.push({
+            id: mediaId,
+            error: result.status === 'rejected' 
+              ? result.reason?.message || 'Unknown error'
+              : 'Failed to delete'
+          })
+        }
+      })
+    }
+    
+    debugLogger.info('MediaService.bulkDeleteMedia', 'Bulk delete completed', { 
+      projectId,
+      succeeded: succeeded.length,
+      failed: failed.length 
+    })
+    
+    return { succeeded, failed }
+  }
+
+  /**
+   * Find orphaned media (media not associated with any topic)
+   */
+  async findOrphanedMedia(projectId: string): Promise<string[]> {
+    debugLogger.info('MediaService.findOrphanedMedia', 'Finding orphaned media', { projectId })
+    
+    try {
+      // Get all media
+      const allMedia = await this.fileStorage.listMedia()
+      
+      // Get all topics from content
+      const content = await this.fileStorage.getContent()
+      const validTopicIds = new Set(content?.topics?.map((t: any) => t.id) || [])
+      
+      // Find media without valid topics
+      const orphaned = allMedia.filter((media: any) => {
+        const topicId = media.topicId || media.metadata?.topicId
+        return !topicId || !validTopicIds.has(topicId)
+      }).map((media: any) => media.id)
+      
+      debugLogger.info('MediaService.findOrphanedMedia', 'Found orphaned media', { 
+        projectId,
+        count: orphaned.length 
+      })
+      
+      return orphaned
+    } catch (error) {
+      debugLogger.error('MediaService.findOrphanedMedia', 'Failed to find orphaned media', { 
+        projectId, 
+        error 
+      })
+      return []
+    }
+  }
+
+  /**
+   * Clean up orphaned media
+   */
+  async cleanupOrphanedMedia(projectId: string): Promise<number> {
+    debugLogger.info('MediaService.cleanupOrphanedMedia', 'Cleaning up orphaned media', { projectId })
+    
+    try {
+      const orphaned = await this.findOrphanedMedia(projectId)
+      
+      for (const mediaId of orphaned) {
+        await this.deleteMedia(projectId, mediaId)
+      }
+      
+      debugLogger.info('MediaService.cleanupOrphanedMedia', 'Cleaned up orphaned media', { 
+        projectId,
+        count: orphaned.length 
+      })
+      
+      return orphaned.length
+    } catch (error) {
+      debugLogger.error('MediaService.cleanupOrphanedMedia', 'Failed to cleanup orphaned media', { 
+        projectId, 
+        error 
+      })
+      return 0
     }
   }
   
