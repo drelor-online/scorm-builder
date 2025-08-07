@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-export type DialogType = 'settings' | 'help' | 'delete' | 'unsaved' | 'performance' | 'testChecklist' | null;
+export type DialogType = 'settings' | 'help' | 'delete' | 'unsaved' | null;
 
 export function useDialogManager() {
   const [activeDialog, setActiveDialog] = useState<DialogType>(null);

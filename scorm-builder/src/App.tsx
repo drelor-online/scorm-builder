@@ -27,10 +27,6 @@ const AIPromptGenerator = lazy(() =>
 const JSONImportValidator = lazy(() => 
   import('@/components/JSONImportValidator').then(m => ({ default: m.JSONImportValidator }))
 )
-const PerformanceDashboard = lazy(() => 
-  import('@/components/PerformanceDashboard').then(m => ({ default: m.PerformanceDashboard }))
-)
-
 const MediaEnhancementWizard = lazy(() => 
   import('./components/MediaEnhancementWizard').then(m => ({ default: m.MediaEnhancementWizard }))
 )
@@ -42,9 +38,6 @@ const ActivitiesEditor = lazy(() =>
 )
 const SCORMPackageBuilder = lazy(() => 
   import('./components/SCORMPackageBuilder').then(m => ({ default: m.SCORMPackageBuilder }))
-)
-const TestChecklist = lazy(() => 
-  import('./components/TestChecklist').then(m => ({ default: m.TestChecklist }))
 )
 // Types
 import type { CourseSeedData } from '@/types/course'
@@ -86,10 +79,6 @@ import { envConfig } from '@/config/environment'
 // Styles
 import './App.css'
 
-// Import E2E tests for browser console
-import './utils/browserE2ETests'
-import './utils/e2eTests'
-import './utils/automatedUITests'
 
 interface AppProps {
   onBackToDashboard?: () => void
@@ -265,17 +254,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Only remove truly obsolete localStorage data
     // Keep UI preferences and non-critical data in localStorage
     
-    // Test mode keyboard shortcut (Ctrl+Shift+T)
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'T') {
-        e.preventDefault()
-        showDialog('testChecklist');
-      }
-      // Performance dashboard shortcut (Ctrl+Shift+P)
-      else if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-        e.preventDefault()
-        showDialog('performance');
-      }
+      // Reserved for future keyboard shortcuts
     }
     
     window.addEventListener('keydown', handleKeyDown)
@@ -1682,49 +1662,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         onCancel={hideDialog}
       />
       
-      {/* Performance Dashboard - Press Ctrl+Shift+P to toggle */}
-      {activeDialog === 'performance' && (
-        <Suspense fallback={<LoadingComponent />}>
-          <PerformanceDashboard show={true} />
-        </Suspense>
-      )}
-      
-      {/* Test Checklist Modal - Press Ctrl+Shift+T to toggle */}
-      {activeDialog === 'testChecklist' && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1200,
-          overflowY: 'auto'
-        }}>
-          <div style={{
-            position: 'relative',
-            width: '90%',
-            maxWidth: '1200px',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <Button
-              onClick={hideDialog}
-              style={{
-                position: 'absolute',
-                right: '1rem',
-                top: '1rem',
-                zIndex: 1
-              }}
-            >
-              Close (Ctrl+Shift+T)
-            </Button>
-            <Suspense fallback={<LoadingComponent />}>
-              <TestChecklist />
-            </Suspense>
-          </div>
-        </div>
-      )}
       
       {/* Toast notification */}
       {toast && (
