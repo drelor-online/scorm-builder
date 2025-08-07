@@ -69,7 +69,9 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
           
           if (mediaData?.data) {
             // Create blob URL from data
-            const blob = new Blob([mediaData.data], { type: 'audio/mp3' })
+            // Handle both Uint8Array and ArrayBuffer
+            const dataArray = mediaData.data instanceof ArrayBuffer ? new Uint8Array(mediaData.data) : new Uint8Array(mediaData.data as any)
+            const blob = new Blob([dataArray], { type: 'audio/mp3' })
             const newBlobUrl = URL.createObjectURL(blob)
             
             // Clean up old blob URL

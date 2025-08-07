@@ -257,7 +257,9 @@ export class MediaService {
     
     try {
       // Convert Uint8Array to Blob for FileStorage
-      const blob = new Blob([data])
+      // Handle both Uint8Array and ArrayBuffer
+      const dataArray = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data as any)
+      const blob = new Blob([dataArray])
       
       // Store using FileStorage - this goes to the file system via Tauri
       await this.fileStorage.storeMedia(id, blob, type, {

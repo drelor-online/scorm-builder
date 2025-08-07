@@ -20,7 +20,9 @@ export async function handleFileAssociation(callbacks: FileAssociationCallbacks)
       const fileContents = await readFile(filePath)
       
       // Create a File object from the binary data
-      const blob = new Blob([fileContents])
+      // Handle both Uint8Array and ArrayBuffer
+      const dataArray = fileContents instanceof ArrayBuffer ? new Uint8Array(fileContents) : new Uint8Array(fileContents as any)
+      const blob = new Blob([dataArray])
       const fileName = filePath.split(/[\\/]/).pop() || 'project.scormproj'
       const file = new File([blob], fileName, { type: 'application/zip' })
       

@@ -96,7 +96,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const mediaData = await getMedia(mediaId)
       if (mediaData && mediaData.data) {
         console.log('[SCORMPackageBuilder] Found media:', mediaId)
-        return new Blob([mediaData.data], { type: mediaData.metadata?.mimeType || 'application/octet-stream' })
+        // Handle both Uint8Array and ArrayBuffer
+        const dataArray = mediaData.data instanceof ArrayBuffer ? new Uint8Array(mediaData.data) : new Uint8Array(mediaData.data as any)
+        return new Blob([dataArray], { type: mediaData.metadata?.mimeType || 'application/octet-stream' })
       }
     } catch (error) {
       console.error('[SCORMPackageBuilder] Error getting media:', error)
@@ -326,7 +328,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       console.log('[SCORMPackageBuilder] Performance metrics:', performanceMetrics)
       
       const newPackage = {
-        data: result.buffer,
+        data: result.buffer instanceof ArrayBuffer ? result.buffer : (result.buffer as any).buffer || result.buffer,
         metadata: metadata
       }
       
