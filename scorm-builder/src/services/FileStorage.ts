@@ -498,6 +498,37 @@ export class FileStorage {
     }
   }
 
+  // Helper function to check if a string is a project path
+  isProjectPath(value: string): boolean {
+    // Check if it ends with .scormproj or contains path separators
+    return value.endsWith('.scormproj') || 
+           value.includes('/') || 
+           value.includes('\\');
+  }
+
+  // Helper function to resolve a project ID or path to a full path
+  async resolveProjectPath(idOrPath: string): Promise<string> {
+    // If it's already a path, return it
+    if (this.isProjectPath(idOrPath)) {
+      return idOrPath;
+    }
+    
+    // Otherwise, it's an ID - look it up in the project list
+    try {
+      const projects = await invoke<any[]>('list_projects');
+      const project = projects.find(p => p.id === idOrPath);
+      
+      if (!project) {
+        throw new Error(`Project not found: ${idOrPath}`);
+      }
+      
+      return project.path;
+    } catch (error) {
+      debugLogger.error('FileStorage.resolveProjectPath', `Failed to resolve project path for: ${idOrPath}`, error);
+      throw new Error(`Project not found: ${idOrPath}`);
+    }
+  }
+
   getCurrentProjectId(): string | null {
     return this.currentProjectId;
   }
@@ -1038,17 +1069,26 @@ export class FileStorage {
     }
   }
 
-  async deleteProject(projectId: string): Promise<void> {
+  async deleteProject(projectIdOrPath: string): Promise<void> {
     try {
-      await invoke('delete_project', { filePath: projectId });
-      if (this._currentProjectPath === projectId) {
+      // Resolve to path if it's an ID
+      const projectPath = await this.resolveProjectPath(projectIdOrPath);
+      
+      await invoke('delete_project', { filePath: projectPath });
+      
+      // Clear current project if it matches
+      if (this._currentProjectPath === projectPath || this._currentProjectId === projectIdOrPath) {
         this._currentProjectId = null;
         this._currentProjectPath = null;
       }
       
-      debugLogger.info('FileStorage.deleteProject', `Project deleted: ${projectId}`);
+      debugLogger.info('FileStorage.deleteProject', `Project deleted: ${projectPath}`);
     } catch (error) {
-      debugLogger.error('FileStorage.deleteProject', `Failed to delete project: ${projectId}`, error);
+      // If resolveProjectPath threw an error, pass it through
+      if (error instanceof Error && error.message.includes('Project not found')) {
+        throw error;
+      }
+      debugLogger.error('FileStorage.deleteProject', `Failed to delete project: ${projectIdOrPath}`, error);
       throw error;
     }
   }
@@ -1109,21 +1149,32 @@ export class FileStorage {
     debugLogger.info('FileStorage.closeProject', 'Project closed and saves cancelled');
   }
 
-  async recoverFromBackup(projectId: string): Promise<any> {
+  async recoverFromBackup(projectIdOrPath: string): Promise<any> {
     try {
-      debugLogger.info('FileStorage.recoverFromBackup', `Recovering from backup: ${projectId}`);
+      // Reject if user tries to pass a backup file path directly
+      if (projectIdOrPath.endsWith('.backup')) {
+        throw new Error('Invalid project identifier: backup files cannot be specified directly');
+      }
       
-      const recoveredData = await invoke<any>('recover_from_backup', { projectId });
+      // Resolve to path if it's an ID
+      const projectPath = await this.resolveProjectPath(projectIdOrPath);
+      
+      debugLogger.info('FileStorage.recoverFromBackup', `Recovering from backup: ${projectPath}`);
+      
+      const recoveredData = await invoke<any>('recover_from_backup', { projectId: projectPath });
       
       debugLogger.info('FileStorage.recoverFromBackup', 'Recovery successful', {
-        projectId,
+        projectId: projectPath,
         hasPages: !!recoveredData.pages,
         hasMetadata: !!recoveredData.metadata
       });
       
       return recoveredData;
     } catch (error) {
-      debugLogger.error('FileStorage.recoverFromBackup', `Failed to recover from backup: ${projectId}`, error);
+      if (error instanceof Error && error.message.includes('Invalid project identifier')) {
+        throw error;
+      }
+      debugLogger.error('FileStorage.recoverFromBackup', `Failed to recover from backup: ${projectIdOrPath}`, error);
       throw new Error('Failed to recover from backup');
     }
   }

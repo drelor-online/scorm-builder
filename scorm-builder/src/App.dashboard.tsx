@@ -35,8 +35,10 @@ function DashboardContent() {
   }, [storage.currentProjectId])
   
   useEffect(() => {
-    // Check for crash recovery on startup
-    checkForCrashRecovery()
+    // Check for crash recovery on startup (only if storage is initialized)
+    if (storage.isInitialized) {
+      checkForCrashRecovery()
+    }
     
     // Set up keyboard shortcuts
     const handleKeyPress = async (e: KeyboardEvent) => {
@@ -65,7 +67,7 @@ function DashboardContent() {
     
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [])
+  }, [storage.isInitialized])
   
   useEffect(() => {
     // Set up file association handling
@@ -133,8 +135,8 @@ function DashboardContent() {
   const checkForCrashRecovery = async () => {
     try {
       const recovery = await storage.checkForRecovery()
-      if (recovery.hasBackup && recovery.backupPath && recovery.projectName) {
-        setRecoveryInfo({ backupPath: recovery.backupPath, projectName: recovery.projectName })
+      if (recovery.hasBackup && recovery.projectPath && recovery.projectName) {
+        setRecoveryInfo({ backupPath: recovery.projectPath, projectName: recovery.projectName })
         setShowRecoveryDialog(true)
       }
     } catch (error) {
@@ -146,15 +148,19 @@ function DashboardContent() {
     if (!recoveryInfo) return
     
     try {
-      await storage.recoverFromBackup(recoveryInfo.backupPath)
+      // recoverFromBackup expects the project path, not the backup path
+      const result = await storage.recoverFromBackup(recoveryInfo.backupPath)
       setShowRecoveryDialog(false)
       setRecoveryInfo(null)
-      if (storage.currentProjectId) {
-        await handleProjectSelected(storage.currentProjectId)
-      }
+      // Open the recovered project
+      await storage.openProject(recoveryInfo.backupPath, (progress) => {
+        setLoadingProgress(progress as any)
+      })
+      setShowDashboard(false)
     } catch (error: any) {
-      setError(`Failed to recover project: ${error.message}`)
-      setTimeout(() => setError(null), 5000)
+      // Show error but keep dialog open for retry
+      showError(`Failed to recover: ${error.message}`)
+      // Dialog stays open so user can retry
     }
   }
   

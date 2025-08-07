@@ -178,9 +178,9 @@ describe('PersistentStorageContext', () => {
     it('should delete a project', async () => {
       const { result } = renderHook(() => useStorage(), { wrapper })
       
-      await result.current.deleteProject('project-to-delete', '/path/to/file')
+      await result.current.deleteProject('/path/to/project.scormproj')
       
-      expect(mockStorage.deleteProject).toHaveBeenCalledWith('project-to-delete', '/path/to/file')
+      expect(mockStorage.deleteProject).toHaveBeenCalledWith('/path/to/project.scormproj')
     })
   })
 
