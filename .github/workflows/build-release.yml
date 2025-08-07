@@ -98,7 +98,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $portableDir
           
           # Copy the exe
-          Copy-Item "scorm-builder/src-tauri/target/release/SCORM Course Builder.exe" "$portableDir/SCORM-Course-Builder.exe"
+          Copy-Item "scorm-builder/src-tauri/target/release/scorm-builder.exe" "$portableDir/SCORM-Course-Builder.exe"
           
           # Create launcher batch file
           @"
