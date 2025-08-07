@@ -1,0 +1,54 @@
+name: Development Build
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test-build:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './scorm-builder/src-tauri -> target'
+
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: npm ci
+
+      - name: Run TypeScript check
+        working-directory: ./scorm-builder
+        run: npx tsc --noEmit
+
+      - name: Build frontend
+        working-directory: ./scorm-builder
+        run: npm run build
+
+      - name: Build Rust binary
+        working-directory: ./scorm-builder/src-tauri
+        run: cargo build --release
+
+      - name: Output summary
+        run: |
+          echo "## ✅ Build Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The development build completed successfully." >> $GITHUB_STEP_SUMMARY

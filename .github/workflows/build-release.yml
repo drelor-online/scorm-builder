@@ -1,0 +1,228 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './scorm-builder/src-tauri -> target'
+
+      - name: Install frontend dependencies
+        working-directory: ./scorm-builder
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ./scorm-builder
+          args: ${{ matrix.args }}
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            scorm-builder/src-tauri/target/release/bundle/msi/*.msi
+            scorm-builder/src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 7
+
+  create-portable:
+    needs: build-tauri
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './scorm-builder/src-tauri -> target'
+
+      - name: Install frontend dependencies
+        working-directory: ./scorm-builder
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ./scorm-builder
+        run: npm run build
+
+      - name: Build Rust binary
+        working-directory: ./scorm-builder/src-tauri
+        run: cargo build --release
+
+      - name: Create portable package
+        shell: pwsh
+        run: |
+          # Create portable directory structure
+          $portableDir = "SCORM-Builder-Portable"
+          New-Item -ItemType Directory -Force -Path $portableDir
+          
+          # Copy the exe
+          Copy-Item "scorm-builder/src-tauri/target/release/SCORM Course Builder.exe" "$portableDir/SCORM-Course-Builder.exe"
+          
+          # Create launcher batch file
+          @"
+          @echo off
+          title SCORM Course Builder
+          start "" "%~dp0SCORM-Course-Builder.exe"
+          "@ | Out-File -FilePath "$portableDir/Launch-SCORM-Builder.bat" -Encoding ASCII
+          
+          # Create README
+          @"
+          SCORM Course Builder - Portable Edition
+          ========================================
+          
+          To run the application:
+          1. Double-click Launch-SCORM-Builder.bat
+             OR
+          2. Run SCORM-Course-Builder.exe directly
+          
+          This portable version stores all data in:
+          %APPDATA%\com.scorm-builder.app
+          
+          Requirements:
+          - Windows 10/11 64-bit
+          - WebView2 Runtime (auto-installed if missing)
+          "@ | Out-File -FilePath "$portableDir/README.txt" -Encoding ASCII
+          
+          # Get version from package.json
+          $packageJson = Get-Content "scorm-builder/package.json" | ConvertFrom-Json
+          $version = $packageJson.version
+          
+          # Create ZIP file
+          $zipName = "SCORM-Builder-Portable-v$version-Win64.zip"
+          Compress-Archive -Path $portableDir -DestinationPath $zipName -CompressionLevel Optimal
+          
+          Write-Host "Created portable package: $zipName"
+          Write-Host "Package size: $((Get-Item $zipName).Length / 1MB) MB"
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-package
+          path: SCORM-Builder-Portable-*.zip
+          retention-days: 7
+
+  create-release:
+    needs: [build-tauri, create-portable]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./scorm-builder/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          echo "# SCORM Builder v${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## 📦 Downloads" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "### Windows" >> RELEASE_NOTES.md
+          echo "- **Portable Version** (Recommended): SCORM-Builder-Portable-*.zip" >> RELEASE_NOTES.md
+          echo "  - No installation required" >> RELEASE_NOTES.md
+          echo "  - Run from any location" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "- **Installer Versions**:" >> RELEASE_NOTES.md
+          echo "  - MSI Installer: *.msi" >> RELEASE_NOTES.md
+          echo "  - NSIS Installer: *.exe" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## 📝 Recent Changes" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          git log -5 --pretty=format:"- %s" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## 🚀 Getting Started" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "1. Download the portable version" >> RELEASE_NOTES.md
+          echo "2. Extract the ZIP file" >> RELEASE_NOTES.md
+          echo "3. Run \`Launch-SCORM-Builder.bat\`" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## 📋 System Requirements" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "- Windows 10/11 (64-bit)" >> RELEASE_NOTES.md
+          echo "- 4GB RAM minimum" >> RELEASE_NOTES.md
+          echo "- 500MB free disk space" >> RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: SCORM Builder v${{ steps.version.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/portable-package/*.zip
+            artifacts/windows-installers/*.msi
+            artifacts/windows-installers/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output summary
+        run: |
+          echo "## 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- Portable ZIP package" >> $GITHUB_STEP_SUMMARY
+          echo "- MSI installer" >> $GITHUB_STEP_SUMMARY
+          echo "- NSIS installer" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release is now available at: https://github.com/${{ github.repository }}/releases" >> $GITHUB_STEP_SUMMARY

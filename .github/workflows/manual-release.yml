@@ -1,0 +1,133 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.1)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  create-release:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './scorm-builder/src-tauri -> target'
+
+      - name: Update version in package.json
+        working-directory: ./scorm-builder
+        run: |
+          npm version ${{ github.event.inputs.version }} --no-git-tag-version
+
+      - name: Update version in Cargo.toml
+        working-directory: ./scorm-builder/src-tauri
+        shell: pwsh
+        run: |
+          $content = Get-Content "Cargo.toml"
+          $content = $content -replace 'version = "\d+\.\d+\.\d+"', 'version = "${{ github.event.inputs.version }}"'
+          $content | Set-Content "Cargo.toml"
+
+      - name: Update version in tauri.conf.json
+        working-directory: ./scorm-builder/src-tauri
+        shell: pwsh
+        run: |
+          $json = Get-Content "tauri.conf.json" | ConvertFrom-Json
+          $json.version = "${{ github.event.inputs.version }}"
+          $json | ConvertTo-Json -Depth 100 | Set-Content "tauri.conf.json"
+
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ./scorm-builder
+          tagName: v${{ github.event.inputs.version }}
+          releaseName: SCORM Builder v${{ github.event.inputs.version }}
+          releaseBody: |
+            # SCORM Builder v${{ github.event.inputs.version }}
+            
+            ## 📦 Installation
+            
+            ### Windows
+            - **Portable Version**: Download the `.zip` file (no installation required)
+            - **Installer**: Download the `.exe` or `.msi` file
+            
+            ## 📝 What's New
+            
+            See [commits](https://github.com/${{ github.repository }}/commits/v${{ github.event.inputs.version }}) for detailed changes.
+            
+            ## 🚀 Getting Started
+            
+            1. Download your preferred package
+            2. For portable: Extract and run `Launch-SCORM-Builder.bat`
+            3. For installer: Run the installer and follow the prompts
+            
+          releaseDraft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+
+      - name: Create portable package
+        shell: pwsh
+        run: |
+          $portableDir = "SCORM-Builder-Portable"
+          New-Item -ItemType Directory -Force -Path $portableDir
+          
+          Copy-Item "scorm-builder/src-tauri/target/release/SCORM Course Builder.exe" "$portableDir/SCORM-Course-Builder.exe"
+          
+          @"
+          @echo off
+          title SCORM Course Builder
+          start "" "%~dp0SCORM-Course-Builder.exe"
+          "@ | Out-File -FilePath "$portableDir/Launch-SCORM-Builder.bat" -Encoding ASCII
+          
+          @"
+          SCORM Course Builder v${{ github.event.inputs.version }} - Portable Edition
+          =========================================================
+          
+          To run: Double-click Launch-SCORM-Builder.bat
+          
+          Requirements:
+          - Windows 10/11 64-bit
+          - WebView2 Runtime (auto-installed if missing)
+          "@ | Out-File -FilePath "$portableDir/README.txt" -Encoding ASCII
+          
+          $zipName = "SCORM-Builder-Portable-v${{ github.event.inputs.version }}-Win64.zip"
+          Compress-Archive -Path $portableDir -DestinationPath $zipName -CompressionLevel Optimal
+
+      - name: Upload portable to release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          files: SCORM-Builder-Portable-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "Bump version to ${{ github.event.inputs.version }}"
+          git push
