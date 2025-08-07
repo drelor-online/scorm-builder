@@ -1,0 +1,254 @@
+name: TDD Coverage Enforcement
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test-coverage:
+    name: Test Coverage Check
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: scorm-builder/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./scorm-builder
+      run: npm ci
+    
+    - name: Run tests with coverage
+      working-directory: ./scorm-builder
+      run: npm test -- --run --coverage
+      env:
+        CI: true
+    
+    - name: Check coverage thresholds
+      working-directory: ./scorm-builder
+      run: |
+        npm test -- --run --coverage --coverage.thresholds.statements=70 --coverage.thresholds.branches=60 --coverage.thresholds.functions=70 --coverage.thresholds.lines=70
+      continue-on-error: true
+      id: coverage-check
+    
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./scorm-builder/coverage
+        fail_ci_if_error: false
+        verbose: true
+    
+    - name: Generate coverage report comment
+      if: github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+      uses: 5monkeys/cobertura-action@master
+      with:
+        path: ./scorm-builder/coverage/cobertura-coverage.xml
+        minimum_coverage: 70
+        fail_below_threshold: false
+        show_line: true
+        show_branch: true
+        show_missing: true
+    
+    - name: TDD Compliance Check
+      working-directory: ./scorm-builder
+      run: |
+        echo "🧪 Checking TDD Compliance..."
+        
+        # Check if test files exist for source files
+        for file in $(find src -name "*.ts" -o -name "*.tsx" | grep -v ".test." | grep -v ".spec." | grep -v "__tests__"); do
+          base=$(basename "$file" | sed 's/\.[^.]*$//')
+          dir=$(dirname "$file")
+          
+          # Look for corresponding test file
+          if ! find "$dir" -name "*$base*.test.*" -o -name "*$base*.spec.*" 2>/dev/null | grep -q .; then
+            if ! find "$dir/__tests__" -name "*$base*" 2>/dev/null | grep -q .; then
+              echo "⚠️  Missing test for: $file"
+            fi
+          fi
+        done
+        
+        echo "✅ TDD compliance check complete"
+
+  test-types:
+    name: Test Types Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: scorm-builder/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./scorm-builder
+      run: npm ci
+    
+    - name: Check for different test types
+      working-directory: ./scorm-builder
+      run: |
+        echo "📊 Test Statistics:"
+        echo "==================="
+        
+        # Count different types of tests
+        UNIT_TESTS=$(find src -name "*.test.ts" -o -name "*.test.tsx" | wc -l)
+        SPEC_TESTS=$(find src -name "*.spec.ts" -o -name "*.spec.tsx" | wc -l)
+        INTEGRATION_TESTS=$(find src -name "*.integration.test.*" | wc -l)
+        BEHAVIOR_TESTS=$(find src -name "*.behavior.test.*" | wc -l)
+        
+        echo "Unit Tests: $UNIT_TESTS"
+        echo "Spec Tests: $SPEC_TESTS"
+        echo "Integration Tests: $INTEGRATION_TESTS"
+        echo "Behavior Tests: $BEHAVIOR_TESTS"
+        
+        TOTAL_TESTS=$((UNIT_TESTS + SPEC_TESTS + INTEGRATION_TESTS + BEHAVIOR_TESTS))
+        echo "Total Test Files: $TOTAL_TESTS"
+        
+        # Count source files
+        SOURCE_FILES=$(find src -name "*.ts" -o -name "*.tsx" | grep -v ".test." | grep -v ".spec." | grep -v "__tests__" | wc -l)
+        echo "Source Files: $SOURCE_FILES"
+        
+        # Calculate ratio
+        if [ $SOURCE_FILES -gt 0 ]; then
+          RATIO=$(echo "scale=2; $TOTAL_TESTS / $SOURCE_FILES" | bc -l 2>/dev/null || echo "N/A")
+          echo "Test-to-Source Ratio: $RATIO"
+          
+          # Warn if ratio is too low
+          if [ "$RATIO" != "N/A" ]; then
+            if (( $(echo "$RATIO < 0.5" | bc -l 2>/dev/null || echo 0) )); then
+              echo "⚠️  WARNING: Test coverage ratio is low (< 0.5)"
+              echo "   Consider adding more tests!"
+            fi
+          fi
+        fi
+
+  lint-tests:
+    name: Lint Test Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: scorm-builder/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./scorm-builder
+      run: npm ci
+    
+    - name: Lint tests
+      working-directory: ./scorm-builder
+      run: |
+        echo "🔍 Checking test quality..."
+        
+        # Check for test descriptions
+        echo "Checking for proper test descriptions..."
+        if grep -r "it(''" src/**/*.test.* 2>/dev/null || grep -r 'it("")' src/**/*.test.* 2>/dev/null; then
+          echo "❌ Found tests without descriptions!"
+          exit 1
+        fi
+        
+        # Check for skipped tests
+        echo "Checking for skipped tests..."
+        SKIPPED=$(grep -r "it.skip\|describe.skip\|xit\|xdescribe" src/**/*.test.* 2>/dev/null | wc -l || echo 0)
+        if [ $SKIPPED -gt 0 ]; then
+          echo "⚠️  Found $SKIPPED skipped tests"
+        fi
+        
+        # Check for focused tests
+        echo "Checking for focused tests..."
+        if grep -r "it.only\|describe.only\|fit\|fdescribe" src/**/*.test.* 2>/dev/null; then
+          echo "❌ Found focused tests! Remove .only before committing"
+          exit 1
+        fi
+        
+        echo "✅ Test quality check passed"
+
+  mutation-testing:
+    name: Mutation Testing (Optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: scorm-builder/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./scorm-builder
+      run: |
+        npm ci
+        npm install --save-dev @stryker-mutator/core @stryker-mutator/typescript-checker @stryker-mutator/vitest-runner 2>/dev/null || true
+    
+    - name: Run mutation testing
+      working-directory: ./scorm-builder
+      continue-on-error: true
+      run: |
+        echo "🧬 Running mutation testing (optional)..."
+        npx stryker run 2>/dev/null || echo "Mutation testing not configured"
+
+  report:
+    name: Generate Test Report
+    needs: [test-coverage, test-types, lint-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Generate summary
+      run: |
+        echo "## 📊 TDD Enforcement Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.test-coverage.result }}" == "success" ]; then
+          echo "✅ Test Coverage: **Passed**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Test Coverage: **Failed**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.test-types.result }}" == "success" ]; then
+          echo "✅ Test Types: **Checked**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Test Types: **Warning**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.lint-tests.result }}" == "success" ]; then
+          echo "✅ Test Quality: **Good**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Test Quality: **Issues Found**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📝 TDD Reminder" >> $GITHUB_STEP_SUMMARY
+        echo "Always follow the **Red-Green-Refactor** cycle:" >> $GITHUB_STEP_SUMMARY
+        echo "1. 🔴 **RED**: Write a failing test" >> $GITHUB_STEP_SUMMARY
+        echo "2. 🟢 **GREEN**: Write minimal code to pass" >> $GITHUB_STEP_SUMMARY
+        echo "3. 🔄 **REFACTOR**: Improve the code" >> $GITHUB_STEP_SUMMARY
