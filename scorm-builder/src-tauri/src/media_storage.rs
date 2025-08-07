@@ -58,8 +58,12 @@ fn extract_project_id(project_id_or_path: &str) -> String {
 }
 
 pub fn get_media_directory(project_id: &str) -> Result<PathBuf, String> {
-    let projects_dir =
-        get_projects_directory().map_err(|e| format!("Failed to get projects directory: {e}"))?;
+    // Check for test environment variable first
+    let projects_dir = if let Ok(test_dir) = std::env::var("SCORM_BUILDER_TEST_DIR") {
+        PathBuf::from(test_dir)
+    } else {
+        get_projects_directory().map_err(|e| format!("Failed to get projects directory: {e}"))?
+    };
 
     let media_dir = projects_dir.join(project_id).join("media");
 

@@ -478,9 +478,24 @@ export class FileStorage {
     }
   }
 
-  async checkForRecovery(): Promise<{ hasBackup: boolean }> {
-    // TODO: Implement recovery check
-    return { hasBackup: false };
+  async checkForRecovery(): Promise<{ hasBackup: boolean; backupTimestamp?: string }> {
+    if (!this._currentProjectPath && !this._currentProjectId) {
+      return { hasBackup: false };
+    }
+    
+    try {
+      const result = await invoke<any>('check_recovery', {
+        projectId: this._currentProjectPath || this._currentProjectId
+      });
+      
+      return {
+        hasBackup: result.hasRecovery || false,
+        backupTimestamp: result.backupTimestamp
+      };
+    } catch (error) {
+      debugLogger.error('FileStorage.checkForRecovery', 'Failed to check for recovery', error);
+      return { hasBackup: false };
+    }
   }
 
   getCurrentProjectId(): string | null {
@@ -565,7 +580,7 @@ export class FileStorage {
       
       await invoke('store_media_base64', {
         id: id,
-        projectId: this._currentProjectId,
+        projectId: this._currentProjectPath || this._currentProjectId,
         dataBase64: base64Data,
         metadata: {
           page_id: metadata?.page_id || '',
@@ -688,7 +703,7 @@ export class FileStorage {
       });
       
       const media = await invoke<any>('get_media', {
-        projectId: this._currentProjectId,
+        projectId: this._currentProjectPath || this._currentProjectId,
         mediaId: id
       });
       
@@ -787,9 +802,55 @@ export class FileStorage {
     });
   }
 
-  addStateChangeListener(_callback: (state: any) => void): () => void {
-    // TODO: Implement state change notifications from Tauri
-    return () => {};
+  addStateChangeListener(callback: (state: any) => void): () => void {
+    // Use dynamic import to handle test environment
+    try {
+      // In test environment, we just return a simple cleanup function
+      if (typeof window !== 'undefined' && (window as any).__VITEST__) {
+        return () => {};
+      }
+      
+      // Store all unsubscribe functions
+      const unsubscribers: Array<() => void> = [];
+      
+      // Import and use listen function
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        // Subscribe to project-saved events
+        listen('project-saved', (event: any) => {
+          callback({
+            type: 'project-saved',
+            projectId: event.payload?.projectId || this._currentProjectId,
+            timestamp: event.payload?.timestamp || new Date().toISOString()
+          });
+        }).then(unsub => unsubscribers.push(unsub as any));
+        
+        // Subscribe to migration-complete events
+        listen('migration-complete', (event: any) => {
+          callback({
+            type: 'migration-complete',
+            itemCount: event.payload?.itemCount || 0
+          });
+        }).then(unsub => unsubscribers.push(unsub as any));
+        
+        // Subscribe to file change events
+        listen('file-changed', (event: any) => {
+          callback({
+            type: 'file-changed',
+            filePath: event.payload?.filePath
+          });
+        }).then(unsub => unsubscribers.push(unsub as any));
+      }).catch(err => {
+        debugLogger.warn('FileStorage.addStateChangeListener', 'Failed to setup listeners', err);
+      });
+      
+      // Return cleanup function
+      return () => {
+        unsubscribers.forEach(unsub => unsub());
+      };
+    } catch (error) {
+      debugLogger.warn('FileStorage.addStateChangeListener', 'Failed to setup state change listener', error);
+      return () => {};
+    }
   }
 
   async openProjectFromFile(): Promise<Project> {
@@ -1000,8 +1061,9 @@ export class FileStorage {
 
     try {
       // Call Tauri backend to delete media file and metadata
+      // Use path if available (backend will extract ID), otherwise use ID
       await invoke('delete_media', {
-        projectId: this._currentProjectId,
+        projectId: this._currentProjectPath || this._currentProjectId,
         mediaId
       });
       
@@ -1249,20 +1311,119 @@ export class FileStorage {
   }
 
   async migrateFromLocalStorage(): Promise<any[]> {
-    // TODO: Implement migration from localStorage
-    return [];
+    const migratedItems: any[] = [];
+    
+    try {
+      // Check for legacy media data
+      const mediaData = localStorage.getItem('scorm_builder_media');
+      const projectData = localStorage.getItem('scorm_builder_project');
+      const courseContent = localStorage.getItem('scorm_builder_course_content');
+      
+      // If no data to migrate, return empty
+      if (!mediaData && !projectData && !courseContent) {
+        return [];
+      }
+      
+      // Prepare migration data
+      const migrationData: any = {};
+      
+      if (mediaData) {
+        try {
+          migrationData.media = JSON.parse(mediaData);
+          migratedItems.push({
+            type: 'media',
+            itemCount: Object.keys(migrationData.media).length
+          });
+        } catch (e) {
+          debugLogger.warn('FileStorage.migrateFromLocalStorage', 'Failed to parse media data', e);
+        }
+      }
+      
+      if (projectData) {
+        try {
+          migrationData.project = JSON.parse(projectData);
+          migratedItems.push({
+            type: 'project',
+            itemCount: 1
+          });
+        } catch (e) {
+          debugLogger.warn('FileStorage.migrateFromLocalStorage', 'Failed to parse project data', e);
+        }
+      }
+      
+      if (courseContent) {
+        try {
+          migrationData.courseContent = JSON.parse(courseContent);
+          migratedItems.push({
+            type: 'course_content',
+            itemCount: 1
+          });
+        } catch (e) {
+          debugLogger.warn('FileStorage.migrateFromLocalStorage', 'Failed to parse course content', e);
+        }
+      }
+      
+      // Call backend to migrate data
+      if (Object.keys(migrationData).length > 0) {
+        const result = await invoke<any>('migrate_from_localstorage', {
+          data: migrationData
+        });
+        
+        // Clear localStorage only on successful migration
+        if (result?.success) {
+          if (mediaData) localStorage.removeItem('scorm_builder_media');
+          if (projectData) localStorage.removeItem('scorm_builder_project');
+          if (courseContent) localStorage.removeItem('scorm_builder_course_content');
+          
+          debugLogger.info('FileStorage.migrateFromLocalStorage', 'Migration successful', {
+            itemCount: migratedItems.length
+          });
+        }
+      }
+      
+      return migratedItems;
+    } catch (error) {
+      debugLogger.error('FileStorage.migrateFromLocalStorage', 'Migration failed', error);
+      // Return empty array on error (don't clear localStorage)
+      return [];
+    }
   }
 
   async clearRecentFilesCache(): Promise<void> {
-    // TODO: Implement recent files cache clearing
-    debugLogger.warn('FileStorage.clearRecentFilesCache', 'Recent files cache clearing not yet implemented');
+    try {
+      // Call backend to clear recent files
+      const result = await invoke<any>('clear_recent_files', {});
+      
+      // Clear internal cache
+      this['recentFiles'] = [];
+      
+      // Emit event for UI updates (only in non-test environment)
+      if (typeof window === 'undefined' || !(window as any).__VITEST__) {
+        try {
+          const { emit } = await import('@tauri-apps/api/event');
+          await emit('cache-cleared', {
+            type: 'recent-files',
+            clearedCount: result?.cleared || 0
+          });
+        } catch (err) {
+          debugLogger.warn('FileStorage.clearRecentFilesCache', 'Failed to emit event', err);
+        }
+      }
+      
+      debugLogger.info('FileStorage.clearRecentFilesCache', 'Recent files cache cleared', {
+        clearedCount: result?.cleared || 0
+      });
+    } catch (error) {
+      debugLogger.error('FileStorage.clearRecentFilesCache', 'Failed to clear recent files cache', error);
+      // Don't throw - handle gracefully
+    }
   }
 
   async getMediaUrl(id: string): Promise<string | null> {
     if (!this._currentProjectId) return null;
     try {
       const media = await invoke<any>('get_media', {
-        projectId: this._currentProjectId,
+        projectId: this._currentProjectPath || this._currentProjectId,
         mediaId: id
       });
       

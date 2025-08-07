@@ -1,6 +1,8 @@
 mod api_keys;
+mod backup_recovery;
 mod commands;
 mod commands_secure;
+mod localstorage_migration;
 mod media_storage;
 mod project_storage;
 mod scorm;
@@ -15,6 +17,12 @@ use commands::{
 use commands_secure::{
     append_to_log, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
     load_api_keys, load_project, save_api_keys, save_project,
+};
+use backup_recovery::{
+    check_recovery, cleanup_old_backups, create_backup, recover_from_backup,
+};
+use localstorage_migration::{
+    clear_recent_files, migrate_from_localstorage,
 };
 use media_storage::{
     delete_media, get_all_project_media, get_media, store_media, store_media_base64,
@@ -55,7 +63,13 @@ pub fn run() {
             delete_api_keys,
             generate_scorm,
             generate_scorm_enhanced,
-            append_to_log
+            append_to_log,
+            create_backup,
+            check_recovery,
+            recover_from_backup,
+            cleanup_old_backups,
+            migrate_from_localstorage,
+            clear_recent_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
