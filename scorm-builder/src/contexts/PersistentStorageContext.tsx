@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode } from 'react'
 import { usePersistentStorage } from '../hooks/usePersistentStorage'
+import type { FileStorage } from '../services/FileStorage'
 
 interface PersistentStorageContextValue {
   isInitialized: boolean
@@ -36,6 +37,7 @@ interface PersistentStorageContextValue {
   setProjectsDirectory: (directory: string) => void;
   migrateFromLocalStorage: () => Promise<any[]>;
   clearRecentFilesCache: () => Promise<void>;
+  fileStorage: FileStorage;  // Expose FileStorage instance
 }
 
 const PersistentStorageContext = createContext<PersistentStorageContextValue | null>(null)

@@ -8,13 +8,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { MediaService, createMediaService, type MediaItem, type MediaMetadata, type ProgressCallback } from '../services/MediaService'
 import { logger } from '../utils/logger'
-import { blobUrlManager } from '../utils/blobUrlManager'
+// Removed blobUrlManager - now using asset URLs from MediaService
 import type { MediaType } from '../utils/idGenerator'
+import { useStorage } from './PersistentStorageContext'
 
 interface UnifiedMediaContextType {
   // Core media operations
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
-  getMedia: (mediaId: string) => Promise<{ data: Uint8Array; metadata: MediaMetadata } | null>
+  getMedia: (mediaId: string) => Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>
   deleteMedia: (mediaId: string) => Promise<boolean>
   
   // YouTube specific
@@ -25,9 +26,9 @@ interface UnifiedMediaContextType {
   getAllMedia: () => MediaItem[]
   getMediaById: (mediaId: string) => MediaItem | undefined
   
-  // Blob URL management
-  createBlobUrl: (mediaId: string) => Promise<string | null>
-  revokeBlobUrl: (url: string) => void
+  // URL management (now using asset URLs)
+  createBlobUrl: (mediaId: string) => Promise<string | null>  // Returns asset URL
+  revokeBlobUrl: (url: string) => void  // No-op for asset URLs
   
   // Utility
   isLoading: boolean
@@ -43,13 +44,55 @@ interface UnifiedMediaProviderProps {
   projectId: string
 }
 
+// Global reference for TauriAudioPlayer
+let globalMediaContext: UnifiedMediaContextType | null = null
+
+export function getMediaFromContext() {
+  return globalMediaContext
+}
+
 export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProviderProps) {
+  // Get the shared FileStorage instance from PersistentStorageContext
+  const storage = useStorage()
+  
+  // Extract actual project ID from path if needed
+  // ProjectId might be a full path like "C:\...\project.scormproj" or just an ID like "1234567890"
+  const extractProjectId = (id: string): string => {
+    if (!id) return ''
+    
+    // If it's a path, extract the project ID from the filename
+    if (id.includes('.scormproj')) {
+      // Extract from path like "...\ProjectName_1234567890.scormproj"
+      const filename = id.split('\\').pop() || id.split('/').pop() || id
+      const match = filename.match(/_(\d+)\.scormproj$/)
+      if (match) {
+        return match[1]
+      }
+      // Fallback: try to get ID from the beginning if no underscore pattern
+      const idMatch = filename.match(/^(\d+)/)
+      if (idMatch) {
+        return idMatch[1]
+      }
+    }
+    
+    // If it looks like just an ID (all digits), return as is
+    if (/^\d+$/.test(id)) {
+      return id
+    }
+    
+    // Otherwise return as is and hope for the best
+    return id
+  }
+  
+  const actualProjectId = extractProjectId(projectId)
+  
   // Use a ref to track the media service to avoid re-creating it
   const mediaServiceRef = React.useRef<MediaService | null>(null)
   
-  // Get or create the media service for this project
-  if (!mediaServiceRef.current || mediaServiceRef.current !== createMediaService(projectId)) {
-    mediaServiceRef.current = createMediaService(projectId)
+  // Get or create the media service for this project with shared FileStorage
+  // Use the extracted project ID instead of the raw projectId prop
+  if (!mediaServiceRef.current || mediaServiceRef.current !== createMediaService(actualProjectId, storage.fileStorage)) {
+    mediaServiceRef.current = createMediaService(actualProjectId, storage.fileStorage)
   }
   
   const mediaService = mediaServiceRef.current
@@ -60,7 +103,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   // Load initial media list when projectId changes
   useEffect(() => {
     // Update service ref if project changed
-    const newService = createMediaService(projectId)
+    // Use the extracted project ID instead of the raw projectId prop
+    const newService = createMediaService(actualProjectId, storage.fileStorage)
     if (mediaServiceRef.current !== newService) {
       mediaServiceRef.current = newService
     }
@@ -72,7 +116,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       // Clean up any blob URLs created for this project
       logger.info('[UnifiedMediaContext] Cleaning up project-specific blob URLs')
     }
-  }, [projectId])
+  }, [actualProjectId, storage.fileStorage])
   
   const refreshMedia = useCallback(async () => {
     setIsLoading(true)
@@ -141,8 +185,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           return updated
         })
         
-        // Release blob URL if exists
-        blobUrlManager.releaseUrl(mediaId)
+        // No need to release asset URLs - they are persistent
       }
       
       return success
@@ -191,56 +234,67 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      // Check if we already have a blob URL
-      const existingUrl = blobUrlManager.getUrl(mediaId)
-      if (existingUrl) {
-        return existingUrl
-      }
+      console.log('[UnifiedMediaContext] Getting media for asset URL:', mediaId)
       
-      // Get media data and create blob
+      // Get media with asset URL from MediaService
       const media = await mediaService.getMedia(mediaId)
+      console.log('[UnifiedMediaContext] Media data retrieved:', {
+        found: !!media,
+        hasUrl: !!(media?.url),
+        url: media?.url,
+        metadata: media?.metadata
+      })
+      
       if (!media) {
+        console.error('[UnifiedMediaContext] No media found for ID:', mediaId)
         return null
       }
       
-      const blob = new Blob([media.data], { type: media.metadata.mimeType || 'application/octet-stream' })
-      const url = blobUrlManager.getOrCreateUrl(mediaId, blob, { 
-        projectId,
-        ...media.metadata 
-      })
+      // Always use asset URL from MediaService (no blob URLs!)
+      // MediaService already handles asset:// protocol correctly
+      if (media.url) {
+        console.log('[UnifiedMediaContext] Using asset URL from MediaService:', {
+          mediaId,
+          url: media.url,
+          isAssetUrl: media.url.startsWith('asset://'),
+          isDataUrl: media.url.startsWith('data:'),
+          isYouTubeUrl: media.url.startsWith('http')
+        })
+        return media.url
+      }
       
-      return url
+      // If no URL, try to get one from MediaService
+      const assetUrl = await mediaService.createBlobUrl(mediaId)
+      if (assetUrl) {
+        console.log('[UnifiedMediaContext] Created asset URL via MediaService:', {
+          mediaId,
+          url: assetUrl
+        })
+        return assetUrl
+      }
+      
+      // No URL available
+      console.warn('[UnifiedMediaContext] Media has no URL:', mediaId)
+      return null
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to create blob URL:', mediaId, err)
       setError(err as Error)
       return null
     }
-  }, [mediaService, projectId])
+  }, [mediaService, actualProjectId])
   
   const revokeBlobUrl = useCallback((url: string) => {
-    // Find the media ID for this URL
-    let mediaId: string | undefined
-    
-    // This is a bit inefficient but necessary for backward compatibility
-    // In the future, we should pass mediaId directly
-    for (const [key, value] of mediaCache.entries()) {
-      if (blobUrlManager.getUrl(key) === url) {
-        mediaId = key
-        break
-      }
-    }
-    
-    if (mediaId) {
-      blobUrlManager.releaseUrl(mediaId)
-    } else {
-      // Direct revoke if we can't find the key
+    // Asset URLs don't need to be revoked - they are persistent
+    // Only revoke if this is a legacy blob URL
+    if (url && url.startsWith('blob:')) {
+      console.log('[UnifiedMediaContext] Revoking legacy blob URL:', url)
       try {
         URL.revokeObjectURL(url)
       } catch (err) {
         logger.error('[UnifiedMediaContext] Failed to revoke blob URL:', url, err)
       }
     }
-  }, [mediaCache])
+  }, [])
   
   const clearError = useCallback(() => {
     setError(null)
@@ -275,6 +329,14 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     clearError,
     refreshMedia
   ])
+  
+  // Set global context for TauriAudioPlayer
+  useEffect(() => {
+    globalMediaContext = value
+    return () => {
+      globalMediaContext = null
+    }
+  }, [value])
   
   return (
     <UnifiedMediaContext.Provider value={value}>

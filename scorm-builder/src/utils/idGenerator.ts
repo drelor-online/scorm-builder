@@ -25,8 +25,7 @@ const PAGE_ID_MAP: Record<string, string> = {
   'learning-objectives': 'objectives'
 }
 
-// Global counters for media types (persisted across calls)
-const mediaCounters = new Map<MediaType, number>()
+// Topic index mapping for unknown pages
 const topicIndexMap = new Map<string, number>()
 let nextTopicIndex = 0
 
@@ -39,8 +38,8 @@ export function generateProjectId(): ProjectId {
 
 /**
  * Generate a media ID following the established pattern
- * Audio/Caption: page-based indexing (welcome=0, objectives=1, topics=2+)
- * Image/Video: global sequential indexing
+ * ALL media types now use page-based indexing for consistency
+ * (welcome=0, objectives=1, topics=2+)
  */
 export function generateMediaId(type: MediaType, pageId: string): MediaId {
   // Runtime validation
@@ -51,33 +50,26 @@ export function generateMediaId(type: MediaType, pageId: string): MediaId {
   
   const normalizedPageId = PAGE_ID_MAP[pageId] || pageId
   
-  if (type === 'audio' || type === 'caption') {
-    // Page-based indexing for audio and captions
-    let pageIndex: number
-    
-    if (normalizedPageId === 'welcome') {
-      pageIndex = 0
-    } else if (normalizedPageId === 'objectives') {
-      pageIndex = 1
-    } else if (normalizedPageId.startsWith('topic-')) {
-      // Extract topic number and add 1 (since topics are 1-based in IDs)
-      const topicNum = parseInt(normalizedPageId.replace('topic-', ''))
-      pageIndex = 1 + topicNum
-    } else {
-      // Unknown page, use topic index map
-      if (!topicIndexMap.has(normalizedPageId)) {
-        topicIndexMap.set(normalizedPageId, nextTopicIndex++)
-      }
-      pageIndex = 2 + topicIndexMap.get(normalizedPageId)!
-    }
-    
-    return `${type}-${pageIndex}` as MediaId
+  // ALL media types now use page-based indexing
+  let pageIndex: number
+  
+  if (normalizedPageId === 'welcome') {
+    pageIndex = 0
+  } else if (normalizedPageId === 'objectives') {
+    pageIndex = 1
+  } else if (normalizedPageId.startsWith('topic-')) {
+    // Extract topic number and add 1 (since topics are 1-based in IDs)
+    const topicNum = parseInt(normalizedPageId.replace('topic-', ''))
+    pageIndex = 1 + topicNum
   } else {
-    // Global sequential indexing for images and videos
-    const currentIndex = mediaCounters.get(type) || 0
-    mediaCounters.set(type, currentIndex + 1)
-    return `${type}-${currentIndex}` as MediaId
+    // Unknown page, use topic index map
+    if (!topicIndexMap.has(normalizedPageId)) {
+      topicIndexMap.set(normalizedPageId, nextTopicIndex++)
+    }
+    pageIndex = 2 + topicIndexMap.get(normalizedPageId)!
   }
+  
+  return `${type}-${pageIndex}` as MediaId
 }
 
 /**
@@ -185,7 +177,6 @@ export function migrateOldMediaId(oldId: string, type: MediaType, pageId: string
  * Reset all counters (for testing only)
  */
 export function __resetCounters(): void {
-  mediaCounters.clear()
   topicIndexMap.clear()
   nextTopicIndex = 0
 }

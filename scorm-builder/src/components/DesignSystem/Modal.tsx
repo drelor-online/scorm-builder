@@ -89,29 +89,27 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
       >
-        <div>
-          {(title || showCloseButton) && (
-            <div className="modal-header">
-              {title && (
-                <h2 id="modal-title" className="modal-title">
-                  {title}
-                </h2>
-              )}
-              {showCloseButton && (
-                <button
-                  className="modal-close"
-                  onClick={onClose}
-                  aria-label="Close modal"
-                  type="button"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          )}
-          <div className="modal-body">
-            {children}
+        {(title || showCloseButton) && (
+          <div className="modal-header">
+            {title && (
+              <h2 id="modal-title" className="modal-title">
+                {title}
+              </h2>
+            )}
+            {showCloseButton && (
+              <button
+                className="modal-close"
+                onClick={onClose}
+                aria-label="Close modal"
+                type="button"
+              >
+                ×
+              </button>
+            )}
           </div>
+        )}
+        <div className="modal-body">
+          {children}
         </div>
       </div>
     </div>

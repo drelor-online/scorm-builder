@@ -198,25 +198,30 @@ function convertNewFormat(
     // Convert assessment from new format
     const assessment = {
       questions: courseContent.assessment.questions.map(q => {
+        const baseQuestion = {
+          id: q.id,
+          question: q.question,
+          // Map feedback if it exists
+          correct_feedback: q.feedback?.correct,
+          incorrect_feedback: q.feedback?.incorrect
+        }
+
         if (q.type === 'true-false') {
           return {
-            id: q.id,
-            question: q.question,
+            ...baseQuestion,
             options: ['True', 'False'],
             correctAnswer: q.correctAnswer.toLowerCase() === 'true' ? 0 : 1
           }
         } else if (q.type === 'multiple-choice' && q.options) {
           return {
-            id: q.id,
-            question: q.question,
+            ...baseQuestion,
             options: q.options,
             correctAnswer: q.options.indexOf(q.correctAnswer)
           }
         }
         // Default fallback
         return {
-          id: q.id,
-          question: q.question,
+          ...baseQuestion,
           options: q.options || [],
           correctAnswer: 0
         }
@@ -457,8 +462,8 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
     if (firstQuestion.type === 'fill-in-the-blank') {
       return {
         type: 'fill-in-the-blank' as const,
-        blank: firstQuestion.question, // The question with _____ blank
-        question: firstQuestion.question,
+        blank: (firstQuestion as any).blank || firstQuestion.question, // Use blank property if it exists
+        question: (firstQuestion as any).blank || firstQuestion.question, // Use blank for question too
         correctAnswer: firstQuestion.correctAnswer,
         explanation: firstQuestion.feedback?.correct || firstQuestion.feedback?.incorrect || firstQuestion.explanation,
         feedback: firstQuestion.feedback // Preserve the feedback object
@@ -499,8 +504,8 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
       } else if (q.type === 'fill-in-the-blank') {
         return {
           ...q,
-          question: q.question,
-          blank: q.question,
+          question: (q as any).blank || q.question, // Use blank property if it exists
+          blank: (q as any).blank || q.question, // Use blank property if it exists
           correctAnswer: q.correctAnswer,
           explanation: q.feedback?.correct || q.feedback?.incorrect || q.explanation
         }

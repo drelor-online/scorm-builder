@@ -13,6 +13,15 @@
     <!-- Alert Container -->
     <div id="scorm-alert-container"></div>
     
+    <!-- Modal Dialog Container -->
+    <div id="scorm-modal-overlay" class="scorm-modal-overlay">
+        <div class="scorm-modal">
+            <div class="scorm-modal-header" id="scorm-modal-header"></div>
+            <div class="scorm-modal-body" id="scorm-modal-body"></div>
+            <div class="scorm-modal-buttons" id="scorm-modal-buttons"></div>
+        </div>
+    </div>
+    
     <!-- Sidebar -->
     <nav class="sidebar">
         <div class="sidebar-header">
@@ -93,58 +102,77 @@
     
     <!-- Initialize SCORM -->
     <script>
-        // Initialize SCORM connection
-        if (window.API) {
-            window.API.LMSInitialize("");
-            console.log('[SCORM] Initialized connection to LMS');
-        }
+        // SCORM initialization is now handled by SafeSCORM in navigation.js
+        console.log('[SCORM] Initialization handled by SafeSCORM wrapper');
         
-        // Handle window unload
-        window.addEventListener('beforeunload', function() {
-            if (window.API) {
-                window.API.LMSFinish("");
-            }
-        });
+        // Custom modal dialog functions
+        function showModal(title, message, buttons) {
+            const overlay = document.getElementById('scorm-modal-overlay');
+            const headerEl = document.getElementById('scorm-modal-header');
+            const bodyEl = document.getElementById('scorm-modal-body');
+            const buttonsEl = document.getElementById('scorm-modal-buttons');
+            
+            headerEl.textContent = title;
+            bodyEl.textContent = message;
+            buttonsEl.innerHTML = '';
+            
+            buttons.forEach(button => {
+                const btn = document.createElement('button');
+                btn.className = `scorm-modal-button scorm-modal-button-${button.type || 'secondary'}`;
+                btn.textContent = button.text;
+                btn.onclick = () => {
+                    overlay.classList.remove('active');
+                    if (button.callback) button.callback();
+                };
+                buttonsEl.appendChild(btn);
+            });
+            
+            overlay.classList.add('active');
+        }
         
         // Exit course functionality
         function exitCourse() {
-            if (confirm('Are you sure you want to exit the course? Your progress has been saved.')) {
-                if (window.API) {
-                    try {
-                        // Set session time if available
-                        if (window.getSessionTime) {
-                            const sessionTime = window.getSessionTime();
-                            window.API.LMSSetValue('cmi.core.session_time', sessionTime);
-                            console.log('[SCORM] Session time:', sessionTime);
+            showModal(
+                'Exit Course',
+                'Are you sure you want to exit the course? Your progress has been saved.',
+                [
+                    {
+                        text: 'Cancel',
+                        type: 'secondary',
+                        callback: null
+                    },
+                    {
+                        text: 'Exit Course',
+                        type: 'primary',
+                        callback: () => {
+                            // Use SafeSCORM if available (loaded from navigation.js)
+                            if (window.SafeSCORM) {
+                                // Set session time if available
+                                if (window.getSessionTime) {
+                                    const sessionTime = window.getSessionTime();
+                                    window.SafeSCORM.setValue('cmi.core.session_time', sessionTime);
+                                    console.log('[SCORM] Session time:', sessionTime);
+                                }
+                                
+                                // Set exit status for proper session termination
+                                window.SafeSCORM.setValue('cmi.core.exit', 'suspend');
+                                console.log('[SCORM] Set exit status to suspend');
+                                
+                                // Commit and finish
+                                window.SafeSCORM.commit();
+                                window.SafeSCORM.finish();
+                            }
+                            
+                            // Close window
+                            setTimeout(() => {
+                                window.close();
+                                // Fallback if window.close() doesn't work
+                                window.location.href = 'about:blank';
+                            }, 500);
                         }
-                        
-                        // Set exit status for proper session termination
-                        window.API.LMSSetValue('cmi.core.exit', 'suspend');
-                        console.log('[SCORM] Set exit status to suspend');
-                        
-                        // Commit any pending data
-                        window.API.LMSCommit('');
-                        console.log('[SCORM] Final commit before exit');
-                        
-                        // Properly close the SCORM session
-                        const result = window.API.LMSFinish('');
-                        console.log('[SCORM] LMSFinish result:', result);
-                        
-                        // Some LMSs handle window closing, others need manual close
-                        setTimeout(() => {
-                            window.close();
-                            // Fallback if window.close() doesn't work
-                            window.location.href = 'about:blank';
-                        }, 500);
-                    } catch (e) {
-                        console.error('[SCORM] Error during exit:', e);
-                        window.close();
                     }
-                } else {
-                    // No SCORM API, just close
-                    window.close();
-                }
-            }
+                ]
+            );
         }
         
         // Fullscreen toggle functionality

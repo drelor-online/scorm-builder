@@ -12,6 +12,7 @@ import {
 import { tokens } from './DesignSystem/designTokens'
 import { Toast } from './Toast'
 import './DesignSystem/designSystem.css'
+import { useStorage } from '../contexts/PersistentStorageContext'
 
 interface TemplateEditorProps {
   onClose: () => void
@@ -49,10 +50,8 @@ const SAMPLE_DATA = {
 }
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClose, onSave }) => {
-  const [customTemplates, setCustomTemplates] = useState<CustomTemplates>(() => {
-    const saved = localStorage.getItem('customTemplates')
-    return saved ? JSON.parse(saved) : {}
-  })
+  const storage = useStorage()
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplates>({})
   
   const [editMode, setEditMode] = useState<'list' | 'create' | 'edit'>('list')
   const [currentTemplate, setCurrentTemplate] = useState<string | null>(null)
@@ -70,10 +69,36 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
   const [activeSection, setActiveSection] = useState<keyof typeof promptSections>('introduction')
   const textareaRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({})
 
-  // Save templates to localStorage whenever they change
+  // Load templates from file storage on mount
   useEffect(() => {
-    localStorage.setItem('customTemplates', JSON.stringify(customTemplates))
-  }, [customTemplates])
+    const loadTemplates = async () => {
+      if (storage && storage.isInitialized) {
+        try {
+          const templates = await storage.getContent('custom-templates')
+          if (templates) {
+            setCustomTemplates(templates)
+          }
+        } catch (error) {
+          console.error('Failed to load custom templates:', error)
+        }
+      }
+    }
+    loadTemplates()
+  }, [storage?.isInitialized])
+  
+  // Save templates to file storage whenever they change
+  useEffect(() => {
+    const saveTemplates = async () => {
+      if (storage && storage.isInitialized && Object.keys(customTemplates).length > 0) {
+        try {
+          await storage.saveContent('custom-templates', customTemplates)
+        } catch (error) {
+          console.error('Failed to save custom templates:', error)
+        }
+      }
+    }
+    saveTemplates()
+  }, [customTemplates, storage?.isInitialized])
 
   const handleCreateNew = () => {
     setEditMode('create')

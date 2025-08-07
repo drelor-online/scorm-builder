@@ -55,22 +55,7 @@ export const loadCourseContentConverter = async () => {
   return converterModule.convertToEnhancedCourseContent
 }
 
-/**
- * Dynamically import preview generator
- */
-export const loadPreviewGenerator = async () => {
-  if (moduleCache.has('preview')) {
-    return moduleCache.get('preview')
-  }
-  
-  const previewModule = await import(
-    /* webpackChunkName: "preview-generator" */
-    '@/services/progressivePreviewGenerator'
-  )
-  
-  moduleCache.set('preview', previewModule.generateProgressivePreviewHTML)
-  return previewModule.generateProgressivePreviewHTML
-}
+// Preview generator removed - progressivePreviewGenerator.ts was unused
 
 /**
  * Dynamically import search services

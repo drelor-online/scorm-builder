@@ -29,7 +29,7 @@ export async function runPerformanceBenchmarks(): Promise<BenchmarkResult[]> {
     testProjectId = project.id
     await storage.openProject(testProjectId)
     
-    const mediaService = new MediaService({ projectId: testProjectId })
+    const mediaService = MediaService.getInstance({ projectId: testProjectId })
     
     // Benchmark 1: Image Upload Performance
     console.log('📸 Testing Image Upload Performance...')

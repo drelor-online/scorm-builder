@@ -21,7 +21,7 @@ export interface CardProps {
   'aria-label'?: string
   actions?: React.ReactNode
   interactive?: boolean
-  onClick?: () => void
+  onClick?: (e: React.MouseEvent) => void
 }
 
 const CardComponent: React.FC<CardProps> = ({
@@ -59,6 +59,18 @@ const CardComponent: React.FC<CardProps> = ({
     className
   ].filter(Boolean).join(' ')
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isClickable && onClick && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      // Convert keyboard event to a synthetic mouse event for onClick
+      const syntheticMouseEvent = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+      })
+      onClick(syntheticMouseEvent as unknown as React.MouseEvent)
+    }
+  }
+
   return (
     <div 
       className={classes} 
@@ -67,6 +79,7 @@ const CardComponent: React.FC<CardProps> = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       role={role || (isClickable ? 'button' : undefined)}
       aria-label={ariaLabel}
       tabIndex={isClickable ? 0 : undefined}

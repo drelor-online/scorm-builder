@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { CourseContent, EnhancedCourseContent } from '../types/scorm'
 import { downloadIfExternal, isExternalUrl } from './externalImageDownloader'
 
@@ -7,6 +8,16 @@ interface MediaFile {
   content: Uint8Array
 }
 
+// Media cache to prevent duplicate loads during SCORM generation
+const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
+
+/**
+ * Clear the media cache (should be called after SCORM generation)
+ */
+export function clearMediaCache(): void {
+  mediaCache.clear()
+  console.log('[Rust SCORM] Media cache cleared')
+}
 
 /**
  * Get file extension from MIME type
@@ -49,6 +60,7 @@ async function resolveAudioCaptionFile(
   mediaFiles: MediaFile[],
   blob?: Blob
 ): Promise<string | undefined> {
+  console.log(`[Rust SCORM] resolveAudioCaptionFile called with fileId: ${fileId}`)
   if (!fileId && !blob) return undefined
   
   // If we have a blob, use it directly
@@ -90,6 +102,24 @@ async function resolveAudioCaptionFile(
   
   // If it's a media ID, load from MediaService
   if (cleanFileId.match(/^(audio|caption)-[\w-]+$/)) {
+    // Check cache first
+    const cached = mediaCache.get(cleanFileId)
+    if (cached) {
+      console.log(`[Rust SCORM] Using cached media:`, cleanFileId)
+      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(cleanFileId)
+      const filename = `${cleanFileId}.${ext}`
+      
+      // Add to mediaFiles if not already there
+      if (!mediaFiles.find(f => f.filename === filename)) {
+        mediaFiles.push({
+          filename,
+          content: cached.data,
+        })
+      }
+      
+      return `media/${filename}`
+    }
+    
     try {
       const { createMediaService } = await import('./MediaService')
       const mediaService = createMediaService(projectId)
@@ -97,12 +127,17 @@ async function resolveAudioCaptionFile(
       
       if (fileData && fileData.data) {
         const mimeType = fileData.metadata?.mimeType || ''
+        const uint8Data = new Uint8Array(fileData.data)
+        
+        // Cache the data
+        mediaCache.set(cleanFileId, { data: uint8Data, mimeType })
+        
         const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(cleanFileId)
         const filename = `${cleanFileId}.${ext}`
         
         mediaFiles.push({
           filename,
-          content: new Uint8Array(fileData.data),
+          content: uint8Data,
         })
         
         return `media/${filename}`
@@ -164,6 +199,40 @@ async function resolveImageUrl(
   // If it's a media ID (like "image-abc123"), load it from MediaService
   if (imageUrl.match(/^(image|video|audio)-[\w-]+$/)) {
     console.log(`[Rust SCORM] Loading media from MediaService:`, imageUrl)
+    
+    // Check cache first
+    const cached = mediaCache.get(imageUrl)
+    if (cached) {
+      console.log(`[Rust SCORM] Using cached media:`, imageUrl)
+      
+      // Check if this is a video metadata JSON file
+      if (imageUrl.startsWith('video-') && cached.mimeType === 'application/json') {
+        try {
+          const jsonText = new TextDecoder().decode(cached.data)
+          const metadata = JSON.parse(jsonText)
+          if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
+            console.log(`[Rust SCORM] Found YouTube URL in cached metadata:`, metadata.url)
+            return metadata.url
+          }
+        } catch (error) {
+          console.error(`[Rust SCORM] Failed to parse cached video metadata:`, error)
+        }
+      }
+      
+      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(imageUrl)
+      const filename = `${imageUrl}.${ext}`
+      
+      // Add to mediaFiles if not already there
+      if (!mediaFiles.find(f => f.filename === filename)) {
+        mediaFiles.push({
+          filename,
+          content: cached.data,
+        })
+      }
+      
+      return `media/${filename}`
+    }
+    
     try {
       const { createMediaService } = await import('./MediaService')
       const mediaService = createMediaService(projectId)
@@ -171,6 +240,10 @@ async function resolveImageUrl(
       
       if (fileData && fileData.data) {
         const mimeType = fileData.metadata?.mimeType || ''
+        const uint8Data = new Uint8Array(fileData.data)
+        
+        // Cache the data
+        mediaCache.set(imageUrl, { data: uint8Data, mimeType })
         
         // Check if this is a video metadata JSON file
         if (imageUrl.startsWith('video-') && mimeType === 'application/json') {
@@ -194,7 +267,7 @@ async function resolveImageUrl(
         
         mediaFiles.push({
           filename,
-          content: new Uint8Array(fileData.data),
+          content: uint8Data,
         })
         
         return `media/${filename}`
@@ -225,6 +298,68 @@ async function resolveMedia(
   
   for (const media of mediaItems) {
     if (!media.url) {
+      // If no URL but we have an ID, try to load from MediaService
+      if (media.id && media.id.match(/^(image|video|audio|caption)-[\w-]+$/)) {
+        console.log(`[Rust SCORM] No URL provided, loading from MediaService using ID: ${media.id}`)
+        
+        try {
+          // Check cache first
+          const cached = mediaCache.get(media.id)
+          if (cached) {
+            console.log(`[Rust SCORM] Using cached media:`, media.id)
+            const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.id)
+            const filename = `${media.id}.${ext}`
+            
+            // Add to mediaFiles if not already there
+            if (!mediaFiles.find(f => f.filename === filename)) {
+              mediaFiles.push({
+                filename,
+                content: cached.data,
+              })
+            }
+            
+            resolvedMedia.push({
+              ...media,
+              url: `media/${filename}`,
+              resolved_path: `media/${filename}`
+            })
+            continue
+          }
+          
+          // Load from MediaService
+          const { createMediaService } = await import('./MediaService')
+          const mediaService = createMediaService(projectId)
+          const fileData = await mediaService.getMedia(media.id)
+          
+          if (fileData && fileData.data) {
+            const uint8Data = new Uint8Array(fileData.data)
+            const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
+            
+            // Cache the data
+            mediaCache.set(media.id, { data: uint8Data, mimeType })
+            
+            const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.id)
+            const filename = `${media.id}.${ext}`
+            
+            mediaFiles.push({
+              filename,
+              content: uint8Data,
+            })
+            
+            resolvedMedia.push({
+              ...media,
+              url: `media/${filename}`,
+              resolved_path: `media/${filename}`
+            })
+            console.log(`[Rust SCORM] Successfully loaded media from MediaService: ${media.id}`)
+            continue
+          }
+        } catch (error) {
+          console.error(`[Rust SCORM] Failed to load media ${media.id}:`, error)
+        }
+      }
+      
+      // If we couldn't load it, push as-is
       resolvedMedia.push(media)
       continue
     }
@@ -243,21 +378,41 @@ async function resolveMedia(
         
         // Try to load and check if it's YouTube metadata
         if (mediaId.startsWith('video-')) {
-          try {
-            const { createMediaService } = await import('./MediaService')
-            const mediaService = createMediaService(projectId)
-            const fileData = await mediaService.getMedia(mediaId)
-            
-            if (fileData && fileData.data && fileData.metadata?.mimeType === 'application/json') {
-              const jsonText = new TextDecoder().decode(fileData.data)
+          // Check cache first
+          const cached = mediaCache.get(mediaId)
+          if (cached && cached.mimeType === 'application/json') {
+            try {
+              const jsonText = new TextDecoder().decode(cached.data)
               const metadata = JSON.parse(jsonText)
               if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
-                console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL:`, metadata.url)
-                media.url = metadata.url // Replace with actual YouTube URL
+                console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL from cache:`, metadata.url)
+                media.url = metadata.url
               }
+            } catch (error) {
+              console.error(`[Rust SCORM] Failed to parse cached asset.localhost metadata:`, error)
             }
-          } catch (error) {
-            console.error(`[Rust SCORM] Failed to resolve asset.localhost URL:`, error)
+          } else {
+            try {
+              const { createMediaService } = await import('./MediaService')
+              const mediaService = createMediaService(projectId)
+              const fileData = await mediaService.getMedia(mediaId)
+              
+              if (fileData && fileData.data && fileData.metadata?.mimeType === 'application/json') {
+                const uint8Data = new Uint8Array(fileData.data)
+                
+                // Cache the data
+                mediaCache.set(mediaId, { data: uint8Data, mimeType: 'application/json' })
+                
+                const jsonText = new TextDecoder().decode(uint8Data)
+                const metadata = JSON.parse(jsonText)
+                if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
+                  console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL:`, metadata.url)
+                  media.url = metadata.url
+                }
+              }
+            } catch (error) {
+              console.error(`[Rust SCORM] Failed to resolve asset.localhost URL:`, error)
+            }
           }
         }
       }
@@ -315,73 +470,189 @@ async function resolveMedia(
     }
     // If it's a media ID, load from MediaService
     else if (media.url.match(/^(image|video|audio)-[\w-]+$/)) {
-      try {
-        const { createMediaService } = await import('./MediaService')
-        const mediaService = createMediaService(projectId)
-        const fileData = await mediaService.getMedia(media.url)
+      // Check cache first
+      const cached = mediaCache.get(media.url)
+      if (cached) {
+        console.log(`[Rust SCORM] Using cached media in resolveMedia:`, media.url)
         
-        if (fileData && fileData.data) {
-          const mimeType = fileData.metadata?.mimeType || ''
-          
-          // Check if this is a video metadata JSON file
-          if (media.type === 'video' && mimeType === 'application/json') {
-            try {
-              // Parse the JSON to get the YouTube URL
-              const jsonText = new TextDecoder().decode(fileData.data)
-              const metadata = JSON.parse(jsonText)
-              if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
-                console.log(`[Rust SCORM] Found YouTube URL in video metadata:`, metadata.url)
-                resolvedUrl = metadata.url // Use the YouTube URL directly
-                // Continue to process as YouTube video below
-              }
-            } catch (error) {
-              console.error(`[Rust SCORM] Failed to parse video metadata:`, error)
+        // Check if this is a video metadata JSON file
+        if (media.type === 'video' && cached.mimeType === 'application/json') {
+          try {
+            const jsonText = new TextDecoder().decode(cached.data)
+            const metadata = JSON.parse(jsonText)
+            if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
+              console.log(`[Rust SCORM] Found YouTube URL in cached video metadata:`, metadata.url)
+              resolvedUrl = metadata.url
             }
-          }
-          
-          // If not YouTube metadata, process as regular file
-          if (!resolvedUrl) {
-            const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.url)
-            
-            // Preserve original ID as filename
-            const filename = `${media.url}.${ext}`
-            
-            mediaFiles.push({
-              filename,
-              content: new Uint8Array(fileData.data),
-            })
-            
-            resolvedUrl = `media/${filename}`
+          } catch (error) {
+            console.error(`[Rust SCORM] Failed to parse cached video metadata:`, error)
           }
         }
-      } catch (error) {
-        console.error(`[Rust SCORM] Error loading media from MediaService:`, error)
+        
+        // If not YouTube metadata, process as regular file
+        if (!resolvedUrl) {
+          const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.url)
+          const filename = `${media.url}.${ext}`
+          
+          // Add to mediaFiles if not already there
+          if (!mediaFiles.find(f => f.filename === filename)) {
+            mediaFiles.push({
+              filename,
+              content: cached.data,
+            })
+          }
+          
+          resolvedUrl = `media/${filename}`
+        }
+      } else {
+        try {
+          const { createMediaService } = await import('./MediaService')
+          const mediaService = createMediaService(projectId)
+          const fileData = await mediaService.getMedia(media.url)
+          
+          if (fileData && fileData.data) {
+            const mimeType = fileData.metadata?.mimeType || ''
+            const uint8Data = new Uint8Array(fileData.data)
+            
+            // Cache the data
+            mediaCache.set(media.url, { data: uint8Data, mimeType })
+            
+            // Check if this is a video metadata JSON file
+            if (media.type === 'video' && mimeType === 'application/json') {
+              try {
+                const jsonText = new TextDecoder().decode(uint8Data)
+                const metadata = JSON.parse(jsonText)
+                if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
+                  console.log(`[Rust SCORM] Found YouTube URL in video metadata:`, metadata.url)
+                  resolvedUrl = metadata.url
+                }
+              } catch (error) {
+                console.error(`[Rust SCORM] Failed to parse video metadata:`, error)
+              }
+            }
+            
+            // If not YouTube metadata, process as regular file
+            if (!resolvedUrl) {
+              const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.url)
+              const filename = `${media.url}.${ext}`
+              
+              mediaFiles.push({
+                filename,
+                content: uint8Data,
+              })
+              
+              resolvedUrl = `media/${filename}`
+            }
+          }
+        } catch (error) {
+          console.error(`[Rust SCORM] Error loading media from MediaService:`, error)
+        }
       }
     }
     // If it has a storageId, use that instead
     else if ((media as any).storageId) {
-      try {
-        const { createMediaService } = await import('./MediaService')
-        const mediaService = createMediaService(projectId)
-        const storageId = (media as any).storageId
-        const fileData = await mediaService.getMedia(storageId)
+      const storageId = (media as any).storageId
+      
+      // Check cache first
+      const cached = mediaCache.get(storageId)
+      if (cached) {
+        console.log(`[Rust SCORM] Using cached media for storageId:`, storageId)
+        const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(storageId)
+        const filename = `${storageId}.${ext}`
         
-        if (fileData && fileData.data) {
-          const mimeType = fileData.metadata?.mimeType || ''
-          const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(storageId)
-          
-          // Preserve original ID as filename
-          const filename = `${storageId}.${ext}`
-          
+        // Add to mediaFiles if not already there
+        if (!mediaFiles.find(f => f.filename === filename)) {
           mediaFiles.push({
             filename,
-            content: new Uint8Array(fileData.data),
+            content: cached.data,
           })
+        }
+        
+        resolvedUrl = `media/${filename}`
+      } else {
+        try {
+          const { createMediaService } = await import('./MediaService')
+          const mediaService = createMediaService(projectId)
+          const fileData = await mediaService.getMedia(storageId)
+          
+          if (fileData && fileData.data) {
+            const mimeType = fileData.metadata?.mimeType || ''
+            const uint8Data = new Uint8Array(fileData.data)
+            
+            // Cache the data
+            mediaCache.set(storageId, { data: uint8Data, mimeType })
+            
+            const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(storageId)
+            const filename = `${storageId}.${ext}`
+            
+            mediaFiles.push({
+              filename,
+              content: uint8Data,
+            })
+            
+            resolvedUrl = `media/${filename}`
+          }
+        } catch (error) {
+          console.error(`[Rust SCORM] Error loading media with storageId:`, error)
+        }
+      }
+    }
+    // Handle blob URLs by immediately falling back to MediaService
+    else if (media.url && media.url.startsWith('blob:')) {
+      // Skip blob URL fetch attempt - logs show they consistently fail with ERR_FILE_NOT_FOUND
+      // Go directly to MediaService using media.id if available
+      if (media.id && media.id.match(/^(image|video|audio)-[\w-]+$/)) {
+        console.log(`[Rust SCORM] Skipping blob URL, loading directly from MediaService: ${media.id}`)
+        
+        // Check cache first
+        const cached = mediaCache.get(media.id)
+        if (cached) {
+          console.log(`[Rust SCORM] Using cached media for blob URL fallback:`, media.id)
+          const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.id)
+          const filename = `${media.id}.${ext}`
+          
+          // Add to mediaFiles if not already there
+          if (!mediaFiles.find(f => f.filename === filename)) {
+            mediaFiles.push({
+              filename,
+              content: cached.data,
+            })
+          }
           
           resolvedUrl = `media/${filename}`
+        } else {
+          try {
+            const { createMediaService } = await import('./MediaService')
+            const mediaService = createMediaService(projectId)
+            const fileData = await mediaService.getMedia(media.id)
+            
+            if (fileData && fileData.data) {
+              const mimeType = fileData.metadata?.mimeType || ''
+              const uint8Data = new Uint8Array(fileData.data)
+              
+              // Cache the data
+              mediaCache.set(media.id, { data: uint8Data, mimeType })
+              
+              const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.id)
+              const filename = `${media.id}.${ext}`
+              
+              mediaFiles.push({
+                filename,
+                content: uint8Data,
+              })
+              
+              resolvedUrl = `media/${filename}`
+              console.log(`[Rust SCORM] Successfully recovered media from MediaService: ${media.id}`)
+            }
+          } catch (msError) {
+            console.error(`[Rust SCORM] MediaService fallback also failed for ${media.id}:`, msError)
+            // Skip this media item rather than using broken blob URL
+            resolvedUrl = undefined
+          }
         }
-      } catch (error) {
-        console.error(`[Rust SCORM] Error loading media with storageId:`, error)
+      } else {
+        // Skip this media item if we can't recover it
+        resolvedUrl = undefined
       }
     }
     // Otherwise, assume it's already a package-relative path
@@ -412,9 +683,11 @@ async function resolveMedia(
         youtube_id: videoId,
         embed_url: videoId ? `https://www.youtube.com/embed/${videoId}` : ''
       })
-    } else {
-      resolvedMedia.push({ ...media, url: resolvedUrl || '' })
+    } else if (resolvedUrl) {
+      // For non-YouTube media, only add if we have a valid resolved URL
+      resolvedMedia.push({ ...media, url: resolvedUrl })
     }
+    // If resolvedUrl is undefined, skip this media item entirely
   }
   
   // Filter out media items with empty URLs
@@ -529,9 +802,12 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
             type: questionType,
             text: q.question || q.text, // Fixed: Support both 'question' and 'text' fields
             options: options,
-            correct_answer: typeof q.correctAnswer === 'number' && options ? 
-              options[q.correctAnswer] : String(q.correctAnswer),
+            correct_answer: questionType === 'true-false' ? 
+              (q.correctAnswer === 0 || q.correctAnswer === 'true' || q.correctAnswer === true ? 'true' : 'false') :
+              (typeof q.correctAnswer === 'number' && options ? options[q.correctAnswer] : String(q.correctAnswer)),
             explanation: q.explanation || q.feedback?.incorrect || q.feedback?.correct || '',
+            correct_feedback: q.feedback?.correct || 'Correct!',
+            incorrect_feedback: q.feedback?.incorrect || 'Not quite. Try again!',
           }
         }) || []
       } : undefined,
@@ -574,12 +850,40 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
           throw new Error('Assessment question missing correctAnswer')
         }
         
+        // Handle different feedback formats
+        let explanation = ''
+        let correct_feedback = ''
+        let incorrect_feedback = ''
+        
+        if (typeof qAny.feedback === 'string') {
+          // String format: use as explanation
+          explanation = qAny.feedback
+        } else if (qAny.feedback && typeof qAny.feedback === 'object') {
+          // Object format: {correct: '...', incorrect: '...'}
+          correct_feedback = qAny.feedback.correct || ''
+          incorrect_feedback = qAny.feedback.incorrect || ''
+          explanation = qAny.feedback.incorrect || qAny.feedback.correct || ''
+        }
+        
+        // Direct fields override feedback object
+        if (qAny.correctFeedback) {
+          correct_feedback = qAny.correctFeedback
+        }
+        if (qAny.incorrectFeedback) {
+          incorrect_feedback = qAny.incorrectFeedback
+        }
+        if (qAny.explanation) {
+          explanation = qAny.explanation
+        }
+        
         return {
           type: qAny.type || 'multiple-choice', // Default to multiple-choice for assessment
           text: qAny.question || qAny.text, // Fixed: Support both 'question' and 'text' fields
           options: qAny.options,
           correct_answer: qAny.correctAnswer,
-          explanation: qAny.feedback?.incorrect || qAny.feedback?.correct || '',
+          explanation,
+          correct_feedback,
+          incorrect_feedback
         }
       })
     } : undefined,
@@ -593,6 +897,25 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
  */
 async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent, projectId: string) {
   console.log('[Rust SCORM] Converting enhanced format, topics:', courseContent.topics.length)
+  
+  // Debug: Log audio IDs being extracted
+  console.log('[Rust SCORM] Welcome audio:', 
+    (courseContent.welcome as any)?.audioId || 
+    courseContent.welcome?.audioFile || 
+    courseContent.welcome?.media?.find((m: any) => m.type === 'audio')?.id
+  )
+  console.log('[Rust SCORM] Objectives audio:', 
+    (courseContent.objectivesPage as any)?.audioId || 
+    courseContent.objectivesPage?.audioFile || 
+    courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id
+  )
+  courseContent.topics.forEach((topic, i) => {
+    console.log(`[Rust SCORM] Topic ${i+1} (${topic.id}) audio:`, 
+      (topic as any).audioId || 
+      topic.audioFile || 
+      topic.media?.find((m: any) => m.type === 'audio')?.id
+    )
+  })
   
   // Check if we have knowledge checks
   const topicsWithKC = courseContent.topics.filter(t => t.knowledgeCheck).length
@@ -613,18 +936,48 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       title: courseContent.welcome.title || 'Welcome',
       content: courseContent.welcome.content || '',
       start_button_text: courseContent.welcome.startButtonText || 'Start Course',
-      audio_file: await resolveAudioCaptionFile((courseContent.welcome as any).audioId || courseContent.welcome.audioFile, projectId, mediaFiles, (courseContent.welcome as any).audioBlob),
-      caption_file: await resolveAudioCaptionFile((courseContent.welcome as any).captionId || courseContent.welcome.captionFile, projectId, mediaFiles, (courseContent.welcome as any).captionBlob),
+      audio_file: await resolveAudioCaptionFile(
+        (courseContent.welcome as any).audioId || 
+        courseContent.welcome.audioFile || 
+        courseContent.welcome.media?.find((m: any) => m.type === 'audio')?.id, 
+        projectId, 
+        mediaFiles, 
+        (courseContent.welcome as any).audioBlob
+      ),
+      caption_file: await resolveAudioCaptionFile(
+        (courseContent.welcome as any).captionId || 
+        courseContent.welcome.captionFile || 
+        courseContent.welcome.media?.find((m: any) => m.type === 'caption')?.id, 
+        projectId, 
+        mediaFiles, 
+        (courseContent.welcome as any).captionBlob
+      ),
       image_url: await resolveImageUrl(courseContent.welcome.imageUrl, projectId, mediaFiles, mediaCounter),
-      media: await resolveMedia(courseContent.welcome.media, projectId, mediaFiles, mediaCounter),
+      // Filter out audio/caption from media array since they're handled separately
+      media: await resolveMedia(courseContent.welcome.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
     } : undefined,
     
     learning_objectives_page: courseContent.objectives ? {
       objectives: courseContent.objectives,
-      audio_file: await resolveAudioCaptionFile((courseContent.objectivesPage as any)?.audioId || courseContent.objectivesPage?.audioFile, projectId, mediaFiles, (courseContent.objectivesPage as any)?.audioBlob),
-      caption_file: await resolveAudioCaptionFile((courseContent.objectivesPage as any)?.captionId || courseContent.objectivesPage?.captionFile, projectId, mediaFiles, (courseContent.objectivesPage as any)?.captionBlob),
+      audio_file: await resolveAudioCaptionFile(
+        (courseContent.objectivesPage as any)?.audioId || 
+        courseContent.objectivesPage?.audioFile || 
+        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id, 
+        projectId, 
+        mediaFiles, 
+        (courseContent.objectivesPage as any)?.audioBlob
+      ),
+      caption_file: await resolveAudioCaptionFile(
+        (courseContent.objectivesPage as any)?.captionId || 
+        courseContent.objectivesPage?.captionFile || 
+        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'caption')?.id, 
+        projectId, 
+        mediaFiles, 
+        (courseContent.objectivesPage as any)?.captionBlob
+      ),
       image_url: await resolveImageUrl(courseContent.objectivesPage?.imageUrl, projectId, mediaFiles, mediaCounter),
-      media: await resolveMedia(courseContent.objectivesPage?.media, projectId, mediaFiles, mediaCounter),
+      // Filter out audio/caption from media array since they're handled separately
+      media: await resolveMedia(courseContent.objectivesPage?.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
     } : undefined,
     
     topics: await Promise.all(courseContent.topics.map(async topic => {
@@ -635,10 +988,25 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         title: topic.title,
         content: topic.content || '',
         knowledge_check: undefined as any,
-        audio_file: await resolveAudioCaptionFile((topic as any).audioId || topic.audioFile, projectId, mediaFiles, (topic as any).audioBlob),
-        caption_file: await resolveAudioCaptionFile((topic as any).captionId || topic.captionFile, projectId, mediaFiles, (topic as any).captionBlob),
+        audio_file: await resolveAudioCaptionFile(
+          (topic as any).audioId || 
+          topic.audioFile || 
+          topic.media?.find((m: any) => m.type === 'audio')?.id, 
+          projectId, 
+          mediaFiles, 
+          (topic as any).audioBlob
+        ),
+        caption_file: await resolveAudioCaptionFile(
+          (topic as any).captionId || 
+          topic.captionFile || 
+          topic.media?.find((m: any) => m.type === 'caption')?.id, 
+          projectId, 
+          mediaFiles, 
+          (topic as any).captionBlob
+        ),
         image_url: await resolveImageUrl(topic.imageUrl, projectId, mediaFiles, mediaCounter),
-        media: await resolveMedia(topic.media?.map(m => ({
+        // Filter out audio/caption from media array since they're handled separately
+        media: await resolveMedia(topic.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption').map(m => ({
           id: m.id,
           type: m.type,
           url: m.url || '',
@@ -647,9 +1015,10 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       }
       
       // Debug log to see audio/caption files
-      console.log(`[Rust SCORM] Topic ${topic.id} audio_file:`, topic.audioFile)
-      console.log(`[Rust SCORM] Topic ${topic.id} caption_file:`, topic.captionFile)
-      console.log(`[Rust SCORM] Topic ${topic.id} media:`, topic.media)
+      console.log(`[Rust SCORM] Topic ${topic.id} resolved audio_file:`, convertedTopic.audio_file)
+      console.log(`[Rust SCORM] Topic ${topic.id} resolved caption_file:`, convertedTopic.caption_file)
+      console.log(`[Rust SCORM] Topic ${topic.id} original media:`, topic.media)
+      console.log(`[Rust SCORM] Topic ${topic.id} filtered media:`, convertedTopic.media)
       
       // Handle single knowledge check question (not array)
       if (topic.knowledgeCheck && !topic.knowledgeCheck.questions) {
@@ -663,7 +1032,10 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
             question: kc.question,
             text: kc.text,
             blank: kc.blank,
-            correctAnswer: kc.correctAnswer
+            correctAnswer: kc.correctAnswer,
+            correctFeedback: kc.correctFeedback,
+            incorrectFeedback: kc.incorrectFeedback,
+            feedback: kc.feedback
           })
         }
         
@@ -675,8 +1047,10 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
               type: kc.type,
               text: kc.question || kc.text || 'True or False?',
               options: ['True', 'False'],
-              correct_answer: String(kc.correctAnswer).toLowerCase(),  // Keep lowercase for template
-              explanation: kc.explanation || kc.feedback?.incorrect || kc.feedback?.correct || '',
+              correct_answer: (kc.correctAnswer === 0 || kc.correctAnswer === 'true' || kc.correctAnswer === true ? 'true' : 'false'),
+              explanation: kc.explanation || (kc.feedback && kc.feedback.incorrect) || (kc.feedback && kc.feedback.correct) || '',
+            correct_feedback: kc.correctFeedback || (kc.feedback && kc.feedback.correct) || 'Correct!',
+            incorrect_feedback: kc.incorrectFeedback || (kc.feedback && kc.feedback.incorrect) || 'Not quite. Try again!',
             }]
           }
         } else {
@@ -684,7 +1058,16 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
             enabled: true,
             questions: [{
               type: kc.type || 'multiple-choice',
-              text: kc.question || kc.text || kc.blank || 'Fill in the blank',
+              text: (() => {
+                // Use the appropriate property based on question type
+                if (kc.type === 'fill-in-the-blank') {
+                  // For fill-in-the-blank, use blank property
+                  return kc.blank || kc.question || kc.text || 'The answer is _____';
+                } else {
+                  // For other types, use question property
+                  return kc.question || kc.text || 'Question text missing';
+                }
+              })(),
               options: kc.options,
               correct_answer: (() => {
                 // Handle multiple choice questions with options
@@ -710,7 +1093,9 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
                 // For non-multiple choice, return as string
                 return String(kc.correctAnswer || '')
               })(),
-              explanation: kc.explanation || kc.feedback?.incorrect || kc.feedback?.correct || '',
+              explanation: kc.explanation || (kc.feedback && kc.feedback.incorrect) || (kc.feedback && kc.feedback.correct) || '',
+            correct_feedback: kc.correctFeedback || (kc.feedback && kc.feedback.correct) || 'Correct!',
+            incorrect_feedback: kc.incorrectFeedback || (kc.feedback && kc.feedback.incorrect) || 'Not quite. Try again!',
             }]
           }
         }
@@ -724,18 +1109,44 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
               console.error(`[Rust SCORM] Enhanced question missing type in topic ${topic.id}:`, q)
               throw new Error(`Question missing type in topic ${topic.id}`)
             }
-            if (!q.question && !(q as any).text) {
-              console.error(`[Rust SCORM] Enhanced question missing question/text field in topic ${topic.id}:`, q)
-              throw new Error(`Question missing question/text field in topic ${topic.id}`)
+            if (!q.question && !(q as any).text && !(q as any).blank) {
+              console.error(`[Rust SCORM] Enhanced question missing question/text/blank field in topic ${topic.id}:`, q)
+              throw new Error(`Question missing question/text/blank field in topic ${topic.id}`)
             }
             if (q.correctAnswer === undefined || q.correctAnswer === null) {
               console.error(`[Rust SCORM] Enhanced question missing correctAnswer in topic ${topic.id}:`, q)
               throw new Error(`Question missing correctAnswer in topic ${topic.id}`)
             }
             
-            return {
+            // Debug logging for fill-in-the-blank questions
+            if (q.type === 'fill-in-the-blank') {
+              console.log(`[Rust SCORM] Fill-in-blank question in array:`, {
+                type: q.type,
+                question: q.question,
+                text: (q as any).text,
+                blank: (q as any).blank,
+                correctAnswer: q.correctAnswer,
+                feedback: (q as any).feedback,
+                correctFeedback: (q as any).correctFeedback,
+                incorrectFeedback: (q as any).incorrectFeedback,
+                hasFeedback: !!(q as any).feedback,
+                hasFeedbackCorrect: !!((q as any).feedback && (q as any).feedback.correct),
+                hasFeedbackIncorrect: !!((q as any).feedback && (q as any).feedback.incorrect),
+                feedbackCorrectValue: (q as any).feedback?.correct,
+                feedbackIncorrectValue: (q as any).feedback?.incorrect
+              })
+            }
+            
+            const result = {
               type: q.type || (q as any).questionType,
-              text: q.question || (q as any).text, // Support both 'question' and 'text' fields
+              text: (() => {
+                // Use the appropriate property based on question type
+                if (q.type === 'fill-in-the-blank') {
+                  return (q as any).blank || q.question || (q as any).text || 'The answer is _____';
+                } else {
+                  return q.question || (q as any).text || 'Question text missing';
+                }
+              })(),
               options: q.options,
               correct_answer: (() => {
                 // Handle multiple choice questions with options
@@ -761,8 +1172,21 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
                 // For non-multiple choice, return as string
                 return String(q.correctAnswer || '')
               })(),
-              explanation: q.explanation || '',
+              explanation: q.explanation || ((q as any).feedback && (q as any).feedback.incorrect) || ((q as any).feedback && (q as any).feedback.correct) || '',
+              correct_feedback: (q as any).correctFeedback || ((q as any).feedback && (q as any).feedback.correct) || 'Correct!',
+              incorrect_feedback: (q as any).incorrectFeedback || ((q as any).feedback && (q as any).feedback.incorrect) || 'Not quite. Try again!',
             }
+            
+            if (q.type === 'fill-in-the-blank') {
+              console.log(`[Rust SCORM] Returning question object:`, {
+                type: result.type,
+                correct_feedback: result.correct_feedback,
+                incorrect_feedback: result.incorrect_feedback,
+                explanation: result.explanation
+              })
+            }
+            
+            return result
           })
         }
       }
@@ -792,6 +1216,8 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
           options: q.options,
           correct_answer: q.options[q.correctAnswer] || String(q.correctAnswer),
           explanation: '', // Enhanced format doesn't have explanations for assessment
+          correct_feedback: (q as any).correct_feedback || (q as any).correctFeedback || 'Correct!',
+          incorrect_feedback: (q as any).incorrect_feedback || (q as any).incorrectFeedback || 'Not quite. Try again!',
         }
       })
     } : undefined,
@@ -805,11 +1231,34 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
  */
 export async function generateRustSCORM(
   courseContent: CourseContent | EnhancedCourseContent,
-  projectId: string
+  projectId: string,
+  onProgress?: (message: string, progress: number) => void
 ): Promise<Uint8Array> {
+  // Lock all blob URLs during SCORM generation to prevent cleanup
+  const { blobUrlManager } = await import('../utils/blobUrlManager')
+  blobUrlManager.lockAll()
+  
+  // Set up progress event listener
+  let unlisten: (() => void) | undefined
+  if (onProgress) {
+    listen<{ message: string; progress: number }>('scorm-generation-progress', (event) => {
+      console.log('[Rust SCORM] Progress event:', event.payload)
+      onProgress(event.payload.message, event.payload.progress)
+    }).then(unlistenFn => {
+      unlisten = unlistenFn
+    })
+  }
+  
+  // Declare mediaFiles outside try block so it's accessible in catch block
+  let mediaFiles: MediaFile[] = []
+  
   try {
     console.log('[Rust SCORM] Converting course content to Rust format')
-    const { courseData: rustCourseData, mediaFiles } = await convertToRustFormat(courseContent, projectId)
+    if (onProgress) {
+      onProgress('Converting course content...', 10)
+    }
+    const { courseData: rustCourseData, mediaFiles: convertedMediaFiles } = await convertToRustFormat(courseContent, projectId)
+    mediaFiles = convertedMediaFiles
     
     // Debug: Log the converted data to see what's being sent
     console.log('[Rust SCORM] Converted data:', JSON.stringify(rustCourseData, null, 2))
@@ -849,11 +1298,32 @@ export async function generateRustSCORM(
     console.log('[Rust SCORM] Invoking Rust generator')
     console.log('[Rust SCORM] Sample topic data being sent:', JSON.stringify(rustCourseData.topics[0], null, 2))
     
+    if (onProgress) {
+      onProgress('Processing media files...', 30)
+    }
+    
+    // Calculate dynamic timeout based on media files
+    const baseTimeout = 120000 // 2 minutes base
+    const perFileTimeout = 4000 // 4 seconds per media file
+    const maxTimeout = 600000 // 10 minutes max
+    const calculatedTimeout = Math.min(baseTimeout + (mediaFiles.length * perFileTimeout), maxTimeout)
+    
+    console.log(`[Rust SCORM] Dynamic timeout calculated: ${calculatedTimeout}ms (${Math.round(calculatedTimeout / 1000)}s) for ${mediaFiles.length} media files`)
+    
+    if (onProgress) {
+      onProgress(`Generating SCORM package (${mediaFiles.length} media files)...`, 50)
+    }
+    
     // Create a timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(new Error('SCORM generation timed out after 60 seconds. The package may be too large or complex.'))
-      }, 60000) // 60 second timeout
+        const timeoutSeconds = Math.round(calculatedTimeout / 1000)
+        reject(new Error(
+          `SCORM generation timed out after ${timeoutSeconds} seconds. ` +
+          `The package contains ${mediaFiles.length} media files which may require more processing time. ` +
+          `Consider optimizing images or reducing the number of media files if generation continues to fail.`
+        ))
+      }, calculatedTimeout)
     })
     
     // Race between the actual invoke and the timeout
@@ -870,8 +1340,18 @@ export async function generateRustSCORM(
     const buffer = new Uint8Array(result)
     console.log('[Rust SCORM] Generated package size:', buffer.length)
     
+    // Unlock blob URLs after successful generation
+    blobUrlManager.unlockAll()
+    
+    if (onProgress) {
+      onProgress('SCORM package generated successfully!', 100)
+    }
+    
     return buffer
   } catch (error) {
+    // Always unlock blob URLs, even on error
+    blobUrlManager.unlockAll()
+    
     console.error('[Rust SCORM] Generation failed:', error)
     console.error('[Rust SCORM] Error details:', {
       message: error instanceof Error ? error.message : String(error),
@@ -884,9 +1364,27 @@ export async function generateRustSCORM(
       throw error // Re-throw timeout errors as-is
     } else if (error instanceof Error && error.message.includes('template')) {
       throw new Error(`SCORM template error: ${error.message}. This may be due to incompatible Handlebars syntax.`)
+    } else if (error instanceof Error && error.message.includes('memory')) {
+      throw new Error(
+        `Out of memory while processing ${mediaFiles.length} media files. ` +
+        `Try reducing image sizes or processing fewer files at once. ` +
+        `Original error: ${error.message}`
+      )
     } else {
-      throw new Error(`Failed to generate SCORM package: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(
+        `Failed to generate SCORM package with ${mediaFiles.length} media files. ` +
+        `Error: ${error instanceof Error ? error.message : String(error)}. ` +
+        `If this persists, try optimizing your media files.`
+      )
     }
+  } finally {
+    // Clean up event listener
+    if (unlisten) {
+      unlisten()
+    }
+    
+    // Clear media cache after generation
+    clearMediaCache()
   }
 }
 

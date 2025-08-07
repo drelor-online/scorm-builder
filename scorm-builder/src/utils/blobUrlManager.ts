@@ -28,6 +28,7 @@ class BlobUrlManager {
   private readonly cleanupInterval = 30 * 60 * 1000 // 30 minutes
   private readonly maxAge = 60 * 60 * 1000 // 1 hour
   private readonly maxInactiveTime = 30 * 60 * 1000 // 30 minutes
+  private lockedUrls = new Set<string>() // URLs locked from cleanup
 
   constructor() {
     // Setup automatic cleanup
@@ -91,6 +92,14 @@ class BlobUrlManager {
   }
 
   /**
+   * Public method to revoke/release a blob URL
+   * @param key The key of the URL to revoke
+   */
+  revokeUrl(key: string): void {
+    this.releaseUrl(key)
+  }
+
+  /**
    * Release a reference to a blob URL
    * The URL is only revoked when all references are released
    * @param key The key of the URL to release
@@ -102,7 +111,7 @@ class BlobUrlManager {
     if (refCount <= 1) {
       // Last reference, revoke the URL
       if (url) {
-        this.revokeUrl(url)
+        this.revokeUrlInternal(url)
         this.urls.delete(key)
         this.refCounts.delete(key)
         this.keyToUrl.delete(key)
@@ -133,9 +142,9 @@ class BlobUrlManager {
   /**
    * Get an existing URL without creating a new one
    * @param key The key to look up
-   * @returns The URL if it exists, undefined otherwise
+   * @returns The URL if it exists, null otherwise
    */
-  getUrl(key: string): string | undefined {
+  getUrl(key: string): string | null {
     const url = this.urls.get(key)
     
     // Update access time if found
@@ -146,13 +155,62 @@ class BlobUrlManager {
       }
     }
     
-    return url
+    return url || null
   }
 
   /**
-   * Revoke a specific URL
+   * Lock a URL to prevent it from being cleaned up
+   * @param key The key of the URL to lock
    */
-  private revokeUrl(url: string): void {
+  lockUrl(key: string): void {
+    const url = this.urls.get(key)
+    if (url) {
+      this.lockedUrls.add(url)
+      logger.debug('[BlobURLManager] Locked blob URL:', url)
+    }
+  }
+
+  /**
+   * Unlock a URL to allow it to be cleaned up
+   * @param key The key of the URL to unlock
+   */
+  unlockUrl(key: string): void {
+    const url = this.urls.get(key)
+    if (url) {
+      this.lockedUrls.delete(url)
+      logger.debug('[BlobURLManager] Unlocked blob URL:', url)
+    }
+  }
+
+  /**
+   * Lock all currently registered URLs (useful during critical operations)
+   */
+  lockAll(): void {
+    this.registry.forEach((_, url) => {
+      this.lockedUrls.add(url)
+    })
+    logger.info('[BlobURLManager] Locked all blob URLs:', this.lockedUrls.size)
+  }
+
+  /**
+   * Unlock all URLs
+   */
+  unlockAll(): void {
+    const count = this.lockedUrls.size
+    this.lockedUrls.clear()
+    logger.info('[BlobURLManager] Unlocked all blob URLs:', count)
+  }
+
+  /**
+   * Revoke a specific blob URL
+   */
+  private revokeUrlInternal(url: string): void {
+    // Don't revoke locked URLs
+    if (this.lockedUrls.has(url)) {
+      logger.debug('[BlobURLManager] Skipping revocation of locked URL:', url)
+      return
+    }
+    
     try {
       URL.revokeObjectURL(url)
       this.registry.delete(url)
@@ -170,6 +228,11 @@ class BlobUrlManager {
     const urlsToRevoke: string[] = []
     
     this.registry.forEach((entry, url) => {
+      // Skip locked URLs
+      if (this.lockedUrls.has(url)) {
+        return
+      }
+      
       const age = now - entry.createdAt
       const inactiveTime = now - entry.lastAccessed
       
@@ -188,7 +251,7 @@ class BlobUrlManager {
         this.refCounts.delete(entry.mediaId)
         this.keyToUrl.delete(entry.mediaId)
       }
-      this.revokeUrl(url)
+      this.revokeUrlInternal(url)
     })
     
     if (urlsToRevoke.length > 0) {

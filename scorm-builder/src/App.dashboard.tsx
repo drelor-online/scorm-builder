@@ -5,6 +5,7 @@ import { PersistentStorageProvider, useStorage } from './contexts/PersistentStor
 import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { handleFileAssociation } from './utils/fileAssociation'
 import { DebugInfo } from './components/DebugInfo'
+import { DebugPanel } from './components/DebugPanel'
 import { ErrorNotification, showError, showInfo } from './components/ErrorNotification'
 import App from './App'
 
@@ -87,13 +88,16 @@ function DashboardContent() {
   }, [])
   
   const handleProjectSelected = async (projectId: string) => {
+    console.log('[App.dashboard] handleProjectSelected called with:', projectId)
     try {
       setIsLoadingProject(true)
       setLoadingProgress({ phase: 'loading', percent: 0, message: 'Initializing...' })
       
+      console.log('[App.dashboard] Opening project:', projectId)
       await storage.openProject(projectId, (progress) => {
         setLoadingProgress(progress as any)
       })
+      console.log('[App.dashboard] Project opened, currentProjectId:', storage.currentProjectId)
       
       // Don't close the dialog yet - wait for media to load
       // The dialog will close when progress reaches 100%
@@ -382,6 +386,7 @@ export function AppWithDashboard() {
     <PersistentStorageProvider>
       <DashboardContent />
       <DebugInfo />
+      <DebugPanel />
       <ErrorNotification />
     </PersistentStorageProvider>
   )

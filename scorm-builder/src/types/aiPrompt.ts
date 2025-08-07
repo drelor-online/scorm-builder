@@ -71,6 +71,9 @@ export interface Media {
   captionUrl?: string
   captionBlob?: Blob
   storageId?: string // Reference to persistent storage
+  isYouTube?: boolean // Flag for YouTube videos
+  mimeType?: string // MIME type of the media
+  fileName?: string // Original file name
 }
 
 export interface Assessment {

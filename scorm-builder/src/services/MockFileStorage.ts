@@ -2,6 +2,7 @@
 export class MockFileStorage {
   private mockData: Record<string, any> = {}
   private _currentProjectId: string | null = null
+  private _currentProjectPath: string | null = null
   public isInitialized = false
   
   get currentProjectId(): string | null {
@@ -16,15 +17,17 @@ export class MockFileStorage {
 
   async createProject(name: string, projectsDir?: string): Promise<any> {
     const projectId = Date.now().toString()
+    const projectPath = `/mock/projects/${projectId}`
     const project = {
       id: projectId,
       name,
-      path: `/mock/projects/${projectId}`,
+      path: projectPath,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
     this.mockData[projectId] = { project, content: {} }
     this._currentProjectId = projectId
+    this._currentProjectPath = projectPath
     return project
   }
 
@@ -33,6 +36,7 @@ export class MockFileStorage {
       throw new Error('Project not found')
     }
     this._currentProjectId = projectId
+    this._currentProjectPath = this.mockData[projectId].project.path
   }
 
   async saveContent(contentId: string, content: any): Promise<void> {

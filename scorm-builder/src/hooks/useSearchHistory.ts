@@ -13,14 +13,31 @@ interface UseSearchHistoryReturn {
   getFilteredHistory: (searchTerm: string) => string[]
 }
 
+// Helper to check if localStorage is available and accessible
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    const testKey = '__localStorage_test__'
+    localStorage.setItem(testKey, 'test')
+    localStorage.removeItem(testKey)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function useSearchHistory(
   key: string,
   options: UseSearchHistoryOptions = {}
 ): UseSearchHistoryReturn {
   const { maxItems = 10, caseInsensitive = false } = options
   const storageKey = `searchHistory:${key}`
+  const storageAvailable = isLocalStorageAvailable()
 
   const loadHistory = (): string[] => {
+    if (!storageAvailable) {
+      return []
+    }
+    
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) {
@@ -30,7 +47,11 @@ export function useSearchHistory(
         }
       }
     } catch (error) {
-      console.error('Failed to load search history:', error)
+      // Silently fail to avoid console spam when storage is blocked
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Search history unavailable:', error)
+      }
     }
     return []
   }
@@ -38,12 +59,19 @@ export function useSearchHistory(
   const [history, setHistory] = useState<string[]>(loadHistory)
 
   const saveHistory = useCallback((newHistory: string[]) => {
+    if (!storageAvailable) {
+      return
+    }
+    
     try {
       localStorage.setItem(storageKey, JSON.stringify(newHistory))
     } catch (error) {
-      console.error('Failed to save search history:', error)
+      // Silently fail to avoid console spam
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Could not save search history:', error)
+      }
     }
-  }, [storageKey])
+  }, [storageKey, storageAvailable])
 
   const addToHistory = useCallback((term: string) => {
     const trimmedTerm = term.trim()
@@ -76,12 +104,20 @@ export function useSearchHistory(
 
   const clearHistory = useCallback(() => {
     setHistory([])
+    
+    if (!storageAvailable) {
+      return
+    }
+    
     try {
       localStorage.removeItem(storageKey)
     } catch (error) {
-      console.error('Failed to clear search history:', error)
+      // Silently fail
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Could not clear search history:', error)
+      }
     }
-  }, [storageKey])
+  }, [storageKey, storageAvailable])
 
   const getFilteredHistory = useCallback((searchTerm: string) => {
     if (!searchTerm.trim()) return history

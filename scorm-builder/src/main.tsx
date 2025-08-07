@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { AppWithDashboard } from './App.dashboard'
 import './index.css'
 import './errorMonitor'
-import './utils/debugLogger'
+import './utils/ultraSimpleLogger' // Load ultra-simple debug logger synchronously
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 import { setupMockTauri } from './mocks/mockTauriAPI'
 
@@ -19,6 +19,8 @@ if (import.meta.env.MODE === 'test' || (import.meta.env.DEV && !window.__TAURI__
   setupMockTauri();
   console.log('✅ Mock Tauri API ready');
 }
+
+// Debug logger is now loaded synchronously above
 
 const root = document.getElementById('root')
 if (root) {

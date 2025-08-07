@@ -18,71 +18,55 @@
                 
                 {{#each knowledge_check_questions}}
                 {{#eq type "multiple-choice"}}
-                <div class="kc-question-wrapper" data-question-index="{{index}}">
+                <div class="kc-question-wrapper" data-question-index="{{@index}}" data-feedback="{{explanation}}" data-correct-answer="{{correct_answer}}" data-correct-feedback="{{correct_feedback}}" data-incorrect-feedback="{{incorrect_feedback}}">
                     <p class="kc-question">{{text}}</p>
                     <div class="kc-options">
                         {{#each options}}
                         <label class="kc-option">
                             <input type="radio" 
-                                   name="q{{../index}}" 
-                                   value="{{this}}"
-                                   data-correct="{{../correct_answer}}"
-                                   data-feedback="{{../explanation}}">
+                                   name="q{{@../index}}" 
+                                   value="{{this}}">
                             <span>{{this}}</span>
                         </label>
                         {{/each}}
                     </div>
-                    <button class="kc-submit" 
-                            data-question-index="{{index}}"
-                            onclick="window.submitMultipleChoice({{index}})">
-                        Submit Answer
-                    </button>
-                    <div id="feedback-{{index}}" class="feedback"></div>
+                    <div id="feedback-{{@index}}" class="feedback"></div>
                 </div>
                 {{else}}
                     {{#eq type "true-false"}}
-                    <div class="kc-question-wrapper" data-question-index="{{index}}">
+                    <div class="kc-question-wrapper" data-question-index="{{@index}}" data-feedback="{{explanation}}" data-correct-answer="{{correct_answer}}" data-correct-feedback="{{correct_feedback}}" data-incorrect-feedback="{{incorrect_feedback}}">
                         <p class="kc-question">{{text}}</p>
                         <div class="kc-options">
                             <label class="kc-option">
                                 <input type="radio" 
-                                       name="q{{index}}" 
-                                       value="true"
-                                       data-correct="{{correct_answer}}"
-                                       data-feedback="{{explanation}}">
+                                       name="q{{@index}}" 
+                                       value="true">
                                 <span>True</span>
                             </label>
                             <label class="kc-option">
                                 <input type="radio" 
-                                       name="q{{index}}" 
-                                       value="false"
-                                       data-correct="{{correct_answer}}"
-                                       data-feedback="{{explanation}}">
+                                       name="q{{@index}}" 
+                                       value="false">
                                 <span>False</span>
                             </label>
                         </div>
-                        <button class="kc-submit" 
-                                data-question-index="{{index}}"
-                                onclick="window.submitMultipleChoice({{index}})">
-                            Submit Answer
-                        </button>
-                        <div id="feedback-{{index}}" class="feedback"></div>
+                        <div id="feedback-{{@index}}" class="feedback"></div>
                     </div>
                     {{else}}
                         {{#eq type "fill-in-the-blank"}}
-                    <div class="kc-question-wrapper">
+                    <div class="kc-question-wrapper" 
+                         data-question-index="{{@index}}"
+                         data-correct-answer="{{correct_answer}}"
+                         data-correct-feedback="{{correct_feedback}}"
+                         data-incorrect-feedback="{{incorrect_feedback}}">
                         <p class="kc-question">{{text}}</p>
                         <div class="kc-input-group">
                             <input type="text" 
-                                   id="fill-blank-{{index}}" 
+                                   id="fill-blank-{{@index}}" 
                                    class="kc-fill-blank" 
                                    placeholder="Type your answer here">
-                            <button class="kc-submit" 
-                                    onclick="window.checkFillInBlank({{index}}, '{{correct_answer}}', '{{explanation}}', 'Not quite. Try again!', event)">
-                                Submit
-                            </button>
                         </div>
-                        <div id="feedback-{{index}}" class="feedback"></div>
+                        <div id="feedback-{{@index}}" class="feedback"></div>
                     </div>
                         {{/eq}}
                     {{/eq}}
@@ -90,6 +74,12 @@
                 {{else}}
                 <!-- DEBUG: No questions found in knowledge_check_questions array -->
                 {{/each}}
+                
+                {{#if knowledge_check_questions}}
+                <button class="kc-submit" onclick="window.submitAllKnowledgeChecks()">
+                    Submit All Answers
+                </button>
+                {{/if}}
             </div>
             {{else}}
             <!-- DEBUG: has_knowledge_check is false or undefined -->
@@ -97,15 +87,15 @@
         </div>
         
         <!-- Right Column: Media and Audio -->
+        {{#or image_url media audio_file}}
         <div class="content-column media-column">
             {{#or image_url media}}
             <div class="media-container">
-                {{#if image_url}}
-                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" />
-                {{/if}}
+                {{#if media}}
+                {{!-- If media array exists, render items from it --}}
                 {{#each media}}
                 {{#eq type "image"}}
-                <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" />
+                <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" onerror="this.parentElement.style.display='none'" />
                 {{else}}
                     {{#eq type "video"}}
                         {{#if is_youtube}}
@@ -126,6 +116,12 @@
                     {{/eq}}
                 {{/eq}}
                 {{/each}}
+                {{else}}
+                {{!-- Only show image_url if media array is empty and it's not a broken path --}}
+                {{#if image_url}}
+                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" onerror="this.parentElement.style.display='none'" />
+                {{/if}}
+                {{/if}}
             </div>
             {{/or}}
             
@@ -201,5 +197,8 @@
             </div>
             {{/if}}
         </div>
+        {{else}}
+        <!-- No media column when no media or audio present -->
+        {{/or}}
     </div>
 </div>

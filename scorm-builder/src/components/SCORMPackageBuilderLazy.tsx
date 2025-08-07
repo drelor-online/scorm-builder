@@ -83,7 +83,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
   const [version, setVersion] = useState('1.0')
   const [isGenerating, setIsGenerating] = useState(false)
   const [packageGenerated, setPackageGenerated] = useState(false)
-  const [isTauriEnvironment, setIsTauriEnvironment] = useState(false)
+  const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -96,16 +96,14 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
     }
   }
   
-  React.useEffect(() => {
-    setIsTauriEnvironment(Boolean((window as any).__TAURI__))
-  }, [])
-  
   const handleGenerateSCORM = async () => {
     setIsGenerating(true)
     setGenerationProgress(0)
     setGenerationMessage('Loading SCORM generator...')
+    setSavedFilePath(null) // Reset previous file path
     
     try {
+      console.log('[SCORM Export] Starting SCORM generation...')
       // Dynamic imports with progress updates
       setGenerationProgress(20)
       setGenerationMessage('Loading content converter...')
@@ -128,25 +126,64 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
       // Convert course content to enhanced format
       const enhancedContent = convertToEnhancedCourseContent(courseContent, courseMetadata)
       
+      // Add title to the enhanced content if not already present
+      if (!enhancedContent.title) {
+        enhancedContent.title = courseSeedData.courseTitle
+      }
+      
       setGenerationProgress(60)
       setGenerationMessage('Loading SCORM package generator...')
       
       // Dynamically load SCORM generator
       const generateSCORM = await loadSCORMGenerator('1.2')
       
+      // Count media files for better progress feedback
+      const mediaCount = courseContent.topics.reduce((count, topic) => {
+        let topicCount = 0
+        if (topic.audioFile) topicCount++
+        if (topic.captionFile) topicCount++
+        if (topic.media?.length) topicCount += topic.media.length
+        return count + topicCount
+      }, 0) + 
+      (courseContent.welcomePage?.audioFile ? 1 : 0) +
+      (courseContent.welcomePage?.captionFile ? 1 : 0) +
+      (courseContent.welcomePage?.media?.length || 0) +
+      (courseContent.learningObjectivesPage?.audioFile ? 1 : 0) +
+      (courseContent.learningObjectivesPage?.captionFile ? 1 : 0) +
+      (courseContent.learningObjectivesPage?.media?.length || 0)
+      
+      const estimatedTime = Math.round(120 + (mediaCount * 4))
+      
       setGenerationProgress(80)
-      setGenerationMessage('Generating SCORM package...')
+      setGenerationMessage(`Generating SCORM package (${mediaCount} media files, ~${estimatedTime}s)...`)
       
       // Generate SCORM package
+      console.log('[SCORM Export] Calling generateSCORM...')
       const result = await generateSCORM(enhancedContent)
-      const buffer = result.buffer
+      console.log('[SCORM Export] Generated result type:', typeof result, 'length:', result?.length)
+      // generateRustSCORM returns the buffer directly as a Uint8Array
+      const buffer = result
+      
+      if (!buffer || buffer.length === 0) {
+        throw new Error('SCORM generation returned empty buffer')
+      }
       
       setGenerationProgress(90)
-      setGenerationMessage('Preparing download...')
+      setGenerationMessage('Opening save dialog...')
       
-      if (isTauriEnvironment) {
-        // Show save dialog
-        const filePath = await save({
+      console.log('[SCORM Export] Opening save dialog with buffer size:', buffer.length)
+      console.log('[SCORM Export] Window.__TAURI__ exists:', typeof window !== 'undefined' && '__TAURI__' in window)
+      console.log('[SCORM Export] Save function exists:', typeof save === 'function')
+      
+      // Show save dialog - this is a Tauri app, always use native dialog
+      let filePath: string | null = null
+      try {
+        // Check if we're in Tauri environment
+        if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+          throw new Error('Not running in Tauri environment. Save dialog requires Tauri.')
+        }
+        
+        console.log('[SCORM Export] Calling save() with:', {
           defaultPath: `${courseSeedData.courseTitle.replace(/[^a-zA-Z0-9]/g, '_')}.zip`,
           filters: [{
             name: 'SCORM Package',
@@ -154,30 +191,69 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
           }]
         })
         
-        if (filePath) {
-          // Write the buffer to file using Tauri's file system API
-          await writeFile(filePath, buffer)
-          setPackageGenerated(true)
+        // Ensure the save function is available
+        if (typeof save !== 'function') {
+          throw new Error('Save dialog function not available. Check @tauri-apps/plugin-dialog import.')
         }
-      } else {
-        // Browser fallback - download the file
-        const blob = new Blob([buffer], { type: 'application/zip' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${courseSeedData.courseTitle.replace(/[^a-zA-Z0-9]/g, '_')}.zip`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        setPackageGenerated(true)
+        
+        filePath = await save({
+          defaultPath: `${courseSeedData.courseTitle.replace(/[^a-zA-Z0-9]/g, '_')}.zip`,
+          filters: [{
+            name: 'SCORM Package',
+            extensions: ['zip']
+          }]
+        })
+        
+        console.log('[SCORM Export] Save dialog returned:', filePath)
+      } catch (saveError) {
+        console.error('[SCORM Export] Failed to open save dialog:', saveError)
+        setGenerationMessage(`Error: ${saveError instanceof Error ? saveError.message : 'Unknown error opening dialog'}`)
+        throw saveError
       }
       
-      setGenerationProgress(100)
-      setGenerationMessage('SCORM package generated successfully!')
+      console.log('[SCORM Export] Save dialog result:', filePath)
+      
+      if (filePath) {
+        setGenerationMessage('Saving file...')
+        console.log('[SCORM Export] Writing file to:', filePath)
+        
+        // Write the buffer to file using Tauri's file system API
+        await writeFile(filePath, buffer)
+        
+        console.log('[SCORM Export] File saved successfully')
+        setSavedFilePath(filePath)
+        setPackageGenerated(true)
+        setGenerationProgress(100)
+        setGenerationMessage('SCORM package saved successfully!')
+      } else {
+        // Dialog was cancelled or failed to open
+        const errorMsg = '[SCORM Export] Export cancelled: Save dialog returned null (dialog may not be opening)'
+        console.error(errorMsg, 'This usually means the Tauri dialog API is not working correctly')
+        setGenerationMessage('Failed: Save dialog did not open')
+        setGenerationProgress(0)
+        
+        // Throw error to make the issue visible
+        throw new Error('Save dialog failed to open or was cancelled. Please check Tauri dialog permissions.')
+      }
     } catch (error) {
-      console.error('Error generating SCORM package:', error)
-      alert('Error generating SCORM package. Please check the console for details.')
+      console.error('[SCORM Export] Failed to generate or save SCORM package:', error)
+      
+      // More detailed error message
+      let errorMessage = 'SCORM Export Failed:\n\n'
+      if (error instanceof Error) {
+        errorMessage += error.message
+        // Add stack trace to console for debugging
+        console.error('[SCORM Export] Stack trace:', error.stack)
+      } else {
+        errorMessage += String(error)
+      }
+      
+      // Show error in UI
+      setGenerationMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setGenerationProgress(0)
+      
+      // Also show alert for visibility
+      alert(errorMessage)
     } finally {
       setIsGenerating(false)
       setTimeout(() => {
@@ -335,7 +411,12 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
           
           {packageGenerated && !isGenerating && (
             <Alert type="success">
-              ✓ SCORM package generated successfully! The file has been {isTauriEnvironment ? 'saved to your selected location' : 'downloaded to your computer'}.
+              <div>✓ SCORM package saved successfully!</div>
+              {savedFilePath && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.85em', opacity: 0.9 }}>
+                  File saved to: {savedFilePath}
+                </div>
+              )}
             </Alert>
           )}
         </Card>

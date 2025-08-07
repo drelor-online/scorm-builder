@@ -1,5 +1,5 @@
 // External packages
-import { useState, useEffect, useCallback, Suspense, lazy, useMemo } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy, useMemo, useRef } from 'react'
 
 // Constants
 import { COLORS, SPACING, DURATIONS } from '@/constants'
@@ -9,6 +9,8 @@ import { apiKeyStorage } from '@/services/ApiKeyStorage'
 import { mapAudioIds } from '@/services/courseContentAudioIdMapper'
 
 // Utils
+import { logger } from '@/utils/logger'
+import { debugLogger } from '@/utils/ultraSimpleLogger'
 
 // Styles - Emergency text visibility fix
 // import './styles/ensure-text-visible.css' // Uncomment if text is not visible
@@ -16,6 +18,7 @@ import { mapAudioIds } from '@/services/courseContentAudioIdMapper'
 // Components
 import { CourseSeedInput } from '@/components/CourseSeedInput'
 import { Button } from '@/components/DesignSystem'
+import { DebugPanel } from '@/components/DebugPanel'
 
 // Lazy load step components
 const AIPromptGenerator = lazy(() => 
@@ -108,6 +111,77 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
+
+  // Set up debug log export on window close
+  useEffect(() => {
+    // This function will be called when the component unmounts
+    let unlistenTauri: (() => void) | undefined;
+
+    const setupTauriCloseHandler = async () => {
+      // Check if running in Tauri environment
+      if (window.__TAURI__) {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window');
+          const appWindow = getCurrentWindow();
+
+          // Listen for the close request event
+          unlistenTauri = await appWindow.onCloseRequested(async (event) => {
+            // VERSION MARKER: v2.0.3 - Fixed infinite loop by unlistening before close
+            debugLogger.info('App v2.0.3', 'Tauri window close requested - starting cleanup...');
+            console.log('[App v2.0.3] Window close requested - preventing default for cleanup');
+            
+            // Prevent the window from closing immediately while we clean up
+            event.preventDefault();
+
+            // 1. Cancel any pending file saves
+            if (storage?.fileStorage) {
+              debugLogger.info('App v2.0.3', 'Cancelling pending saves...');
+              storage.fileStorage.cancelAllPendingSaves();
+            }
+
+            // 2. Export debug logs (but don't await - too slow)
+            debugLogger.info('App v2.0.3', 'Triggering debug log export...');
+            const report = debugLogger.createBugReport();
+            if (report) {
+              // Fire and forget - don't await
+              debugLogger.writeToFile({
+                timestamp: new Date().toISOString(),
+                level: 'info' as const,
+                category: 'session-export',
+                message: 'Session export on close',
+                data: report
+              });
+            }
+            
+            // 3. CRITICAL: Unlisten to prevent infinite loop when we call close()
+            debugLogger.info('App v2.0.3', 'Removing close handler to prevent recursion...');
+            if (unlistenTauri) {
+              unlistenTauri();
+              unlistenTauri = undefined; // Clear reference
+            }
+            
+            // 4. Close the window after a short delay to ensure cleanup
+            debugLogger.info('App v2.0.3', 'Cleanup complete, closing window...');
+            console.log('[App v2.0.3] Closing window now');
+            
+            // Use setTimeout to ensure the cleanup happens before close
+            setTimeout(() => {
+              appWindow.close();
+            }, 100);
+          });
+        } catch (error) {
+          debugLogger.error('App', 'Failed to set up Tauri close handler', error);
+        }
+      }
+    };
+
+    setupTauriCloseHandler();
+
+    // Cleanup the event listener when the component unmounts
+    return () => {
+      unlistenTauri?.();
+    };
+  }, [storage])
   
   // Performance monitoring
   const { measureAsync } = usePerformanceMonitor({
@@ -118,7 +192,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   // Debug effect to log state changes - DISABLED to prevent console spam
   // useEffect(() => {
-  //   console.log('State changed:', {
+  //   debugLogger.info('State changed:', {
   //     currentStep,
   //     hasCourseSeedData: !!courseSeedData,
   //     courseSeedDataKeys: courseSeedData ? Object.keys(courseSeedData) : null,
@@ -134,7 +208,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   })
   
   // Save/Open state
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   
@@ -185,20 +260,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [courseSeedData, courseContent, currentStep, lastSavedTime])
   
-  // Clear old localStorage data and load API keys on first load
+  // Load API keys on first load
   useEffect(() => {
-    // Clear any old localStorage data to prevent conflicts
-    const keysToRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && key.startsWith('scorm_') && !key.includes('recent_files')) {
-        keysToRemove.push(key)
-      }
-    }
-    keysToRemove.forEach(key => {
-      console.log('Removing old localStorage key:', key)
-      localStorage.removeItem(key)
-    })
+    // Only remove truly obsolete localStorage data
+    // Keep UI preferences and non-critical data in localStorage
     
     // Test mode keyboard shortcut (Ctrl+Shift+T)
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -224,12 +289,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         const savedKeys = await apiKeyStorage.load()
         if (savedKeys) {
           setApiKeys(savedKeys)
-          console.log('API keys loaded from encrypted file')
+          debugLogger.info('App.init', 'API keys loaded from encrypted file')
         } else {
-          console.log('No API keys found, using environment defaults')
+          debugLogger.info('App.init', 'No API keys found, using environment defaults')
         }
       } catch (error) {
-        console.error('Unexpected error loading API keys:', error)
+        debugLogger.error('App.init', 'Unexpected error loading API keys', error)
       }
     }
     loadApiKeys()
@@ -237,11 +302,28 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Load project data from PersistentStorage on mount
   useEffect(() => {
-    if (!storage.currentProjectId || !storage.isInitialized || lastLoadedProjectId === storage.currentProjectId) {
+    if (!storage.currentProjectId || !storage.isInitialized) {
+      debugLogger.info('App.loadProject', 'Skipping load - no project or storage not initialized', {
+        currentProjectId: storage.currentProjectId,
+        isInitialized: storage.isInitialized
+      })
+      return
+    }
+    
+    // For new projects, we should always load even if it's the same ID
+    // because the project might have just been created
+    if (lastLoadedProjectId === storage.currentProjectId && courseSeedData) {
+      debugLogger.info('App.loadProject', 'Skipping load - already loaded this project', {
+        projectId: storage.currentProjectId,
+        hasCourseSeedData: !!courseSeedData
+      })
       return
     }
 
     const loadProjectData = async () => {
+      debugLogger.info('App.loadProject', 'Starting to load project data', { 
+        projectId: storage.currentProjectId 
+      })
       setLastLoadedProjectId(storage.currentProjectId)
       try {
         let loadedCourseContent: CourseContent | null = null
@@ -249,9 +331,59 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         let loadedStep = 'seed'
 
         await measureAsync('loadProjectData', async () => {
+          // First, always try to load the courseSeedData
+          debugLogger.info('App.loadProject', 'Loading courseSeedData from storage')
+          const seedData = await storage.getContent('courseSeedData')
+          if (seedData) {
+            debugLogger.info('App.loadProject', 'Loaded courseSeedData', seedData)
+            loadedCourseSeedData = seedData as CourseSeedData
+          } else {
+            debugLogger.warn('App.loadProject', 'No courseSeedData found in project, will try to reconstruct')
+          }
+          
+          // Try to load course-content directly (for projects that saved complete content)
+          const directCourseContent = await storage.getContent('course-content')
+          if (directCourseContent) {
+            debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
+            loadedCourseContent = directCourseContent as CourseContent
+            
+            // Validate and fix fill-in-the-blank questions
+            if (loadedCourseContent.topics) {
+              loadedCourseContent.topics.forEach(topic => {
+                if (topic.knowledgeCheck?.questions) {
+                  topic.knowledgeCheck.questions.forEach(question => {
+                    if (question.type === 'fill-in-the-blank' && !question.blank) {
+                      console.warn(`[App] Fill-in-the-blank question missing blank property in topic ${topic.id}`)
+                      // Create a default blank text if missing
+                      question.blank = question.question || `The answer is _____.`
+                    }
+                  })
+                }
+              })
+            }
+          }
+          
+          // Get metadata (which now handles unified data model internally)
           const metadata = await storage.getCourseMetadata()
+          debugLogger.info('App.loadProject', 'Loaded metadata', metadata)
+          
+          // If we don't have seedData but have metadata, reconstruct it
+          if (!loadedCourseSeedData && metadata) {
+            debugLogger.info('App.loadProject', 'Reconstructing courseSeedData from metadata')
+            debugLogger.debug('App.loadProject', `Title from metadata: ${metadata.title} or courseTitle: ${metadata.courseTitle}`)
+            loadedCourseSeedData = {
+              courseTitle: metadata.title || metadata.courseTitle || '',
+              difficulty: metadata.difficulty || 3,
+              customTopics: metadata.topics || [],
+              template: metadata.template || 'None',
+              templateTopics: []
+            }
+            debugLogger.info('App.loadProject', 'Reconstructed courseSeedData', loadedCourseSeedData)
+          }
 
-          if (metadata && metadata.topics && metadata.topics.length > 0) {
+          // Only try reconstruction if we didn't load course content directly
+          if (!loadedCourseContent && metadata && metadata.topics && metadata.topics.length > 0) {
+            debugLogger.info('App.loadProject', 'Course content not found directly, attempting reconstruction from individual pieces')
             const topics: Topic[] = []
             for (let i = 0; i < metadata.topics.length; i++) {
               const topicIdOrName = metadata.topics[i]
@@ -326,20 +458,45 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 } as CourseContent
               }
             }
-
-            const seedData = await storage.getContent('courseSeedData')
-            if (seedData) {
-              loadedCourseSeedData = seedData as CourseSeedData
+          }
+          
+          // Load the current step (moved outside of reconstruction logic)
+          const stepData = await storage.getContent('currentStep')
+          if (stepData && stepData.step) {
+            // Only validate step if it requires content
+            if (stepData.step !== 'seed' && stepData.step !== 'prompt' && !loadedCourseContent?.topics?.length) {
+              console.warn('Step requires courseContent but topics not found, defaulting to seed step')
+              loadedStep = 'seed'
+            } else {
+              loadedStep = stepData.step
             }
-
-            const stepData = await storage.getContent('currentStep')
-            if (stepData && stepData.step) {
-              if (stepData.step !== 'seed' && stepData.step !== 'prompt' && !topics?.length) {
-                console.warn('Step requires courseContent but topics not found, defaulting to seed step')
-                loadedStep = 'seed'
+          } else {
+            // No saved step - intelligently detect based on content
+            debugLogger.info('App.loadProject', 'No saved currentStep, detecting from content...')
+            if (loadedCourseContent?.topics && loadedCourseContent.topics.length > 0) {
+              // Check if we have media content
+              const hasMedia = loadedCourseContent.topics.some(topic => 
+                topic.media && topic.media.length > 0
+              ) || (loadedCourseContent.welcomePage?.media && loadedCourseContent.welcomePage.media.length > 0)
+              
+              if (hasMedia) {
+                debugLogger.info('App.loadProject', 'Content has media, setting step to activities')
+                loadedStep = 'activities'
               } else {
-                loadedStep = stepData.step
+                debugLogger.info('App.loadProject', 'Content has topics but no media, setting step to media')
+                loadedStep = 'media'
               }
+              
+              // Save the detected step for next time
+              try {
+                await storage.saveContent('currentStep', { step: loadedStep })
+                debugLogger.info('App.loadProject', 'Saved detected step', { step: loadedStep })
+              } catch (error) {
+                console.warn('[App] Failed to save detected step:', error)
+              }
+            } else if (loadedCourseSeedData) {
+              debugLogger.info('App.loadProject', 'Has seed data but no content, setting step to prompt')
+              loadedStep = 'prompt'
             }
           }
         })
@@ -348,18 +505,38 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         if (loadedCourseContent && storage.currentProjectId) {
           try {
             loadedCourseContent = await mapAudioIds(loadedCourseContent, storage.currentProjectId)
-            console.log('[App] Mapped audioIds from backend')
+            debugLogger.info('App.loadProject', 'Mapped audioIds from backend')
           } catch (error) {
             console.warn('[App] Failed to map audioIds from backend:', error)
           }
         }
 
         // Atomic state updates
+        debugLogger.info('App.loadProject', 'About to update state', {
+          loadedCourseSeedData,
+          loadedCourseContent: loadedCourseContent ? 'present' : 'null',
+          loadedStep
+        })
         setCourseContent(loadedCourseContent)
         setCourseSeedData(loadedCourseSeedData)
         setCurrentStep(loadedStep)
+        debugLogger.info('App.loadProject', 'State updated', { 
+          step: loadedStep, 
+          hasSeedData: !!loadedCourseSeedData, 
+          hasContent: !!loadedCourseContent,
+          courseSeedDataTitle: (loadedCourseSeedData as any)?.courseTitle
+        })
+        
+        // Navigate to the current step and mark all previous steps as visited
+        // This ensures that when loading a project at step N, all steps 0 through N are accessible
         if (loadedStep !== 'seed') {
-          navigation.navigateToStep(stepNumbers[loadedStep as keyof typeof stepNumbers])
+          const targetStep = stepNumbers[loadedStep as keyof typeof stepNumbers]
+          // Mark all steps from 0 to targetStep as visited
+          for (let i = 0; i <= targetStep; i++) {
+            navigation.navigateToStep(i)
+          }
+          // End at the target step
+          navigation.navigateToStep(targetStep)
         } else {
           navigation.navigateToStep(0)
         }
@@ -374,8 +551,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   // Debug courseContent changes - DISABLED to prevent console spam
   // useEffect(() => {
-  //   console.log('courseContent state updated:', courseContent)
-  //   console.log('Current step when courseContent updates:', currentStep)
+  //   debugLogger.info('courseContent state updated:', courseContent)
+  //   debugLogger.info('Current step when courseContent updates:', currentStep)
   // }, [courseContent, currentStep])
 
   // Track unsaved changes
@@ -386,25 +563,23 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   // Manual save functionality (shows toast)
   const handleSave = useCallback(async (data?: ProjectData) => {
-    console.log('[handleSave] Called with data:', data)
-    console.log('[handleSave] Storage initialized:', storage.isInitialized)
-    console.log('[handleSave] Current project:', storage.currentProjectId)
+    debugLogger.debug('App.handleSave', 'Called with data', data)
+    debugLogger.debug('App.handleSave', 'Storage state', { initialized: storage.isInitialized, projectId: storage.currentProjectId })
     
     try {
       // Use passed data if provided, otherwise use state
       const dataToSave = data || projectData
-      console.log('[handleSave] Data to save:', dataToSave)
+      debugLogger.debug('App.handleSave', 'Data to save', dataToSave)
       
       // Save all data from all pages
       if (dataToSave.courseSeedData) {
-        console.log('[handleSave] Saving course metadata:', dataToSave.courseSeedData)
+        debugLogger.info('App.handleSave', 'Saving course metadata', dataToSave.courseSeedData)
         
         // Test for circular references
         try {
           JSON.stringify(dataToSave.courseSeedData)
         } catch (e) {
-          console.error('[handleSave] Circular reference in courseSeedData:', e)
-          console.log('[handleSave] courseSeedData keys:', Object.keys(dataToSave.courseSeedData))
+          debugLogger.error('App.handleSave', 'Circular reference in courseSeedData', { error: e, keys: Object.keys(dataToSave.courseSeedData) })
         }
         
         await storage.saveCourseMetadata(dataToSave.courseSeedData)
@@ -414,42 +589,17 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('course-content', dataToSave.courseContent)
       }
       
-      // Save AI prompt if it exists
-      const aiPrompt = localStorage.getItem('aiPrompt')
-      if (aiPrompt) {
-        await storage.saveAiPrompt(aiPrompt)
-      }
-      
-      // Save audio settings if they exist
-      const audioSettingsStr = localStorage.getItem('audioSettings')
-      if (audioSettingsStr) {
-        try {
-          const audioSettings = JSON.parse(audioSettingsStr)
-          await storage.saveAudioSettings(audioSettings)
-        } catch (e) {
-          console.error('Failed to parse audio settings:', e)
-        }
-      }
-      
-      // Save SCORM config if it exists
-      const scormConfigStr = localStorage.getItem('scormConfig')
-      if (scormConfigStr) {
-        try {
-          const scormConfig = JSON.parse(scormConfigStr)
-          await storage.saveScormConfig(scormConfig)
-        } catch (e) {
-          console.error('Failed to parse SCORM config:', e)
-        }
-      }
+      // AI prompt, audio settings, and SCORM config are now saved directly through storage
+      // No need to check localStorage anymore
       
       await storage.saveProject()
-      setToast({ message: 'Project saved successfully', type: 'success' })
+      showToast('Project saved successfully', 'success')
       setHasUnsavedChanges(false)
       setLastSavedTime(new Date().toISOString()) // Update last saved time
       return { success: true }
     } catch (error: any) {
       console.error('[handleSave] Save error:', error)
-      setToast({ message: error.message || 'Failed to save project', type: 'error' })
+      showToast( error.message || 'Failed to save project', 'error')
       return { success: false, error: error.message }
     }
   }, [storage, projectData, setLastSavedTime])
@@ -469,33 +619,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('course-content', dataToSave.courseContent)
       }
       
-      // Save AI prompt if it exists
-      const aiPrompt = localStorage.getItem('aiPrompt')
-      if (aiPrompt) {
-        await storage.saveAiPrompt(aiPrompt)
-      }
-      
-      // Save audio settings if they exist
-      const audioSettingsStr = localStorage.getItem('audioSettings')
-      if (audioSettingsStr) {
-        try {
-          const audioSettings = JSON.parse(audioSettingsStr)
-          await storage.saveAudioSettings(audioSettings)
-        } catch (e) {
-          console.error('Failed to parse audio settings:', e)
-        }
-      }
-      
-      // Save SCORM config if it exists
-      const scormConfigStr = localStorage.getItem('scormConfig')
-      if (scormConfigStr) {
-        try {
-          const scormConfig = JSON.parse(scormConfigStr)
-          await storage.saveScormConfig(scormConfig)
-        } catch (e) {
-          console.error('Failed to parse SCORM config:', e)
-        }
-      }
+      // AI prompt, audio settings, and SCORM config are now saved directly through storage
+      // No need to check localStorage anymore
       
       await storage.saveProject()
       setHasUnsavedChanges(false)
@@ -503,7 +628,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return { success: true }
     } catch (error: any) {
       // Only show error toast for autosave failures
-      setToast({ message: 'Autosave failed', type: 'error' })
+      showToast('Autosave failed', 'error')
       return { success: false, error: error.message }
     }
   }, [storage, setLastSavedTime])
@@ -515,32 +640,75 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     disabled: !storage.currentProjectId
   })
   
-  // Toast timeout
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), DURATIONS.toastDuration)
-      return () => clearTimeout(timer)
+  // Safe toast setter that prevents duplicates and manages timeouts
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    // Clear existing timeout
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
     }
+    
+    // Don't show duplicate messages
+    if (toast?.message === message) {
+      return
+    }
+    
+    setToast({ message, type })
+    
+    // Set new timeout
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null)
+      toastTimeoutRef.current = null
+    }, DURATIONS.toastDuration)
   }, [toast])
+  
+  // Clear toast on navigation
+  useEffect(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+      toastTimeoutRef.current = null
+    }
+    setToast(null)
+  }, [currentStep])
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
+    // VERSION MARKER: v2.0.2 - Returns Promise for proper async handling
+    debugLogger.info('App.handleCourseSeedSubmit v2.0.2', 'Course seed data submitted', { title: data.courseTitle })
     try {
       await measureAsync('handleCourseSeedSubmit', async () => {
         // Create a new project if we don't have one - BEFORE setting state or navigating
         if (!storage.currentProjectId) {
+          debugLogger.info('App.handleCourseSeedSubmit', 'Creating new project', { title: data.courseTitle })
           const project = await storage.createProject(data.courseTitle)
           if (!project || !project.id) {
             throw new Error('Failed to create project')
           }
+          // Clear lastLoadedProjectId to force reload for new project
+          setLastLoadedProjectId(null)
+          debugLogger.info('App.handleCourseSeedSubmit', 'Project created, forcing reload', { 
+            projectId: project.id,
+            currentProjectId: storage.currentProjectId 
+          })
         }
       
-      // Now save the data
+      // Now save the COMPLETE course seed data - not just metadata
       await storage.saveContent('courseSeedData', data)
       await storage.saveContent('currentStep', { step: 'prompt' })
+      
+      // Also save to metadata for backward compatibility
       await storage.saveCourseMetadata({
         courseTitle: data.courseTitle,
         difficulty: data.difficulty,
         topics: data.customTopics,
+        template: data.template,
         lastModified: new Date().toISOString()
       })
       
@@ -638,7 +806,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }) // End of measureAsync
       } catch (error) {
         console.error('Failed to save course content:', error)
-        setToast({ message: 'Failed to save data', type: 'error' })
+        showToast('Failed to save data', 'error')
       }
     }
   }
@@ -709,7 +877,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save media-enhanced content:', error)
-        setToast({ message: 'Failed to save data', type: 'error' })
+        showToast('Failed to save data', 'error')
       }
     }
   }
@@ -767,7 +935,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save audio-enhanced content:', error)
-        setToast({ message: 'Failed to save data', type: 'error' })
+        showToast('Failed to save data', 'error')
       }
     }
   }
@@ -838,7 +1006,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save activities-enhanced content:', error)
-        setToast({ message: 'Failed to save data', type: 'error' })
+        showToast('Failed to save data', 'error')
       }
     }
   }
@@ -859,7 +1027,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleSCORMNext = async () => {
     // Could show a completion screen or download the package
-    setToast({ message: 'SCORM package built successfully!', type: 'success' })
+    showToast('SCORM package built successfully!', 'success')
     
     // Save completion state to PersistentStorage
     if (storage.currentProjectId) {
@@ -902,12 +1070,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   // Save functionality
   const handleManualSave = async (data?: CourseSeedData) => {
-    console.log('[handleManualSave] Called with data:', data)
-    console.log('[handleManualSave] Current project ID:', storage.currentProjectId)
+    debugLogger.debug('App.handleManualSave', 'Called', { data, projectId: storage.currentProjectId })
     
     // If no project is open, show error
     if (!storage.currentProjectId) {
-      setToast({ message: 'Please create or open a project first', type: 'error' })
+      showToast('Please create or open a project first', 'error')
       return
     }
     
@@ -929,16 +1096,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Save As functionality
   const handleSaveAs = async () => {
     if (!storage.currentProjectId) {
-      setToast({ message: 'No project to save', type: 'error' })
+      showToast('No project to save', 'error')
       return
     }
     
     try {
       await storage.saveProjectAs()
-      setToast({ message: 'Project saved to new file', type: 'success' })
+      showToast('Project saved to new file', 'success')
     } catch (error: any) {
       if (error.message !== 'User cancelled') {
-        setToast({ message: `Failed to save as: ${error.message}`, type: 'error' })
+        showToast( `Failed to save as: ${error.message}`, 'error')
       }
     }
   }
@@ -950,11 +1117,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       if (hasUnsavedChanges && courseSeedData?.courseTitle) {
         showDialog('unsaved');
       } else {
+        // Go back to dashboard - the dashboard will handle project switching
         onBackToDashboard()
       }
     } else {
       // Otherwise show error as we should only use dashboard
-      setToast({ message: 'Please use the project dashboard to open projects', type: 'error' })
+      showToast('Please use the project dashboard to open projects', 'error')
     }
   }
   
@@ -968,7 +1136,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (projectToDelete) {
       try {
         await storage.deleteProject(projectToDelete.path || projectToDelete.id)
-        setToast({ message: `Deleted project: ${projectToDelete.name}`, type: 'success' })
+        showToast( `Deleted project: ${projectToDelete.name}`, 'success')
         if (storage.currentProjectId === projectToDelete.id) {
           // Current project was deleted, clear state and redirect to dashboard
           // Clear state since current project was deleted
@@ -978,7 +1146,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           // The dashboard will automatically show when currentProjectId is null
         }
       } catch (error: any) {
-        setToast({ message: error.message || 'Failed to delete project', type: 'error' })
+        showToast( error.message || 'Failed to delete project', 'error')
       }
     }
     hideDialog();
@@ -1065,9 +1233,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   //     link.remove()
   //     URL.revokeObjectURL(url)
   //     
-  //     setToast({ message: 'Project exported successfully', type: 'success' })
+  //     showToast('Project exported successfully', 'success')
   //   } catch (error) {
-  //     setToast({ message: 'Failed to export project', type: 'error' })
+  //     showToast('Failed to export project', 'error')
   //   }
   // }
   
@@ -1087,9 +1255,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   //     if (result.success && result.data) {
   //       // Import functionality is not fully implemented for the new format
   //       // For now, just show an error
-  //       setToast({ message: 'Import functionality needs to be updated for the new format', type: 'error' })
+  //       showToast('Import functionality needs to be updated for the new format', 'error')
   //     } else {
-  //       setToast({ message: result.error || 'Failed to import project', type: 'error' })
+  //       showToast( result.error || 'Failed to import project', 'error')
   //     }
   //   }
   //   
@@ -1327,6 +1495,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   <MediaEnhancementWizard
                     courseContent={courseContent}
                     courseSeedData={courseSeedData}
+                    onUpdateContent={(content) => {
+                      debugLogger.info('App.MediaEnhancement', 'Updating courseContent with media');
+                      // Type guard to ensure we have CourseContent, not LegacyCourseContent
+                      if ('welcomePage' in content) {
+                        setCourseContent(content as CourseContent);
+                        // Save the updated content to backend
+                        handleSave({
+                          ...projectData,
+                          courseContent: content as CourseContent
+                        });
+                      }
+                    }}
                     onNext={handleMediaNext}
                     onBack={handleMediaBack}
                     apiKeys={apiKeys}
@@ -1378,14 +1558,32 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onBack={handleAudioBack}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={(content?: any, silent?: boolean) => {
+                  onSave={async (content?: any, silent?: boolean) => {
+                  logger.log('[App] AudioNarrationWizard onSave called', { hasContent: !!content, silent })
+                  
                   if (content) {
+                    // Update local state with the new content
                     setCourseContent(content);
+                    
+                    // If not silent, save to storage with updated content
                     if (!silent) {
-                      handleManualSave();
+                      logger.log('[App] Saving updated content from AudioNarrationWizard')
+                      // Create updated project data for save
+                      const updatedProjectData = {
+                        ...projectData,
+                        courseContent: content
+                      };
+                      await handleSave(updatedProjectData);
+                    } else {
+                      // For silent saves, just save to storage without toast
+                      logger.log('[App] Silent save from AudioNarrationWizard')
+                      if (storage.currentProjectId) {
+                        await storage.saveContent('course-content', content);
+                      }
                     }
                   } else if (!silent) {
-                    handleManualSave();
+                    // No content provided, just trigger a regular save
+                    await handleManualSave();
                   }
                 }}
                   onSaveAs={handleSaveAs}
@@ -1536,7 +1734,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             position: 'fixed',
             bottom: '2rem',
             right: '2rem',
-            backgroundColor: toast.type === 'success' ? COLORS.success : COLORS.error,
+            backgroundColor: toast.type === 'success' ? COLORS.success : toast.type === 'error' ? COLORS.error : COLORS.primary,
             color: 'white',
             padding: '1rem 1.5rem',
             borderRadius: '0.5rem',
@@ -1548,6 +1746,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           {toast.message}
         </div>
       )}
+      
+      {/* Debug Panel - Always accessible */}
+      <DebugPanel />
+      
       </div>
       </UnifiedMediaProvider>
     </ErrorBoundary>

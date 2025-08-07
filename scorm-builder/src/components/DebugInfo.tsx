@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { debugLogger } from '../utils/debugLogger'
+import { debugLogger } from '../utils/ultraSimpleLogger'
 
 export function DebugInfo() {
   const [isDebugMode, setIsDebugMode] = useState(false)
@@ -10,7 +10,7 @@ export function DebugInfo() {
     
     if (debugLogger.isDebugMode()) {
       const interval = setInterval(() => {
-        setMetrics(debugLogger.getPerformanceMetrics())
+        // setMetrics(debugLogger.getPerformanceMetrics()) // Not available in simple logger
       }, 2000)
       
       return () => clearInterval(interval)

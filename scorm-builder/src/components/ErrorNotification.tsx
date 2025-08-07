@@ -81,11 +81,15 @@ export function ErrorNotification() {
       position: 'fixed',
       top: '1rem',
       right: '1rem',
-      zIndex: 1000,
+      bottom: '1rem',
+      zIndex: 1070, // Use tooltip z-index to appear above navigation
       display: 'flex',
       flexDirection: 'column',
       gap: '0.5rem',
-      maxWidth: '24rem'
+      maxWidth: '24rem',
+      maxHeight: 'calc(100vh - 2rem)',
+      overflowY: 'auto',
+      pointerEvents: 'none'
     }}>
       {errors.map(error => (
         <div
@@ -102,7 +106,8 @@ export function ErrorNotification() {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '1rem',
-            animation: 'slideIn 0.3s ease-out'
+            animation: 'slideIn 0.3s ease-out',
+            pointerEvents: 'auto'
           }}
         >
           <div style={{ flex: 1 }}>

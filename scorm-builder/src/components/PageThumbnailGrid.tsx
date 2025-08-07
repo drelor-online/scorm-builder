@@ -5,6 +5,7 @@ import { tokens } from './DesignSystem/designTokens'
 import { Home, Target, Image as ImageIcon, Video } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+// Removed blobUrlManager - now using asset URLs
 
 interface PageThumbnailGridProps {
   courseContent: CourseContent | null
@@ -14,26 +15,104 @@ interface PageThumbnailGridProps {
 
 // Media Preview Component
 const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
-  const { getMediaForPage, createBlobUrl } = useUnifiedMedia()
+  const { getMediaForPage, createBlobUrl, revokeBlobUrl } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const mediaIdRef = React.useRef<string | null>(null)
   
   useEffect(() => {
     const loadMedia = async () => {
       if (!page.id) return
       
-      const pageMedia = getMediaForPage(page.id)
-      const firstMedia = pageMedia.find(m => m.type === 'image' || m.type === 'video')
+      // Clear previous media URL to avoid showing stale content
+      setMediaUrl(null)
       
-      if (firstMedia) {
-        // Use storageId if available, fallback to id for backward compatibility
-        const mediaId = firstMedia.storageId || firstMedia.id
-        const url = await createBlobUrl(mediaId)
-        setMediaUrl(url)
+      // First check if page has media in its own media array
+      // This is where the media references are stored
+      const pageMediaRefs = page.media || []
+      console.log(`[PageThumbnailGrid] Page ${page.id} has ${pageMediaRefs.length} media items:`, pageMediaRefs)
+      
+      // Log detailed info about each media item
+      pageMediaRefs.forEach((media: any, index: number) => {
+        console.log(`[PageThumbnailGrid] Media item ${index} for page ${page.id}:`, {
+          id: media.id,
+          type: media.type,
+          isYouTube: media.isYouTube,
+          url: media.url,
+          embedUrl: media.embedUrl,
+          title: media.title,
+          thumbnail: media.thumbnail,
+          storageId: media.storageId,
+          hasAllProperties: !!(media.id && media.type)
+        })
+      })
+      
+      const firstMediaRef = pageMediaRefs.find((m: any) => m.type === 'image' || m.type === 'video')
+      
+      if (firstMediaRef) {
+        console.log('[PageThumbnailGrid] Selected first media ref:', {
+          id: firstMediaRef.id,
+          type: firstMediaRef.type,
+          isYouTube: firstMediaRef.isYouTube,
+          url: firstMediaRef.url
+        })
+        
+        // Handle YouTube videos specially
+        if ('isYouTube' in firstMediaRef && firstMediaRef.isYouTube && 'url' in firstMediaRef && firstMediaRef.url) {
+          console.log('[PageThumbnailGrid] Processing YouTube video:', firstMediaRef.url)
+          // Extract YouTube video ID and use thumbnail URL
+          const videoIdMatch = firstMediaRef.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
+          if (videoIdMatch) {
+            const videoId = videoIdMatch[1]
+            const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+            console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
+            setMediaUrl(thumbnailUrl)
+          } else {
+            console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', firstMediaRef.url)
+          }
+        } else {
+          // Use id directly - storageId was from old system
+          const mediaId = firstMediaRef.id
+          console.log('[PageThumbnailGrid] Creating blob URL for media ID:', mediaId)
+          
+          // Store the media ID for cleanup
+          mediaIdRef.current = mediaId
+          
+          try {
+            const url = await createBlobUrl(mediaId)
+            console.log('[PageThumbnailGrid] Blob URL result:', {
+              mediaId,
+              url,
+              urlLength: url ? url.length : 0,
+              isValidBlobUrl: url ? url.startsWith('blob:') : false
+            })
+            
+            if (!url) {
+              console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for:', mediaId)
+            } else if (url === '') {
+              console.error('[PageThumbnailGrid] createBlobUrl returned empty string for:', mediaId)
+            }
+            setMediaUrl(url)
+          } catch (error) {
+            console.error('[PageThumbnailGrid] Error creating blob URL:', error, 'for media:', mediaId)
+          }
+        }
+      } else {
+        console.log(`[PageThumbnailGrid] No image/video media found for page ${page.id}`)
       }
     }
     
     loadMedia()
-  }, [page.id, getMediaForPage, createBlobUrl])
+    
+    // Cleanup function - asset URLs don't need cleanup
+    return () => {
+      // Asset URLs are persistent and don't need to be revoked
+      // Only revoke if we somehow still have a blob URL (legacy)
+      if (mediaUrl && mediaUrl.startsWith('blob:')) {
+        console.log('[PageThumbnailGrid] Revoking legacy blob URL:', mediaUrl)
+        revokeBlobUrl(mediaUrl)
+      }
+    }
+  }, [page.id, page.media, getMediaForPage, createBlobUrl, revokeBlobUrl])
   
   const hasVideo = page.media?.some((m: any) => m.type === 'video')
   
@@ -65,43 +144,34 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
       position: 'relative',
       backgroundColor: tokens.colors.background.secondary
     }}>
-      {hasVideo ? (
-        <>
-          <video 
-            src={mediaUrl || undefined}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover'
-            }}
-          />
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            borderRadius: '50%',
-            width: '2rem',
-            height: '2rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Video size={16} color="white" />
-          </div>
-        </>
-      ) : (
-        <img 
-          src={mediaUrl || undefined}
-          alt=""
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-          }}
-          loading="lazy"
-        />
+      {/* Always use img element for thumbnails, including YouTube */}
+      <img 
+        src={mediaUrl || undefined}
+        alt=""
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover'
+        }}
+        loading="lazy"
+      />
+      {/* Show video overlay indicator for video content */}
+      {hasVideo && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          borderRadius: '50%',
+          width: '2rem',
+          height: '2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <Video size={16} color="white" />
+        </div>
       )}
     </div>
   )
@@ -144,9 +214,10 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
     return text.substring(0, maxLength) + '...'
   }
 
-  // Helper to get media count
+  // Helper to get media count (only image/video, not audio/captions)
   const getMediaCount = (page: Page | Topic): number => {
-    return page.media?.length || 0
+    // Only count image and video media types for enhancement purposes
+    return page.media?.filter(m => m.type === 'image' || m.type === 'video').length || 0
   }
 
   // Helper to check if page has media
@@ -157,7 +228,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
   // Create array of all pages
   const allPages: Array<Page | Topic> = [
     courseContent.welcomePage,
-    courseContent.objectivesPage || courseContent.learningObjectivesPage, // Handle both naming conventions
+    (courseContent as any).objectivesPage || courseContent.learningObjectivesPage, // Handle both naming conventions
     ...courseContent.topics
   ].filter(Boolean) // Remove any undefined entries
 
@@ -172,8 +243,16 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
       }}
     >
       {allPages.map((page, index) => {
+        // Debug logging to verify page structure
+        console.log(`[PageThumbnailGrid] Rendering page ${page.id}:`, {
+          hasMedia: !!page.media,
+          mediaCount: page.media?.length || 0,
+          mediaArray: page.media,
+          pageKeys: Object.keys(page)
+        })
+        
         const isWelcome = page.id === 'welcome'
-        const isObjectives = page.id === 'objectives'
+        const isObjectives = page.id === 'objectives' || page.id === 'learning-objectives'
         const isCurrent = page.id === currentPageId
         const mediaCount = getMediaCount(page)
         
@@ -182,10 +261,16 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
             key={page.id}
             data-testid={`page-thumbnail-${page.id}`}
             className={isCurrent ? 'selected' : ''}
-            onClick={() => onPageSelect(page.id)}
+            onClick={(e) => {
+              console.log('[PageThumbnailGrid] Card clicked:', page.id, page.title)
+              console.log('[PageThumbnailGrid] Event target:', e.target)
+              console.log('[PageThumbnailGrid] Event currentTarget:', e.currentTarget)
+              // Don't stop propagation - let it bubble
+              onPageSelect(page.id)
+            }}
             style={{
               cursor: 'pointer',
-              border: `2px solid ${isCurrent ? tokens.colors.primary[500] : tokens.colors.border.default}`,
+              border: isCurrent ? `2px solid ${tokens.colors.primary[500]}` : 'none',  // Only show border when selected
               transition: 'all 0.2s',
               position: 'relative',
               overflow: 'hidden',
@@ -268,22 +353,26 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
               <MediaPreview page={page} />
             )}
 
-            {/* Content Preview */}
-            <div 
-              data-testid={`content-preview-${page.id}`}
-              style={{
-                fontSize: '0.75rem',
-                color: tokens.colors.text.secondary,
-                lineHeight: 1.4,
-                marginBottom: '0.5rem',
-                minHeight: '6rem',  // Increased from 3rem to 6rem (96px)
-                maxHeight: '8rem',  // Add max height with scrolling
-                overflowY: 'auto',
-                paddingRight: '0.25rem'
-              }}
-            >
-              {getContentPreview(page.content)}
-            </div>
+            {/* Content Preview - Only show if no media */}
+            {!hasMedia(page) && (
+              <div 
+                data-testid={`content-preview-${page.id}`}
+                style={{
+                  fontSize: '0.75rem',
+                  color: tokens.colors.text.secondary,
+                  lineHeight: 1.4,
+                  marginBottom: '0.5rem',
+                  minHeight: '4rem',  // Reduced minimum height for flexibility
+                  maxHeight: '12rem',  // Increased max height for more content
+                  overflowY: 'auto',
+                  paddingRight: '0.25rem',
+                  // Make it flexible - will grow with content but won't exceed max
+                  height: 'auto'
+                }}
+              >
+                {getContentPreview(page.content)}
+              </div>
+            )}
 
             {/* Media Indicator */}
             {hasMedia(page) && (
@@ -302,6 +391,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '0.75rem'
+                  // Removed pointerEvents: 'none' to allow clicks to bubble
                 }}
                 title="Has media"
               >
@@ -322,6 +412,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
                 padding: '0.125rem 0.5rem',
                 fontSize: '0.625rem',
                 fontWeight: 500
+                // Removed pointerEvents: 'none' to allow clicks to bubble
               }}>
                 {mediaCount} media items
               </div>

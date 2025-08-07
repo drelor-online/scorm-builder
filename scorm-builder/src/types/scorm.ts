@@ -18,8 +18,10 @@ export interface EnhancedCourseContent {
     startButtonText: string
     imageUrl?: string
     audioFile?: string
+    audioId?: string
     audioBlob?: Blob
     captionFile?: string
+    captionId?: string
     captionBlob?: Blob
     embedUrl?: string
     media?: Array<{
@@ -37,8 +39,10 @@ export interface EnhancedCourseContent {
   objectivesPage?: {
     imageUrl?: string
     audioFile?: string
+    audioId?: string
     audioBlob?: Blob
     captionFile?: string
+    captionId?: string
     captionBlob?: Blob
     embedUrl?: string
     media?: Array<{
@@ -77,8 +81,10 @@ export interface EnhancedCourseContent {
     content: string
     imageUrl?: string
     audioFile?: string
+    audioId?: string
     audioBlob?: Blob
     captionFile?: string
+    captionId?: string
     captionBlob?: Blob
     embedUrl?: string
     knowledgeCheck?: {

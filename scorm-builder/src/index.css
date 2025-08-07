@@ -1,3 +1,5 @@
+@import './styles/theme.css';
+
 /* Force dark theme with high specificity */
 body, #root {
   background-color: #18181b !important;
@@ -11,8 +13,6 @@ body, #root {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-@import './styles/theme.css';
 
 body {
   margin: 0;

@@ -198,7 +198,11 @@ export class AutomationScreenshotManager {
           const reader = new FileReader()
           const dataUrl = await new Promise<string>((resolve) => {
             reader.onloadend = () => resolve(reader.result as string)
-            reader.readAsDataURL(screenshot.blob)
+            if (screenshot.blob) {
+              reader.readAsDataURL(screenshot.blob)
+            } else {
+              resolve('')
+            }
           })
           return { ...screenshot, dataUrl }
         }

@@ -36,7 +36,7 @@ export async function testNewProjectCreation() {
     await storage.openProject(projectId)
     
     // Initialize MediaService for this project
-    mediaService = new MediaService({ projectId })
+    mediaService = MediaService.getInstance({ projectId })
     
     // Step 3: Save course metadata
     console.log('3️⃣ Saving course metadata...')
@@ -152,7 +152,7 @@ export async function testNewProjectCreation() {
     // Step 7: Reopen the project
     console.log('7️⃣ Reopening project...')
     await storage.openProject(projectId)
-    mediaService = new MediaService({ projectId })
+    mediaService = MediaService.getInstance({ projectId })
     
     // Step 8: Verify data loaded correctly
     console.log('8️⃣ Verifying loaded data...')
@@ -236,7 +236,7 @@ export async function testYouTubeVideoHandling() {
     projectId = project.id
     await storage.openProject(projectId)
     
-    mediaService = new MediaService({ projectId })
+    mediaService = MediaService.getInstance({ projectId })
     
     // Test YouTube URL storage
     console.log('🎥 Storing YouTube video...')
@@ -283,7 +283,7 @@ export async function testYouTubeVideoHandling() {
 export async function testSecurityFeatures() {
   console.log('🧪 Testing Security Features')
   
-  const mediaService = new MediaService({ projectId: 'security-test' })
+  const mediaService = MediaService.getInstance({ projectId: 'security-test' })
   
   try {
     // Test 1: Malicious URL validation

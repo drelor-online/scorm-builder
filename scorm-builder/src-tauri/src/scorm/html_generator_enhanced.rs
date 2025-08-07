@@ -203,10 +203,28 @@ impl<'a> HtmlGenerator<'a> {
                     match q.question_type.as_str() {
                         "multiple-choice" | "true-false" => {
                             question_data["options"] = json!(q.options.as_ref().unwrap_or(&Vec::new()));
+                            // Add feedback for all question types
+                            question_data["correct_feedback"] = json!(
+                                q.correct_feedback.as_deref()
+                                    .or(q.explanation.as_deref())
+                                    .unwrap_or("Correct!")
+                            );
+                            question_data["incorrect_feedback"] = json!(
+                                q.incorrect_feedback.as_deref()
+                                    .unwrap_or("Not quite. Try again!")
+                            );
                         }
                         "fill-in-the-blank" => {
-                            question_data["correct_feedback"] = json!(q.explanation.as_deref().unwrap_or("Correct!"));
-                            question_data["incorrect_feedback"] = json!("Not quite. Try again!");
+                            // Use the actual feedback fields from the question
+                            question_data["correct_feedback"] = json!(
+                                q.correct_feedback.as_deref()
+                                    .or(q.explanation.as_deref())
+                                    .unwrap_or("Correct!")
+                            );
+                            question_data["incorrect_feedback"] = json!(
+                                q.incorrect_feedback.as_deref()
+                                    .unwrap_or("Not quite. Try again!")
+                            );
                         }
                         _ => {}
                     }
@@ -235,7 +253,15 @@ impl<'a> HtmlGenerator<'a> {
             "knowledge_check_questions": kc_questions,
             "audio_file": audio_file_path,
             "caption_file": topic.caption_file.as_ref().map(|f| Self::ensure_media_path(f)),
-            "image_url": topic.image_url.as_ref().map(|f| Self::ensure_media_path(f)),
+            // Filter out invalid image URLs like "media/image-3.jpg"
+            "image_url": topic.image_url.as_ref()
+                .filter(|url| {
+                    // Skip URLs that look like broken paths (e.g., "media/image-X.jpg")
+                    !url.contains(".jpg") && !url.contains(".jpeg") && !url.contains(".png") && !url.contains(".gif")
+                    || url.starts_with("http://") || url.starts_with("https://") 
+                    || url.starts_with("media/image-") && !url.contains(".")
+                })
+                .map(|f| Self::ensure_media_path(f)),
             "media": topic.media.as_ref().map(|media_items| {
                 media_items.iter().map(|item| {
                     let mut url = item.url.clone();
@@ -295,7 +321,12 @@ impl<'a> HtmlGenerator<'a> {
                     "text": q.text,
                     "options": q.options,
                     "correct_answer": q.correct_answer,
-                    "explanation": q.explanation.as_deref().unwrap_or("")
+                    "explanation": q.explanation.as_deref().unwrap_or(""),
+                    "correct_feedback": q.correct_feedback.as_deref()
+                        .or(q.explanation.as_deref())
+                        .unwrap_or("Correct!"),
+                    "incorrect_feedback": q.incorrect_feedback.as_deref()
+                        .unwrap_or("Not quite. Try again!")
                 })).collect::<Vec<_>>()
             }
         });

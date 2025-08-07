@@ -102,7 +102,7 @@ export class AutomatedUITester {
       await this.storage.openProject(project.id)
       
       // Initialize MediaService for this project
-      this.mediaService = new MediaService({ projectId: project.id })
+      this.mediaService = MediaService.getInstance({ projectId: project.id })
       
       this.logResult('Create Project', true, undefined, { projectId: project.id, name: projectName })
       return project.id
@@ -366,7 +366,7 @@ export class AutomatedUITester {
       await this.storage.openProject(projectId)
       
       // Create new MediaService instance
-      this.mediaService = new MediaService({ projectId })
+      this.mediaService = MediaService.getInstance({ projectId })
       
       // Verify all data is still there
       const metadata = await this.storage.getCourseMetadata()

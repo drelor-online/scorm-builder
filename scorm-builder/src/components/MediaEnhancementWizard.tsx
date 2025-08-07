@@ -25,6 +25,8 @@ import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
 import { RichTextEditor } from './RichTextEditor'
+import { useStorage } from '../contexts/PersistentStorageContext'
+import DOMPurify from 'dompurify'
 
 
 interface SearchResult {
@@ -40,6 +42,7 @@ interface SearchResult {
   uploadedAt?: string
   channel?: string
   duration?: string
+  isYouTube?: boolean
 }
 
 // Alert component with robust type handling
@@ -116,15 +119,16 @@ const setPageMedia = (page: Page | Topic | undefined, media: Media[]): Page | To
   
   const updated = { ...page }
   
-  // Update media array
-  if ('media' in updated) {
-    updated.media = media
-  }
+  // Always set media array directly (don't check if property exists)
+  // This ensures media is added even if the page didn't have a media property initially
+  updated.media = media
   
-  // Update mediaReferences
+  // Also set mediaReferences if needed for compatibility
   if ('mediaReferences' in updated) {
     updated.mediaReferences = media
   }
+  
+  console.log(`[setPageMedia] Updated page ${updated.id} with ${media.length} media items`)
   
   return updated
 }
@@ -169,6 +173,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const fileInputIdRef = useRef<string>('media-upload')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isFileProcessing, setIsFileProcessing] = useState(false)
+  
+  // FIX: Track current page index with ref to prevent stale closures in async operations
+  const currentPageIndexRef = useRef(currentPageIndex)
+  useEffect(() => {
+    currentPageIndexRef.current = currentPageIndex
+  }, [currentPageIndex])
   const [uploadProgress, setUploadProgress] = useState<{
     current: number
     total: number
@@ -177,15 +187,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   } | null>(null)
   const [recentlyUploadedIds, setRecentlyUploadedIds] = useState<Set<string>>(new Set())
   const [resultPage, setResultPage] = useState(1)
-  const resultsPerPage = 12
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null)
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
+  const resultsPerPage = 12
   const [replaceConfirmDetails, setReplaceConfirmDetails] = useState<{
     existingMedia: Media
     newSearchResult: SearchResult
   } | null>(null)
   const [isEditingContent, setIsEditingContent] = useState(false)
   const [activeTab, setActiveTab] = useState<'images' | 'videos' | 'upload' | 'ai'>('images')
+  
+  // FIX: Use ref to always have access to latest course content
+  // This prevents stale closure issues when onNext is called
+  const courseContentRef = useRef(courseContent)
+  useEffect(() => {
+    courseContentRef.current = courseContent
+  }, [courseContent])
   
   const { 
     storeMedia, 
@@ -196,6 +213,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     createBlobUrl,
     revokeBlobUrl 
   } = useUnifiedMedia()
+  
+  const storage = useStorage()
   
   console.log('[MediaEnhancement] Component render - UnifiedMedia ready')
   
@@ -212,17 +231,27 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }, [revokeBlobUrl])
   
-  // Create blob URL and track it
+  // FIX: Properly track and manage blob URLs to prevent memory leaks
   const createTrackedBlobUrl = (blob: Blob, key: string): string => {
-    // Revoke existing URL if any
+    // Revoke existing URL if any to prevent memory leaks
     const existingUrl = blobUrlsRef.current.get(key)
     if (existingUrl) {
-      URL.revokeObjectURL(existingUrl)
+      // Use revokeBlobUrl from UnifiedMediaContext for consistent cleanup
+      try {
+        revokeBlobUrl(existingUrl)
+      } catch (error) {
+        // Fallback to direct revoke if context method fails
+        URL.revokeObjectURL(existingUrl)
+      }
     }
     
-    // Create new URL
+    // Create new URL for temporary blob
+    // Note: For temporary upload blobs, we must use URL.createObjectURL
+    // The UnifiedMediaContext's createBlobUrl is for stored media IDs
     const url = URL.createObjectURL(blob)
     blobUrlsRef.current.set(key, url)
+    
+    // This URL will be cleaned up in the useEffect cleanup function
     return url
   }
   
@@ -270,53 +299,222 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const result = [...searchResults, ...uploadedMedia].find(r => r.id === resultId)
     if (!result) return
 
+    // Check if there's existing media on the page
+    // Use the local state which is updated after deletions
+    const hasExistingMedia = existingPageMedia && existingPageMedia.length > 0
+    
+    if (hasExistingMedia) {
+      // Show confirmation dialog
+      setReplaceMode({ id: resultId, title: result.title || 'Media' })
+      setIsSearching(false)
+      return
+    }
+
+    // No existing media, proceed with adding
+    await addMediaToPage(result)
+  }
+
+  // Separate function to add media to page
+  const addMediaToPage = async (result: SearchResult) => {
     try {
       setIsSearching(true) // Use existing loading state
       
-      // Check if it's a YouTube video
-      if (result.embedUrl || (result.url && (result.url.includes('youtube.com') || result.url.includes('youtu.be')))) {
-        // For YouTube videos, use the actual URL not the title
+      // Declare pageId at function scope so it's accessible throughout
+      const currentPage = getCurrentPage()
+      if (!currentPage) {
+        throw new Error('No current page selected')
+      }
+      const pageId = getPageId(currentPage)
+      
+      // Variable to store the result of storing media
+      let storedItem: any
+      
+      // Check if it's a YouTube video - check isYouTube flag first
+      if (result.isYouTube || result.embedUrl || (result.url && (result.url.includes('youtube.com') || result.url.includes('youtu.be')))) {
+        console.log('[MediaEnhancement] Processing YouTube video:', {
+          title: result.title,
+          url: result.url,
+          embedUrl: result.embedUrl,
+          isYouTube: result.isYouTube,
+          pageId
+        })
+        
+        // FIX: Validate and sanitize YouTube URL before storing
         const videoUrl = result.url || (result.embedUrl ? result.embedUrl.replace('/embed/', '/watch?v=') : '')
         if (!videoUrl) {
+          console.error('[MediaEnhancement] YouTube video URL not found in result:', result)
           throw new Error('YouTube video URL not found')
         }
-        const pageId = getPageId(getCurrentPage()!)
-        const stored = await storeYouTubeVideo(videoUrl, result.embedUrl || videoUrl, pageId, {
-          title: result.title || 'Video',
-          type: 'video'
+        
+        // Extract and validate video ID
+        const videoId = extractYouTubeVideoId(videoUrl)
+        if (!videoId) {
+          console.error('[MediaEnhancement] Invalid YouTube URL:', videoUrl)
+          setSearchError('Invalid YouTube URL format. Please use a valid YouTube video URL.')
+          throw new Error('Invalid YouTube URL')
+        }
+        
+        // Generate secure embed URL
+        const embedUrl = generateSecureYouTubeEmbed(videoId)
+        
+        console.log('[MediaEnhancement] Storing validated YouTube video:', {
+          originalUrl: videoUrl,
+          videoId,
+          embedUrl,
+          pageId
         })
-        console.log('[MediaEnhancement] Stored YouTube video:', stored)
+        
+        storedItem = await storeYouTubeVideo(
+          `https://www.youtube.com/watch?v=${videoId}`, // Normalized URL
+          embedUrl,
+          pageId, 
+          {
+            title: result.title || 'Video',
+            type: 'video',
+            isYouTube: true
+          }
+        )
+        console.log('[MediaEnhancement] Successfully stored YouTube video:', storedItem)
       } else {
-        // Download and store external image
-        const blob = await downloadExternalImage(result.url)
-        const pageId = getPageId(getCurrentPage()!)
-        const stored = await storeMedia(blob, pageId, 'image', {
+        console.log('[MediaEnhancement] Processing image:', {
+          title: result.title,
+          url: result.url,
+          pageId
+        })
+        
+        // Check if this is an uploaded file (has blob in mediaItemsRef)
+        const mediaItem = mediaItemsRef.current.get(result.id)
+        let blob: Blob
+        
+        if (mediaItem?.blob) {
+          // Use the existing blob from uploaded file
+          console.log('[MediaEnhancement] Using existing blob from uploaded file')
+          blob = mediaItem.blob
+        } else {
+          // Download and store external image
+          console.log('[MediaEnhancement] Downloading external image')
+          blob = await downloadExternalImage(result.url)
+        }
+        
+        console.log('[MediaEnhancement] Image blob:', {
+          size: blob.size,
+          type: blob.type
+        })
+        
+        storedItem = await storeMedia(blob, pageId, 'image', {
           title: result.title || 'Image',
           type: 'image',
           url: result.url
         })
-        console.log('[MediaEnhancement] Stored media:', stored)
+        console.log('[MediaEnhancement] Successfully stored image:', storedItem)
       }
 
-      // Update selected state for visual feedback
-      setSelectedResults(prev => ({
-        ...prev,
-        [resultId]: true
-      }))
+      // Create the new media item for the page
+      let newMediaItem: Media
+      if (result.isYouTube || result.embedUrl || (result.url && (result.url.includes('youtube.com') || result.url.includes('youtu.be')))) {
+        // YouTube video
+        newMediaItem = {
+          id: storedItem.id,
+          type: 'video',
+          title: storedItem.metadata?.title || storedItem.fileName || result.title || 'Video',
+          url: storedItem.metadata?.youtubeUrl || result.url || '',
+          embedUrl: storedItem.metadata?.embedUrl || result.embedUrl || '',
+          isYouTube: true,
+          storageId: storedItem.id,
+          mimeType: 'video/mp4'
+        }
+      } else {
+        // Regular image - create blob URL
+        const blobUrl = await createBlobUrl(storedItem.id)
+        
+        // Track the blob URL for cleanup
+        if (blobUrl) {
+          blobUrlsRef.current.set(storedItem.id, blobUrl)
+          console.log('[MediaEnhancement] Created and tracked blob URL for stored image:', storedItem.id)
+        }
+        
+        newMediaItem = {
+          id: storedItem.id,
+          type: 'image',
+          title: storedItem.metadata?.title || storedItem.fileName || result.title || 'Image',
+          url: blobUrl || `media-error://${storedItem.id}`,
+          storageId: storedItem.id,
+          mimeType: storedItem.metadata?.mimeType || 'image/jpeg'
+        }
+      }
 
-      // Reload existing media to show the new addition
-      await loadExistingMedia()
+      // FIXED: Replace media instead of appending (only one media per page)
+      // Previously: const updatedPageMedia = [...currentPageMedia, newMediaItem]
+      const updatedPageMedia = [newMediaItem]
+      
+      // Update the local state immediately with single media item
+      setExistingPageMedia(updatedPageMedia)
+      
+      // Clear selections after successfully adding media
+      setSelectedResults({})
+      
+      // Update course content with the combined media array
+      if (currentPage) {
+        updatePageInCourseContent(currentPage, updatedPageMedia)
+      }
 
       // Show success message
       setSuccessMessage('Media added to page')
       setTimeout(() => setSuccessMessage(null), 3000)
       console.log('[MediaEnhancement] Media added to page successfully')
     } catch (error) {
-      console.error('[MediaEnhancement] Error adding media:', error)
+      // Properly serialize error for logging (Error objects serialize to {})
+      const errorInfo = error instanceof Error ? {
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.split('\n')[0] // Just first line of stack
+      } : error
+      console.error('[MediaEnhancement] Error adding media:', errorInfo)
       setSearchError('Failed to add media to page')
     } finally {
       setIsSearching(false)
     }
+  }
+
+  // Handle replace confirmation
+  const handleReplaceConfirm = async () => {
+    if (!replaceMode) return
+    
+    const result = [...searchResults, ...uploadedMedia].find(r => r.id === replaceMode.id)
+    if (!result) {
+      setReplaceMode(null)
+      return
+    }
+
+    // FIXED: Properly delete ALL existing media before adding new
+    // This ensures only one media item per page
+    if (existingPageMedia && existingPageMedia.length > 0) {
+      console.log('[MediaEnhancement] Deleting existing media before replacement:', existingPageMedia)
+      for (const media of existingPageMedia) {
+        try {
+          // FIXED: Always delete ALL existing media when replacing
+          // Only one media per page is allowed - no exceptions
+          console.log('[MediaEnhancement] Deleting existing media:', media.id, media.type)
+          
+          // Delete from storage if it has a storage ID
+          if (media.storageId) {
+            await deleteMedia(media.storageId)
+          } else {
+            // Fallback to media.id if no storageId
+            await deleteMedia(media.id)
+          }
+        } catch (err) {
+          console.warn('[MediaEnhancement] Failed to delete existing media:', err)
+        }
+      }
+      
+      // Clear the existing media array immediately
+      setExistingPageMedia([])
+    }
+
+    // Now add the new media as the ONLY media item
+    await addMediaToPage(result)
+    setReplaceMode(null)
   }
   
   // Move loadExistingMedia to component scope using useCallback
@@ -356,29 +554,56 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (imageAndVideoItems.length > 0) {
       console.log('[MediaEnhancement] Loading', imageAndVideoItems.length, 'media items')
       
-      // Create media items from MediaService items
-      const mediaItems: Media[] = imageAndVideoItems.map((item) => ({
-        id: item.id,
-        type: item.type as 'image' | 'video',
-        title: item.metadata.title || item.fileName,
-        thumbnail: item.metadata.thumbnail,
-        url: item.metadata.youtubeUrl || item.metadata.embedUrl || `scorm-media://${pageId}/${item.id}`,
-        embedUrl: item.metadata.embedUrl,
-        storageId: item.id
-      }))
+      // Create media items from MediaService items with real blob URLs
+      const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
+        let url = item.metadata.youtubeUrl || item.metadata.embedUrl
+        
+        // For non-YouTube media, create blob URLs
+        if (!url && !item.metadata.youtubeUrl) {
+          const blobUrl = await createBlobUrl(item.id)
+          url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
+          
+          // Track blob URLs for cleanup
+          if (blobUrl) {
+            blobUrlsRef.current.set(item.id, blobUrl)
+          }
+        }
+        
+        return {
+          id: item.id,
+          type: item.type as 'image' | 'video',
+          title: item.metadata.title || item.fileName,
+          thumbnail: item.metadata.thumbnail,
+          url: item.metadata.youtubeUrl || url || '',
+          embedUrl: item.metadata.embedUrl,
+          isYouTube: item.metadata.isYouTube || !!item.metadata.youtubeUrl,
+          storageId: item.id,
+          mimeType: item.metadata.mimeType || 'video/mp4'
+        }
+      })
       
-      console.log('[MediaEnhancement] Created media items:', mediaItems)
+      const mediaItems = await Promise.all(mediaItemsPromises)
+      console.log('[MediaEnhancement] Created media items with blob URLs:', mediaItems)
       setExistingPageMedia(mediaItems)
     } else {
       console.log('[MediaEnhancement] No media found for page')
       setExistingPageMedia([])
     }
-  }, [currentPageIndex, courseContent, getMediaForPage])
+  }, [currentPageIndex, courseContent, getMediaForPage, createBlobUrl])
   
   // Load existing media on mount and page change
   useEffect(() => {
     loadExistingMedia()
-  }, [loadExistingMedia])
+    
+    // Cleanup blob URLs on unmount or page change
+    return () => {
+      blobUrlsRef.current.forEach((url, id) => {
+        console.log('[MediaEnhancement] Revoking blob URL for:', id)
+        revokeBlobUrl(url)
+      })
+      blobUrlsRef.current.clear()
+    }
+  }, [loadExistingMedia, revokeBlobUrl])
   
   // Auto-trigger search when suggestion is clicked
   useEffect(() => {
@@ -419,10 +644,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const files = event.target.files
     if (!files || files.length === 0) return
     
+    // FIX: Enforce single file selection even if browser allows multiple
+    if (files.length > 1) {
+      console.warn('[MediaEnhancement] Multiple files selected, but only one media per page is allowed.')
+      setSearchError('Only one media file per page is allowed. Please select a single file.')
+      setTimeout(() => setSearchError(null), 3000)
+      event.target.value = '' // Clear the input
+      return
+    }
+    
     setIsFileProcessing(true)
     setUploadProgress({
       current: 0,
-      total: files.length,
+      total: 1,
       fileName: files[0].name,
       percent: 0
     })
@@ -430,72 +664,122 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const results: SearchResult[] = []
     const newlyUploaded = new Set<string>()
     
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const fileId = `uploaded-${Date.now()}-${i}`
-      const blob = new Blob([file], { type: file.type })
-      const blobUrl = createTrackedBlobUrl(blob, fileId)
-      
-      // Update progress for current file
-      setUploadProgress({
-        current: i,
-        total: files.length,
-        fileName: file.name,
-        percent: Math.round((i / files.length) * 100)
-      })
-      
-      const result: SearchResult = {
-        id: fileId,
-        url: blobUrl,
-        title: file.name,
-        thumbnail: file.type.startsWith('image/') ? blobUrl : undefined
-      }
-      
-      results.push(result)
-      newlyUploaded.add(fileId)
-      
-      // Create media item
-      const mediaItem: Media = {
-        id: fileId,
-        type: file.type.startsWith('video/') ? 'video' : 'image',
-        title: file.name,
-        url: blobUrl,
-        blob: blob,
-        storageId: fileId
-      }
-      
-      mediaItemsRef.current.set(fileId, mediaItem)
+    // Process only the first file
+    const file = files[0]
+    const fileId = `uploaded-${Date.now()}-0`
+    const blob = new Blob([file], { type: file.type })
+    const blobUrl = createTrackedBlobUrl(blob, fileId)
+    
+    // Update progress
+    setUploadProgress({
+      current: 1,
+      total: 1,
+      fileName: file.name,
+      percent: 100
+    })
+    
+    const result: SearchResult = {
+      id: fileId,
+      url: blobUrl,
+      title: file.name,
+      thumbnail: file.type.startsWith('image/') ? blobUrl : undefined
     }
     
-    setUploadedMedia(prev => [...prev, ...results])
+    results.push(result)
+    newlyUploaded.add(fileId)
+    
+    // Create media item
+    const mediaItem: Media = {
+      id: fileId,
+      type: file.type.startsWith('video/') ? 'video' : 'image',
+      title: file.name,
+      url: blobUrl,
+      blob: blob,
+      storageId: fileId
+    }
+    
+    mediaItemsRef.current.set(fileId, mediaItem)
+    
+    // Check if there's existing media on the current page
+    const currentPage = getCurrentPage()
+    const pageId = getPageId(currentPage!)
+    const existingMedia = getMediaForPage(pageId)
+    
+    if (existingMedia && existingMedia.length > 0 && results.length > 0) {
+      // If there's existing media, show confirmation for the first uploaded file
+      const firstResult = results[0]
+      setReplaceMode({ id: firstResult.id, title: firstResult.title })
+      // Temporarily store in uploadedMedia so handleReplaceConfirm can find it
+      setUploadedMedia(results)
+    } else if (results.length > 0) {
+      // No existing media, add the first file directly
+      const firstResult = results[0]
+      await addMediaToPage(firstResult)
+      // Clear uploadedMedia since we've added it
+      setUploadedMedia([])
+    }
+    
     setRecentlyUploadedIds(prev => new Set([...prev, ...newlyUploaded]))
-    setSelectedResults(prev => {
-      const updated = { ...prev }
-      results.forEach(r => {
-        updated[r.id] = true
-      })
-      return updated
-    })
     
     setIsFileProcessing(false)
     setUploadProgress(null)
     event.target.value = ''
   }
   
-  // Extract YouTube video ID from URL
+  // FIX: Validate and extract YouTube video ID with security checks
   const extractYouTubeVideoId = (url: string): string | null => {
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /youtube\.com\/watch\?.*v=([^&\n?#]+)/
-    ]
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern)
-      if (match && match[1]) {
-        return match[1]
+    // Validate URL format first
+    try {
+      const urlObj = new URL(url)
+      
+      // Only allow HTTPS for security
+      if (urlObj.protocol !== 'https:') {
+        console.warn('[MediaEnhancement] YouTube URL must use HTTPS:', url)
+        return null
       }
+      
+      // Validate hostname (prevent open redirects and subdomain attacks)
+      const validHosts = ['www.youtube.com', 'youtube.com', 'youtu.be', 'm.youtube.com']
+      if (!validHosts.includes(urlObj.hostname)) {
+        console.warn('[MediaEnhancement] Invalid YouTube hostname:', urlObj.hostname)
+        return null
+      }
+      
+      // Extract video ID based on URL format
+      let videoId: string | null = null
+      
+      if (urlObj.hostname === 'youtu.be') {
+        videoId = urlObj.pathname.slice(1)
+      } else if (urlObj.pathname === '/watch') {
+        videoId = urlObj.searchParams.get('v')
+      } else if (urlObj.pathname.startsWith('/embed/')) {
+        videoId = urlObj.pathname.slice(7)
+      }
+      
+      // Validate video ID format (11 characters, alphanumeric with - and _)
+      if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return videoId
+      }
+      
+      console.warn('[MediaEnhancement] Invalid YouTube video ID format:', videoId)
+      return null
+    } catch (error) {
+      console.error('[MediaEnhancement] Invalid URL:', url, error)
+      return null
     }
-    return null
+  }
+  
+  // FIX: Generate secure YouTube embed URL
+  const generateSecureYouTubeEmbed = (videoId: string): string => {
+    // Use validated video ID to create secure embed URL
+    // Include only safe parameters
+    const safeParams = new URLSearchParams({
+      'rel': '0', // Don't show related videos
+      'modestbranding': '1', // Minimal YouTube branding
+      'controls': '1', // Show player controls
+    })
+    
+    return `https://www.youtube.com/embed/${videoId}?${safeParams.toString()}`
   }
   
   const handleSearch = async () => {
@@ -507,6 +791,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setIsSearching(true)
     setSearchError(null)
     setYoutubeMessage(null)
+    setSelectedResults({}) // Clear previous selections when starting new search
     
     try {
       if (isVideoSearch) {
@@ -579,6 +864,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }
   
   const handleAddSelectedMedia = async () => {
+    // FIX: Capture page index at start of async operation
+    const pageIndexAtStart = currentPageIndexRef.current
+    
     const currentPage = getCurrentPage()
     if (!currentPage) return
     
@@ -633,7 +921,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           mediaItem.storageId = storedItem.id
           console.log('[MediaEnhancement] Stored YouTube video:', storedItem.id)
         } catch (error) {
-          console.error('[MediaEnhancement] Failed to store YouTube video:', error)
+          // Properly serialize error for logging
+          const errorInfo = error instanceof Error ? {
+            message: error.message,
+            name: error.name,
+            stack: error.stack?.split('\n')[0]
+          } : error
+          console.error('[MediaEnhancement] Failed to store YouTube video:', errorInfo)
         }
       } else if (item.id.startsWith('uploaded-') || recentlyUploadedIds.has(item.id)) {
         // Store non-YouTube media
@@ -666,7 +960,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             mediaItem.storageId = storedItem.id
             console.log('[MediaEnhancement] Stored media:', storedItem.id)
           } catch (error) {
-            console.error('[MediaEnhancement] Failed to store media:', error)
+            // Properly serialize error for logging
+            const errorInfo = error instanceof Error ? {
+              message: error.message,
+              name: error.name,
+              stack: error.stack?.split('\n')[0]
+            } : error
+            console.error('[MediaEnhancement] Failed to store media:', errorInfo)
           }
         }
       }
@@ -674,8 +974,25 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       newMedia.push(mediaItem)
     }
     
-    // Update page media
-    const updatedPageMedia = [...existingPageMedia, ...newMedia]
+    // FIX: Properly handle single media per page requirement
+    // If multiple media items were processed, show user feedback
+    if (newMedia.length > 1) {
+      console.warn('[MediaEnhancement] Multiple media items selected, but only one media per page is allowed. Using the first item.')
+      setSearchError('Only one media item per page is allowed. The first item was added.')
+      setTimeout(() => setSearchError(null), 3000)
+    }
+    
+    // Take only the first media item (more intuitive than last)
+    const updatedPageMedia = newMedia.length > 0 ? [newMedia[0]] : []
+    
+    // FIX: Check if we're still on the same page before updating
+    if (currentPageIndexRef.current !== pageIndexAtStart) {
+      console.warn('[MediaEnhancement] Page changed during async operation, aborting update')
+      setSearchError('Page changed during media processing. Please try again.')
+      setTimeout(() => setSearchError(null), 3000)
+      return
+    }
+    
     setExistingPageMedia(updatedPageMedia)
     
     // Clear selections
@@ -697,17 +1014,59 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const content = courseContent as CourseContent
     const updatedContent = { ...content }
     
-    const pageWithMedia = setPageMedia(page, media)
+    // Ensure each Media object has a proper URL for display and preserves all flags
+    const mediaWithUrls = media.map(item => ({
+      ...item,
+      // Preserve isYouTube flag explicitly
+      isYouTube: item.isYouTube || false,
+      // If no URL, create one based on the media ID
+      url: item.url || item.embedUrl || `media://${item.id}`
+    }))
+    
+    const pageWithMedia = setPageMedia(page, mediaWithUrls)
     if (!pageWithMedia) return
     
+    // FIXED: Do NOT modify HTML content - keep media separate
+    // Media should only be stored in the media array, never embedded in content
+    const updatedPage = { ...pageWithMedia }
+    
+    // FIX: Use specific patterns to only remove OUR generated media containers
+    // Preserve user-added images and iframes
+    if (updatedPage.content) {
+      console.log('[MediaEnhancement] Cleaning only our generated media from content')
+      
+      // Pattern 1: Remove our media container divs with class="media-container" or data-media-id
+      updatedPage.content = updatedPage.content.replace(
+        /<div[^>]*(?:class="media-container"|data-media-id="[^"]*")[^>]*>[\s\S]*?<\/div>/gi,
+        ''
+      )
+      
+      // Pattern 2: Only remove blob images that are part of our media system (with data attributes)
+      // This preserves user-uploaded images with regular URLs
+      updatedPage.content = updatedPage.content.replace(
+        /<img[^>]*blob:[^>]*data-media-[^>]*>/gi,
+        ''
+      )
+      
+      // Pattern 3: Only remove YouTube iframes with our specific markers
+      // Look for iframes with data-media-youtube attribute or our specific embed pattern
+      updatedPage.content = updatedPage.content.replace(
+        /<iframe[^>]*(?:data-media-youtube="true"|class="media-youtube")[^>]*>[\s\S]*?<\/iframe>/gi,
+        ''
+      )
+      
+      // Clean up extra whitespace
+      updatedPage.content = updatedPage.content.replace(/\n\s*\n\s*\n/g, '\n\n').trim()
+    }
+    
     if (currentPageIndex === 0) {
-      updatedContent.welcomePage = pageWithMedia as Page
+      updatedContent.welcomePage = updatedPage as Page
     } else if (currentPageIndex === 1) {
-      updatedContent.learningObjectivesPage = pageWithMedia as Page
+      updatedContent.learningObjectivesPage = updatedPage as Page
     } else {
       const topicIndex = currentPageIndex - 2
       if (updatedContent.topics && topicIndex >= 0) {
-        updatedContent.topics[topicIndex] = pageWithMedia as Topic
+        updatedContent.topics[topicIndex] = updatedPage as Topic
       }
     }
     
@@ -755,7 +1114,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Find the page index
     if (pageId === 'welcome') {
       newIndex = 0
-    } else if (pageId === 'objectives') {
+    } else if (pageId === 'objectives' || pageId === 'learning-objectives') {
+      // Handle both 'objectives' and 'learning-objectives' IDs
       newIndex = 1
     } else {
       // Find topic index
@@ -767,6 +1127,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     // Navigate to the page with state clearing
     if (newIndex >= 0) {
+      console.log('[MediaEnhancementWizard] Navigating to page index:', newIndex, 'from pageId:', pageId)
       navigateToPage(newIndex)
     }
   }
@@ -776,7 +1137,26 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const currentPage = getCurrentPage()
     if (!currentPage || !onUpdateContent) return
     
-    const updatedPage = { ...currentPage, content: newContent }
+    // FIX: Sanitize content before saving to prevent XSS attacks
+    // Configure DOMPurify to allow safe HTML elements and attributes
+    const sanitizedContent = DOMPurify.sanitize(newContent, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'video', 'iframe',
+        'div', 'span', 'table', 'thead', 'tbody', 'tr', 'td', 'th'
+      ],
+      ALLOWED_ATTR: [
+        'href', 'target', 'src', 'alt', 'title', 'width', 'height',
+        'class', 'id', 'style', 'data-*', 'controls', 'autoplay',
+        'allowfullscreen', 'frameborder'
+      ],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|data|blob):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+      KEEP_CONTENT: true,
+      // Allow data attributes for our media system
+      ADD_ATTR: ['data-media-id', 'data-media-youtube']
+    })
+    
+    const updatedPage = { ...currentPage, content: sanitizedContent }
     const updatedContent = { ...courseContent } as CourseContent
     
     if (currentPageIndex === 0) {
@@ -795,10 +1175,58 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }
   
   // Get image source handling CORS-restricted domains
-  const getImageSource = (url: string, isSearchResult: boolean = false): string => {
-    // Handle undefined/null URLs
+  const handleMediaClick = (mediaId: string) => {
+    console.log('[MediaEnhancement] Media clicked:', mediaId)
+    setPreviewMediaId(mediaId)
+    setPreviewDialogOpen(true)
+  }
+
+  const getPreviewContent = () => {
+    if (!previewMediaId) return null
+    
+    const media = existingPageMedia.find(m => m.id === previewMediaId)
+    if (!media) return null
+    
+    if (media.type === 'video') {
+      // Check if it's a YouTube video
+      if (media.embedUrl || (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be')))) {
+        const embedUrl = media.embedUrl || media.url
+        return (
+          <iframe
+            src={embedUrl}
+            width="100%"
+            height="400"
+            frameBorder="0"
+            allowFullScreen
+            title={media.title}
+          />
+        )
+      }
+      // Regular video
+      return (
+        <video
+          src={media.url}
+          controls
+          style={{ width: '100%', maxHeight: '400px' }}
+          title={media.title}
+        />
+      )
+    } else {
+      // Image
+      return (
+        <img
+          src={media.url}
+          alt={media.title}
+          style={{ width: '100%', maxHeight: '400px', objectFit: 'contain' }}
+        />
+      )
+    }
+  }
+
+  const getImageSource = (url: string, isSearchResult: boolean = false): string | undefined => {
+    // Handle undefined/null URLs - return undefined to avoid empty src warning
     if (!url) {
-      return ''
+      return undefined
     }
     
     // Handle blob URLs directly
@@ -851,7 +1279,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               blobUrlsRef.current.set(media.storageId, blobUrl)
             }
           } catch (error) {
-            console.error('[MediaEnhancement] Failed to create blob URL:', error)
+            // Properly serialize error for logging
+            const errorInfo = error instanceof Error ? {
+              message: error.message,
+              name: error.name,
+              stack: error.stack?.split('\n')[0]
+            } : error
+            console.error('[MediaEnhancement] Failed to create blob URL:', errorInfo)
           }
         }
       }
@@ -860,47 +1294,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     loadBlobUrls()
   }, [existingPageMedia, createBlobUrl])
   
-  // Handle media item click for preview
-  const handleMediaClick = (mediaId: string) => {
-    setPreviewMediaId(mediaId)
-    setPreviewDialogOpen(true)
-  }
   
-  // Get preview content for dialog
-  const getPreviewContent = () => {
-    if (!previewMediaId) return null
-    
-    const media = existingPageMedia.find(m => m.id === previewMediaId)
-    if (!media) return null
-    
-    if (media.type === 'video' && media.embedUrl) {
-      return (
-        <iframe
-          src={media.embedUrl}
-          width="100%"
-          height="450"
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title={media.title || 'Video'}
-        />
-      )
-    } else {
-      const imgSrc = getImageSource(media.url || '')
-      return (
-        <img 
-          src={imgSrc} 
-          alt={media.title || 'Image'} 
-          style={{ 
-            width: '100%', 
-            height: 'auto',
-            maxHeight: '70vh',
-            objectFit: 'contain'
-          }} 
-        />
-      )
-    }
-  }
   
   // Paginate results
   const paginateResults = (results: SearchResult[]) => {
@@ -917,7 +1311,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       title="Media Enhancement"
       description="Add images and videos to your course content"
       onBack={onBack}
-      onNext={() => onNext(courseContent)}
+      onNext={() => onNext(courseContentRef.current)}
       nextDisabled={false}
       onSettingsClick={onSettingsClick}
       onHelp={onHelp}
@@ -948,38 +1342,36 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           <Section>
             {/* Current Page Info */}
             <Card style={{ marginBottom: '1.5rem' }} data-testid="current-page-info-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                <div style={{ flex: 1 }}>
-                  <h2 style={{ marginBottom: '0.5rem' }}>{getCurrentPageTitle()}</h2>
-                  <div 
-                    data-testid="page-content-preview"
-                    style={{ 
-                      color: tokens.colors.text.secondary,
-                      fontSize: '0.875rem',
-                      lineHeight: 1.5,
-                      minHeight: '8rem',
-                      maxHeight: '12rem',
-                      overflowY: 'auto',
-                      padding: '0.5rem',
-                      backgroundColor: tokens.colors.background.secondary,
-                      borderRadius: '0.375rem',
-                      marginTop: '0.5rem'
-                    }}
-                    dangerouslySetInnerHTML={{ __html: getCurrentPage()?.content || '' }}
-                  />
-                </div>
+              {/* Header row with title and Edit button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 style={{ margin: 0 }}>{getCurrentPageTitle()}</h2>
                 <Button
                   variant="secondary"
                   size="small"
                   onClick={() => setIsEditingContent(true)}
                   disabled={isEditingContent}
                   data-testid="edit-content-button"
-                  style={{ marginLeft: '1rem' }}
                 >
                   <Icon icon={Edit} size="sm" data-testid="edit-icon" />
                   Edit Content
                 </Button>
               </div>
+              
+              {/* Content preview below the header */}
+              <div 
+                data-testid="page-content-preview"
+                style={{ 
+                  color: tokens.colors.text.secondary,
+                  fontSize: '0.875rem',
+                  lineHeight: 1.5,
+                  maxHeight: '20rem',  // More generous max height for flexibility
+                  overflowY: 'auto',
+                  padding: '0.5rem',
+                  backgroundColor: tokens.colors.background.secondary,
+                  borderRadius: '0.375rem'
+                }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getCurrentPage()?.content || '') }}
+              />
             </Card>
             
             {/* Existing Media */}
@@ -1003,19 +1395,78 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     }}
                     onClick={() => handleMediaClick(media.id)}
                   >
-                    {media.type === 'video' ? (
-                      <div style={{
-                        width: '100%',
-                        height: '150px',
-                        backgroundColor: tokens.colors.background.secondary,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: tokens.colors.text.secondary
-                      }}>
-                        <span>📹 Video</span>
-                      </div>
-                    ) : (
+                    {media.type === 'video' && media.isYouTube && media.url ? (
+                      // FIXED: Display YouTube thumbnail for video preview
+                      (() => {
+                        const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
+                        const videoId = videoIdMatch ? videoIdMatch[1] : null
+                        const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+                        
+                        return thumbnailUrl ? (
+                          <div style={{ position: 'relative' }}>
+                            <img
+                              src={thumbnailUrl}
+                              alt={media.title || 'Video thumbnail'}
+                              style={{
+                                width: '100%',
+                                height: '150px',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement
+                                target.style.display = 'none'
+                                const parent = target.parentElement
+                                if (parent) {
+                                  // Use safe DOM manipulation instead of innerHTML
+                                  const placeholder = document.createElement('div')
+                                  placeholder.style.padding = '2rem'
+                                  placeholder.style.textAlign = 'center'
+                                  placeholder.style.color = '#666'
+                                  placeholder.textContent = '📹 Video'
+                                  parent.replaceChildren(placeholder)
+                                }
+                              }}
+                            />
+                            {/* Video play overlay */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                              borderRadius: '50%',
+                              width: '48px',
+                              height: '48px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              pointerEvents: 'none'
+                            }}>
+                              <div style={{
+                                width: '0',
+                                height: '0',
+                                borderLeft: '16px solid white',
+                                borderTop: '10px solid transparent',
+                                borderBottom: '10px solid transparent',
+                                marginLeft: '4px'
+                              }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{
+                            width: '100%',
+                            height: '150px',
+                            backgroundColor: tokens.colors.background.secondary,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: tokens.colors.text.secondary
+                          }}>
+                            <span>📹 Video</span>
+                          </div>
+                        )
+                      })()
+                    ) : getImageSource(media.url || '') ? (
                       <img 
                         src={getImageSource(media.url || '')} 
                         alt={media.title || 'Media'} 
@@ -1029,10 +1480,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           target.style.display = 'none'
                           const parent = target.parentElement
                           if (parent) {
-                            parent.innerHTML = '<div style="padding: 2rem; text-align: center; color: #666;">Image unavailable</div>'
+                            // Use safe DOM manipulation instead of innerHTML
+                            const placeholder = document.createElement('div')
+                            placeholder.style.padding = '2rem'
+                            placeholder.style.textAlign = 'center'
+                            placeholder.style.color = '#666'
+                            placeholder.textContent = 'Image unavailable'
+                            parent.replaceChildren(placeholder)
                           }
                         }}
                       />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '150px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: tokens.colors.background.secondary,
+                        color: tokens.colors.text.tertiary
+                      }}>
+                        <span>No preview</span>
+                      </div>
                     )}
                     <div style={{ padding: '0.5rem' }}>
                       <p style={{ 
@@ -1063,6 +1532,23 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     </Button>
                   </div>
                 ))}
+              </div>
+            </Card>
+          )}
+          
+          {/* Show "No media" message when page has no media */}
+          {existingPageMedia.length === 0 && (
+            <Card style={{ marginBottom: '2rem' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Current Media</h3>
+              <div style={{ 
+                padding: '2rem',
+                textAlign: 'center',
+                color: tokens.colors.text.secondary
+              }}>
+                <p>No media added yet</p>
+                <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                  Use the options below to add images or videos to this page
+                </p>
               </div>
             </Card>
           )}
@@ -1128,8 +1614,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       onClick={handleSearch} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search images"
-                      size="medium"
-                      style={{ padding: '0.75rem 1.25rem' }}
+                      size="large"
+                      style={{ 
+                        borderWidth: '1px',
+                        height: '40px',  // Force exact height to match input
+                        minHeight: 'unset'  // Override any min-height from CSS
+                      }}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
@@ -1193,8 +1683,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       onClick={handleSearch} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search videos"
-                      size="medium"
-                      style={{ padding: '0.75rem 1.25rem' }}
+                      size="large"
+                      style={{ 
+                        borderWidth: '1px',
+                        height: '40px',  // Force exact height to match input
+                        minHeight: 'unset'  // Override any min-height from CSS
+                      }}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
@@ -1245,7 +1739,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     style={{ display: 'none' }}
                     id="media-upload"
                     data-testid="file-input"
-                    multiple
+                    // FIXED: Removed 'multiple' - only one media per page allowed
                     disabled={isFileProcessing}
                   />
                   <label
@@ -1472,7 +1966,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   </div>
                   
                   {/* Instructions */}
-                  <Alert variant="info">
+                  <Alert type="info">
                     <strong>How to use:</strong><br />
                     1. Copy the AI prompt above<br />
                     2. Visit one of the AI image generation tools<br />
@@ -1511,11 +2005,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           opacity: isRestricted ? 0.5 : 1,
                           transition: 'all 0.2s',
                           backgroundColor: selectedResults[result.id] ? tokens.colors.success[50] : 'transparent',
-                          pointerEvents: isSearching ? 'none' : 'auto',
-                          '&:hover': !isRestricted && !isSearching ? {
-                            borderColor: tokens.colors.primary[500],
-                            transform: 'translateY(-2px)'
-                          } : {}
+                          pointerEvents: isSearching ? 'none' : 'auto'
                         }}
                         onClick={() => !isRestricted && !isSearching && handleToggleSelection(result.id)}
                       >
@@ -1625,8 +2115,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               </>
             )}
             
-            {/* No Results Message */}
-            {hasSearched && searchResults.length === 0 && !searchError && !youtubeMessage && (
+            {/* No Results Message - Only show for search tabs */}
+            {hasSearched && searchResults.length === 0 && !searchError && !youtubeMessage && 
+             (activeTab === 'images' || activeTab === 'videos') && (
               <Alert type="info">
                 No results found. Try different search terms or upload your own media.
               </Alert>
@@ -1679,6 +2170,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         onSave={handleSaveContent}
         onCancel={() => setIsEditingContent(false)}
       />
+
+      {/* Replace Media Confirmation Dialog */}
+      {replaceMode && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Replace Existing Media"
+          message={`This page already has media. Do you want to replace it with "${replaceMode.title}"?`}
+          onConfirm={handleReplaceConfirm}
+          onCancel={() => setReplaceMode(null)}
+          confirmText="Replace"
+          cancelText="Cancel"
+        />
+      )}
     </PageLayout>
   )
 }

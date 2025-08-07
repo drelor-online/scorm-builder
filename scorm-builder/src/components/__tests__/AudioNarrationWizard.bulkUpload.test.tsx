@@ -1,25 +1,35 @@
 import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
-import { describe, test, expect, beforeEach, vi } from 'vitest'
+import { describe, test, expect, beforeEach, vi, it } from 'vitest'
 import { AudioNarrationWizard } from '../AudioNarrationWizard'
+
+// Mock MediaService
+const mockMediaService = {
+  isInitialized: () => true,
+  storeMedia: vi.fn().mockResolvedValue({
+    id: 'audio-test',
+    type: 'audio',
+    pageId: 'test',
+    fileName: 'test.mp3'
+  }),
+  getMedia: vi.fn(),
+  deleteMedia: vi.fn(),
+  getAllMedia: vi.fn(() => [])
+}
+
+vi.mock('../../services/MediaService', () => ({
+  MediaService: {
+    getInstance: vi.fn(() => mockMediaService)
+  },
+  createMediaService: vi.fn(() => mockMediaService)
+}))
+
 // Mock JSZip
+let mockZipFiles: any = {}
 vi.mock('jszip', () => ({
   default: vi.fn().mockImplementation(() => ({
     loadAsync: vi.fn().mockResolvedValue({
-      files: {
-        '0001.mp3': { name: '0001.mp3', async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) },
-        '0002.mp3': { name: '0002.mp3', async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) },
-        '0001.vtt': { name: '0001.vtt', async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 1') },
-        '0002.vtt': { name: '0002.vtt', async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 2') }
-      },
-      file: vi.fn().mockImplementation((name: string) => {
-        const files: Record<string, { async: any }> = {
-          '0001.mp3': { async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) },
-          '0002.mp3': { async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) },
-          '0001.vtt': { async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 1') },
-          '0002.vtt': { async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 2') }
-        }
-        return files[name]
-      })
+      files: mockZipFiles,
+      file: vi.fn().mockImplementation((name: string) => mockZipFiles[name])
     })
   }))
 }))
@@ -81,6 +91,25 @@ describe('AudioNarrationWizard - Bulk Upload', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Reset mock ZIP files for each test
+    mockZipFiles = {
+      '0001-Block.mp3': { 
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) 
+      },
+      '0002-Block.mp3': { 
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(100)) 
+      },
+      '0001-Block.vtt': { 
+        dir: false,
+        async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 1') 
+      },
+      '0002-Block.vtt': { 
+        dir: false,
+        async: vi.fn().mockResolvedValue('WEBVTT\n\n00:00.000 --> 00:05.000\nCaption 2') 
+      }
+    }
   })
 
   test('should display bulk upload section with download narration and upload buttons', async () => {
@@ -183,5 +212,119 @@ describe('AudioNarrationWizard - Bulk Upload', () => {
           />)
 
     expect(screen.getByText(/Bulk upload will replace all existing audio and caption files/i)).toBeInTheDocument()
+  })
+
+  it('should handle large audio files (>1MB) in ZIP without Base64 errors', async () => {
+    // Create large audio data (1.5MB) to trigger chunked encoding
+    const largeAudioSize = 1.5 * 1024 * 1024
+    const largeAudioData = new ArrayBuffer(largeAudioSize)
+    const uint8View = new Uint8Array(largeAudioData)
+    // Fill with pattern to simulate real audio
+    for (let i = 0; i < uint8View.length; i++) {
+      uint8View[i] = i % 256
+    }
+    
+    // Set up mock ZIP with large audio file
+    mockZipFiles = {
+      '0001-Block.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(largeAudioData)
+      }
+    }
+    
+    render(<AudioNarrationWizard
+            courseContent={mockCourseContent}
+            onNext={mockOnNext}
+            onBack={mockOnBack}
+          />)
+    
+    // Create a mock ZIP file
+    const file = new File(['fake zip content'], 'large-audio.zip', { type: 'application/zip' })
+    
+    // Find and trigger the upload
+    const fileInput = screen.getByTestId('audio-zip-input')
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    
+    // Wait for processing - should complete without errors
+    await waitFor(() => {
+      expect(screen.getByText(/1 audio file/i)).toBeInTheDocument()
+    }, { timeout: 10000 }) // Longer timeout for large file
+  })
+
+  it('should correctly process audio files with naming format 0001-Block.mp3', async () => {
+    // Set up correct file naming
+    mockZipFiles = {
+      '0001-Block.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      },
+      '0002-Block.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      },
+      '0003-Block.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      },
+      'wrong-name.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      }
+    }
+    
+    render(<AudioNarrationWizard
+            courseContent={mockCourseContent}
+            onNext={mockOnNext}
+            onBack={mockOnBack}
+          />)
+    
+    const file = new File(['fake zip content'], 'correct-naming.zip', { type: 'application/zip' })
+    const fileInput = screen.getByTestId('audio-zip-input')
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    
+    await waitFor(() => {
+      // Should only process the 2 correctly named files (0001 and 0002)
+      // 0003 would be skipped as there's no matching narration block
+      expect(screen.getByText(/2 audio files uploaded/i)).toBeInTheDocument()
+    })
+  })
+
+  it('should show user feedback when files are skipped due to incorrect naming', async () => {
+    // Set up files with incorrect naming
+    mockZipFiles = {
+      'audio1.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      },
+      'Block-0001.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      },
+      '0001.mp3': {
+        dir: false,
+        async: vi.fn().mockResolvedValue(new ArrayBuffer(1000))
+      }
+    }
+    
+    render(<AudioNarrationWizard
+            courseContent={mockCourseContent}
+            onNext={mockOnNext}
+            onBack={mockOnBack}
+          />)
+    
+    const file = new File(['fake zip content'], 'incorrect-naming.zip', { type: 'application/zip' })
+    const fileInput = screen.getByTestId('audio-zip-input')
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    
+    // Wait for processing
+    await waitFor(() => {
+      // Should show an alert about skipped files
+      const alerts = screen.getAllByRole('alert')
+      expect(alerts.length).toBeGreaterThan(0)
+      
+      // Check for specific feedback about file naming
+      const alertText = alerts.map(a => a.textContent).join(' ')
+      expect(alertText).toMatch(/skipped|format|0001-Block.mp3/i)
+    })
   })
 })

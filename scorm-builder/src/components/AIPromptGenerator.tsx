@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { CourseSeedData } from '../types/course'
-import { PageLayout, FormSection } from './PageLayout'
+import { PageLayout } from './PageLayout'
 import { getButtonStyle } from '../styles/buttonStyles'
 import { Toast } from './Toast'
 import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import { tokens } from './DesignSystem/designTokens'
 import { Check, Copy } from 'lucide-react'
+import { Card } from './DesignSystem'
 
 interface AIPromptGeneratorProps {
   courseSeedData: CourseSeedData
@@ -303,90 +304,77 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
       )}
 
       {/* Course Information */}
-      <FormSection title="Course Information">
-        <div style={{
-          backgroundColor: '#18181b',
-          border: `1px solid ${tokens.colors.border.default}`,
-          borderRadius: '0.5rem',
-          padding: '1.5rem'
-        }}>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: tokens.colors.text.primary, marginBottom: '1rem' }}>Course Information</h2>
+        <Card>
           <div style={{ display: 'grid', gap: '0.5rem' }}>
-            <p style={{ margin: 0, color: '#d4d4d8' }}>
-              <strong style={{ color: '#f4f4f5' }}>Title:</strong> {courseSeedData.courseTitle}
+            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
+              <strong style={{ color: tokens.colors.text.primary }}>Title:</strong> {courseSeedData.courseTitle}
             </p>
-            <p style={{ margin: 0, color: '#d4d4d8' }}>
-              <strong style={{ color: '#f4f4f5' }}>Difficulty:</strong> {courseSeedData.difficulty}/5
+            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
+              <strong style={{ color: tokens.colors.text.primary }}>Difficulty:</strong> {courseSeedData.difficulty}/5
             </p>
-            <p style={{ margin: 0, color: '#d4d4d8' }}>
-              <strong style={{ color: '#f4f4f5' }}>Template:</strong> {courseSeedData.template}
+            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
+              <strong style={{ color: tokens.colors.text.primary }}>Template:</strong> {courseSeedData.template}
             </p>
           </div>
-        </div>
-      </FormSection>
+        </Card>
+      </div>
 
       {/* Prompt History removed per UX requirements */}
 
       {/* AI Prompt */}
-      <FormSection title="AI Prompt">
-        <textarea
-          id="ai-prompt"
-          data-testid="ai-prompt-textarea"
-          value={prompt}
-          onChange={(e) => setCustomPrompt(e.target.value)}
-          rows={20}
-          aria-label="AI prompt for course generation"
-          style={{
-            width: '100%',
-            padding: '1rem',
-            backgroundColor: '#18181b',
-            border: `1px solid ${tokens.colors.border.default}`,
-            borderRadius: '0.5rem',
-            color: '#e4e4e7',
-            fontSize: '0.875rem',
-            fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            outline: 'none',
-            resize: 'vertical',
-            boxSizing: 'border-box'
-          }}
-        />
-        
-        <button
-          onClick={handleCopy}
-          aria-label="Copy prompt to clipboard"
-          data-testid="copy-prompt-button"
-          style={getButtonStyle(copied ? 'success' : 'tertiary', 'medium', { marginTop: '1rem' })}
-        >
-          {copied ? (
-            <>
-              <Check size={16} style={{ marginRight: '0.5rem' }} /> Copied!
-            </>
-          ) : (
-            <>
-              <Copy size={16} style={{ marginRight: '0.5rem' }} /> Copy Prompt
-            </>
-          )}
-        </button>
-      </FormSection>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: tokens.colors.text.primary, marginBottom: '1rem' }}>AI Prompt</h2>
+        <Card>
+          <textarea
+            id="ai-prompt"
+            data-testid="ai-prompt-textarea"
+            value={prompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            rows={20}
+            aria-label="AI prompt for course generation"
+            style={{
+              width: '100%',
+              padding: '1rem',
+              backgroundColor: tokens.colors.background.primary,
+              border: 'none',
+              borderRadius: '0.5rem',
+              color: tokens.colors.text.primary,
+              fontSize: '0.875rem',
+              fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+              outline: 'none',
+              resize: 'vertical',
+              boxSizing: 'border-box'
+            }}
+          />
+          
+          <button
+            onClick={handleCopy}
+            aria-label="Copy prompt to clipboard"
+            data-testid="copy-prompt-button"
+            style={getButtonStyle(copied ? 'success' : 'tertiary', 'medium', { marginTop: '1rem' })}
+          >
+            {copied ? (
+              <>
+                <Check size={16} style={{ marginRight: '0.5rem' }} /> Copied!
+              </>
+            ) : (
+              <>
+                <Copy size={16} style={{ marginRight: '0.5rem' }} /> Copy Prompt
+              </>
+            )}
+          </button>
+        </Card>
+      </div>
 
       {/* Instructions */}
-      <FormSection>
-        <div style={{
-          backgroundColor: '#3b82f6',
-          borderRadius: '0.75rem',
-          padding: '1.5rem'
-        }}>
-          <h3 style={{
-            fontSize: '1.125rem',
-            fontWeight: 600,
-            color: 'white',
-            margin: '0 0 1rem 0'
-          }}>
-            Instructions
-          </h3>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Card title="Instructions">
           <ol style={{
             margin: 0,
             paddingLeft: '1.25rem',
-            color: 'white',
+            color: tokens.colors.text.primary,
             lineHeight: 1.6
           }}>
             <li>Copy this prompt using the button above</li>
@@ -394,8 +382,8 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
             <li>Copy the JSON response from the AI</li>
             <li>Click Next to proceed to the JSON import step</li>
           </ol>
-        </div>
-      </FormSection>
+        </Card>
+      </div>
 
       {toast && (
         <Toast

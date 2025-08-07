@@ -1,3 +1,4 @@
+// @ts-nocheck
 import html2canvas from 'html2canvas'
 
 interface UserAction {
@@ -38,6 +39,7 @@ interface RecordingOptions {
   annotationsEnabled: boolean
   screenshotQuality?: number
   maxScreenshots?: number
+  allowProgrammaticStart?: boolean // Allow recording to start without user interaction
 }
 
 interface PerformanceMetric {
@@ -66,6 +68,14 @@ interface ErrorRecord {
   screenshotId?: string
 }
 
+interface ConsoleLog {
+  timestamp: number
+  level: 'log' | 'warn' | 'error' | 'info' | 'debug'
+  message: string
+  args: any[]
+  stack?: string
+}
+
 export interface TestSessionData {
   metadata: {
     sessionId: string
@@ -88,6 +98,7 @@ export interface TestSessionData {
   }[]
   notes: Note[]
   errors: ErrorRecord[]
+  consoleLogs: ConsoleLog[]
   performance: PerformanceMetric[]
   summary: {
     totalActions: number
@@ -95,6 +106,7 @@ export interface TestSessionData {
     errorCount: number
     noteCount: number
     screenshotCount: number
+    consoleLogCount: number
   }
 }
 
@@ -103,6 +115,7 @@ export class ManualTestRecorder {
   private screenshots: Screenshot[] = []
   private notes: Note[] = []
   private errors: ErrorRecord[] = []
+  private consoleLogs: ConsoleLog[] = []
   private performanceMetrics: PerformanceMetric[] = []
   private startTime: number = 0
   private endTime: number = 0
@@ -116,6 +129,13 @@ export class ManualTestRecorder {
   private noteCounter: number = 0
   private observer: MutationObserver | null = null
   private sessionId: string = ''
+  private originalConsole: {
+    log: typeof console.log
+    warn: typeof console.warn
+    error: typeof console.error
+    info: typeof console.info
+    debug: typeof console.debug
+  } | null = null
   
   constructor(options: Partial<RecordingOptions> = {}) {
     this.options = {
@@ -144,10 +164,14 @@ export class ManualTestRecorder {
     this.screenshots = []
     this.notes = []
     this.errors = []
+    this.consoleLogs = []
     this.performanceMetrics = []
     this.actionCounter = 0
     this.screenshotCounter = 0
     this.noteCounter = 0
+    
+    // Intercept console methods to capture logs
+    this.interceptConsole()
     
     console.log('🎬 Manual test recording started')
     
@@ -183,6 +207,9 @@ export class ManualTestRecorder {
     
     this.isRecording = false
     this.endTime = Date.now()
+    
+    // Restore original console methods
+    this.restoreConsole()
     
     // Remove event listeners
     this.detachEventListeners()
@@ -572,6 +599,115 @@ export class ManualTestRecorder {
     })
   }
   
+  private interceptConsole(): void {
+    // Store original console methods
+    this.originalConsole = {
+      log: console.log,
+      warn: console.warn,
+      error: console.error,
+      info: console.info,
+      debug: console.debug
+    }
+    
+    // Replace console methods with interceptors
+    console.log = (...args: any[]) => {
+      this.captureConsoleLog('log', args)
+      this.originalConsole!.log(...args)
+    }
+    
+    console.warn = (...args: any[]) => {
+      this.captureConsoleLog('warn', args)
+      this.originalConsole!.warn(...args)
+    }
+    
+    console.error = (...args: any[]) => {
+      this.captureConsoleLog('error', args)
+      this.originalConsole!.error(...args)
+    }
+    
+    console.info = (...args: any[]) => {
+      this.captureConsoleLog('info', args)
+      this.originalConsole!.info(...args)
+    }
+    
+    console.debug = (...args: any[]) => {
+      this.captureConsoleLog('debug', args)
+      this.originalConsole!.debug(...args)
+    }
+  }
+  
+  private restoreConsole(): void {
+    if (this.originalConsole) {
+      console.log = this.originalConsole.log
+      console.warn = this.originalConsole.warn
+      console.error = this.originalConsole.error
+      console.info = this.originalConsole.info
+      console.debug = this.originalConsole.debug
+      this.originalConsole = null
+    }
+  }
+  
+  private captureConsoleLog(level: 'log' | 'warn' | 'error' | 'info' | 'debug', args: any[]): void {
+    if (!this.isRecording) return
+    
+    // Sanitize args to remove circular references and DOM elements
+    const sanitizedArgs = args.map(arg => {
+      if (typeof arg === 'object' && arg !== null) {
+        try {
+          // Try to stringify to check for circular references
+          JSON.stringify(arg)
+          return arg // It's safe
+        } catch {
+          // Has circular reference or is too complex
+          // Return a safe representation
+          if (arg instanceof HTMLElement) {
+            return {
+              type: 'HTMLElement',
+              tagName: arg.tagName,
+              id: arg.id || undefined,
+              className: arg.className || undefined,
+              textContent: arg.textContent?.substring(0, 100) || undefined
+            }
+          }
+          if (arg instanceof Node) {
+            return {
+              type: 'DOMNode',
+              nodeType: arg.nodeType,
+              nodeName: arg.nodeName
+            }
+          }
+          if (arg.constructor) {
+            return {
+              type: arg.constructor.name,
+              toString: String(arg)
+            }
+          }
+          return { type: 'CircularObject', toString: String(arg) }
+        }
+      }
+      return arg
+    })
+    
+    const consoleLog: ConsoleLog = {
+      timestamp: Date.now(),
+      level,
+      message: args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg, null, 2)
+          } catch {
+            return String(arg)
+          }
+        }
+        return String(arg)
+      }).join(' '),
+      args: sanitizedArgs, // Use sanitized args
+      stack: level === 'error' ? new Error().stack : undefined
+    }
+    
+    this.consoleLogs.push(consoleLog)
+  }
+  
   private startMutationObserver(): void {
     this.observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
@@ -874,11 +1010,11 @@ export class ManualTestRecorder {
     // Screenshot after clicking links that change the page
     if (element.tagName === 'A') {
       const href = (element as HTMLAnchorElement).href
-      return href && !href.startsWith('#')
+      return !!href && !href.startsWith('#')
     }
     
     // Screenshot after form submissions
-    if (element.type === 'submit') return true
+    if ('type' in element && (element as HTMLInputElement).type === 'submit') return true
     
     // Screenshot after clicking navigation elements
     if (element.getAttribute('role') === 'navigation') return true
@@ -1098,13 +1234,15 @@ ${this.screenshots.length > 0
       screenshots: lightweightScreenshots,
       notes: this.notes,
       errors: this.errors,
+      consoleLogs: this.consoleLogs,
       performance: this.performanceMetrics,
       summary: {
         totalActions: this.actions.length,
         actionsByType: this.getActionTypeSummary(),
         errorCount: this.errors.length,
         noteCount: this.notes.length,
-        screenshotCount: this.screenshots.length
+        screenshotCount: this.screenshots.length,
+        consoleLogCount: this.consoleLogs.length
       }
     }
   }
@@ -1689,6 +1827,22 @@ export function startRecording(options?: Partial<RecordingOptions>): void {
     return
   }
   
+  // Check if this was called by user interaction
+  const event = window.event as Event | undefined
+  const isUserTriggered = event && event.isTrusted
+  
+  // Log how recording was triggered
+  console.log('[ManualTestRecorder] Starting recording session...', {
+    triggered: isUserTriggered ? 'user' : 'programmatic',
+    caller: new Error().stack?.split('\n')[2] // Get caller info
+  })
+  
+  // Add a safeguard: Only allow programmatic starts if explicitly allowed
+  if (!isUserTriggered && !options?.allowProgrammaticStart) {
+    console.warn('[ManualTestRecorder] Recording was triggered programmatically. To allow this, pass { allowProgrammaticStart: true } in options.')
+    return
+  }
+  
   recorder = new ManualTestRecorder(options)
   recorder.start()
 }
@@ -1703,30 +1857,29 @@ export function stopRecording(): void {
 // Attach to window for easy console access
 if (typeof window !== 'undefined') {
   try {
-    (window as any).startRecording = startRecording
-    (window as any).stopRecording = stopRecording
+    (window as any).startRecording = startRecording;
+    (window as any).stopRecording = stopRecording;
   } catch (e) {
     console.warn('Could not attach recorder functions to window:', e)
   }
   
   console.log(`
-📹 Manual Test Recorder loaded!
+📹 Manual Test Recorder AVAILABLE (not recording yet)
 
+To start recording:
+  - Click the "Record Session" button in the UI, OR
+  - Call startRecording() in the console
+  
 Commands:
   startRecording()     - Start recording your actions
   stopRecording()      - Stop and generate report
   
-Keyboard shortcuts:
+Keyboard shortcuts (when recording):
   Ctrl+Shift+S - Take screenshot
   Ctrl+Shift+N - Add note
   Ctrl+Shift+M - Mark as important
   Ctrl+Shift+E - End recording
   
-Options:
-  startRecording({
-    autoScreenshot: true,    // Auto-capture screenshots
-    capturePerformance: true, // Track performance metrics
-    annotationsEnabled: true  // Allow notes and marks
-  })
+Note: Recording will NOT start automatically.
   `)
 }

@@ -16,6 +16,7 @@ import './DesignSystem/transitions.css'
 import { runFullAutomation } from '../utils/fullWorkflowAutomation'
 import { startRecording, stopRecording } from '../utils/ManualTestRecorder'
 import { envConfig } from '../config/environment'
+import { debugLogger } from '@/utils/ultraSimpleLogger'
 
 interface Project {
   id: string
@@ -43,7 +44,7 @@ function formatLastAccessed(project: Project): string {
     }
     return formatDistanceToNow(date, { addSuffix: true })
   } catch (error) {
-    console.error('Error formatting date:', dateString, error)
+    debugLogger.warn('ProjectDashboard.formatLastAccessed', 'Error formatting date', { dateString, error })
     return 'Never'
   }
 }
@@ -93,7 +94,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   
   useEffect(() => {
     if (storage.isInitialized) {
+      debugLogger.info('ProjectDashboard', 'Storage initialized, loading projects')
       loadProjects()
+    } else {
+      debugLogger.warn('ProjectDashboard', 'Storage not initialized yet')
     }
   }, [storage.isInitialized])
   
@@ -104,15 +108,21 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         // First try to get from backend
         const settings = await invoke<any>('get_app_settings')
         if (settings?.projects_directory) {
+          debugLogger.debug('ProjectDashboard.loadDefaultFolder', 'Loaded default folder from backend', {
+            folder: settings.projects_directory
+          })
           setDefaultFolder(settings.projects_directory)
           localStorage.setItem('defaultProjectsFolder', settings.projects_directory)
         } else {
           // Fall back to localStorage
           const savedFolder = localStorage.getItem('defaultProjectsFolder')
+          debugLogger.debug('ProjectDashboard.loadDefaultFolder', 'Using localStorage folder', {
+            folder: savedFolder
+          })
           setDefaultFolder(savedFolder)
         }
       } catch (error) {
-        console.error('Failed to load default folder:', error)
+        debugLogger.error('ProjectDashboard.loadDefaultFolder', 'Failed to load default folder', error)
         // Fall back to localStorage
         const savedFolder = localStorage.getItem('defaultProjectsFolder')
         setDefaultFolder(savedFolder)
@@ -122,21 +132,36 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   }, [])
   
   async function loadProjects() {
-    if (!storage.isInitialized) return
+    if (!storage.isInitialized) {
+      debugLogger.warn('ProjectDashboard.loadProjects', 'Storage not initialized, skipping load')
+      return
+    }
     
     try {
       setLoading(true)
+      debugLogger.info('ProjectDashboard.loadProjects', 'Starting to load projects')
+      
       await measureAsync('loadProjects', async () => {
         const projectList = await storage.listProjects()
         const recentList = await storage.getRecentProjects()
         
+        debugLogger.debug('ProjectDashboard.loadProjects', 'Projects retrieved', {
+          totalProjects: projectList.length,
+          recentProjects: recentList.length
+        })
+        
         // Validate project data before setting
         const validProjects = projectList.filter(project => {
           if (!project || !project.id || !project.name) {
-            console.warn('Invalid project data:', project)
+            debugLogger.warn('ProjectDashboard.loadProjects', 'Invalid project data', project)
             return false
           }
           return true
+        })
+        
+        debugLogger.debug('ProjectDashboard.loadProjects', 'Validated projects', {
+          validCount: validProjects.length,
+          invalidCount: projectList.length - validProjects.length
         })
       
         // Separate recent projects from the main list
@@ -144,30 +169,38 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         const mainProjects = validProjects.filter(p => !recentIds.includes(p.id))
         const validRecentProjects = recentList.filter((project: any) => {
           if (!project || !project.id || !project.name) {
-            console.warn('Invalid recent project data:', project)
+            debugLogger.warn('ProjectDashboard.loadProjects', 'Invalid recent project data', project)
             return false
           }
           return true
         }).slice(0, 5) // Show only top 5 recent projects
         
+        debugLogger.info('ProjectDashboard.loadProjects', 'Projects loaded successfully', {
+          mainProjects: mainProjects.length,
+          recentProjects: validRecentProjects.length,
+          projectNames: validProjects.map(p => p.name)
+        })
+        
         setProjects(mainProjects)
         setRecentProjects(validRecentProjects)
       })
     } catch (error) {
-      console.error('Failed to load projects:', error)
+      debugLogger.error('ProjectDashboard.loadProjects', 'Failed to load projects', error)
       setProjects([]) // Set empty array on error
       setRecentProjects([])
     } finally {
       setLoading(false)
+      debugLogger.debug('ProjectDashboard.loadProjects', 'Load complete')
     }
   }
   
   async function handleCreateProject() {
     try {
-      console.log('[ProjectDashboard] handleCreateProject called')
-      console.log('[ProjectDashboard] Project name:', newProjectName)
-      console.log('[ProjectDashboard] Storage object:', storage)
-      console.log('[ProjectDashboard] Storage initialized:', storage.isInitialized)
+      debugLogger.info('ProjectDashboard.handleCreateProject', 'Creating new project', {
+        projectName: newProjectName,
+        storageInitialized: storage.isInitialized,
+        defaultFolder
+      })
       
       // Trim whitespace from project name
       const trimmedName = newProjectName.trim()
@@ -191,13 +224,16 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       }
       
       if (!storage.isInitialized) {
-        console.error('[ProjectDashboard] Storage not initialized!')
+        debugLogger.error('ProjectDashboard.handleCreateProject', 'Storage not initialized')
         showError('Storage system not ready. Please refresh the page.')
         return
       }
       
       // Check for duplicate project names (case-insensitive)
-      console.log('[ProjectDashboard] Checking for duplicate project names...')
+      debugLogger.debug('ProjectDashboard.handleCreateProject', 'Checking for duplicate names', {
+        existingCount: projects.length + recentProjects.length
+      })
+      
       const allProjects = [...projects, ...recentProjects]
       const normalizedNewName = trimmedName.toLowerCase()
       const duplicateProject = allProjects.find(p => 
@@ -209,19 +245,28 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         return
       }
       
-      console.log('[ProjectDashboard] Calling storage.createProject...')
+      debugLogger.debug('ProjectDashboard.handleCreateProject', 'Calling storage.createProject')
       const project = await storage.createProject(trimmedName, defaultFolder || undefined)
-      console.log('[ProjectDashboard] Project created:', project)
+      
+      debugLogger.info('ProjectDashboard.handleCreateProject', 'Project created successfully', {
+        projectId: project.id,
+        projectName: project.name,
+        projectPath: project.path
+      })
       
       // Don't open the project here - let the parent handle it
       setShowNewProjectDialog(false)
       setNewProjectName('')
       showInfo('Project created successfully')
       
-      console.log('[ProjectDashboard] Calling onProjectSelected with path:', project.path)
+      debugLogger.info('ProjectDashboard.handleCreateProject', 'Calling onProjectSelected', {
+        path: project.path,
+        projectId: project.id,
+        projectName: project.name
+      })
       onProjectSelected(project.path)
     } catch (error) {
-      console.error('[ProjectDashboard] handleCreateProject error:', error)
+      debugLogger.error('ProjectDashboard.handleCreateProject', 'Failed to create project', error)
       
       const errorMessage = error instanceof Error ? error.message : String(error)
       
@@ -244,10 +289,16 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     try {
       // Use path if available, otherwise use ID (for backward compatibility)
       const pathToOpen = projectPath || projectIdOrPath;
-      console.log('Opening project:', pathToOpen)
+      
+      debugLogger.info('ProjectDashboard.handleOpenProject', 'Opening project', {
+        idOrPath: projectIdOrPath,
+        path: projectPath,
+        pathToOpen
+      })
+      
       onProjectSelected(pathToOpen)
     } catch (error) {
-      console.error('Failed to open project:', error)
+      debugLogger.error('ProjectDashboard.handleOpenProject', 'Failed to open project', error)
       showError('Failed to open project', {
         label: 'Retry',
         onClick: () => handleOpenProject(projectIdOrPath, projectPath)
@@ -257,23 +308,35 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   
   async function handleOpenFromFile() {
     try {
+      debugLogger.info('ProjectDashboard.handleOpenFromFile', 'Opening project from file dialog')
+      
       await storage.openProjectFromFile()
       const currentProjectId = storage.currentProjectId
+      
       if (currentProjectId) {
+        debugLogger.debug('ProjectDashboard.handleOpenFromFile', 'Project opened', {
+          projectId: currentProjectId
+        })
         onProjectSelected(currentProjectId)
+      } else {
+        debugLogger.warn('ProjectDashboard.handleOpenFromFile', 'No project ID after opening file')
       }
     } catch (error) {
-      console.error('Failed to open project file:', error)
+      debugLogger.error('ProjectDashboard.handleOpenFromFile', 'Failed to open project file', error)
     }
   }
   
   async function handleDeleteProject(projectId: string) {
     try {
+      debugLogger.info('ProjectDashboard.handleDeleteProject', 'Deleting project', { projectId })
+      
       await storage.deleteProject(projectId)
       await loadProjects()
       setDeleteConfirm(null)
+      
+      debugLogger.info('ProjectDashboard.handleDeleteProject', 'Project deleted successfully', { projectId })
     } catch (error) {
-      console.error('Failed to delete project:', error)
+      debugLogger.error('ProjectDashboard.handleDeleteProject', 'Failed to delete project', { projectId, error })
       showError(`Failed to delete project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
@@ -281,6 +344,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   async function handleImportProject() {
     try {
       setImportingProject(true)
+      debugLogger.info('ProjectDashboard.handleImportProject', 'Starting project import')
       
       // Open file dialog for zip files
       const selected = await open({
@@ -292,14 +356,20 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       })
       
       if (!selected || typeof selected !== 'string') {
+        debugLogger.debug('ProjectDashboard.handleImportProject', 'Import cancelled by user')
         return
       }
+      
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'File selected for import', {
+        path: selected
+      })
       
       // Load the zip file
       const response = await fetch(`file://${selected}`)
       const blob = await response.blob()
       
       // Import the project
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'Importing project from zip')
       await storage.importProjectFromZip(blob)
       
       // Reload projects list
@@ -308,11 +378,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       // Navigate to the imported project
       const projectId = storage.getCurrentProjectId()
       if (projectId) {
+        debugLogger.info('ProjectDashboard.handleImportProject', 'Project imported successfully', { projectId })
         showSuccess('Project imported successfully')
         onProjectSelected(projectId)
+      } else {
+        debugLogger.warn('ProjectDashboard.handleImportProject', 'No project ID after import')
       }
     } catch (error) {
-      console.error('Failed to import project:', error)
+      debugLogger.error('ProjectDashboard.handleImportProject', 'Failed to import project', error)
       showError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setImportingProject(false)
@@ -322,6 +395,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   async function handleExportProject(projectId: string) {
     try {
       setExportingProjectId(projectId)
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Exporting project', { projectId })
       
       // Open the project first
       await storage.openProject(projectId)
@@ -334,6 +408,11 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       const project = allProjects.find(p => p.id === projectId)
       const projectName = project?.name || 'project'
       
+      debugLogger.debug('ProjectDashboard.handleExportProject', 'Exporting as zip', {
+        projectName,
+        blobSize: zipBlob.size
+      })
+      
       // Download the zip file
       const url = URL.createObjectURL(zipBlob)
       const link = document.createElement('a')
@@ -344,9 +423,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
       
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Project exported successfully', { projectId })
       showSuccess('Project exported successfully')
     } catch (error) {
-      console.error('Failed to export project:', error)
+      debugLogger.error('ProjectDashboard.handleExportProject', 'Failed to export project', { projectId, error })
       showError(`Failed to export project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setExportingProjectId(null)
@@ -359,6 +439,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       return
     }
     
+    debugLogger.info('ProjectDashboard.handleBulkExport', 'Starting bulk export', {
+      projectCount: selectedProjects.size
+    })
+    
     try {
       for (const projectId of selectedProjects) {
         await handleExportProject(projectId)
@@ -366,8 +450,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       
       setSelectionMode(false)
       setSelectedProjects(new Set())
+      
+      debugLogger.info('ProjectDashboard.handleBulkExport', 'Bulk export completed')
     } catch (error) {
-      console.error('Failed to export projects:', error)
+      debugLogger.error('ProjectDashboard.handleBulkExport', 'Failed to export projects', error)
       showError(`Failed to export projects: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }

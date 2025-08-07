@@ -16,9 +16,8 @@
         <div class="content-column media-column">
             {{#or image_url media}}
             <div class="media-container">
-                {{#if image_url}}
-                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" />
-                {{/if}}
+                {{#if media}}
+                {{!-- If media array exists, render items from it --}}
                 {{#each media}}
                 {{#eq type "image"}}
                 <img src="{{url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{url}}', '{{title}}')" />
@@ -42,6 +41,12 @@
                     {{/eq}}
                 {{/eq}}
                 {{/each}}
+                {{else}}
+                {{!-- Only show image_url if media array is empty --}}
+                {{#if image_url}}
+                <img src="{{image_url}}" alt="{{title}}" class="topic-image" onclick="window.openLightbox('{{image_url}}', '{{title}}')" />
+                {{/if}}
+                {{/if}}
             </div>
             {{/or}}
             

@@ -91,17 +91,33 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [isLocked, setIsLocked] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   
-  // Load persisted validation state on mount
+  // Load persisted JSON import data on mount
   useEffect(() => {
     const loadPersistedValidationState = async () => {
       if (storage && storage.isInitialized) {
         try {
-          const persistedValidation = await storage.getContent('json-validation-state')
-          if (persistedValidation) {
-            setValidationResult(persistedValidation)
-            // If we have a valid validation result, lock the input
-            if (persistedValidation.isValid) {
-              setIsLocked(true)
+          // Try to load the complete JSON import data
+          const jsonImportData = await storage.getContent('json-import-data')
+          if (jsonImportData) {
+            // Restore all state from the saved data
+            if (jsonImportData.rawJson) {
+              setJsonInput(jsonImportData.rawJson)
+            }
+            if (jsonImportData.validationResult) {
+              setValidationResult(jsonImportData.validationResult)
+            }
+            if (jsonImportData.isLocked !== undefined) {
+              setIsLocked(jsonImportData.isLocked)
+            }
+          } else {
+            // Fallback to old format for backward compatibility
+            const persistedValidation = await storage.getContent('json-validation-state')
+            if (persistedValidation) {
+              setValidationResult(persistedValidation)
+              // If we have a valid validation result, lock the input
+              if (persistedValidation.isValid) {
+                setIsLocked(true)
+              }
             }
           }
         } catch (error) {
@@ -113,12 +129,18 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     loadPersistedValidationState()
   }, [storage?.isInitialized])
   
-  // Persist validation state when it changes
+  // Persist validation state AND raw JSON when it changes
   useEffect(() => {
     const persistValidationState = async () => {
-      if (storage && storage.isInitialized && validationResult) {
+      if (storage && storage.isInitialized) {
         try {
-          await storage.saveContent('json-validation-state', validationResult)
+          // Save both the validation result and the raw JSON input
+          const jsonImportData = {
+            rawJson: jsonInput,
+            validationResult: validationResult,
+            isLocked: isLocked
+          }
+          await storage.saveContent('json-import-data', jsonImportData)
         } catch (error) {
           console.error('Error persisting validation state:', error)
         }
@@ -126,7 +148,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     }
     
     persistValidationState()
-  }, [validationResult, storage?.isInitialized])
+  }, [jsonInput, validationResult, isLocked, storage?.isInitialized])
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   

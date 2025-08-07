@@ -134,6 +134,8 @@ mod tests {
                             options: None,
                             correct_answer: "answer".to_string(),
                             explanation: Some("Explanation".to_string()),
+                            correct_feedback: None,
+                            incorrect_feedback: None,
                         }],
                     }),
                     ..Default::default()

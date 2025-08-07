@@ -4,6 +4,250 @@
 (function() {
     'use strict';
     
+    // SafeSCORM Wrapper - Handles all SCORM API calls with error protection
+    const SafeSCORM = {
+        api: null,
+        initialized: false,
+        available: false,
+        
+        // Initialize the SCORM API wrapper
+        init: function() {
+            try {
+                this.api = this.findAPI(window);
+                this.available = !!this.api;
+                
+                if (this.available) {
+                    console.log('[SafeSCORM] API found, attempting initialization');
+                    
+                    // Try to initialize but don't require success
+                    try {
+                        const result = this.api.LMSInitialize('');
+                        console.log('[SafeSCORM] LMSInitialize result:', result);
+                        
+                        // Even if it throws an error, we might still be able to use the API
+                        if (result === 'true' || result === true) {
+                            console.log('[SafeSCORM] Standard initialization successful');
+                        }
+                    } catch (e) {
+                        console.warn('[SafeSCORM] LMSInitialize error (may be just logging issue):', e.message);
+                        // Don't give up - the API might still work!
+                    }
+                    
+                    // Test if the API is actually functional by trying a simple operation
+                    try {
+                        // Try to get a value - this should work even if init "failed"
+                        const testValue = this.api.LMSGetValue('cmi.core.student_name');
+                        console.log('[SafeSCORM] API functionality test passed, got:', testValue || '(empty)');
+                        
+                        // If we got here without throwing, the API is working!
+                        this.initialized = true;
+                        this.available = true;
+                        
+                        // Try to set initial status (but don't fail if it doesn't work)
+                        try {
+                            this.api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+                            this.api.LMSCommit('');
+                        } catch (statusError) {
+                            console.log('[SafeSCORM] Could not set initial status (non-critical)');
+                        }
+                        
+                    } catch (testError) {
+                        // If even basic GetValue fails, check if it's just UpdateLog
+                        if (testError.message && testError.message.includes('UpdateLog')) {
+                            console.log('[SafeSCORM] API test hit UpdateLog error - assuming API is functional');
+                            this.initialized = true;
+                            this.available = true;
+                        } else {
+                            console.error('[SafeSCORM] API functionality test failed:', testError);
+                            this.available = false;
+                            this.initialized = false;
+                        }
+                    }
+                } else {
+                    console.warn('[SafeSCORM] No SCORM API found - running in standalone mode');
+                }
+            } catch (e) {
+                console.error('[SafeSCORM] Unexpected error during initialization:', e);
+                this.available = false;
+            }
+            
+            console.log('[SafeSCORM] Final state - Available:', this.available, 'Initialized:', this.initialized);
+            return this.initialized;
+        },
+        
+        // Find SCORM API in window hierarchy
+        findAPI: function(win) {
+            let attempts = 0;
+            while ((!win.API && !win.API_1484_11) && (win.parent) && (win.parent != win) && (attempts <= 7)) {
+                attempts++;
+                win = win.parent;
+            }
+            return win.API || win.API_1484_11;
+        },
+        
+        // Safe wrapper for LMSGetValue
+        getValue: function(element) {
+            if (!this.available || !this.api) return '';
+            
+            try {
+                const value = this.api.LMSGetValue(element);
+                return value || '';
+            } catch (e) {
+                // Ignore UpdateLog errors - they're not real failures
+                if (e.message && e.message.includes('UpdateLog')) {
+                    // Return empty string but don't log as error
+                    return '';
+                }
+                console.warn('[SafeSCORM] GetValue error for', element, ':', e.message);
+                return '';
+            }
+        },
+        
+        // Safe wrapper for LMSSetValue with UpdateLog error handling
+        setValue: function(element, value) {
+            if (!this.api) {
+                console.log('[SafeSCORM] Skipping setValue - No API object');
+                return false;
+            }
+            
+            try {
+                // Convert value to string as required by SCORM
+                const stringValue = String(value);
+                const result = this.api.LMSSetValue(element, stringValue);
+                
+                if (result === 'true' || result === true) {
+                    return true;
+                } else {
+                    // Check if it's just an UpdateLog error
+                    const errorCode = this.getLastError();
+                    if (errorCode === '0' || errorCode === 0) {
+                        // No real error, just logging issue
+                        return true;
+                    }
+                    console.warn('[SafeSCORM] SetValue failed for', element, '=', stringValue);
+                    return false;
+                }
+            } catch (e) {
+                // Special handling for UpdateLog errors
+                if (e.message && e.message.includes('UpdateLog')) {
+                    console.log('[SafeSCORM] Ignoring UpdateLog error, continuing...');
+                    return true; // Assume success if only logging failed
+                }
+                console.warn('[SafeSCORM] SetValue error for', element, ':', e.message);
+                return false;
+            }
+        },
+        
+        // Safe wrapper for LMSCommit
+        commit: function() {
+            if (!this.api) return false;
+            
+            try {
+                const result = this.api.LMSCommit('');
+                return result === 'true' || result === true;
+            } catch (e) {
+                if (e.message && e.message.includes('UpdateLog')) {
+                    console.log('[SafeSCORM] Ignoring UpdateLog error on commit');
+                    return true;
+                }
+                console.warn('[SafeSCORM] Commit error:', e.message);
+                return false;
+            }
+        },
+        
+        // Safe wrapper for LMSFinish
+        finish: function() {
+            if (!this.api) return false;
+            
+            try {
+                const result = this.api.LMSFinish('');
+                this.initialized = false;
+                return result === 'true' || result === true;
+            } catch (e) {
+                if (e.message && e.message.includes('UpdateLog')) {
+                    console.log('[SafeSCORM] Ignoring UpdateLog error on finish');
+                    return true;
+                }
+                console.warn('[SafeSCORM] Finish error:', e.message);
+                return false;
+            }
+        },
+        
+        // Get last error code
+        getLastError: function() {
+            if (!this.available) return '0';
+            
+            try {
+                return this.api.LMSGetLastError() || '0';
+            } catch (e) {
+                return '0';
+            }
+        },
+        
+        // Get error string
+        getErrorString: function(errorCode) {
+            if (!this.available) return '';
+            
+            try {
+                return this.api.LMSGetErrorString(errorCode) || '';
+            } catch (e) {
+                return '';
+            }
+        },
+        
+        // Set score with full error handling
+        setScore: function(score) {
+            console.log('[SafeSCORM] Setting score:', score);
+            
+            let success = false;
+            
+            // Try multiple approaches for maximum compatibility
+            const approaches = [
+                // Approach 1: Decimal format with proper order
+                () => {
+                    this.setValue('cmi.core.score.min', '0.00');
+                    this.setValue('cmi.core.score.max', '100.00');
+                    this.setValue('cmi.core.score.raw', score.toFixed(2));
+                    this.commit();
+                },
+                // Approach 2: Integer format
+                () => {
+                    this.setValue('cmi.core.score.min', '0');
+                    this.setValue('cmi.core.score.max', '100');
+                    this.setValue('cmi.core.score.raw', Math.round(score).toString());
+                    this.commit();
+                },
+                // Approach 3: Raw score only
+                () => {
+                    this.setValue('cmi.core.score.raw', Math.round(score).toString());
+                    this.commit();
+                }
+            ];
+            
+            for (let i = 0; i < approaches.length; i++) {
+                try {
+                    approaches[i]();
+                    const errorCode = this.getLastError();
+                    if (errorCode === '0' || errorCode === 0) {
+                        console.log('[SafeSCORM] Score set successfully using approach', i + 1);
+                        success = true;
+                        break;
+                    }
+                } catch (e) {
+                    console.log('[SafeSCORM] Approach', i + 1, 'failed:', e.message);
+                }
+            }
+            
+            return success;
+        }
+    };
+    
+    // Initialize SafeSCORM
+    SafeSCORM.init();
+    
+    // Expose SafeSCORM globally for other scripts
+    window.SafeSCORM = SafeSCORM;
+    
     // Session time tracking
     const sessionStartTime = new Date();
     
@@ -21,74 +265,28 @@
         return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)}.${pad(centiseconds, 2)}`;
     }
     
-    // SCORM API Detection and Initialization
-    function findSCORMAPI(win) {
-        let attempts = 0;
-        while ((!win.API && !win.API_1484_11) && (win.parent) && (win.parent != win) && (attempts <= 7)) {
-            attempts++;
-            win = win.parent;
-        }
-        // Return whichever API was found (SCORM 1.2 or 2004)
-        return win.API || win.API_1484_11;
-    }
+    // Set initial lesson location
+    SafeSCORM.setValue('cmi.core.lesson_location', 'course-start');
+    SafeSCORM.commit();
     
-    // Initialize SCORM API
-    window.API = window.API || findSCORMAPI(window);
-    if (!window.API) {
-        console.warn('[SCORM] No LMS API found - running in standalone mode');
-    } else {
-        console.log('[SCORM] LMS API detected successfully');
-        // Initialize lesson
-        try {
-            window.API.LMSInitialize('');
-            window.API.LMSSetValue('cmi.core.lesson_status', 'incomplete');
-            window.API.LMSCommit('');
-        } catch (e) {
-            console.error('[SCORM] Failed to initialize:', e);
+    // Set up beforeunload handler to properly close SCORM session
+    window.addEventListener('beforeunload', function(e) {
+        console.log('[SCORM] Page unloading - saving data');
+        
+        // Set session time
+        const sessionTime = window.getSessionTime();
+        SafeSCORM.setValue('cmi.core.session_time', sessionTime);
+        console.log('[SCORM] Session time:', sessionTime);
+        
+        // Save current location
+        if (window.currentPage) {
+            SafeSCORM.setValue('cmi.core.lesson_location', window.currentPage);
         }
         
-        // Initialize lesson location
-        try {
-            window.API.LMSSetValue('cmi.core.lesson_location', 'course-start');
-            window.API.LMSCommit('');
-        } catch (e) {
-            console.warn('[SCORM] Could not set initial lesson location:', e);
-        }
-        
-        // Set up beforeunload handler to properly close SCORM session
-        window.addEventListener('beforeunload', function(e) {
-            console.log('[SCORM] Page unloading - saving data');
-            try {
-                // Set session time
-                const sessionTime = window.getSessionTime();
-                window.API.LMSSetValue('cmi.core.session_time', sessionTime);
-                console.log('[SCORM] Session time:', sessionTime);
-                
-                // Save current location
-                if (window.currentPage) {
-                    window.API.LMSSetValue('cmi.core.lesson_location', window.currentPage);
-                }
-                
-                // Try to save any pending data
-                window.API.LMSCommit('');
-                
-                // Use sendBeacon for modern browsers (works even when page is closing)
-                if (navigator.sendBeacon && window.API) {
-                    const data = new FormData();
-                    data.append('action', 'scorm_finish');
-                    data.append('session_id', window.API.LMSGetValue('cmi.core.session_id') || '');
-                    
-                    // This will complete even if page closes
-                    navigator.sendBeacon(window.location.href, data);
-                }
-                
-                // Traditional approach as fallback
-                window.API.LMSFinish('');
-            } catch (error) {
-                console.error('[SCORM] Error during unload:', error);
-            }
-        });
-    }
+        // Commit and finish
+        SafeSCORM.commit();
+        SafeSCORM.finish();
+    });
     
     // Initialize navigation state
     window.currentPage = window.currentPage || 'welcome';
@@ -367,9 +565,6 @@
             setTimeout(() => {
                 alert.remove();
             }, 5000);
-        } else {
-            // Fallback to standard alert
-            alert(message);
         }
     }
     
@@ -669,7 +864,19 @@
         });
         
         if (!allAnswered) {
-            alert('Please answer all questions before submitting.');
+            // Show custom alert
+            const alertContainer = document.getElementById('scorm-alert-container');
+            if (alertContainer) {
+                const alert = document.createElement('div');
+                alert.className = 'scorm-alert scorm-alert-warning';
+                alert.textContent = 'Please answer all questions before submitting.';
+                alertContainer.appendChild(alert);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    alert.remove();
+                }, 5000);
+            }
             return;
         }
         
@@ -999,18 +1206,16 @@
             lastAnswers: {}
         };
         
-        if (window.API) {
-            try {
-                const suspendData = window.API.LMSGetValue('cmi.suspend_data');
-                if (suspendData) {
-                    const data = JSON.parse(suspendData);
-                    window.assessmentData.attempts = data.assessmentAttempts || 0;
-                    window.assessmentData.scores = data.attemptHistory || [];
-                    window.assessmentData.lastAnswers = data.lastAnswers || {};
-                }
-            } catch (e) {
-                console.log('[SCORM Navigation] No previous assessment data found');
+        try {
+            const suspendData = SafeSCORM.getValue('cmi.suspend_data');
+            if (suspendData) {
+                const data = JSON.parse(suspendData);
+                window.assessmentData.attempts = data.assessmentAttempts || 0;
+                window.assessmentData.scores = data.attemptHistory || [];
+                window.assessmentData.lastAnswers = data.lastAnswers || {};
             }
+        } catch (e) {
+            console.log('[SCORM Navigation] No previous assessment data found');
         }
     }
     
@@ -1138,98 +1343,66 @@
         window.assessmentData.lastAnswers = currentAnswers;
         
         if (answered < questions.length) {
-            alert('Please answer all questions before submitting.');
+            // Decrement attempt counter since this isn't a valid submission
+            window.assessmentData.attempts--;
+            
+            // Show custom alert
+            const alertContainer = document.getElementById('scorm-alert-container');
+            if (alertContainer) {
+                const alert = document.createElement('div');
+                alert.className = 'scorm-alert scorm-alert-warning';
+                alert.innerHTML = `
+                    <strong>Incomplete Assessment</strong><br>
+                    Please answer all questions before submitting. You have answered ${answered} out of ${questions.length} questions.
+                `;
+                alertContainer.appendChild(alert);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (alert.parentElement) {
+                        alert.remove();
+                    }
+                }, 5000);
+            }
             return;
         }
         
         const percentage = Math.round((score / questions.length) * 100);
         console.log('[SCORM Navigation] Assessment score:', percentage);
         
-        // Report score to SCORM with Moodle-specific sequence
-        if (window.API) {
-            try {
-                console.log('[SCORM] Starting Moodle-specific score submission');
-                console.log('[SCORM] Score to report:', percentage);
-                
-                // CRITICAL FOR MOODLE: Set lesson location first
-                const locationResult = window.API.LMSSetValue('cmi.core.lesson_location', 'assessment-completed');
-                console.log('[SCORM] Set lesson_location result:', locationResult);
-                
-                // Handle zero score bug in Moodle
-                const scoreString = percentage === 0 ? '0.0' : percentage.toString();
-                
-                // MOODLE SEQUENCE: Set raw score BEFORE min/max
-                let rawResult = window.API.LMSSetValue('cmi.core.score.raw', scoreString);
-                console.log('[SCORM] Set score.raw result:', rawResult);
-                
-                // Small delay for Moodle processing
-                await new Promise(resolve => setTimeout(resolve, 200));
-                
-                // Now set min/max
-                const minResult = window.API.LMSSetValue('cmi.core.score.min', '0');
-                console.log('[SCORM] Set score.min result:', minResult);
-                
-                const maxResult = window.API.LMSSetValue('cmi.core.score.max', '100');
-                console.log('[SCORM] Set score.max result:', maxResult);
-                
-                // Single commit after all values are set
-                let commitResult = window.API.LMSCommit('');
-                console.log('[SCORM] Commit result:', commitResult);
-                
-                // Wait before verification
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Verify score was set (may still return empty in Moodle)
-                try {
-                    const savedScore = window.API.LMSGetValue('cmi.core.score.raw');
-                    console.log('[SCORM] Verification - saved score:', savedScore || '(empty - normal for Moodle)');
-                    
-                    // If empty, try setting again with different approach
-                    if (!savedScore || savedScore === '') {
-                        console.log('[SCORM] Moodle returned empty score, trying alternative approach');
-                        
-                        // Alternative: Set score as scaled value
-                        const scaledScore = Math.round((percentage / 100) * 100);
-                        window.API.LMSSetValue('cmi.core.score.raw', scaledScore.toString());
-                        window.API.LMSCommit('');
-                    }
-                } catch (verifyError) {
-                    console.warn('[SCORM] Score verification error (normal for some Moodle versions):', verifyError);
-                }
-                
-                // Double-check with error code
-                const errorCode = window.API.LMSGetLastError();
-                if (errorCode !== '0' && errorCode !== 0) {
-                    console.warn('[SCORM] LMS reported error:', errorCode, window.API.LMSGetErrorString(errorCode));
-                }
-            } catch (e) {
-                console.error('[SCORM] Error reporting score:', e);
-                // Try simplified fallback
-                try {
-                    console.log('[SCORM] Attempting simplified score submission');
-                    window.API.LMSSetValue('cmi.core.score.raw', percentage.toString());
-                    window.API.LMSSetValue('cmi.core.lesson_location', 'assessment');
-                    window.API.LMSCommit('');
-                } catch (fallbackError) {
-                    console.error('[SCORM] Fallback also failed:', fallbackError);
-                }
-            }
-        } else {
-            console.warn('[SCORM] No API available for score reporting');
+        // Report score to SCORM using SafeSCORM wrapper
+        console.log('[SCORM] Starting score submission');
+        console.log('[SCORM] Score to report:', percentage);
+        
+        // Set lesson location
+        SafeSCORM.setValue('cmi.core.lesson_location', 'assessment-completed');
+        SafeSCORM.commit();
+        
+        // Use SafeSCORM's built-in score setting with multiple approaches
+        const scoreSet = SafeSCORM.setScore(percentage);
+        
+        if (!scoreSet) {
+            console.warn('[SCORM] Score may not have been saved to LMS');
+        }
+        
+        // Store score locally as fallback
+        try {
+            localStorage.setItem('lastAssessmentScore', percentage.toString());
+            localStorage.setItem('lastAssessmentDate', new Date().toISOString());
+        } catch (e) {
+            console.log('[SCORM] Could not store score locally');
         }
         
         // Save assessment data to SCORM
         window.assessmentData.scores.push(percentage);
-        if (window.API) {
-            const suspendData = JSON.stringify({
-                assessmentAttempts: window.assessmentData.attempts,
-                attemptHistory: window.assessmentData.scores,
-                lastAnswers: currentAnswers,
-                timestamp: new Date().toISOString()
-            });
-            window.API.LMSSetValue('cmi.suspend_data', suspendData);
-            window.API.LMSCommit('');
-        }
+        const suspendData = JSON.stringify({
+            assessmentAttempts: window.assessmentData.attempts,
+            attemptHistory: window.assessmentData.scores,
+            lastAnswers: currentAnswers,
+            timestamp: new Date().toISOString()
+        });
+        SafeSCORM.setValue('cmi.suspend_data', suspendData);
+        SafeSCORM.commit();
         
         // Don't hide submit button - allow resubmission
         const submitButton = document.querySelector('.submit-assessment');
@@ -1242,15 +1415,23 @@
             }
         }
         
-        // Show results section
+        // Show results section - CRITICAL: Must show regardless of SCORM errors
         const resultsDiv = document.getElementById('assessment-results');
         if (resultsDiv) {
+            console.log('[SCORM] Showing assessment results div');
             resultsDiv.style.display = 'block';
             
             // Update score display
             const scoreText = document.getElementById('score-percentage');
             if (scoreText) {
+                console.log('[SCORM] Updating score text to:', percentage + '%');
                 scoreText.textContent = `${percentage}%`;
+                // Force visibility
+                scoreText.style.display = 'block';
+                scoreText.style.visibility = 'visible';
+                scoreText.style.opacity = '1';
+            } else {
+                console.error('[SCORM] Score percentage element not found!');
             }
             
             // Update score circle
@@ -1281,18 +1462,9 @@
                 window.completedPages.add('assessment');
                 
                 // Update SCORM status to completed and passed
-                if (window.API) {
-                    try {
-                        // For SCORM 1.2, use 'passed' status (no cmi.success_status)
-                        window.API.LMSSetValue('cmi.core.lesson_status', 'passed');
-                        window.API.LMSCommit('');
-                        console.log('[SCORM] Assessment passed - status updated');
-                        
-                        // Don't set exit or call LMSFinish here - let user exit when ready
-                    } catch (e) {
-                        console.error('[SCORM] Error updating passed status:', e);
-                    }
-                }
+                SafeSCORM.setValue('cmi.core.lesson_status', 'passed');
+                SafeSCORM.commit();
+                console.log('[SCORM] Assessment passed - status updated');
             } else {
                 // Failed - show different messages based on attempt number
                 if (scoreMessage) {
@@ -1308,22 +1480,24 @@
                 if (completionMessage) completionMessage.style.display = 'none';
                 
                 // Update SCORM status - mark as failed
-                if (window.API) {
-                    try {
-                        // For SCORM 1.2, use 'failed' status when score is below passing
-                        window.API.LMSSetValue('cmi.core.lesson_status', 'failed');
-                        window.API.LMSCommit('');
-                        console.log('[SCORM] Assessment failed - status updated to failed');
-                        
-                        // Don't automatically finish on final attempt - user controls exit
-                    } catch (e) {
-                        console.error('[SCORM] Error updating failed status:', e);
-                    }
-                }
+                SafeSCORM.setValue('cmi.core.lesson_status', 'failed');
+                SafeSCORM.commit();
+                console.log('[SCORM] Assessment failed - status updated to failed');
             }
         } else {
-            // Fallback to alert if results div not found
-            alert(`Assessment complete! Your score: ${percentage}%${percentage >= passingScore ? ' - Passed!' : ' - Failed'}`);
+            // Fallback to custom alert if results div not found
+            const alertContainer = document.getElementById('scorm-alert-container');
+            if (alertContainer) {
+                const alert = document.createElement('div');
+                alert.className = percentage >= passingScore ? 'scorm-alert scorm-alert-success' : 'scorm-alert scorm-alert-error';
+                alert.textContent = `Assessment complete! Your score: ${percentage}%${percentage >= passingScore ? ' - Passed!' : ' - Failed'}`;
+                alertContainer.appendChild(alert);
+                
+                // Auto-remove after 8 seconds
+                setTimeout(() => {
+                    alert.remove();
+                }, 8000);
+            }
         }
         
         // Completion tracking already handled above

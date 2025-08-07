@@ -4,7 +4,7 @@ import { FileStorage } from '../services/FileStorage';
 import { isTauriEnvironment } from '../config/environment';
 
 // Use real FileStorage in Tauri environment, MockFileStorage for browser
-const fileStorage = isTauriEnvironment() ? new FileStorage() : new MockFileStorage();
+const fileStorage = isTauriEnvironment() ? new FileStorage() : new MockFileStorage() as any as FileStorage;
 
 export function usePersistentStorage() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -262,5 +262,6 @@ export function usePersistentStorage() {
     setProjectsDirectory,
     migrateFromLocalStorage,
     clearRecentFilesCache,
+    fileStorage,  // Expose the FileStorage instance
   };
 }

@@ -3,6 +3,14 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
 use chrono::{DateTime, Utc};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
+
+// Global mutex map for file locking
+static FILE_LOCKS: Lazy<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProjectFile {
@@ -13,6 +21,19 @@ pub struct ProjectFile {
     pub media: MediaData,
     pub audio_settings: AudioSettings,
     pub scorm_config: ScormConfig,
+    // New fields for complete data persistence
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_seed_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_import_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activities_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_enhancements: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_edits: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_step: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -86,11 +107,33 @@ pub fn get_projects_directory() -> Result<PathBuf, String> {
     crate::settings::get_projects_directory()
 }
 
-/// Save a project file to disk
+/// Save a project file to disk with file locking
 pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), String> {
+    // Get or create a lock for this specific file
+    let file_path_buf = file_path.to_path_buf();
+    let file_lock = {
+        let mut locks = FILE_LOCKS.lock().map_err(|e| format!("Failed to acquire lock map: {}", e))?;
+        locks.entry(file_path_buf.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+    
+    // Acquire the lock for this specific file
+    let _guard = match file_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            // If the lock is poisoned, we still want to save, so we recover
+            eprintln!("Warning: Lock was poisoned for file: {}", file_path.display());
+            poisoned.into_inner()
+        }
+    };
+    
     // Update last modified timestamp
     let mut project = project.clone();
     project.project.last_modified = Utc::now();
+    
+    // Ensure data consistency before saving
+    ensure_data_consistency(&mut project);
     
     // Serialize to pretty JSON
     let json = serde_json::to_string_pretty(&project)
@@ -102,12 +145,27 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
             .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
     
-    // Write to file
-    let mut file = fs::File::create(file_path)
-        .map_err(|e| format!("Failed to create file: {}", e))?;
+    // Write to a temporary file first, then rename (atomic operation)
+    let temp_path = file_path.with_extension("scormproj.tmp");
     
-    file.write_all(json.as_bytes())
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    {
+        let mut file = fs::File::create(&temp_path)
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        
+        file.write_all(json.as_bytes())
+            .map_err(|e| format!("Failed to write temp file: {}", e))?;
+        
+        file.sync_all()
+            .map_err(|e| format!("Failed to sync temp file: {}", e))?;
+    }
+    
+    // Atomic rename to prevent partial writes
+    fs::rename(&temp_path, file_path)
+        .map_err(|e| {
+            // Clean up temp file if rename fails
+            let _ = fs::remove_file(&temp_path);
+            format!("Failed to rename temp file to final location: {}", e)
+        })?;
     
     Ok(())
 }
@@ -203,6 +261,37 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Ensure data consistency between course_seed_data and course_data
+fn ensure_data_consistency(project: &mut ProjectFile) {
+    // If we have course_seed_data with customTopics, sync them to course_data.topics
+    if let Some(seed_data) = &project.course_seed_data {
+        if let Some(custom_topics) = seed_data.get("customTopics").and_then(|t| t.as_array()) {
+            let topics: Vec<String> = custom_topics
+                .iter()
+                .filter_map(|t| t.as_str())
+                .map(|s| s.to_string())
+                .collect();
+            
+            project.course_data.topics = topics.clone();
+            
+            // Also update course title if present
+            if let Some(title) = seed_data.get("courseTitle").and_then(|t| t.as_str()) {
+                project.course_data.title = title.to_string();
+            }
+            
+            // Update difficulty if present
+            if let Some(difficulty) = seed_data.get("difficulty").and_then(|d| d.as_u64()) {
+                project.course_data.difficulty = difficulty as u8;
+            }
+            
+            // Update template if present  
+            if let Some(template) = seed_data.get("template").and_then(|t| t.as_str()) {
+                project.course_data.template = template.to_string();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,6 +332,12 @@ mod tests {
                 completion_criteria: "all_pages".to_string(),
                 passing_score: 80,
             },
+            course_seed_data: None,
+            json_import_data: None,
+            activities_data: None,
+            media_enhancements: None,
+            content_edits: None,
+            current_step: None,
         }
     }
 

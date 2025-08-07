@@ -1,13 +1,37 @@
 use crate::scorm::{manifest, package};
 use crate::project_storage::{
-    ProjectFile,
+    ProjectFile, ProjectMetadata,
     save_project_file, load_project_file, list_project_files, delete_project_file, get_projects_directory
 };
 use crate::api_keys::{ApiKeys, save_api_keys as save_keys, load_api_keys as load_keys, delete_api_keys as delete_keys};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use url::Url;
 use std::net::IpAddr;
+use std::fs::OpenOptions;
+use std::io::Write;
+use chrono::Local;
+
+// Simple file logger for debugging
+pub fn log_debug(message: &str) {
+    let log_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".scorm-builder")
+        .join("logs");
+    
+    let _ = std::fs::create_dir_all(&log_dir);
+    
+    let log_file = log_dir.join(format!("rust-debug-{}.log", Local::now().format("%Y-%m-%d")));
+    
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)
+    {
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let _ = writeln!(file, "[{}] {}", timestamp, message);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateManifestRequest {
@@ -99,8 +123,31 @@ fn validate_image_url(url_str: &str) -> Result<Url, String> {
     
     // Block private IP ranges
     if let Ok(ip) = host.parse::<IpAddr>() {
-        if ip.is_loopback() || ip.is_private() || ip.is_link_local() {
-            return Err("Access to private IP addresses is not allowed".to_string());
+        if ip.is_loopback() {
+            return Err("Access to loopback addresses is not allowed".to_string());
+        }
+        
+        // Check for private IP ranges manually
+        match ip {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
+                // Check for private IPv4 ranges
+                if (octets[0] == 10) || // 10.0.0.0/8
+                   (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) || // 172.16.0.0/12
+                   (octets[0] == 192 && octets[1] == 168) || // 192.168.0.0/16
+                   (octets[0] == 169 && octets[1] == 254) // 169.254.0.0/16 (link-local)
+                {
+                    return Err("Access to private IP addresses is not allowed".to_string());
+                }
+            }
+            IpAddr::V6(ipv6) => {
+                // Check for IPv6 private/link-local ranges
+                if ipv6.segments()[0] & 0xfe00 == 0xfc00 || // Unique local addresses
+                   ipv6.segments()[0] & 0xffc0 == 0xfe80    // Link-local addresses
+                {
+                    return Err("Access to private IP addresses is not allowed".to_string());
+                }
+            }
         }
     }
     
@@ -174,22 +221,71 @@ fn validate_package_output_path(path_str: &str) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub async fn save_project(project_data: ProjectFile, file_path: String) -> Result<(), String> {
+    log_debug(&format!("save_project called with path: {}", file_path));
+    
+    // Log what we're saving
+    if let Some(ref seed_data) = project_data.course_seed_data {
+        log_debug(&format!("Saving project with course_seed_data: {}", seed_data));
+    } else {
+        log_debug("Saving project WITHOUT course_seed_data");
+    }
+    
     let path = validate_project_path(&file_path)?;
-    save_project_file(&project_data, &path).await
+    save_project_file(&project_data, &path)?;
+    
+    log_debug("Project saved successfully");
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
+    log_debug(&format!("load_project called with path: {}", file_path));
+    
     let path = validate_project_path(&file_path)?;
-    load_project_file(&path).await
+    let project = load_project_file(&path)?;
+    
+    // Log what we're loading
+    if let Some(ref seed_data) = project.course_seed_data {
+        log_debug(&format!("Loaded project with course_seed_data: {}", seed_data));
+    } else {
+        log_debug("Loaded project WITHOUT course_seed_data");
+    }
+    
+    log_debug(&format!("Project title from course_data: '{}'", project.course_data.title));
+    
+    Ok(project)
 }
 
 #[tauri::command]
-pub async fn list_projects() -> Result<Vec<String>, String> {
+pub async fn list_projects() -> Result<Vec<ProjectMetadata>, String> {
+    log_debug("list_projects called");
+    
     let files = list_project_files()?;
-    Ok(files.into_iter()
-        .filter_map(|p| p.to_str().map(String::from))
-        .collect())
+    let mut projects = Vec::new();
+    
+    for path in files {
+        log_debug(&format!("Processing project file: {}", path.display()));
+        
+        match load_project_file(&path) {
+            Ok(project_file) => {
+                // Return only the metadata with the file path included
+                let mut metadata = project_file.project.clone();
+                metadata.path = Some(path.to_string_lossy().to_string());
+                
+                log_debug(&format!("Loaded project: id={}, name='{}', path='{}'", 
+                    metadata.id, metadata.name, metadata.path.as_ref().unwrap_or(&String::from("unknown"))));
+                
+                projects.push(metadata);
+            }
+            Err(e) => {
+                log_debug(&format!("Failed to load project file '{}': {}", path.display(), e));
+                // Continue processing other files even if one fails
+            }
+        }
+    }
+    
+    log_debug(&format!("Returning {} projects", projects.len()));
+    Ok(projects)
 }
 
 #[tauri::command]
@@ -259,7 +355,7 @@ pub async fn append_to_log(content: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn save_api_keys(api_keys: ApiKeys) -> Result<(), String> {
-    save_keys(&api_keys)
+    save_keys(api_keys)
 }
 
 #[tauri::command]

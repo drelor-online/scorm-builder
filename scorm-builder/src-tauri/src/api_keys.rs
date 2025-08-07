@@ -61,7 +61,8 @@ fn get_or_create_key() -> Result<Vec<u8>, String> {
     }
 }
 
-#[tauri::command]
+// Commented out - using secure version from commands_secure.rs
+// #[tauri::command]
 pub fn save_api_keys(api_keys: ApiKeys) -> Result<(), String> {
     // Serialize API keys to JSON
     let json = serde_json::to_string(&api_keys)
@@ -100,7 +101,8 @@ pub fn save_api_keys(api_keys: ApiKeys) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+// Commented out - using secure version from commands_secure.rs
+// #[tauri::command]
 pub fn load_api_keys() -> Result<ApiKeys, String> {
     let path = get_api_keys_path()?;
     
@@ -142,7 +144,8 @@ pub fn load_api_keys() -> Result<ApiKeys, String> {
     Ok(api_keys)
 }
 
-#[tauri::command]
+// Commented out - using secure version from commands_secure.rs
+// #[tauri::command]
 pub fn delete_api_keys() -> Result<(), String> {
     let path = get_api_keys_path()?;
     

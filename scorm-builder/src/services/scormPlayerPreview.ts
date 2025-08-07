@@ -14,14 +14,14 @@ export function generateSCORMPlayerPreviewHTML(
         title: 'Welcome',
         content: courseContent.welcomePage.content,
         narration: courseContent.welcomePage.narration,
-        media: []
+        media: courseContent.welcomePage.media || []
       }
     } else if (currentPageId === 'objectives') {
       return {
         title: 'Learning Objectives',
         content: courseContent.learningObjectivesPage.content,
         narration: courseContent.learningObjectivesPage.narration,
-        media: []
+        media: courseContent.learningObjectivesPage.media || []
       }
     } else if (currentPageId === 'assessment') {
       // Show assessment questions
@@ -556,6 +556,33 @@ export function generateSCORMPlayerPreviewHTML(
                         <img src="${sanitizeHTML(media.url)}" alt="${sanitizeHTML(media.title || 'Course image')}" />
                       </div>
                     `
+                  } else if (media.type === 'video') {
+                    // Check if it's a YouTube video
+                    if (media.embedUrl || (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be')))) {
+                      const embedUrl = media.embedUrl || media.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')
+                      return `
+                        <div class="visual-container">
+                          <iframe 
+                            src="${sanitizeHTML(embedUrl)}" 
+                            title="${sanitizeHTML(media.title || 'Video')}"
+                            frameborder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen
+                            style="width: 100%; height: 100%; min-height: 300px;">
+                          </iframe>
+                        </div>
+                      `
+                    } else {
+                      // Regular video
+                      return `
+                        <div class="visual-container">
+                          <video controls style="width: 100%; height: auto;">
+                            <source src="${sanitizeHTML(media.url)}" type="video/mp4">
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      `
+                    }
                   }
                   return ''
                 }).join('') : ''}

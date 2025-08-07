@@ -14,12 +14,52 @@ export class MediaUrlService {
     return MediaUrlService.instance
   }
   
+  private extractNumericProjectId(projectIdOrPath: string): string {
+    if (!projectIdOrPath) return ''
+    
+    // If it's a file path like "...\ProjectName_1234567890.scormproj"
+    if (projectIdOrPath.includes('.scormproj')) {
+      const match = projectIdOrPath.match(/_(\d+)\.scormproj$/)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    // If it's a folder path like "C:\...\SCORM Projects\1754510569416"
+    if (projectIdOrPath.includes('\\') || projectIdOrPath.includes('/')) {
+      const parts = projectIdOrPath.split(/[\\/]/)
+      const lastPart = parts[parts.length - 1]
+      // If the last part is all digits, use it
+      if (/^\d+$/.test(lastPart)) {
+        return lastPart
+      }
+    }
+    
+    // If it's already just a numeric ID
+    if (/^\d+$/.test(projectIdOrPath)) {
+      return projectIdOrPath
+    }
+    
+    // Fallback: return as is
+    logger.warn('[MediaUrlService] Could not extract numeric ID from:', projectIdOrPath)
+    return projectIdOrPath
+  }
+  
   async getMediaUrl(projectId: string, mediaId: string): Promise<string | null> {
-    const cacheKey = `${projectId}/${mediaId}`
+    // VERSION MARKER: v2.0.2 - Fixed asset URL generation on Windows
+    logger.info('[MediaUrlService v2.0.2] Getting media URL for', mediaId, 'in project', projectId)
+    
+    // Extract numeric project ID from any format
+    const numericProjectId = this.extractNumericProjectId(projectId)
+    logger.info('[MediaUrlService v2.0.2] Extracted numeric project ID:', numericProjectId, 'from:', projectId)
+    
+    const cacheKey = `${numericProjectId}/${mediaId}`
     
     // Check cache first
     if (this.urlCache.has(cacheKey)) {
-      return this.urlCache.get(cacheKey)!
+      const cachedUrl = this.urlCache.get(cacheKey)!
+      logger.info('[MediaUrlService v2.0.2] Using cached URL for', mediaId)
+      return cachedUrl
     }
     
     try {
@@ -27,15 +67,15 @@ export class MediaUrlService {
       let isSvg = false
       let mediaData: any = null
       try {
-        // Use get_media to retrieve both data and metadata
+        // Use get_media to retrieve both data and metadata - use numeric project ID
         mediaData = await invoke<any>('get_media', {
-          projectId: projectId,
+          projectId: numericProjectId,
           mediaId: mediaId
         })
         isSvg = mediaData?.metadata?.mime_type === 'image/svg+xml'
       } catch (e) {
         // Media not found
-        logger.error('[MediaUrlService] Failed to get media:', e)
+        logger.error('[MediaUrlService v2.0.2] Failed to get media:', e)
         return null
       }
       
@@ -61,26 +101,26 @@ export class MediaUrlService {
         }
       }
       
-      // For non-SVG files, use the asset protocol
-      const projectsDir = await invoke<string>('get_projects_dir')
+      // FIX: Manually construct the asset URL to avoid issues with convertFileSrc on Windows.
+      // The asset protocol should be rooted at the main projects directory.
       
-      // Use Tauri's path join to handle platform-specific separators
-      const mediaDir = await join(projectsDir, projectId, 'media')
-      const filePath = await join(mediaDir, `${mediaId}.bin`)
+      // 1. Construct the relative path to the media file using the numeric project ID.
+      const relativePath = await join(numericProjectId, 'media', `${mediaId}.bin`);
       
-      // We already verified the file exists by successfully calling get_media above
-      // Convert to a URL that Tauri can serve
-      const url = convertFileSrc(filePath)
+      // 2. Normalize the path for URL usage (replace backslashes with forward slashes).
+      const urlPath = relativePath.replace(/\\/g, '/');
       
+      // 3. Create the final URL using the https://asset.localhost convention.
+      const url = `https://asset.localhost/${urlPath}`;
+
       // Cache the URL
       this.urlCache.set(cacheKey, url)
       
-      logger.info('[MediaUrlService] Generated URL for', mediaId, ':', url)
-      logger.info('[MediaUrlService] File path:', filePath)
+      logger.info('[MediaUrlService v2.0.2] Generated URL for', mediaId, ':', url)
       
       return url
     } catch (error) {
-      logger.error('[MediaUrlService] Failed to generate URL:', error)
+      logger.error('[MediaUrlService v2.0.2] Failed to generate URL:', error)
       return null
     }
   }

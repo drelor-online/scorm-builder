@@ -335,6 +335,8 @@ mod tests {
                             options: None,
                             correct_answer: "Paris".to_string(),
                             explanation: Some("Paris is the capital of France.".to_string()),
+                            correct_feedback: None,
+                            incorrect_feedback: None,
                         }],
                     }),
                     ..Default::default()

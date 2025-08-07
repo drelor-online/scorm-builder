@@ -789,4 +789,40 @@ export class AutomationUINavigator {
       this.pointerElement = null
     }
   }
+
+  // Alias methods for compatibility with fullWorkflowAutomation
+  async click(selector: string): Promise<void> {
+    return this.clickButton(selector)
+  }
+
+  async pressKey(key: string): Promise<void> {
+    const activeElement = document.activeElement as HTMLElement
+    if (!activeElement) return
+
+    const event = new KeyboardEvent('keydown', {
+      key,
+      code: `Key${key.toUpperCase()}`,
+      bubbles: true,
+      cancelable: true
+    })
+    activeElement.dispatchEvent(event)
+    
+    await this.delay(50)
+    
+    activeElement.dispatchEvent(new KeyboardEvent('keyup', {
+      key,
+      code: `Key${key.toUpperCase()}`,
+      bubbles: true,
+      cancelable: true
+    }))
+  }
+
+  async executeScript(script: () => void): Promise<void> {
+    script()
+    await this.delay(100)
+  }
+
+  async waitForModal(timeout: number = 5000): Promise<void> {
+    return this.waitForModalToOpen(timeout)
+  }
 }

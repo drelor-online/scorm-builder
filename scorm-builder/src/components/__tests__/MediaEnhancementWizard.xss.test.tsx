@@ -1,9 +1,17 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '../../test/testProviders'
 import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { CourseContent } from '../../types/aiPrompt'
+import DOMPurify from 'dompurify'
+
+// Spy on DOMPurify to check if it's being called
+const sanitizeSpy = vi.spyOn(DOMPurify, 'sanitize')
 
 describe('MediaEnhancementWizard - XSS Protection', () => {
+  beforeEach(() => {
+    sanitizeSpy.mockClear()
+  })
+
   const mockCourseContent: CourseContent = {
     welcomePage: {
       id: 'welcome',
@@ -52,7 +60,10 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   }
 
   it('should sanitize script tags from content', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
+    
+    // Check that DOMPurify.sanitize was called for the content
+    expect(sanitizeSpy).toHaveBeenCalled()
     
     // Should not contain any script tags
     const scripts = container.querySelectorAll('script')
@@ -63,7 +74,7 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   })
 
   it('should remove dangerous event handlers', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Should not have onclick handlers
     const elementsWithOnclick = container.querySelectorAll('[onclick]')
@@ -71,7 +82,7 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   })
 
   it('should remove dangerous img onerror handlers', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Should not have onerror handlers
     const imagesWithOnerror = container.querySelectorAll('img[onerror]')
@@ -79,7 +90,7 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   })
 
   it('should remove dangerous iframes', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Should not have iframes with javascript: protocol
     const iframes = container.querySelectorAll('iframe')
@@ -89,7 +100,7 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   })
 
   it('should remove dangerous SVG elements', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
     
     // Should not have SVG elements with onload handlers
     const svgsWithOnload = container.querySelectorAll('svg[onload]')
@@ -97,11 +108,12 @@ describe('MediaEnhancementWizard - XSS Protection', () => {
   })
 
   it('should remove style tags that could hide content', () => {
-    render(<MediaEnhancementWizard {...defaultProps} />)
+    const { container } = render(<MediaEnhancementWizard {...defaultProps} />)
     
     // The welcome page has dangerous content with script tags and img onerror
     // Check that it contains safe content but not the dangerous parts
-    const contentArea = container.querySelector('[style*="line-height: 1.6"]')
+    const contentArea = container.querySelector('[style*="line-height: 1.5"]') || 
+                       container.querySelector('[style*="lineHeight"]')
     expect(contentArea).toBeTruthy()
     
     if (contentArea) {

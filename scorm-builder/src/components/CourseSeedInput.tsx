@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CourseSeedData, CourseTemplate, templateTopics } from '../types/course';
 import { PageLayout } from './PageLayout';
 import { TemplateEditor } from './TemplateEditor';
@@ -14,11 +14,14 @@ import {
   Flex,
   Modal
 } from './DesignSystem';
+import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
 import { useStorage } from '../contexts/PersistentStorageContext';
+import { debugLogger } from '../utils/ultraSimpleLogger';
 
 interface CourseSeedInputProps {
-  onSubmit: (data: CourseSeedData) => void;
+  // Make onSubmit return a Promise so we can await it
+  onSubmit: (data: CourseSeedData) => Promise<void>;
   onSettingsClick?: () => void;
   onSave?: (data?: CourseSeedData) => void;
   onHelp?: () => void;
@@ -89,7 +92,16 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   onStepClick,
   initialData
 }) => {
+  // VERSION MARKER: v2.0.4 - Fixed infinite loop and Next button
+  debugLogger.info('CourseSeedInput v2.0.4', 'Component mounted/updated', {
+    hasInitialData: !!initialData,
+    initialTitle: initialData?.courseTitle,
+    initialDifficulty: initialData?.difficulty,
+    initialTemplate: initialData?.template
+  });
+  
   const storage = useStorage()
+  const formRef = useRef<HTMLFormElement>(null)
   const [template, setTemplate] = useState<CourseTemplate>(initialData?.template || 'None')
   const [customTopics, setCustomTopics] = useState(initialData?.customTopics?.join('\n') || '')
   const [courseTitle, setCourseTitle] = useState(initialData?.courseTitle || '')
@@ -98,31 +110,92 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [showTemplateEditor, setShowTemplateEditor] = useState(false)
   const [showTopicWarning, setShowTopicWarning] = useState(false)
   const [showComingSoon, setShowComingSoon] = useState(false)
-  const [customTemplates, setCustomTemplates] = useState<Record<string, any>>(() => {
-    // Load from localStorage
-    const saved = localStorage.getItem('customTemplates')
-    return saved ? JSON.parse(saved) : {}
-  })
-  const [showDraftLoaded] = useState(false)
+  const [customTemplates, setCustomTemplates] = useState<Record<string, any>>({})
+  const [isTitleLocked, setIsTitleLocked] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
-  // Load project name as course title if it's a new course
+  // Sync state when initialData changes (for when component receives data after mounting)
   useEffect(() => {
-    const loadProjectName = async () => {
-      if (!courseTitle && storage.currentProjectId && storage.isInitialized) {
+    if (initialData?.courseTitle && !courseTitle) {
+      debugLogger.info('CourseSeedInput', 'Updating title from initialData', {
+        newTitle: initialData.courseTitle
+      });
+      setCourseTitle(initialData.courseTitle);
+    }
+    if (initialData?.difficulty && difficulty === 3) {
+      setDifficulty(initialData.difficulty);
+    }
+    if (initialData?.template && template === 'None') {
+      setTemplate(initialData.template);
+    }
+    if (initialData?.customTopics && !customTopics) {
+      setCustomTopics(initialData.customTopics.join('\n'));
+    }
+  }, [initialData])
+  
+  // Load custom templates from file storage
+  useEffect(() => {
+    const loadCustomTemplates = async () => {
+      if (storage && storage.isInitialized) {
         try {
-          const projects = await storage.listProjects()
-          const currentProject = projects.find(p => p.id === storage.currentProjectId)
-          if (currentProject?.name) {
-            setCourseTitle(currentProject.name)
+          const templates = await storage.getContent('custom-templates')
+          if (templates) {
+            setCustomTemplates(templates)
           }
         } catch (error) {
-          console.error('Failed to load project name:', error)
+          console.error('Failed to load custom templates:', error)
+        }
+      }
+    }
+    loadCustomTemplates()
+  }, [storage?.isInitialized])
+  const [showDraftLoaded] = useState(false)
+  
+  // Load project name as course title and check if it should be locked
+  useEffect(() => {
+    const loadProjectData = async () => {
+      if (storage && storage.currentProjectId && storage.isInitialized) {
+        try {
+          // Check if we have saved course data
+          const savedData = await storage.getContent('courseSeedData')
+          
+          // If we don't have a title from initial data, load from project name or saved data
+          if (!initialData?.courseTitle && !courseTitle) {
+            // First check if we have saved course data with a title
+            if (savedData?.courseTitle) {
+              debugLogger.info('CourseSeedInput', 'Loading title from saved course data', {
+                title: savedData.courseTitle
+              });
+              setCourseTitle(savedData.courseTitle);
+              setIsTitleLocked(true);
+            } else {
+              // Otherwise, try to get the project name
+              const projects = await storage.listProjects()
+              const currentProject = projects.find(p => p.id === storage.currentProjectId)
+              if (currentProject?.name) {
+                debugLogger.info('CourseSeedInput', 'Loading title from project name', {
+                  projectName: currentProject.name,
+                  isNewProject: !savedData
+                });
+                setCourseTitle(currentProject.name);
+                // Lock the title if we have saved data (not a new project)
+                if (savedData) {
+                  setIsTitleLocked(true)
+                }
+              }
+            }
+          } else if (savedData) {
+            // If we already have a title but also have saved data, lock it
+            setIsTitleLocked(true)
+          }
+        } catch (error) {
+          console.error('Failed to load project data:', error)
         }
       }
     }
     
-    loadProjectName()
-  }, [storage.currentProjectId, storage.isInitialized])
+    loadProjectData()
+  }, [storage, storage?.currentProjectId, storage?.isInitialized, initialData])
   
   // Navigation guard hook
   const {
@@ -150,10 +223,50 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     })
   }, [template, customTopics, courseTitle, difficulty])
   
-  // Auto-save course metadata when title changes
+  // Track if we've mounted to prevent initial save
+  const hasMountedRef = useRef(false)
+  const previousValuesRef = useRef({
+    courseTitle,
+    difficulty,
+    customTopics,
+    template
+  })
+  
+  // Auto-save course metadata when values change
   useEffect(() => {
+    // Skip the initial mount
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      previousValuesRef.current = {
+        courseTitle,
+        difficulty,
+        customTopics,
+        template
+      }
+      return
+    }
+    
+    // Check if values actually changed
+    const hasChanged = 
+      previousValuesRef.current.courseTitle !== courseTitle ||
+      previousValuesRef.current.difficulty !== difficulty ||
+      previousValuesRef.current.customTopics !== customTopics ||
+      previousValuesRef.current.template !== template
+    
+    if (!hasChanged) {
+      return // No changes, don't save
+    }
+    
+    // Update previous values
+    previousValuesRef.current = {
+      courseTitle,
+      difficulty,
+      customTopics,
+      template
+    }
+    
     const saveMetadata = async () => {
-      if (courseTitle && storage.currentProjectId && storage.isInitialized) {
+      if (courseTitle && storage?.currentProjectId && storage?.isInitialized) {
         try {
           const topicsArray = customTopics
             .split('\n')
@@ -187,7 +300,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     // Debounce the save
     const timer = setTimeout(saveMetadata, 1000)
     return () => clearTimeout(timer)
-  }, [courseTitle, difficulty, customTopics, storage, template, onSave])
+  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized, onSave])
   
   // Wrapped navigation handlers
   const handleStepClick = (stepIndex: number) => {
@@ -237,24 +350,50 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     setShowTopicWarning(false)
   }
   
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
+    // VERSION MARKER: v2.0.4 - Enhanced submission logging
+    debugLogger.info('CourseSeedInput v2.0.4', 'Form submit event triggered', {
+      isSubmitting,
+      courseTitle,
+      hasTopics: customTopics.trim().length > 0
+    });
+    
+    if (isSubmitting) {
+      debugLogger.info('CourseSeedInput v2.0.4', 'Preventing double submission');
+      console.log('[CourseSeedInput v2.0.4] Form already submitting, ignoring duplicate submit');
+      return;
+    }
+    
+    setError('');
+    
+    // Validation checks
     if (!courseTitle.trim()) {
-      setError('Course title is required')
-      return
+      debugLogger.warn('CourseSeedInput v2.0.4', 'Validation failed: No course title');
+      setError('Course title is required');
+      return;
     }
     
     const topicsArray = customTopics
       .split(/[\n,]/)
       .map(topic => topic.trim())
-      .filter(topic => topic.length > 0)
+      .filter(topic => topic.length > 0);
     
     if (topicsArray.length === 0) {
-      setError('At least one topic is required')
-      return
+      debugLogger.warn('CourseSeedInput v2.0.4', 'Validation failed: No topics');
+      setError('At least one topic is required');
+      return;
     }
+    
+    // Set submitting flag and prepare data
+    setIsSubmitting(true);
+    debugLogger.info('CourseSeedInput v2.0.4', 'Submitting form data', { 
+      courseTitle, 
+      topicsCount: topicsArray.length,
+      difficulty,
+      template
+    });
     
     const data = {
       courseTitle,
@@ -262,17 +401,31 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       customTopics: topicsArray,
       template,
       templateTopics: []
+    };
+    
+    try {
+      // Await the submission process from the parent component
+      debugLogger.info('CourseSeedInput v2.0.4', 'Calling onSubmit callback');
+      await onSubmit(data);
+      debugLogger.info('CourseSeedInput v2.0.4', 'onSubmit completed successfully');
+
+      // Update the form's initial values only after a successful submission
+      updateInitialValues({
+        template,
+        customTopics,
+        courseTitle,
+        difficulty
+      });
+    } catch (error) {
+      // The parent component will show a toast, but we can log here too
+      debugLogger.error('CourseSeedInput v2.0.4', 'Submission failed', error);
+      console.error('[CourseSeedInput v2.0.4] Submission failed', error);
+      setError('Failed to create course. Please check the logs and try again.');
+    } finally {
+      // Reliably reset the submitting flag when the operation is complete
+      setIsSubmitting(false);
+      debugLogger.info('CourseSeedInput v2.0.4', 'Submission complete, reset submitting flag');
     }
-    
-    // Update initial values after successful submit
-    updateInitialValues({
-      template,
-      customTopics,
-      courseTitle,
-      difficulty
-    })
-    
-    onSubmit(data)
   }
   
   const autoSaveIndicator = (
@@ -302,12 +455,46 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       description="Set up your course fundamentals to generate targeted learning content"
       autoSaveIndicator={autoSaveIndicator}
       onSettingsClick={onSettingsClick}
-      onNext={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-      nextDisabled={!isFormValid()}
+      onNext={() => {
+        // VERSION MARKER: v2.0.4 - Enhanced debug logging for Next button
+        debugLogger.info('CourseSeedInput v2.0.4', 'Next button clicked', {
+          isSubmitting,
+          formRefExists: !!formRef.current,
+          isFormValid: isFormValid()
+        })
+        
+        if (isSubmitting) {
+          debugLogger.info('CourseSeedInput v2.0.4', 'Next button clicked but already submitting')
+          console.log('[CourseSeedInput v2.0.4] Ignoring Next click - already submitting')
+          return
+        }
+        
+        // Programmatically submit the form with Tauri fallback
+        if (formRef.current) {
+          debugLogger.info('CourseSeedInput v2.0.4', 'Submitting form programmatically', {
+            hasRequestSubmit: typeof formRef.current.requestSubmit === 'function'
+          })
+          
+          // Check if requestSubmit is available (not in Tauri webview)
+          if (typeof formRef.current.requestSubmit === 'function') {
+            debugLogger.info('CourseSeedInput v2.0.4', 'Using requestSubmit API')
+            formRef.current.requestSubmit()
+          } else {
+            // Fallback for Tauri: dispatch submit event
+            debugLogger.info('CourseSeedInput v2.0.4', 'Using submit event fallback for Tauri')
+            const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+            const dispatched = formRef.current.dispatchEvent(submitEvent)
+            debugLogger.info('CourseSeedInput v2.0.4', 'Submit event dispatched', { dispatched })
+          }
+        } else {
+          debugLogger.error('CourseSeedInput v2.0.4', 'Form ref is null, cannot submit')
+        }
+      }}
+      nextDisabled={!isFormValid() || isSubmitting}
       onHelp={onHelp}
       onStepClick={handleStepClick}
     >
-      <form aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
+      <form ref={formRef} aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
         {/* Error announcement region for screen readers */}
         <div role="alert" aria-live="assertive" style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}>
           {error}
@@ -329,16 +516,46 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
             {/* Course Title */}
             <div style={{ marginBottom: '2rem' }}>
               <div className="input-wrapper">
-                <label htmlFor="course-title" className="input-label">
+                <label htmlFor="course-title" className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   Course Title <span style={{ color: 'rgb(220, 38, 38)' }}>*</span>
+                  {isTitleLocked && (
+                    <span 
+                      data-testid="title-lock-icon"
+                      title="Title is locked from project creation"
+                      style={{ 
+                        color: '#71717a',
+                        fontSize: '0.875rem',
+                        display: 'inline-flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      🔒
+                    </span>
+                  )}
                 </label>
-                <Input
+                <input
                   id="course-title"
                   placeholder="Enter your course title"
                   value={courseTitle}
-                  onChange={(e) => setCourseTitle(e.target.value)}
+                  onChange={(e) => !isTitleLocked && setCourseTitle(e.target.value)}
                   required
+                  readOnly={isTitleLocked}
                   data-testid="course-title-input"
+                  className="input"
+                  style={{
+                    width: `calc(100% - ${tokens.spacing.md} * 2)`,
+                    padding: tokens.spacing.md,
+                    backgroundColor: isTitleLocked 
+                      ? tokens.colors.background.tertiary 
+                      : tokens.colors.background.secondary,
+                    color: tokens.colors.text.primary,
+                    border: `1px solid ${tokens.colors.border.default}`,
+                    borderRadius: tokens.borderRadius.md,
+                    fontFamily: tokens.typography.fontFamily,
+                    fontSize: tokens.typography.fontSize.base,
+                    cursor: isTitleLocked ? 'not-allowed' : 'text',
+                    opacity: isTitleLocked ? 0.7 : 1
+                  }}
                 />
               </div>
               <div style={{ 
@@ -348,6 +565,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                 textAlign: 'right'
               }}>
                 {courseTitle.length}/100 characters
+                {isTitleLocked && ' (locked from project)'}
               </div>
             </div>
             
@@ -469,15 +687,15 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                 data-testid="topics-textarea"
                 required
                 style={{
-                  width: '100%',
+                  width: `calc(100% - ${tokens.spacing.md} * 2)`,
                   minHeight: '200px',
-                  padding: 'var(--spacing-sm)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--border-radius)',
-                  fontFamily: 'var(--font-family)',
-                  fontSize: 'var(--font-size-base)',
-                  backgroundColor: 'var(--input-background-color)',
-                  color: 'var(--text-color)',
+                  padding: tokens.spacing.md,
+                  border: `1px solid ${tokens.colors.border.default}`,
+                  borderRadius: tokens.borderRadius.md,
+                  fontFamily: tokens.typography.fontFamily,
+                  fontSize: tokens.typography.fontSize.base,
+                  backgroundColor: tokens.colors.background.secondary,
+                  color: tokens.colors.text.primary,
                   resize: 'vertical'
                 }}
               />
@@ -563,11 +781,17 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         >
           <TemplateEditor
             onClose={() => setShowTemplateEditor(false)}
-            onSave={() => {
-              // Reload custom templates from localStorage
-              const saved = localStorage.getItem('customTemplates')
-              if (saved) {
-                setCustomTemplates(JSON.parse(saved))
+            onSave={async () => {
+              // Reload custom templates from file storage
+              if (storage && storage.isInitialized) {
+                try {
+                  const templates = await storage.getContent('custom-templates')
+                  if (templates) {
+                    setCustomTemplates(templates)
+                  }
+                } catch (error) {
+                  console.error('Failed to reload custom templates:', error)
+                }
               }
             }}
           />

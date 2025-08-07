@@ -16,14 +16,60 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onCancel,
   isOpen
 }) => {
-  const [, setEditorContent] = useState(content)
+  const [editorContent, setEditorContent] = useState(content)
   const editorRef = useRef<HTMLDivElement>(null)
   const [selectedHeading, setSelectedHeading] = useState('normal')
+  const hasSetContent = useRef(false)
 
   useEffect(() => {
-    if (isOpen && editorRef.current) {
-      editorRef.current.innerHTML = DOMPurify.sanitize(content)
-      setEditorContent(content)
+    // Reset flag when modal opens/closes
+    if (!isOpen) {
+      hasSetContent.current = false
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen && !hasSetContent.current) {
+      // Wait for modal animation and DOM to be ready
+      const initializeContent = () => {
+        if (editorRef.current) {
+          // Set the content directly in the contentEditable div
+          // Handle both empty and populated content
+          const sanitizedContent = content ? DOMPurify.sanitize(content) : ''
+          editorRef.current.innerHTML = sanitizedContent
+          setEditorContent(content || '')
+          hasSetContent.current = true
+          
+          // Force the browser to recognize the content change
+          if (content) {
+            // Move cursor to end of content after a brief delay
+            setTimeout(() => {
+              if (editorRef.current) {
+                editorRef.current.focus()
+                // Move cursor to end of content
+                const range = document.createRange()
+                const sel = window.getSelection()
+                if (editorRef.current.childNodes.length > 0) {
+                  range.selectNodeContents(editorRef.current)
+                  range.collapse(false)
+                } else {
+                  range.setStart(editorRef.current, 0)
+                  range.setEnd(editorRef.current, 0)
+                }
+                sel?.removeAllRanges()
+                sel?.addRange(range)
+                editorRef.current.blur()
+              }
+            }, 50)
+          }
+        }
+      }
+
+      // Use requestAnimationFrame to wait for Modal animation
+      requestAnimationFrame(() => {
+        // Additional delay to ensure modal is fully rendered
+        setTimeout(initializeContent, 50)
+      })
     }
   }, [isOpen, content])
 
@@ -162,7 +208,6 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             color: tokens.colors.text.primary,
             outline: 'none'
           }}
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
         />
 
         {/* Actions */}

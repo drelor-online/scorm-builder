@@ -14,6 +14,19 @@ pub struct ProjectFile {
     pub media: MediaData,
     pub audio_settings: AudioSettings,
     pub scorm_config: ScormConfig,
+    // New fields for complete data persistence
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_seed_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_import_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activities_data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_enhancements: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_edits: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_step: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -270,6 +283,13 @@ mod tests {
                 completion_criteria: "all_pages".to_string(),
                 passing_score: 80,
             },
+            // Initialize new fields
+            course_seed_data: None,
+            json_import_data: None,
+            activities_data: None,
+            media_enhancements: None,
+            content_edits: None,
+            current_step: None,
         }
     }
 

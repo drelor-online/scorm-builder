@@ -5,6 +5,7 @@ import { PageLayout } from './PageLayout'
 import { COLORS } from '../constants'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import { ConfirmDialog } from './ConfirmDialog'
+import QuestionEditorModal from './QuestionEditorModal'
 import { 
   Button, 
   Card, 
@@ -17,12 +18,14 @@ import {
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { generateActivityId } from '../utils/idGenerator'
+import DOMPurify from 'dompurify'
 
 interface ActivitiesEditorProps {
   courseContent: CourseContentUnion
   courseSeedData?: CourseSeedData
   onNext: (content: CourseContentUnion) => void
   onBack: () => void
+  onUpdateContent?: (content: CourseContentUnion) => void  // FIX: Add callback to update parent
   onSettingsClick?: () => void
   onSave?: () => void
   onSaveAs?: () => void
@@ -33,12 +36,12 @@ interface ActivitiesEditorProps {
 
 // Type guard to check if content is new format
 function isNewFormat(content: CourseContentUnion): content is CourseContent {
-  return 'welcomePage' in content && 'learningObjectivesPage' in content && 'assessment' in content
+  return content != null && 'welcomePage' in content && 'learningObjectivesPage' in content && 'assessment' in content
 }
 
 // Type guard to check if content is old format
 function isOldFormat(content: CourseContentUnion): content is LegacyCourseContent {
-  return 'activities' in content && 'quiz' in content
+  return content != null && 'activities' in content && 'quiz' in content
 }
 
 // Interface for editing knowledge check questions
@@ -109,54 +112,13 @@ const Alert: React.FC<{
   )
 }
 
-// Modal component
-const Modal: React.FC<{
-  isOpen: boolean
-  onClose: () => void
-  title: string
-  children: React.ReactNode
-}> = ({ isOpen, title, children }) => {
-  if (!isOpen) return null
-  
-  return (
-    <div className="modal-overlay" style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1100,
-      padding: '1rem'
-    }}>
-      <div className="modal" style={{
-        backgroundColor: COLORS.backgroundLight,
-        borderRadius: '0.5rem',
-        padding: '2rem',
-        maxWidth: '40rem',
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        border: `1px solid ${COLORS.border}`
-      }}>
-        <h3 style={{
-          fontSize: '1.25rem',
-          fontWeight: 600,
-          color: COLORS.text,
-          margin: '0 0 1.5rem 0'
-        }}>
-          {title}
-        </h3>
-        {children}
-      </div>
-    </div>
-  )
-}
+// Modal component removed - using QuestionEditorModal instead
 
 export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({ 
   courseContent,
   onNext, 
-  onBack, 
+  onBack,
+  onUpdateContent,  // FIX: Add onUpdateContent 
   onSettingsClick, 
   onSave, 
   onSaveAs,
@@ -165,6 +127,25 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   onStepClick 
 }) => {
   const [content, setContent] = useState(courseContent)
+  
+  // FIX: Use ref to track latest content and avoid stale closures
+  const contentRef = React.useRef(content)
+  React.useEffect(() => {
+    contentRef.current = content
+  }, [content])
+  
+  // Sync internal state with prop changes
+  useEffect(() => {
+    setContent(courseContent)
+  }, [courseContent])
+  
+  // FIX: Update parent whenever content changes
+  useEffect(() => {
+    // Skip initial mount and only update if content has actually changed
+    if (onUpdateContent && content !== courseContent) {
+      onUpdateContent(content)
+    }
+  }, [content])
   const [editingKnowledgeCheck, setEditingKnowledgeCheck] = useState<EditingKnowledgeCheck | null>(null)
   const [editingAssessment, setEditingAssessment] = useState<EditingAssessment | null>(null)
   const [editingActivity, setEditingActivity] = useState<string | null>(null)
@@ -172,6 +153,10 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
   const [itemToRemove, setItemToRemove] = useState<{ type: 'knowledgeCheck' | 'assessment' | 'activity'; topicId: string; questionIndex: number } | null>(null)
+  const [isEditingPassMark, setIsEditingPassMark] = useState(false)
+  const [tempPassMark, setTempPassMark] = useState(80)
+  const [isAddingKnowledgeCheck, setIsAddingKnowledgeCheck] = useState<string | null>(null) // topicId
+  const [isAddingAssessment, setIsAddingAssessment] = useState(false)
   
   // Use storage hook - handle case where it might not be available
   let storage = null
@@ -297,24 +282,15 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
         }
       })
     } else if (type === 'assessment') {
+      // FIX: Remove from assessment questions, not knowledge check questions
       setContent(prev => {
         if (!isNewFormat(prev)) return prev
         return {
           ...prev,
-          topics: prev.topics.map(topic => {
-            if (topic.id === topicId && topic.knowledgeCheck) {
-              const newQuestions = [...topic.knowledgeCheck.questions]
-              newQuestions.splice(questionIndex, 1)
-              return {
-                ...topic,
-                knowledgeCheck: {
-                  ...topic.knowledgeCheck,
-                  questions: newQuestions
-                }
-              }
-            }
-            return topic
-          })
+          assessment: prev.assessment ? {
+            ...prev.assessment,
+            questions: prev.assessment.questions.filter((_, index) => index !== questionIndex)
+          } : prev.assessment
         }
       })
     }
@@ -358,15 +334,18 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       onSettingsClick={onSettingsClick}
       onBack={onBack}
       onNext={async () => {
+        // FIX: Use ref to get latest content and avoid stale closure
+        const latestContent = contentRef.current
+        
         // Save final state before navigating
         if (storage && storage.isInitialized && storage.currentProjectId) {
           try {
-            await storage.saveContent('activities', content)
+            await storage.saveContent('activities', latestContent)
           } catch (error) {
             console.error('Error saving activities data before navigation:', error)
           }
         }
-        onNext(content)
+        onNext(latestContent)
       }}
       onSave={onSave}
       onSaveAs={onSaveAs}
@@ -411,12 +390,10 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             <Card title="Knowledge Check Questions" padding="large">
               <Grid cols={1} gap="large">
                 {content.topics.map(topic => (
-                  <div key={topic.id} style={{
-                    backgroundColor: COLORS.background,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: '0.5rem',
-                    padding: '1.5rem'
-                  }}>
+                  <Card 
+                    key={topic.id}
+                    className="enhanced-padding"
+                  >
                     <h4 style={{
                       fontSize: '1.125rem',
                       fontWeight: 600,
@@ -429,9 +406,11 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     {topic.knowledgeCheck && topic.knowledgeCheck.questions && topic.knowledgeCheck.questions.length > 0 ? (
                       <div style={{ display: 'grid', gap: '1rem' }}>
                         {topic.knowledgeCheck.questions.map((question, qIndex) => (
-                          <div key={question.id} className="card enhanced-padding" data-testid={`question-card-${question.id}`} style={{
-                            backgroundColor: COLORS.background
-                          }}>
+                          <Card 
+                            key={question.id} 
+                            className="enhanced-padding" 
+                            data-testid={`question-card-${question.id}`}
+                          >
                             <Flex justify="space-between" align="start" style={{ marginBottom: '0.75rem' }}>
                               <div style={{ flex: 1 }}>
                                 <p style={{
@@ -439,11 +418,20 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                                   fontWeight: 500,
                                   margin: '0 0 0.5rem 0',
                                   fontSize: '1rem'
-                                }}>
-                                  {question.type === 'fill-in-the-blank' && question.blank
-                                    ? question.blank
-                                    : question.question}
-                                </p>
+                                }}
+                                  dangerouslySetInnerHTML={{
+                                    __html: DOMPurify.sanitize(
+                                      question.type === 'fill-in-the-blank' && question.blank
+                                        ? question.blank
+                                        : question.question,
+                                      {
+                                        ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'p', 'span'],
+                                        ALLOWED_ATTR: [],
+                                        KEEP_CONTENT: true
+                                      }
+                                    )
+                                  }}
+                                />
                                 <QuestionTypeBadge type={question.type} />
                               </div>
                               <ButtonGroup gap="small">
@@ -482,7 +470,14 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               }}>
                                 {question.options.map((opt, idx) => (
                                   <li key={idx} style={{ marginBottom: '0.25rem' }}>
-                                    {opt} {opt === question.correctAnswer && (
+                                    <span dangerouslySetInnerHTML={{
+                                      __html: DOMPurify.sanitize(opt, {
+                                        ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                        ALLOWED_ATTR: [],
+                                        KEEP_CONTENT: true
+                                      })
+                                    }} />
+                                    {opt === question.correctAnswer && (
                                       <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓</span>
                                     )}
                                   </li>
@@ -490,9 +485,19 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               </ul>
                             )}
                             {question.type === 'fill-in-the-blank' && question.blank && (
-                              <p style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}>
-                                {question.blank.replace('_____', `[${question.correctAnswer}]`)}
-                              </p>
+                              <p 
+                                style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}
+                                dangerouslySetInnerHTML={{
+                                  __html: DOMPurify.sanitize(
+                                    question.blank.replace(/_____/g, `[${question.correctAnswer}]`),
+                                    {
+                                      ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                      ALLOWED_ATTR: [],
+                                      KEEP_CONTENT: true
+                                    }
+                                  )
+                                }}
+                              />
                             )}
                             {question.type === 'true-false' && (
                               <p style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}>
@@ -505,15 +510,33 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               <div style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
                                 <div style={{ marginBottom: '0.5rem' }}>
                                   <span style={{ color: '#71717a' }}>Correct Feedback: </span>
-                                  <span style={{ color: '#a1a1aa' }}>{question.feedback.correct || 'No feedback provided'}</span>
+                                  <span 
+                                    style={{ color: '#a1a1aa' }}
+                                    dangerouslySetInnerHTML={{
+                                      __html: DOMPurify.sanitize(question.feedback.correct || 'No feedback provided', {
+                                        ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                        ALLOWED_ATTR: [],
+                                        KEEP_CONTENT: true
+                                      })
+                                    }}
+                                  />
                                 </div>
                                 <div>
                                   <span style={{ color: '#71717a' }}>Incorrect Feedback: </span>
-                                  <span style={{ color: '#a1a1aa' }}>{question.feedback.incorrect || 'No feedback provided'}</span>
+                                  <span 
+                                    style={{ color: '#a1a1aa' }}
+                                    dangerouslySetInnerHTML={{
+                                      __html: DOMPurify.sanitize(question.feedback.incorrect || 'No feedback provided', {
+                                        ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                        ALLOWED_ATTR: [],
+                                        KEEP_CONTENT: true
+                                      })
+                                    }}
+                                  />
                                 </div>
                               </div>
                             )}
-                          </div>
+                          </Card>
                         ))}
                       </div>
                     ) : (
@@ -526,8 +549,17 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       </div>
                     )}
                     
-                    {/* Add Knowledge Check functionality removed */}
-                  </div>
+                    <div style={{ marginTop: '1rem' }}>
+                      <Button
+                        onClick={() => setIsAddingKnowledgeCheck(topic.id)}
+                        variant="success"
+                        size="small"
+                        data-testid="add-knowledge-check-question"
+                      >
+                        Add Question
+                      </Button>
+                    </div>
+                  </Card>
                 ))}
               </Grid>
             </Card>
@@ -536,16 +568,85 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
           {/* Assessment Questions */}
           <Section>
             <Card title="Assessment Questions" padding="large">
+              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Button
+                  onClick={() => setIsAddingAssessment(true)}
+                  variant="success"
+                  size="medium"
+                  data-testid="add-assessment-question"
+                >
+                  Add Question
+                </Button>
+              </div>
               <div style={{ marginBottom: '1rem' }}>
-                <Alert type="info">
-                  Pass Mark: {content.assessment?.passMark || 80}%
-                </Alert>
+                {isEditingPassMark ? (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <Input
+                      type="number"
+                      value={tempPassMark}
+                      onChange={(e) => setTempPassMark(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                      min="0"
+                      max="100"
+                      style={{ width: '100px' }}
+                      data-testid="pass-mark-input"
+                    />
+                    <span>%</span>
+                    <Button
+                      onClick={() => {
+                        setContent(prev => {
+                          if (!isNewFormat(prev)) return prev
+                          return {
+                            ...prev,
+                            assessment: {
+                              ...prev.assessment,
+                              passMark: tempPassMark,
+                              questions: prev.assessment?.questions || []
+                            }
+                          }
+                        })
+                        setIsEditingPassMark(false)
+                      }}
+                      variant="primary"
+                      size="small"
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setTempPassMark(content.assessment?.passMark || 80)
+                        setIsEditingPassMark(false)
+                      }}
+                      variant="secondary"
+                      size="small"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Alert type="info">
+                    Pass Mark: {content.assessment?.passMark || 80}%
+                    <Button
+                      onClick={() => {
+                        setTempPassMark(content.assessment?.passMark || 80)
+                        setIsEditingPassMark(true)
+                      }}
+                      variant="secondary"
+                      size="small"
+                      style={{ marginLeft: '1rem' }}
+                      data-testid="pass-mark-edit"
+                    >
+                      Edit
+                    </Button>
+                  </Alert>
+                )}
               </div>
               <Grid cols={1} gap="medium">
                 {content.assessment?.questions?.map(question => (
-                  <div key={question.id} className="card enhanced-padding" data-testid={`assessment-question-${question.id}`} style={{
-                    backgroundColor: COLORS.background
-                  }}>
+                  <Card 
+                    key={question.id} 
+                    className="enhanced-padding" 
+                    data-testid={`assessment-question-${question.id}`}
+                  >
                     <Flex justify="space-between" align="start" style={{ marginBottom: '0.75rem' }}>
                       <div style={{ flex: 1 }}>
                         <p style={{
@@ -553,23 +654,46 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                           fontWeight: 500,
                           margin: '0 0 0.5rem 0',
                           fontSize: '1rem'
-                        }}>
-                          {question.question}
-                        </p>
+                        }}
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(question.question, {
+                              ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'p', 'span'],
+                              ALLOWED_ATTR: [],
+                              KEEP_CONTENT: true
+                            })
+                          }}
+                        />
                         <QuestionTypeBadge type={question.type} />
                       </div>
-                      <Button
-                        onClick={() => setEditingAssessment({ 
-                          questionId: question.id, 
-                          question: { ...question }
-                        })}
-                        variant="primary"
-                        size="small"
-                        className="question-edit-button"
-                        data-testid="assessment-edit-button"
-                      >
-                        Edit
-                      </Button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <Button
+                          onClick={() => setEditingAssessment({ 
+                            questionId: question.id, 
+                            question: { ...question }
+                          })}
+                          variant="primary"
+                          size="small"
+                          className="question-edit-button"
+                          data-testid="assessment-edit-button"
+                        >
+                          Edit
+                        </Button>
+                        {/* FIX: Add Remove button for assessment questions */}
+                        <Button
+                          onClick={() => {
+                            const questionIndex = content.assessment?.questions?.findIndex(q => q.id === question.id) ?? -1
+                            if (questionIndex >= 0) {
+                              setItemToRemove({ type: 'assessment', topicId: '', questionIndex })
+                              setShowRemoveConfirm(true)
+                            }
+                          }}
+                          variant="danger"
+                          size="small"
+                          data-testid="assessment-remove-button"
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     </Flex>
                     
                     {/* Show question details */}
@@ -581,7 +705,14 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       }}>
                         {question.options.map((opt, idx) => (
                           <li key={idx} style={{ marginBottom: '0.25rem' }}>
-                            {opt} {opt === question.correctAnswer && (
+                            <span dangerouslySetInnerHTML={{
+                              __html: DOMPurify.sanitize(opt, {
+                                ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                ALLOWED_ATTR: [],
+                                KEEP_CONTENT: true
+                              })
+                            }} />
+                            {opt === question.correctAnswer && (
                               <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓</span>
                             )}
                           </li>
@@ -599,496 +730,165 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       <div style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
                         <div style={{ marginBottom: '0.5rem' }}>
                           <span style={{ color: '#71717a' }}>Correct Feedback: </span>
-                          <span style={{ color: '#a1a1aa' }}>{question.feedback.correct || 'No feedback provided'}</span>
+                          <span 
+                            style={{ color: '#a1a1aa' }}
+                            dangerouslySetInnerHTML={{
+                              __html: DOMPurify.sanitize(question.feedback.correct || 'No feedback provided', {
+                                ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                ALLOWED_ATTR: [],
+                                KEEP_CONTENT: true
+                              })
+                            }}
+                          />
                         </div>
                         <div>
                           <span style={{ color: '#71717a' }}>Incorrect Feedback: </span>
-                          <span style={{ color: '#a1a1aa' }}>{question.feedback.incorrect || 'No feedback provided'}</span>
+                          <span 
+                            style={{ color: '#a1a1aa' }}
+                            dangerouslySetInnerHTML={{
+                              __html: DOMPurify.sanitize(question.feedback.incorrect || 'No feedback provided', {
+                                ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
+                                ALLOWED_ATTR: [],
+                                KEEP_CONTENT: true
+                              })
+                            }}
+                          />
                         </div>
                       </div>
                     )}
-                  </div>
+                  </Card>
                 ))}
               </Grid>
             </Card>
           </Section>
                 
+          {/* Add Knowledge Check Question Modal */}
+          <QuestionEditorModal
+            isOpen={!!isAddingKnowledgeCheck}
+            onClose={() => setIsAddingKnowledgeCheck(null)}
+            question={null}
+            title="Add Knowledge Check Question"
+            onSave={(newQuestion) => {
+              if (isAddingKnowledgeCheck) {
+                setContent(prev => {
+                  if (!isNewFormat(prev)) return prev
+                  return {
+                    ...prev,
+                    topics: prev.topics.map(topic => {
+                      if (topic.id === isAddingKnowledgeCheck) {
+                        const updatedKnowledgeCheck = topic.knowledgeCheck || { questions: [] }
+                        return {
+                          ...topic,
+                          knowledgeCheck: {
+                            ...updatedKnowledgeCheck,
+                            questions: [
+                              ...updatedKnowledgeCheck.questions,
+                              {
+                                ...newQuestion,
+                                id: `kc-${Date.now()}`
+                              } as KnowledgeCheckQuestion
+                            ]
+                          }
+                        }
+                      }
+                      return topic
+                    })
+                  }
+                })
+                setIsAddingKnowledgeCheck(null)
+              }
+            }}
+          />
+          
+          {/* Add Assessment Question Modal */}
+          <QuestionEditorModal
+            isOpen={isAddingAssessment}
+            onClose={() => setIsAddingAssessment(false)}
+            question={null}
+            title="Add Assessment Question"
+            onSave={(newQuestion) => {
+              setContent(prev => {
+                if (!isNewFormat(prev)) return prev
+                const currentQuestions = prev.assessment?.questions || []
+                return {
+                  ...prev,
+                  assessment: {
+                    ...prev.assessment,
+                    passMark: prev.assessment?.passMark || 80,
+                    questions: [
+                      ...currentQuestions,
+                      {
+                        ...newQuestion,
+                        id: `assess-${Date.now()}`
+                      } as AssessmentQuestion
+                    ]
+                  }
+                }
+              })
+              setIsAddingAssessment(false)
+            }}
+          />
+          
           {/* Edit Knowledge Check Question Modal */}
-          <Modal
+          <QuestionEditorModal
             isOpen={!!editingKnowledgeCheck}
             onClose={() => setEditingKnowledgeCheck(null)}
-            title="Edit Question"
-          >
-            {editingKnowledgeCheck && (
-              <>
-                {/* Different input for fill-in-the-blank vs other question types */}
-                {editingKnowledgeCheck.question.type !== 'fill-in-the-blank' && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label htmlFor="question-text" style={{
-                      display: 'block',
-                      color: '#a1a1aa',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem'
-                    }}>
-                      Question Text
-                    </label>
-                    <Input
-                      id="question-text"
-                      type="text"
-                      value={editingKnowledgeCheck.question.question}
-                      onChange={(e) => setEditingKnowledgeCheck({
-                        ...editingKnowledgeCheck,
-                        question: { ...editingKnowledgeCheck.question, question: e.target.value }
-                      })}
-                      fullWidth
-                    />
-                  </div>
-                )}
-                
-                {/* Fill-in-the-blank specific fields */}
-                {editingKnowledgeCheck.question.type === 'fill-in-the-blank' && (
-                  <>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label htmlFor="blank-text" style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Question with Blank (use _____ for the blank)
-                      </label>
-                      <Input
-                        id="blank-text"
-                        type="text"
-                        value={editingKnowledgeCheck.question.blank || ''}
-                        onChange={(e) => setEditingKnowledgeCheck({
-                          ...editingKnowledgeCheck,
-                          question: { ...editingKnowledgeCheck.question, blank: e.target.value }
-                        })}
-                        fullWidth
-                        placeholder="The capital of France is _____."
-                      />
-                    </div>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label htmlFor="correct-answer-blank" style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Correct Answer
-                      </label>
-                      <Input
-                        id="correct-answer-blank"
-                        type="text"
-                        value={editingKnowledgeCheck.question.correctAnswer}
-                        onChange={(e) => setEditingKnowledgeCheck({
-                          ...editingKnowledgeCheck,
-                          question: { ...editingKnowledgeCheck.question, correctAnswer: e.target.value }
-                        })}
-                        fullWidth
-                        placeholder="Paris"
-                      />
-                    </div>
-                  </>
-                )}
-                
-                {/* Options for multiple choice */}
-                {editingKnowledgeCheck.question.type === 'multiple-choice' && (
-                  <>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Answer Options
-                      </label>
-                      {editingKnowledgeCheck.question.options?.map((option, idx) => (
-                        <div key={idx} style={{ marginBottom: '0.5rem' }}>
-                          <Input
-                            label={`Option ${idx + 1}`}
-                            value={option}
-                            onChange={(e) => {
-                              const newOptions = [...(editingKnowledgeCheck.question.options || [])]
-                              newOptions[idx] = e.target.value
-                              setEditingKnowledgeCheck({
-                                ...editingKnowledgeCheck,
-                                question: { ...editingKnowledgeCheck.question, options: newOptions }
-                              })
-                            }}
-                            fullWidth
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label htmlFor="correct-answer" style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Correct Answer
-                      </label>
-                      <select
-                        id="correct-answer"
-                        value={editingKnowledgeCheck.question.correctAnswer}
-                        onChange={(e) => setEditingKnowledgeCheck({
-                          ...editingKnowledgeCheck,
-                          question: { ...editingKnowledgeCheck.question, correctAnswer: e.target.value }
-                        })}
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          backgroundColor: COLORS.background,
-                          border: `1px solid ${COLORS.border}`,
-                          borderRadius: '0.25rem',
-                          color: '#e4e4e7',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="">Select correct answer</option>
-                        {editingKnowledgeCheck.question.options?.map((option, idx) => (
-                          <option key={idx} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-                
-                {/* True/False options */}
-                {editingKnowledgeCheck.question.type === 'true-false' && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{
-                      display: 'block',
-                      color: '#a1a1aa',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem'
-                    }}>
-                      Correct Answer
-                    </label>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="True"
-                          checked={editingKnowledgeCheck.question.correctAnswer === 'True'}
-                          onChange={(e) => setEditingKnowledgeCheck({
-                            ...editingKnowledgeCheck,
-                            question: { ...editingKnowledgeCheck.question, correctAnswer: e.target.value }
-                          })}
-                        />
-                        <span style={{ color: '#e4e4e7' }}>True</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="False"
-                          checked={editingKnowledgeCheck.question.correctAnswer === 'False'}
-                          onChange={(e) => setEditingKnowledgeCheck({
-                            ...editingKnowledgeCheck,
-                            question: { ...editingKnowledgeCheck.question, correctAnswer: e.target.value }
-                          })}
-                        />
-                        <span style={{ color: '#e4e4e7' }}>False</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Feedback */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <Input
-                    label="Correct Feedback"
-                    value={editingKnowledgeCheck.question.feedback?.correct || ''}
-                    onChange={(e) => setEditingKnowledgeCheck({
-                      ...editingKnowledgeCheck,
-                      question: {
-                        ...editingKnowledgeCheck.question,
-                        feedback: {
-                          ...editingKnowledgeCheck.question.feedback || { correct: '', incorrect: '' },
-                          correct: e.target.value
-                        }
-                      }
-                    })}
-                    fullWidth
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <Input
-                    label="Incorrect Feedback"
-                    value={editingKnowledgeCheck.question.feedback?.incorrect || ''}
-                    onChange={(e) => setEditingKnowledgeCheck({
-                      ...editingKnowledgeCheck,
-                      question: {
-                        ...editingKnowledgeCheck.question,
-                        feedback: {
-                          ...editingKnowledgeCheck.question.feedback || { correct: '', incorrect: '' },
-                          incorrect: e.target.value
-                        }
-                      }
-                    })}
-                    fullWidth
-                  />
-                </div>
-                
-                <Flex gap="medium" justify="end">
-                  <Button
-                    onClick={() => {
-                      // Save logic here
-                      setContent(prev => {
-                        if (!isNewFormat(prev)) return prev;
-                        return {
-                          ...prev,
-                          topics: prev.topics.map(topic => 
-                            topic.id === editingKnowledgeCheck.topicId
-                              ? {
-                                  ...topic,
-                                  knowledgeCheck: {
-                                    ...topic.knowledgeCheck!,
-                                    questions: topic.knowledgeCheck!.questions.map(q =>
-                                      q.id === editingKnowledgeCheck.questionId
-                                        ? editingKnowledgeCheck.question
-                                        : q
-                                    )
-                                  }
-                                }
-                              : topic
-                          )
-                        };
-                      });
-                      setEditingKnowledgeCheck(null);
-                    }}
-                    variant="primary"
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    onClick={() => setEditingKnowledgeCheck(null)}
-                    variant="secondary"
-                  >
-                    Cancel
-                  </Button>
-                </Flex>
-              </>
-            )}
-          </Modal>
+            question={editingKnowledgeCheck?.question || null}
+            title="Edit Knowledge Check Question"
+            onSave={(updatedQuestion) => {
+              if (editingKnowledgeCheck) {
+                setContent(prev => {
+                  if (!isNewFormat(prev)) return prev;
+                  return {
+                    ...prev,
+                    topics: prev.topics.map(topic => 
+                      topic.id === editingKnowledgeCheck.topicId
+                        ? {
+                            ...topic,
+                            knowledgeCheck: {
+                              ...topic.knowledgeCheck!,
+                              questions: topic.knowledgeCheck!.questions.map(q =>
+                                q.id === editingKnowledgeCheck.questionId
+                                  ? updatedQuestion as KnowledgeCheckQuestion
+                                  : q
+                              )
+                            }
+                          }
+                        : topic
+                    )
+                  };
+                });
+                setEditingKnowledgeCheck(null);
+              }
+            }}
+          />
           
           {/* Edit Assessment Question Modal */}
-          <Modal
+          <QuestionEditorModal
             isOpen={!!editingAssessment}
             onClose={() => setEditingAssessment(null)}
+            question={editingAssessment?.question || null}
             title="Edit Assessment Question"
-          >
-            {editingAssessment && (
-              <>
-                <div style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="assessment-question-text" style={{
-                    display: 'block',
-                    color: '#a1a1aa',
-                    marginBottom: '0.5rem',
-                    fontSize: '0.875rem'
-                  }}>
-                    Question Text
-                  </label>
-                  <Input
-                    id="assessment-question-text"
-                    type="text"
-                    value={editingAssessment.question.question}
-                    onChange={(e) => setEditingAssessment({
-                      ...editingAssessment,
-                      question: { ...editingAssessment.question, question: e.target.value }
-                    })}
-                    fullWidth
-                  />
-                </div>
-                
-                {/* Options for multiple choice */}
-                {editingAssessment.question.type === 'multiple-choice' && (
-                  <>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Answer Options
-                      </label>
-                      {editingAssessment.question.options?.map((option, idx) => (
-                        <div key={idx} style={{ marginBottom: '0.5rem' }}>
-                          <Input
-                            label={`Option ${idx + 1}`}
-                            value={option}
-                            onChange={(e) => {
-                              const newOptions = [...(editingAssessment.question.options || [])]
-                              newOptions[idx] = e.target.value
-                              setEditingAssessment({
-                                ...editingAssessment,
-                                question: { ...editingAssessment.question, options: newOptions }
-                              })
-                            }}
-                            fullWidth
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <label htmlFor="assessment-correct-answer" style={{
-                        display: 'block',
-                        color: '#a1a1aa',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        Correct Answer
-                      </label>
-                      <select
-                        id="assessment-correct-answer"
-                        value={editingAssessment.question.correctAnswer}
-                        onChange={(e) => setEditingAssessment({
-                          ...editingAssessment,
-                          question: { ...editingAssessment.question, correctAnswer: e.target.value }
-                        })}
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          backgroundColor: COLORS.background,
-                          border: `1px solid ${COLORS.border}`,
-                          borderRadius: '0.25rem',
-                          color: '#e4e4e7',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="">Select correct answer</option>
-                        {editingAssessment.question.options?.map((option, idx) => (
-                          <option key={idx} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-                
-                {/* True/False options */}
-                {editingAssessment.question.type === 'true-false' && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{
-                      display: 'block',
-                      color: '#a1a1aa',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem'
-                    }}>
-                      Correct Answer
-                    </label>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                          type="radio"
-                          name="assessmentTrueFalse"
-                          value="True"
-                          checked={editingAssessment.question.correctAnswer === 'True'}
-                          onChange={(e) => setEditingAssessment({
-                            ...editingAssessment,
-                            question: { ...editingAssessment.question, correctAnswer: e.target.value }
-                          })}
-                        />
-                        <span style={{ color: '#e4e4e7' }}>True</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                          type="radio"
-                          name="assessmentTrueFalse"
-                          value="False"
-                          checked={editingAssessment.question.correctAnswer === 'False'}
-                          onChange={(e) => setEditingAssessment({
-                            ...editingAssessment,
-                            question: { ...editingAssessment.question, correctAnswer: e.target.value }
-                          })}
-                        />
-                        <span style={{ color: '#e4e4e7' }}>False</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Feedback */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <Input
-                    label="Correct Feedback"
-                    value={editingAssessment.question.feedback?.correct || ''}
-                    onChange={(e) => setEditingAssessment({
-                      ...editingAssessment,
-                      question: {
-                        ...editingAssessment.question,
-                        feedback: {
-                          ...editingAssessment.question.feedback || { correct: '', incorrect: '' },
-                          correct: e.target.value
-                        }
-                      }
-                    })}
-                    fullWidth
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '1rem' }}>
-                  <Input
-                    label="Incorrect Feedback"
-                    value={editingAssessment.question.feedback?.incorrect || ''}
-                    onChange={(e) => setEditingAssessment({
-                      ...editingAssessment,
-                      question: {
-                        ...editingAssessment.question,
-                        feedback: {
-                          ...editingAssessment.question.feedback || { correct: '', incorrect: '' },
-                          incorrect: e.target.value
-                        }
-                      }
-                    })}
-                    fullWidth
-                  />
-                </div>
-                
-                <Flex gap="medium" justify="end">
-                  <Button
-                    onClick={() => {
-                      // Save logic here
-                      setContent(prev => {
-                        if (!isNewFormat(prev)) return prev;
-                        return {
-                          ...prev,
-                          assessment: {
-                            ...prev.assessment,
-                            questions: prev.assessment?.questions?.map(q =>
-                              q.id === editingAssessment.questionId
-                                ? editingAssessment.question
-                                : q
-                            ) || []
-                          }
-                        };
-                      });
-                      setEditingAssessment(null);
-                    }}
-                    variant="primary"
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    onClick={() => setEditingAssessment(null)}
-                    variant="secondary"
-                  >
-                    Cancel
-                  </Button>
-                </Flex>
-              </>
-            )}
-          </Modal>
+            onSave={(updatedQuestion) => {
+              if (editingAssessment) {
+                setContent(prev => {
+                  if (!isNewFormat(prev)) return prev;
+                  return {
+                    ...prev,
+                    assessment: {
+                      ...prev.assessment,
+                      questions: prev.assessment?.questions?.map(q =>
+                        q.id === editingAssessment.questionId
+                          ? updatedQuestion as AssessmentQuestion
+                          : q
+                      ) || []
+                    }
+                  };
+                });
+                setEditingAssessment(null);
+              }
+            }}
+          />
         </>
       ) : (
         // Old format: Activities & Quiz Editor
@@ -1111,12 +911,10 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
               
               <Grid cols={1} gap="medium">
                 {isOldFormat(content) && content.activities.map(activity => (
-                  <div key={activity.id} style={{
-                    backgroundColor: COLORS.background,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: '0.5rem',
-                    padding: '1rem'
-                  }}>
+                  <Card 
+                    key={activity.id}
+                    className="enhanced-padding"
+                  >
                     {editingActivity === activity.id ? (
                       <>
                         <Input
@@ -1189,7 +987,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         </Flex>
                       </>
                     )}
-                  </div>
+                  </Card>
                 ))}
               </Grid>
             </Card>
@@ -1200,12 +998,10 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             <Card title="Quiz Questions" padding="large">
               <Grid cols={1} gap="medium">
                 {isOldFormat(content) && content.quiz.questions.map(question => (
-                  <div key={question.id} style={{
-                    backgroundColor: COLORS.background,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: '0.5rem',
-                    padding: '1rem'
-                  }}>
+                  <Card
+                    key={question.id}
+                    className="enhanced-padding"
+                  >
                     <p style={{
                       color: COLORS.text,
                       fontWeight: 500,
@@ -1237,7 +1033,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     >
                       Edit Question
                     </Button>
-                  </div>
+                  </Card>
                 ))}
               </Grid>
             </Card>

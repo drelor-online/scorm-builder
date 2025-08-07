@@ -3,17 +3,15 @@ import { CourseContent } from '../types/aiPrompt'
 import type { CourseMetadata } from '../types/metadata'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
-// import { invoke } from '@tauri-apps/api/core' // Not used
+import { invoke } from '@tauri-apps/api/core'
 import { convertToEnhancedCourseContent } from '../services/courseContentConverter'
-// import type { EnhancedCourseContent } from '../types/scorm' // Not used
 import { generateRustSCORM } from '../services/rustScormGenerator'
-// import { detectMediaTypeFromBlob } from '../utils/mediaExtension' // Not used
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
+import { sanitizeScormFileName } from '../utils/fileSanitizer'
 
 import { PageLayout } from './PageLayout'
-// import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected' // Not used
 import { 
   Card, 
   Button, 
@@ -23,9 +21,6 @@ import {
 import { Package, Download, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import type { CourseSeedData } from '../types/course'
-// import { convertScormToStructuredContentSafely } from '../services/courseContentConverter' // Doesn't exist
-// import { getExtensionFromMimeType } from '../utils/mediaExtension' // Doesn't exist
-// import { sanitizeHtml } from '../utils/sanitization' // Wrong name
 
 interface SCORMPackageBuilderProps {
   courseContent: CourseContent
@@ -46,8 +41,7 @@ interface Message {
   text: string
 }
 
-// Create a singleton map for tracking media files during generation
-const mediaFiles = new Map<string, Blob>()
+// Media files map will be created inside component to avoid memory leaks
 
 const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   courseContent,
@@ -61,6 +55,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   onHelp,
   onStepClick
 }) => {
+  // Create media files map inside component to avoid persistence issues
+  const mediaFilesRef = React.useRef(new Map<string, Blob>())
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -69,9 +65,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     metadata: any // SCORMMetadata type not defined
   } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState('Preparing SCORM package...')
-  const [isUsingCache, setIsUsingCache] = useState(false)
-  const [cachedMediaCount, setCachedMediaCount] = useState(0)
-  const [totalMediaCount, setTotalMediaCount] = useState(0)
+  const [audioAutoplay, setAudioAutoplay] = useState(() => 
+    localStorage.getItem('audioAutoplay') === 'true'
+  )
   const [isLoadingMedia, setIsLoadingMedia] = useState(false)
   const [mediaLoadProgress, setMediaLoadProgress] = useState(0)
   const [loadingDetails, setLoadingDetails] = useState({
@@ -98,7 +94,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     try {
       const mediaData = await getMedia(mediaId)
-      if (mediaData) {
+      if (mediaData && mediaData.data) {
         console.log('[SCORMPackageBuilder] Found media:', mediaId)
         return new Blob([mediaData.data], { type: mediaData.metadata?.mimeType || 'application/octet-stream' })
       }
@@ -117,16 +113,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items')
     
     // Load media for each page
-    if (enhancedContent.welcomePage) {
+    // FIX: Use correct property name 'welcome' instead of 'welcomePage'
+    if (enhancedContent.welcome) {
       // Welcome page media
-      const welcomeAudio = enhancedContent.welcomePage.audio
-      const welcomeCaption = enhancedContent.welcomePage.caption
-      const welcomeMedia = enhancedContent.welcomePage.mediaReferences || []
+      const welcomeAudio = enhancedContent.welcome.audio
+      const welcomeCaption = enhancedContent.welcome.caption
+      const welcomeMedia = enhancedContent.welcome.mediaReferences || []
       
       if (welcomeAudio?.id) {
         const audioBlob = await getMediaBlobFromRegistry(welcomeAudio.id)
         if (audioBlob) {
-          mediaFiles.set(welcomeAudio.fileName || 'welcome.mp3', audioBlob)
+          mediaFilesRef.current.set(welcomeAudio.fileName || 'welcome.mp3', audioBlob)
           console.log('[SCORMPackageBuilder] Loaded welcome audio:', welcomeAudio.id)
         }
       }
@@ -134,7 +131,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       if (welcomeCaption?.id) {
         const captionBlob = await getMediaBlobFromRegistry(welcomeCaption.id)
         if (captionBlob) {
-          mediaFiles.set(welcomeCaption.fileName || 'welcome.vtt', captionBlob)
+          mediaFilesRef.current.set(welcomeCaption.fileName || 'welcome.vtt', captionBlob)
           console.log('[SCORMPackageBuilder] Loaded welcome caption:', welcomeCaption.id)
         }
       }
@@ -143,23 +140,24 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (mediaRef.id) {
           const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
           if (mediaBlob) {
-            mediaFiles.set(mediaRef.fileName, mediaBlob)
+            mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
             console.log('[SCORMPackageBuilder] Loaded welcome media:', mediaRef.id)
           }
         }
       }
     }
     
-    if (enhancedContent.learningObjectivesPage) {
+    // FIX: Use correct property name 'objectivesPage'
+    if (enhancedContent.objectivesPage) {
       // Objectives page media
-      const objectivesAudio = enhancedContent.learningObjectivesPage.audio
-      const objectivesCaption = enhancedContent.learningObjectivesPage.caption
-      const objectivesMedia = enhancedContent.learningObjectivesPage.mediaReferences || []
+      const objectivesAudio = enhancedContent.objectivesPage.audio
+      const objectivesCaption = enhancedContent.objectivesPage.caption
+      const objectivesMedia = enhancedContent.objectivesPage.mediaReferences || []
       
       if (objectivesAudio?.id) {
         const audioBlob = await getMediaBlobFromRegistry(objectivesAudio.id)
         if (audioBlob) {
-          mediaFiles.set(objectivesAudio.fileName || 'objectives.mp3', audioBlob)
+          mediaFilesRef.current.set(objectivesAudio.fileName || 'objectives.mp3', audioBlob)
           console.log('[SCORMPackageBuilder] Loaded objectives audio:', objectivesAudio.id)
         }
       }
@@ -167,7 +165,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       if (objectivesCaption?.id) {
         const captionBlob = await getMediaBlobFromRegistry(objectivesCaption.id)
         if (captionBlob) {
-          mediaFiles.set(objectivesCaption.fileName || 'objectives.vtt', captionBlob)
+          mediaFilesRef.current.set(objectivesCaption.fileName || 'objectives.vtt', captionBlob)
           console.log('[SCORMPackageBuilder] Loaded objectives caption:', objectivesCaption.id)
         }
       }
@@ -176,7 +174,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (mediaRef.id) {
           const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
           if (mediaBlob) {
-            mediaFiles.set(mediaRef.fileName, mediaBlob)
+            mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
             console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaRef.id)
           }
         }
@@ -194,7 +192,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (topicAudio?.id) {
           const audioBlob = await getMediaBlobFromRegistry(topicAudio.id)
           if (audioBlob) {
-            mediaFiles.set(topicAudio.fileName || `topic${topicIndex}.mp3`, audioBlob)
+            mediaFilesRef.current.set(topicAudio.fileName || `topic${topicIndex}.mp3`, audioBlob)
             console.log('[SCORMPackageBuilder] Loaded topic audio:', topicAudio.id)
           }
         }
@@ -202,7 +200,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (topicCaption?.id) {
           const captionBlob = await getMediaBlobFromRegistry(topicCaption.id)
           if (captionBlob) {
-            mediaFiles.set(topicCaption.fileName || `topic${topicIndex}.vtt`, captionBlob)
+            mediaFilesRef.current.set(topicCaption.fileName || `topic${topicIndex}.vtt`, captionBlob)
             console.log('[SCORMPackageBuilder] Loaded topic caption:', topicCaption.id)
           }
         }
@@ -211,7 +209,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           if (mediaRef.id) {
             const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
             if (mediaBlob) {
-              mediaFiles.set(mediaRef.fileName, mediaBlob)
+              mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded topic media:', mediaRef.id)
             }
           }
@@ -219,13 +217,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
     }
     
-    console.log('[SCORMPackageBuilder] Media loading complete. Total files:', mediaFiles.size)
+    console.log('[SCORMPackageBuilder] Media loading complete. Total files:', mediaFilesRef.current.size)
   }
 
   const generatePackage = async () => {
     // Clear previous messages and media files
     setMessages([])
-    mediaFiles.clear()
+    mediaFilesRef.current.clear()  // FIX: Use ref instead of global
     setGeneratedPackage(null)
     setIsGenerating(true)
     setIsLoadingMedia(true)
@@ -266,7 +264,35 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       performanceMetrics.mediaLoadDuration = Date.now() - performanceMetrics.mediaLoadStart
       
       setIsLoadingMedia(false)
-      setLoadingMessage('Generating SCORM package...')
+      
+      // FIX: Calculate accurate media count from enhanced content
+      let mediaCount = 0
+      
+      // Count welcome page media
+      if (enhancedContent.welcome) {
+        if (enhancedContent.welcome.audioFile || enhancedContent.welcome.audioId || enhancedContent.welcome.audioBlob) mediaCount++
+        if (enhancedContent.welcome.captionFile || enhancedContent.welcome.captionId || enhancedContent.welcome.captionBlob) mediaCount++
+        if (enhancedContent.welcome.media) mediaCount += enhancedContent.welcome.media.length
+      }
+      
+      // Count objectives page media
+      if (enhancedContent.objectivesPage) {
+        if (enhancedContent.objectivesPage.audioFile || enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioBlob) mediaCount++
+        if (enhancedContent.objectivesPage.captionFile || enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionBlob) mediaCount++
+        if (enhancedContent.objectivesPage.media) mediaCount += enhancedContent.objectivesPage.media.length
+      }
+      
+      // Count topic media
+      if (enhancedContent.topics) {
+        enhancedContent.topics.forEach(topic => {
+          if (topic.audioFile || topic.audioId || topic.audioBlob) mediaCount++
+          if (topic.captionFile || topic.captionId || topic.captionBlob) mediaCount++
+          if (topic.media) mediaCount += topic.media.length
+        })
+      }
+      
+      const estimatedSeconds = Math.round(120 + (mediaCount * 4))
+      setLoadingMessage(`Generating SCORM package (${mediaCount} media files, estimated ${estimatedSeconds}s)...`)
       
       // Generate using Rust
       performanceMetrics.rustGenerationStart = Date.now()
@@ -276,7 +302,12 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           try {
             return await generateRustSCORM(
               enhancedContent,
-              storage.currentProjectId || 'default-project'
+              storage.currentProjectId || 'default-project',
+              (message, progress) => {
+                setLoadingMessage(message)
+                // Could also update a progress bar here if we had one
+                console.log('[SCORMPackageBuilder] Progress:', progress, message)
+              }
             )
           } catch (rustError: any) {
             console.error('[SCORMPackageBuilder] Rust generation failed:', rustError)
@@ -294,10 +325,12 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       setPerformanceData(performanceMetrics)
       console.log('[SCORMPackageBuilder] Performance metrics:', performanceMetrics)
       
-      setGeneratedPackage({
+      const newPackage = {
         data: result.buffer,
         metadata: metadata
-      })
+      }
+      
+      setGeneratedPackage(newPackage)
       
       setMessages(prev => [...prev, {
         id: `success-${Date.now()}`,
@@ -306,6 +339,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }])
       
       setLoadingMessage('')
+      
+      // FIX: Don't auto-download. Let user choose when to download
+      console.log('[SCORMPackageBuilder] Package generated successfully, ready for download')
     } catch (error) {
       console.error('Error generating SCORM package:', error)
       setMessages(prev => [...prev, {
@@ -318,42 +354,98 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       setIsGenerating(false)
       setIsLoadingMedia(false)
       // Clear media files to free memory
-      mediaFiles.clear()
+      mediaFilesRef.current.clear()
     }
   }
 
-  const downloadPackage = async () => {
-    if (!generatedPackage) return
+  const downloadPackage = async (packageToDownload?: typeof generatedPackage) => {
+    console.log('[SCORMPackageBuilder] downloadPackage called')
+    const pkg = packageToDownload || generatedPackage
+    if (!pkg) {
+      console.log('[SCORMPackageBuilder] No generated package available')
+      return
+    }
     
+    console.log('[SCORMPackageBuilder] Starting download process...')
+    console.log('[SCORMPackageBuilder] Package size:', pkg.data.byteLength, 'bytes')
     setIsDownloading(true)
+    
     try {
-      // Open save dialog
-      const filePath = await save({
-        defaultPath: `${generatedPackage.metadata.title || 'course'}.zip`,
-        filters: [{
-          name: 'SCORM Package',
-          extensions: ['zip']
-        }]
-      })
+      // First, try the dialog API directly
+      console.log('[SCORMPackageBuilder] Attempting to open save dialog...')
+      console.log('[SCORMPackageBuilder] Dialog save function available:', typeof save)
+      
+      let filePath = null
+      
+      try {
+        // FIX: Sanitize filename to avoid Windows reserved characters
+        const sanitizedFileName = sanitizeScormFileName(pkg.metadata.title || courseSeedData?.courseTitle)
+        console.log('[SCORMPackageBuilder] Calling save dialog with sanitized filename:', sanitizedFileName)
+        filePath = await save({
+          defaultPath: sanitizedFileName,
+          filters: [{
+            name: 'SCORM Package',
+            extensions: ['zip']
+          }]
+        })
+        console.log('[SCORMPackageBuilder] Dialog returned:', filePath)
+      } catch (dialogError) {
+        console.error('[SCORMPackageBuilder] Dialog error:', dialogError)
+        console.error('[SCORMPackageBuilder] Dialog error type:', typeof dialogError)
+        console.error('[SCORMPackageBuilder] Dialog error stringify:', JSON.stringify(dialogError, null, 2))
+        
+        // If dialog fails, try using invoke to get projects directory
+        console.log('[SCORMPackageBuilder] Attempting alternative save method...')
+        try {
+          // FIX: Use sanitized filename for fallback too
+          const fileName = sanitizeScormFileName(pkg.metadata.title || courseSeedData?.courseTitle)
+          const projectDir = await invoke<string>('get_projects_dir')
+          filePath = `${projectDir}/${fileName}`
+          console.log('[SCORMPackageBuilder] Using fallback path:', filePath)
+        } catch (fallbackError) {
+          console.error('[SCORMPackageBuilder] Fallback error:', fallbackError)
+          throw dialogError // Re-throw original error
+        }
+      }
       
       if (filePath) {
-        // Write the file
-        await writeFile(filePath, new Uint8Array(generatedPackage.data))
+        console.log('[SCORMPackageBuilder] Writing file to:', filePath)
+        console.log('[SCORMPackageBuilder] Data type:', typeof pkg.data)
+        console.log('[SCORMPackageBuilder] Data constructor:', pkg.data.constructor.name)
         
+        // Convert ArrayBuffer to Uint8Array if needed
+        const data = pkg.data instanceof Uint8Array 
+          ? pkg.data 
+          : new Uint8Array(pkg.data)
+        
+        console.log('[SCORMPackageBuilder] Writing', data.length, 'bytes to file...')
+        await writeFile(filePath, data)
+        
+        console.log('[SCORMPackageBuilder] File written successfully')
         setMessages(prev => [...prev, {
           id: `download-success-${Date.now()}`,
           type: 'success',
           text: `SCORM package saved to: ${filePath}`
         }])
+      } else {
+        console.log('[SCORMPackageBuilder] User cancelled save dialog or no path returned')
       }
-    } catch (error) {
-      console.error('Error saving SCORM package:', error)
+    } catch (error: any) {
+      console.error('[SCORMPackageBuilder] Error saving SCORM package:', error)
+      console.error('[SCORMPackageBuilder] Error details:', {
+        name: error?.name,
+        message: error?.message,
+        stack: error?.stack,
+        type: typeof error,
+        constructor: error?.constructor?.name
+      })
       setMessages(prev => [...prev, {
         id: `download-error-${Date.now()}`,
         type: 'error',
         text: `Error saving SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
       }])
     } finally {
+      console.log('[SCORMPackageBuilder] Download process complete')
       setIsDownloading(false)
     }
   }
@@ -396,24 +488,26 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       description="Create a SCORM-compliant package for your course"
       onBack={onBack}
       actions={
-        <Button 
-          onClick={downloadPackage}
-          disabled={!generatedPackage || isDownloading}
-          variant="primary"
-          className="min-w-[200px]"
-        >
-          {isDownloading ? (
-            <>
-              <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Icon icon={Download} />
-              Download Package
-            </>
-          )}
-        </Button>
+        generatedPackage ? (
+          <Button 
+            onClick={() => downloadPackage()}
+            disabled={isDownloading}
+            variant="primary"
+            className="min-w-[200px]"
+          >
+            {isDownloading ? (
+              <>
+                <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Icon icon={Download} />
+                Download Package
+              </>
+            )}
+          </Button>
+        ) : undefined
       }
       onSettingsClick={onSettingsClick}
       onSave={onSave}
@@ -443,6 +537,34 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   {' '}{courseContent.assessment?.questions?.length || 0} assessment questions
                 </p>
               </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Audio Settings */}
+        <Card className="mb-6">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Audio Settings</h3>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={audioAutoplay}
+                  onChange={(e) => {
+                    const newValue = e.target.checked
+                    setAudioAutoplay(newValue)
+                    localStorage.setItem('audioAutoplay', newValue.toString())
+                  }}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  aria-label="Enable audio autoplay"
+                />
+                <div>
+                  <span className="font-medium">Autoplay audio when pages load</span>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Note: Some browsers may require user interaction before audio can play automatically.
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
         </Card>
@@ -509,12 +631,31 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               <p className="text-gray-600 mb-4">
                 Your SCORM package has been generated successfully.
               </p>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-500 mb-6">
                 <p>Package size: {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB</p>
                 {performanceData && (
                   <p>Generation time: {(performanceData.totalDuration / 1000).toFixed(2)} seconds</p>
                 )}
               </div>
+              <Button
+                onClick={() => downloadPackage()}
+                disabled={isDownloading}
+                variant="primary"
+                size="large"
+                className="min-w-[200px]"
+              >
+                {isDownloading ? (
+                  <>
+                    <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Icon icon={Download} />
+                    Download Package
+                  </>
+                )}
+              </Button>
             </div>
           </Card>
         )}

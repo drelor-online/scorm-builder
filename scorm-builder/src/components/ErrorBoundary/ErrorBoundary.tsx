@@ -41,6 +41,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const { onError, showInDevelopment = true } = this.props
     
+    // Log to window.__debugLogs for production debugging
+    if (typeof window !== 'undefined') {
+      if (!window.__debugLogs) {
+        window.__debugLogs = []
+      }
+      const errorLog = `[${new Date().toISOString()}] [ERROR_BOUNDARY] ${error.message}\nStack: ${error.stack}\nComponent Stack: ${errorInfo.componentStack}`
+      window.__debugLogs.push(errorLog)
+      
+      // Keep only last 1000 entries
+      if (window.__debugLogs.length > 1000) {
+        window.__debugLogs.shift()
+      }
+    }
+    
     // Log error to console in development
     if (import.meta.env.MODE === 'development') {
       console.error('Error caught by ErrorBoundary:', error)

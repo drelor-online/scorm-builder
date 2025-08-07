@@ -1,10 +1,15 @@
 <div class="content-wrapper">
     <div class="assessment-container">
         <h2>Course Assessment</h2>
-        <p>Please answer all questions to complete the course.</p>
+        <p style="margin-bottom: 2rem;">Please answer all questions to complete the course.</p>
         
         {{#each assessment.questions}}
-        <div class="question-container">
+        <div class="question-container" 
+             data-question-index="{{index}}"
+             data-correct-answer="{{correct_answer}}"
+             data-correct-feedback="{{correct_feedback}}"
+             data-incorrect-feedback="{{incorrect_feedback}}"
+             data-explanation="{{explanation}}">
             <p class="question-text">{{add index 1}}. {{text}}</p>
             <div class="kc-options">
             {{#each options}}
@@ -12,8 +17,7 @@
                 <input type="radio" 
                        name="assessment-q{{../index}}" 
                        value="{{this}}"
-                       data-correct="{{../correct_answer}}"
-                       data-feedback="{{../explanation}}">
+                       data-correct="{{../correct_answer}}">
                 <span>{{this}}</span>
             </label>
             {{/each}}
@@ -22,8 +26,30 @@
         </div>
         {{/each}}
         
-        <button class="submit-assessment" onclick="window.submitAssessment()">
+        <button class="kc-submit submit-assessment" onclick="window.submitAssessment()">
             Submit Assessment
         </button>
+        
+        <!-- Assessment Results Display -->
+        <div id="assessment-results" class="assessment-results" style="display: none;">
+            <h3>Assessment Results</h3>
+            <div class="score-display">
+                <div class="score-circle">
+                    <svg width="120" height="120">
+                        <circle cx="60" cy="60" r="50" class="score-circle-bg"></circle>
+                        <circle cx="60" cy="60" r="50" class="score-circle-fill" id="score-circle-fill"></circle>
+                    </svg>
+                    <div class="score-text" id="score-percentage">0%</div>
+                </div>
+            </div>
+            <p id="score-message" class="score-message"></p>
+            <div id="result-actions" class="result-actions">
+                <div id="completion-message" class="completion-message" style="display: none;">
+                    <p>🎉 Congratulations! You have successfully completed the course.</p>
+                    <p>Your certificate will be emailed to you shortly.</p>
+                    <p>You may now close this window.</p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

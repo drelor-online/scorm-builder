@@ -1,26 +1,15 @@
 /**
- * MediaService - Unified media management service
+ * MediaService - File-based media management ONLY
  * 
- * This service consolidates all media handling into a single, simple interface.
- * It replaces the complex FileStorage + FileStorageAdapter + MediaRegistry system
- * with a straightforward API that directly integrates with the Tauri backend.
+ * This service wraps FileStorage to ensure ALL media is stored in the file system.
+ * NO IndexedDB, NO memory storage - ONLY file-based storage through Tauri.
  */
 
+import { FileStorage } from './FileStorage'
 import { generateMediaId, type MediaType } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
-import { performanceMonitor } from '../utils/performanceMonitor'
-import { retryWithBackoff, RetryStrategies } from '../utils/retryWithBackoff'
-import { validateExternalURL, validateYouTubeURL, validateImageURL } from '../utils/urlValidator'
-import { sanitizePath, sanitizeFilename, PathSanitizers } from '../utils/pathSanitizerBrowser'
-import { hasTauriAPI, getStorageBackend } from '../utils/environment'
-
-// Conditionally import Tauri API only if available
-let invoke: (<T = any>(cmd: string, args?: any) => Promise<T>) | null = null
-if (hasTauriAPI()) {
-  import('@tauri-apps/api/core').then(module => {
-    invoke = module.invoke
-  })
-}
+import { debugLogger } from '@/utils/ultraSimpleLogger'
+import { mediaUrlService } from './mediaUrl'
 
 export interface MediaMetadata {
   size?: number
@@ -46,6 +35,11 @@ export interface MediaItem {
   metadata: MediaMetadata
 }
 
+export interface MediaServiceConfig {
+  projectId: string
+  fileStorage?: FileStorage  // Optional shared FileStorage instance
+}
+
 export interface ProgressInfo {
   loaded: number
   total: number
@@ -56,454 +50,524 @@ export interface ProgressInfo {
 
 export type ProgressCallback = (progress: ProgressInfo) => void
 
-export interface MediaServiceConfig {
-  projectId: string
-}
-
 // Singleton instance cache
 const mediaServiceInstances = new Map<string, MediaService>()
 
 export class MediaService {
   private projectId: string
+  private fileStorage: FileStorage
   private mediaCache: Map<string, MediaItem> = new Map()
-  private pageIndex: Map<string, Set<string>> = new Map()
-  private storageBackend: 'tauri' | 'indexeddb' | 'memory'
-  private indexedDB: IDBDatabase | null = null
-  private memoryStorage: Map<string, { data: Uint8Array; metadata: any }> = new Map()
   
   private constructor(config: MediaServiceConfig) {
+    // VERSION MARKER: v2.0.1 - MediaService with project ID extraction
+    // Project ID should already be extracted by getInstance
     this.projectId = config.projectId
-    this.storageBackend = getStorageBackend()
-    logger.info('[MediaService] Initialized for project:', this.projectId, 'using backend:', this.storageBackend)
+    // Use provided FileStorage or create new one
+    this.fileStorage = config.fileStorage || new FileStorage()
     
-    // Initialize IndexedDB if needed
-    if (this.storageBackend === 'indexeddb') {
-      this.initializeIndexedDB()
-    }
+    debugLogger.info('MediaService.constructor v2.0.1', 'Initialized MediaService', {
+      projectId: this.projectId,
+      storageType: 'FILE_STORAGE_ONLY',
+      sharedInstance: !!config.fileStorage,
+      version: 'v2.0.1'
+    })
+    console.log('[MediaService v2.0.1] Initialized with project ID:', this.projectId)
+    
+    logger.info('[MediaService] Initialized for project:', this.projectId, 'using FILE STORAGE ONLY', 
+      config.fileStorage ? '(shared instance)' : '(new instance)')
   }
   
   // Static factory method to get singleton instance per project
   static getInstance(config: MediaServiceConfig): MediaService {
-    const existing = mediaServiceInstances.get(config.projectId)
+    // Extract the numeric project ID for consistent caching
+    const extractedId = MediaService.extractNumericProjectId(config.projectId)
+    
+    const existing = mediaServiceInstances.get(extractedId)
     if (existing) {
+      debugLogger.debug('MediaService.getInstance', 'Returning existing instance', {
+        originalProjectId: config.projectId,
+        extractedId: extractedId
+      })
       return existing
     }
     
-    const instance = new MediaService(config)
-    mediaServiceInstances.set(config.projectId, instance)
+    debugLogger.debug('MediaService.getInstance', 'Creating new instance', {
+      originalProjectId: config.projectId,
+      extractedId: extractedId
+    })
+    
+    // Pass the extracted ID to ensure consistency
+    const instance = new MediaService({ ...config, projectId: extractedId })
+    mediaServiceInstances.set(extractedId, instance)
     return instance
   }
   
-  // Clear singleton instance for a project (useful for cleanup)
-  static clearInstance(projectId: string): void {
-    mediaServiceInstances.delete(projectId)
+  // Static method to extract numeric project ID
+  private static extractNumericProjectId(projectIdOrPath: string): string {
+    if (!projectIdOrPath) return ''
+    
+    // If it's a file path like "...\ProjectName_1234567890.scormproj"
+    if (projectIdOrPath.includes('.scormproj')) {
+      const match = projectIdOrPath.match(/_(\d+)\.scormproj$/)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    // If it's a folder path like "C:\...\SCORM Projects\1754510569416"
+    if (projectIdOrPath.includes('\\') || projectIdOrPath.includes('/')) {
+      const parts = projectIdOrPath.split(/[\\/]/)
+      const lastPart = parts[parts.length - 1]
+      // If the last part is all digits, use it
+      if (/^\d+$/.test(lastPart)) {
+        return lastPart
+      }
+    }
+    
+    // If it's already just a numeric ID
+    if (/^\d+$/.test(projectIdOrPath)) {
+      return projectIdOrPath
+    }
+    
+    // Fallback: return as is
+    debugLogger.warn('MediaService.extractNumericProjectId', 'Could not extract numeric ID from:', projectIdOrPath)
+    return projectIdOrPath
   }
   
-  private async initializeIndexedDB(): Promise<void> {
-    try {
-      const request = indexedDB.open('MediaServiceDB', 1)
-      
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-        if (!db.objectStoreNames.contains('media')) {
-          db.createObjectStore('media', { keyPath: 'id' })
-        }
-      }
-      
-      return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
-          this.indexedDB = request.result
-          resolve()
-        }
-        request.onerror = () => reject(request.error)
-      })
-    } catch (error) {
-      logger.error('[MediaService] Failed to initialize IndexedDB:', error)
-      // Fallback to memory storage
-      this.storageBackend = 'memory'
-    }
+  // Clear singleton instance for a project
+  static clearInstance(projectId: string): void {
+    const extractedId = MediaService.extractNumericProjectId(projectId)
+    debugLogger.info('MediaService.clearInstance', 'Clearing instance', { 
+      originalProjectId: projectId,
+      extractedId: extractedId 
+    })
+    mediaServiceInstances.delete(extractedId)
   }
   
   /**
-   * Store a media file
+   * Store media from File/Blob - ALWAYS to file system
    */
   async storeMedia(
-    file: File | Blob, 
-    pageId: string, 
+    file: File | Blob,
+    pageId: string,
     type: MediaType,
     metadata?: Partial<MediaMetadata>,
     progressCallback?: ProgressCallback
   ): Promise<MediaItem> {
-    // Input validation
-    if (!file) {
-      throw new Error('File is required')
-    }
-    
-    if (pageId === undefined) {
-      throw new Error('Page ID is required')
-    }
-    
-    const validTypes: MediaType[] = ['image', 'video', 'audio', 'caption']
-    if (!validTypes.includes(type)) {
-      throw new Error(`Invalid media type: ${type}`)
-    }
-    
-    try {
-      return await performanceMonitor.measureOperation(
-        'MediaService.storeMedia',
-        async () => {
-    // Validate media type matches file extension if it's a File
-    if (file instanceof File) {
-      if (!this.validateMediaType(file.name, type)) {
-        throw new Error(`File type mismatch: ${file.name} is not a valid ${type} file`)
-      }
-    }
-    
-    // Generate consistent ID
     const id = generateMediaId(type, pageId)
     
-    // Prepare metadata - strip any sensitive data
-    const cleanMetadata = metadata ? this.stripSensitiveData(metadata) : {}
-    
-    // Sanitize filename
-    const originalName = file instanceof File 
-      ? this.sanitizePath(file.name) 
-      : `${id}.${this.getExtension(file.type || this.getDefaultMimeType(type))}`
-    
-    const fullMetadata: MediaMetadata = {
-      uploadedAt: new Date().toISOString(),
-      mimeType: file.type,
-      size: file.size,
-      originalName,
+    debugLogger.info('MediaService.storeMedia', 'Storing media', {
+      mediaId: id,
       pageId,
       type,
-      ...cleanMetadata
-    }
-    
-    // Convert to array buffer for Tauri
-    const buffer = await file.arrayBuffer()
-    const data = new Uint8Array(buffer)
+      fileSize: file.size,
+      fileName: (file as File).name || 'blob',
+      mimeType: file.type
+    })
     
     try {
       // Report initial progress
       if (progressCallback) {
-        try {
-          progressCallback({ loaded: 0, total: file.size, percent: 0 })
-        } catch (err) {
-          logger.warn('[MediaService] Progress callback error:', err)
-        }
+        progressCallback({ loaded: 0, total: file.size, percent: 0 })
       }
       
-      // Store in backend based on environment
-      await this.storeInBackend(id, data, originalName, file.type)
+      // Get filename
+      const fileName = file instanceof File ? file.name : `${id}.${this.getExtension(type)}`
+      
+      // Store directly using FileStorage for efficiency with large files
+      await this.fileStorage.storeMedia(id, file, type, {
+        page_id: pageId,
+        type,
+        original_name: fileName,
+        mime_type: file.type,
+        size: file.size,
+        ...metadata
+      }, (progress) => {
+        // Convert FileStorage progress to MediaService format
+        progressCallback?.({
+          loaded: Math.round(file.size * progress.percent / 100),
+          total: file.size,
+          percent: progress.percent
+        })
+      })
       
       // Report completion
       if (progressCallback) {
-        try {
-          progressCallback({ loaded: file.size, total: file.size, percent: 100 })
-        } catch (err) {
-          logger.warn('[MediaService] Progress callback error:', err)
-        }
+        progressCallback({ loaded: file.size, total: file.size, percent: 100 })
       }
       
-      // Create media item
+      // Update cache
       const mediaItem: MediaItem = {
         id,
         type,
         pageId,
-        fileName: originalName || id,
-        metadata: fullMetadata
+        fileName: fileName,
+        metadata: {
+          uploadedAt: new Date().toISOString(),
+          type,
+          pageId,
+          mimeType: file.type,
+          size: file.size,
+          originalName: fileName,
+          ...metadata
+        }
       }
-      
-      // Update cache
       this.mediaCache.set(id, mediaItem)
       
-      // Update page index
-      if (!this.pageIndex.has(pageId)) {
-        this.pageIndex.set(pageId, new Set())
-      }
-      this.pageIndex.get(pageId)!.add(id)
-      
-      logger.info('[MediaService] Stored media:', id, 'for page:', pageId)
-      return mediaItem
-      
-    } catch (error) {
-      logger.error('[MediaService] Failed to store media:', error)
-      throw new Error(`Failed to store media: ${error}`)
-    }
-      },
-      {
-        mediaType: type,
-        pageId: pageId,
-        fileSize: file.size,
-        largeFile: file.size > 5 * 1024 * 1024 // Flag files > 5MB
-      }
-    )
-    } catch (error) {
-      // If performance monitoring fails, log it but continue with the operation
-      logger.warn('[MediaService] Performance monitoring failed, continuing without metrics:', error)
-      
-      // Execute the operation without monitoring
-      return this.storeMediaInternal(file, pageId, type, metadata, progressCallback)
-    }
-  }
-  
-  // Internal version without performance monitoring
-  private async storeMediaInternal(
-    file: File | Blob, 
-    pageId: string, 
-    type: MediaType,
-    metadata?: Partial<MediaMetadata>,
-    progressCallback?: ProgressCallback
-  ): Promise<MediaItem> {
-    // Validate media type matches file extension if it's a File
-    if (file instanceof File) {
-      if (!this.validateMediaType(file.name, type)) {
-        throw new Error(`File type mismatch: ${file.name} is not a valid ${type} file`)
-      }
-    }
-    
-    // Generate consistent ID
-    const id = generateMediaId(type, pageId)
-    
-    // Prepare metadata - strip any sensitive data
-    const cleanMetadata = metadata ? this.stripSensitiveData(metadata) : {}
-    
-    // Sanitize filename
-    const originalName = file instanceof File 
-      ? this.sanitizePath(file.name) 
-      : `${id}.${this.getExtension(file.type || this.getDefaultMimeType(type))}`
-    
-    const fullMetadata: MediaMetadata = {
-      uploadedAt: new Date().toISOString(),
-      mimeType: file.type,
-      size: file.size,
-      originalName,
-      pageId,
-      type,
-      ...cleanMetadata
-    }
-    
-    // Convert to array buffer for Tauri
-    const buffer = await file.arrayBuffer()
-    const data = new Uint8Array(buffer)
-    
-    try {
-      // Report initial progress
-      if (progressCallback) {
-        try {
-          progressCallback({ loaded: 0, total: file.size, percent: 0 })
-        } catch (err) {
-          logger.warn('[MediaService] Progress callback error:', err)
-        }
-      }
-      
-      // Store in backend with retry
-      await retryWithBackoff(
-        async () => {
-          await this.storeInBackend(id, data, originalName, file.type)
-        },
-        {
-          ...RetryStrategies.network,
-          maxAttempts: 3,
-          onRetry: (error, attempt, delay) => {
-            logger.warn(`[MediaService] Store media retry attempt ${attempt} in ${delay}ms:`, error)
-            if (progressCallback) {
-              try {
-                // Report retry to user
-                progressCallback({ 
-                  loaded: 0, 
-                  total: file.size, 
-                  percent: 0,
-                  timestamp: Date.now()
-                })
-              } catch (err) {
-                logger.warn('[MediaService] Progress callback error during retry:', err)
-              }
-            }
-          }
-        }
-      )
-      
-      // Report completion
-      if (progressCallback) {
-        try {
-          progressCallback({ loaded: file.size, total: file.size, percent: 100 })
-        } catch (err) {
-          logger.warn('[MediaService] Progress callback error:', err)
-        }
-      }
-      
-      // Create media item
-      const mediaItem: MediaItem = {
-        id,
-        type,
+      debugLogger.info('MediaService.storeMedia', 'Media stored successfully', {
+        mediaId: id,
         pageId,
-        fileName: originalName || id,
-        metadata: fullMetadata
-      }
+        fileName,
+        fileSize: file.size
+      })
       
-      // Update cache
-      this.mediaCache.set(id, mediaItem)
+      logger.info('[MediaService] Stored media to FILE SYSTEM:', id, 'for page:', pageId)
       
-      // Update page index
-      if (!this.pageIndex.has(pageId)) {
-        this.pageIndex.set(pageId, new Set())
-      }
-      this.pageIndex.get(pageId)!.add(id)
-      
-      logger.info('[MediaService] Stored media:', id, 'for page:', pageId)
       return mediaItem
-      
     } catch (error) {
+      debugLogger.error('MediaService.storeMedia', 'Failed to store media', {
+        mediaId: id,
+        pageId,
+        error
+      })
       logger.error('[MediaService] Failed to store media:', error)
-      throw new Error(`Failed to store media: ${error}`)
+      throw error
     }
   }
   
   /**
-   * Get a media file by ID
+   * Internal method to store media data - ALWAYS to file system
    */
-  async getMedia(mediaId: string): Promise<{ data: Uint8Array; metadata: MediaMetadata } | null> {
-    return performanceMonitor.measureOperation(
-      'MediaService.getMedia',
-      async () => {
+  private async storeMediaInternal(
+    data: Uint8Array,
+    type: MediaType,
+    pageId: string,
+    fileName?: string,
+    metadata?: Partial<MediaMetadata>,
+    onProgress?: (progress: { percent: number }) => void
+  ): Promise<string> {
+    const id = generateMediaId(type, pageId)
+    
+    debugLogger.debug('MediaService.storeMediaInternal', 'Storing media data', {
+      mediaId: id,
+      type,
+      pageId,
+      dataSize: data.length
+    })
+    
     try {
-      // Check cache first
-      const cached = this.mediaCache.get(mediaId)
+      // Convert Uint8Array to Blob for FileStorage
+      const blob = new Blob([data])
       
-      // Get from backend with retry
-      const result = await retryWithBackoff(
-        async () => this.getFromBackend(mediaId),
-        {
-          ...RetryStrategies.fast,
-          maxAttempts: 2,
-          onRetry: (error, attempt, delay) => {
-            logger.warn(`[MediaService] Get media retry attempt ${attempt} in ${delay}ms:`, error)
-          }
+      // Store using FileStorage - this goes to the file system via Tauri
+      await this.fileStorage.storeMedia(id, blob, type, {
+        page_id: pageId,
+        type,
+        original_name: fileName || `${id}.${this.getExtension(type)}`,
+        mime_type: metadata?.mimeType,
+        ...metadata
+      }, onProgress)
+      
+      debugLogger.debug('MediaService.storeMediaInternal', 'Media data stored to file system', {
+        mediaId: id
+      })
+      
+      logger.info('[MediaService] Stored media to FILE SYSTEM:', id, 'for page:', pageId)
+      
+      // Update cache
+      const mediaItem: MediaItem = {
+        id,
+        type,
+        pageId,
+        fileName: fileName || id,
+        metadata: {
+          uploadedAt: new Date().toISOString(),
+          type,
+          pageId,
+          originalName: fileName,
+          ...metadata
         }
-      )
+      }
+      this.mediaCache.set(id, mediaItem)
       
-      if (!result || !result.data) {
+      return id
+    } catch (error) {
+      debugLogger.error('MediaService.storeMediaInternal', 'Failed to store media', {
+        mediaId: id,
+        error
+      })
+      logger.error('[MediaService] Failed to store media to file system:', error)
+      throw new Error(`Failed to store media to file system: ${error}`)
+    }
+  }
+  
+  /**
+   * Store YouTube video metadata - to file system
+   */
+  async storeYouTubeVideo(
+    youtubeUrl: string,
+    embedUrl: string,
+    pageId: string,
+    metadata?: Partial<MediaMetadata>
+  ): Promise<MediaItem> {
+    const id = generateMediaId('video', pageId)
+    
+    debugLogger.info('MediaService.storeYouTubeVideo', 'Storing YouTube video', {
+      mediaId: id,
+      pageId,
+      youtubeUrl,
+      embedUrl
+    })
+    
+    try {
+      // Store YouTube metadata to file system
+      await this.fileStorage.storeYouTubeVideo(id, youtubeUrl, {
+        page_id: pageId,
+        title: metadata?.title,
+        thumbnail: metadata?.thumbnail,
+        embed_url: embedUrl  // Use the embedUrl parameter
+      })
+      
+      debugLogger.info('MediaService.storeYouTubeVideo', 'YouTube video stored successfully', {
+        mediaId: id,
+        pageId
+      })
+      
+      logger.info('[MediaService] Stored YouTube video to FILE SYSTEM:', id)
+      
+      // Update cache
+      const mediaItem: MediaItem = {
+        id,
+        type: 'video',
+        pageId,
+        fileName: metadata?.title || 'YouTube Video',
+        metadata: {
+          uploadedAt: new Date().toISOString(),
+          type: 'video',
+          pageId,
+          youtubeUrl,
+          embedUrl,  // Include embedUrl
+          isYouTube: true,  // Mark as YouTube video
+          ...metadata
+        }
+      }
+      this.mediaCache.set(id, mediaItem)
+      
+      return mediaItem  // Return MediaItem, not just id
+    } catch (error) {
+      debugLogger.error('MediaService.storeYouTubeVideo', 'Failed to store YouTube video', {
+        mediaId: id,
+        error
+      })
+      logger.error('[MediaService] Failed to store YouTube video:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Get media from file system with asset URL
+   */
+  async getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
+    debugLogger.debug('MediaService.getMedia', 'Getting media', { mediaId })
+    
+    try {
+      console.log('[MediaService] Getting media from file system:', mediaId)
+      
+      const mediaInfo = await this.fileStorage.getMedia(mediaId)
+      
+      debugLogger.debug('MediaService.getMedia', 'FileStorage returned', {
+        found: !!mediaInfo,
+        hasData: !!(mediaInfo?.data),
+        dataSize: mediaInfo?.data?.byteLength || 0,
+        mediaType: mediaInfo?.mediaType,
+        metadataKeys: mediaInfo?.metadata ? Object.keys(mediaInfo.metadata) : []
+      })
+      
+      console.log('[MediaService] FileStorage returned:', {
+        found: !!mediaInfo,
+        hasData: !!(mediaInfo?.data),
+        dataSize: mediaInfo?.data?.byteLength || 0,
+        mediaType: mediaInfo?.mediaType,
+        metadataKeys: mediaInfo?.metadata ? Object.keys(mediaInfo.metadata) : []
+      })
+      
+      if (!mediaInfo) {
+        debugLogger.warn('MediaService.getMedia', 'Media not found', { mediaId })
+        console.error('[MediaService] No media info returned from FileStorage for:', mediaId)
         return null
       }
       
-      const data = result.data
+      // Get cached metadata
+      const cachedItem = this.mediaCache.get(mediaId)
+      console.log('[MediaService] Cached item:', {
+        found: !!cachedItem,
+        id: cachedItem?.id,
+        type: cachedItem?.type,
+        pageId: cachedItem?.pageId
+      })
       
-      // Use cached metadata if available, otherwise use backend metadata
-      const metadata = cached?.metadata || result.metadata || {
+      const metadata = cachedItem?.metadata || {
         uploadedAt: new Date().toISOString(),
-        type: this.getTypeFromId(mediaId),
-        pageId: this.getPageFromId(mediaId)
+        type: mediaInfo.mediaType as MediaType,
+        pageId: mediaInfo.metadata?.page_id || '',
+        size: mediaInfo.data?.byteLength || 0,
+        ...mediaInfo.metadata
       }
       
-      return { data, metadata }
+      // Update cache if not already cached
+      if (!cachedItem) {
+        this.mediaCache.set(mediaId, {
+          id: mediaId,
+          type: metadata.type,
+          pageId: metadata.pageId || '',
+          fileName: metadata.originalName || mediaId,
+          metadata
+        })
+      }
       
+      // Generate URL based on media type
+      let url: string | undefined
+      
+      // For YouTube videos, return the embed URL directly
+      if (metadata.source === 'youtube' && metadata.embedUrl) {
+        url = metadata.embedUrl
+        debugLogger.debug('MediaService.getMedia', 'Using YouTube embed URL', { mediaId, url })
+        logger.info('[MediaService] Using YouTube embed URL:', url)
+      } else if (metadata.youtubeUrl) {
+        url = metadata.youtubeUrl
+        debugLogger.debug('MediaService.getMedia', 'Using YouTube URL', { mediaId, url })
+        logger.info('[MediaService] Using YouTube URL:', url)
+      } else {
+        // For regular files, use the asset protocol via MediaUrlService
+        const mediaUrl = await mediaUrlService.getMediaUrl(this.projectId, mediaId)
+        
+        if (mediaUrl) {
+          url = mediaUrl
+          debugLogger.debug('MediaService.getMedia', 'Generated asset URL', { mediaId, url })
+          logger.info('[MediaService] Generated asset URL:', url)
+        } else {
+          // MediaUrlService returned null - file may not exist yet
+          // Try to generate a proper asset URL as fallback
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            const { convertFileSrc } = await import('@tauri-apps/api/core')
+            const { join } = await import('@tauri-apps/api/path')
+            
+            const projectsDir = await invoke<string>('get_projects_dir')
+            const mediaPath = await join(projectsDir, this.projectId, 'media', `${mediaId}.bin`)
+            url = convertFileSrc(mediaPath)
+            
+            debugLogger.debug('MediaService.getMedia', 'Generated fallback asset URL', { mediaId, url })
+            logger.info('[MediaService] Generated fallback asset URL:', url)
+          } catch (error) {
+            debugLogger.warn('MediaService.getMedia', 'Failed to generate fallback URL', { mediaId, error })
+            logger.warn('[MediaService] Failed to generate fallback URL for:', mediaId)
+          }
+        }
+      }
+      
+      // Convert ArrayBuffer to Uint8Array if data exists (for backward compatibility)
+      let data: Uint8Array | undefined
+      if (mediaInfo.data && !metadata.source) {
+        data = new Uint8Array(mediaInfo.data)
+        console.log('[MediaService] Converted ArrayBuffer to Uint8Array:', {
+          originalSize: mediaInfo.data.byteLength,
+          convertedSize: data.length,
+          firstBytes: data.length > 0 ? Array.from(data.slice(0, 10)) : []
+        })
+      }
+      
+      debugLogger.info('MediaService.getMedia', 'Media retrieved successfully', {
+        mediaId,
+        hasData: !!data,
+        hasUrl: !!url,
+        type: metadata.type
+      })
+      
+      logger.info('[MediaService] Retrieved media from FILE SYSTEM:', mediaId, 'url:', url)
+      
+      const result = {
+        data,
+        metadata,
+        url
+      }
+      
+      console.log('[MediaService] Returning media:', {
+        mediaId,
+        hasData: !!result.data,
+        metadataType: result.metadata.type,
+        metadataPageId: result.metadata.pageId,
+        url: result.url
+      })
+      
+      return result
     } catch (error) {
-      logger.error('[MediaService] Failed to get media:', mediaId, error)
+      debugLogger.error('MediaService.getMedia', 'Failed to get media', {
+        mediaId,
+        error
+      })
+      logger.error('[MediaService] Failed to get media from file system:', error)
+      console.error('[MediaService] Error details:', error)
       return null
     }
-      },
-      { mediaId }
-    )
   }
   
   /**
-   * Delete a media file
+   * Create asset URL for media from file system
    */
-  async deleteMedia(mediaId: string): Promise<boolean> {
-    return performanceMonitor.measureOperation(
-      'MediaService.deleteMedia',
-      async () => {
+  async createBlobUrl(mediaId: string): Promise<string | null> {
+    debugLogger.debug('MediaService.createBlobUrl', 'Creating asset URL', { mediaId })
+    
     try {
-      await retryWithBackoff(
-        async () => this.deleteFromBackend(mediaId),
-        {
-          ...RetryStrategies.fast,
-          maxAttempts: 2,
-          onRetry: (error, attempt, delay) => {
-            logger.warn(`[MediaService] Delete media retry attempt ${attempt} in ${delay}ms:`, error)
-          }
-        }
-      )
-      
-      // Remove from cache
-      const item = this.mediaCache.get(mediaId)
-      if (item) {
-        this.mediaCache.delete(mediaId)
-        
-        // Remove from page index
-        const pageSet = this.pageIndex.get(item.pageId)
-        if (pageSet) {
-          pageSet.delete(mediaId)
-          if (pageSet.size === 0) {
-            this.pageIndex.delete(item.pageId)
-          }
-        }
+      // Use MediaUrlService to get asset protocol URL
+      const url = await mediaUrlService.getMediaUrl(this.projectId, mediaId)
+      if (!url) {
+        debugLogger.warn('MediaService.createBlobUrl', 'No URL found', { mediaId })
+        logger.warn('[MediaService] No URL found for media:', mediaId)
+        return null
       }
       
-      logger.info('[MediaService] Deleted media:', mediaId)
-      return true
-      
+      debugLogger.debug('MediaService.createBlobUrl', 'Asset URL created', { mediaId, url })
+      logger.info('[MediaService] Created asset URL from FILE SYSTEM:', mediaId, 'URL:', url)
+      return url
     } catch (error) {
-      logger.error('[MediaService] Failed to delete media:', mediaId, error)
-      return false
+      debugLogger.error('MediaService.createBlobUrl', 'Failed to create asset URL', { mediaId, error })
+      logger.error('[MediaService] Failed to create asset URL:', error)
+      return null
     }
-      },
-      { mediaId }
-    )
   }
   
   /**
-   * List all media for a specific page
+   * List media for a page from file system
    */
   async listMediaForPage(pageId: string): Promise<MediaItem[]> {
+    debugLogger.debug('MediaService.listMediaForPage', 'Listing media for page', { pageId })
+    
     try {
-      // Get all media for project with retry
-      const allMedia = await retryWithBackoff(
-        async () => this.listFromBackend(),
-        {
-          ...RetryStrategies.fast,
-          maxAttempts: 2,
-          onRetry: (error, attempt, delay) => {
-            logger.warn(`[MediaService] List media retry attempt ${attempt} in ${delay}ms:`, error)
-          }
+      const media = await this.fileStorage.getMediaForTopic(pageId)
+      
+      debugLogger.info('MediaService.listMediaForPage', 'Media listed', {
+        pageId,
+        count: media.length
+      })
+      
+      logger.info('[MediaService] Listed media from FILE SYSTEM for page:', pageId, 'count:', media.length)
+      
+      return media.map(item => ({
+        id: item.id,
+        type: item.metadata?.type || 'image',
+        pageId,
+        fileName: item.metadata?.original_name || item.id,
+        metadata: {
+          uploadedAt: item.metadata?.uploadedAt || new Date().toISOString(),
+          type: item.metadata?.type || 'image',
+          pageId,
+          ...item.metadata
         }
-      )
-      
-      // Filter by page ID
-      const pageMedia = allMedia
-        .filter(item => item.id.startsWith(`${pageId}-`) || this.getPageFromId(item.id) === pageId)
-        .map(item => {
-          // Check cache first
-          const cached = this.mediaCache.get(item.id)
-          if (cached) {
-            return cached
-          }
-          
-          // Create media item
-          const mediaItem: MediaItem = {
-            id: item.id,
-            type: this.getTypeFromId(item.id),
-            pageId: this.getPageFromId(item.id),
-            fileName: item.fileName,
-            metadata: {
-              uploadedAt: new Date().toISOString(),
-              mimeType: item.mimeType,
-              type: this.getTypeFromId(item.id),
-              pageId: this.getPageFromId(item.id)
-            }
-          }
-          
-          // Update cache
-          this.mediaCache.set(item.id, mediaItem)
-          return mediaItem
-        })
-      
-      return pageMedia
-      
+      }))
     } catch (error) {
-      logger.error('[MediaService] Failed to list media for page:', pageId, error)
+      debugLogger.error('MediaService.listMediaForPage', 'Failed to list media', { pageId, error })
+      logger.error('[MediaService] Failed to list media for page:', error)
       return []
     }
   }
@@ -512,529 +576,102 @@ export class MediaService {
    * List all media in the project
    */
   async listAllMedia(): Promise<MediaItem[]> {
-    return performanceMonitor.measureOperation(
-      'MediaService.listAllMedia',
-      async () => {
+    debugLogger.debug('MediaService.listAllMedia', 'Listing all media')
+    
     try {
-      const allMedia = await retryWithBackoff(
-        async () => this.listFromBackend(),
-        {
-          ...RetryStrategies.fast,
-          maxAttempts: 2,
-          onRetry: (error, attempt, delay) => {
-            logger.warn(`[MediaService] List all media retry attempt ${attempt} in ${delay}ms:`, error)
-          }
-        }
-      )
+      // Return cached items since FileStorage doesn't have getAllMedia
+      // The cache is populated when media is stored or retrieved
+      const items = Array.from(this.mediaCache.values())
       
-      return allMedia.map((item: any) => {
-        // Check cache first
-        const cached = this.mediaCache.get(item.id)
-        if (cached) {
-          return cached
-        }
-        
-        // Create media item
-        const mediaItem: MediaItem = {
-          id: item.id,
-          type: this.getTypeFromId(item.id),
-          pageId: this.getPageFromId(item.id),
-          fileName: item.fileName,
-          metadata: {
-            uploadedAt: new Date().toISOString(),
-            mimeType: item.mimeType,
-            type: this.getTypeFromId(item.id),
-            pageId: this.getPageFromId(item.id)
-          }
-        }
-        
-        // Update cache
-        this.mediaCache.set(item.id, mediaItem)
-        return mediaItem
+      debugLogger.info('MediaService.listAllMedia', 'Media listed from cache', {
+        count: items.length
       })
       
+      logger.info('[MediaService] Listed all media from cache, count:', items.length)
+      return items
     } catch (error) {
+      debugLogger.error('MediaService.listAllMedia', 'Failed to list media', error)
       logger.error('[MediaService] Failed to list all media:', error)
       return []
     }
-      },
-      { projectId: this.projectId }
-    )
   }
-  
+
   /**
-   * Create a blob URL for media (for preview/playback)
+   * Get all media with asset URLs
    */
-  async createBlobUrl(mediaId: string): Promise<string | null> {
-    return performanceMonitor.measureOperation(
-      'MediaService.createBlobUrl',
-      async () => {
-        const media = await this.getMedia(mediaId)
-        if (!media) {
-          return null
+  async getAllMedia(): Promise<Array<{ id: string; url: string; metadata: MediaMetadata }>> {
+    debugLogger.debug('MediaService.getAllMedia', 'Getting all media with URLs')
+    
+    try {
+      const items = Array.from(this.mediaCache.values())
+      const mediaWithUrls = []
+      
+      for (const item of items) {
+        let url: string | null = null
+        
+        // For YouTube videos, use the embed URL
+        if (item.metadata.youtubeUrl || item.metadata.embedUrl) {
+          url = item.metadata.embedUrl || item.metadata.youtubeUrl || null
+        } else {
+          // For regular files, use the asset protocol
+          url = await mediaUrlService.getMediaUrl(this.projectId, item.id)
         }
         
-        const blob = new Blob([media.data], { type: media.metadata.mimeType || 'application/octet-stream' })
-        return URL.createObjectURL(blob)
-      },
-      { mediaId }
-    )
-  }
-  
-  /**
-   * Store a YouTube video reference (no actual file storage)
-   */
-  async storeYouTubeVideo(
-    youtubeUrl: string,
-    embedUrl: string,
-    pageId: string,
-    metadata?: Partial<MediaMetadata>
-  ): Promise<MediaItem> {
-    return performanceMonitor.measureOperation(
-      'MediaService.storeYouTubeVideo',
-      async () => {
-    // Validate YouTube URL for security
-    const youtubeValidation = validateYouTubeURL(youtubeUrl)
-    if (!youtubeValidation.valid) {
-      throw new Error(`Invalid YouTube URL: ${youtubeValidation.reason}`)
-    }
-    
-    // Also validate embed URL as general external URL
-    if (!this.validateExternalUrl(embedUrl)) {
-      throw new Error('Invalid or unsafe YouTube embed URL')
-    }
-    
-    const id = generateMediaId('video', pageId)
-    
-    // Strip sensitive data from metadata
-    const cleanMetadata = metadata ? this.stripSensitiveData(metadata) : {}
-    
-    const fullMetadata: MediaMetadata = {
-      uploadedAt: new Date().toISOString(),
-      youtubeUrl,
-      embedUrl,
-      type: 'video',
-      pageId,
-      ...cleanMetadata
-    }
-    
-    const mediaItem: MediaItem = {
-      id,
-      type: 'video',
-      pageId,
-      fileName: youtubeUrl,
-      metadata: fullMetadata
-    }
-    
-    // Just cache it, no backend storage needed for YouTube
-    this.mediaCache.set(id, mediaItem)
-    
-    if (!this.pageIndex.has(pageId)) {
-      this.pageIndex.set(pageId, new Set())
-    }
-    this.pageIndex.get(pageId)!.add(id)
-    
-    logger.info('[MediaService] Stored YouTube video reference:', id, youtubeUrl)
-    return mediaItem
-      },
-      { pageId }
-    )
-  }
-  
-  /**
-   * Clear all cached data
-   */
-  clearCache(): void {
-    this.mediaCache.clear()
-    this.pageIndex.clear()
-    logger.info('[MediaService] Cache cleared')
-  }
-  
-  /**
-   * Get media statistics
-   */
-  getStats(): {
-    totalItems: number
-    itemsByType: Record<MediaType, number>
-    itemsByPage: Record<string, number>
-  } {
-    const items = Array.from(this.mediaCache.values())
-    
-    const itemsByType = items.reduce((acc, item) => {
-      acc[item.type] = (acc[item.type] || 0) + 1
-      return acc
-    }, {} as Record<MediaType, number>)
-    
-    const itemsByPage = items.reduce((acc, item) => {
-      acc[item.pageId] = (acc[item.pageId] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    return {
-      totalItems: items.length,
-      itemsByType,
-      itemsByPage
-    }
-  }
-  
-  /**
-   * Validate an external URL for safety
-   * Prevents XSS, SSRF, and other injection attacks
-   */
-  validateExternalUrl(url: string): boolean {
-    const result = validateExternalURL(url, {
-      allowedProtocols: ['https:', 'http:'],
-      allowLocalhost: false
-    })
-    
-    if (!result.valid) {
-      logger.warn('[MediaService] URL validation failed:', result.reason, url)
-    }
-    
-    return result.valid
-  }
-  
-  /**
-   * Sanitize a file path to prevent directory traversal attacks
-   */
-  sanitizePath(path: string): string {
-    if (!path || typeof path !== 'string') {
-      return ''
-    }
-    
-    // First check if the path is safe
-    const pathResult = sanitizePath(path, {
-      allowAbsolute: false,
-      allowDotFiles: false,
-      maxDepth: 5
-    })
-    
-    if (!pathResult.safe) {
-      logger.warn('[MediaService] Path sanitization failed:', pathResult.reason)
-      // If path is unsafe, just sanitize the filename
-      const filename = sanitizeFilename(path)
-      return `file_${Date.now()}`
-    }
-    
-    // For safe paths, preserve the directory structure but sanitize filename
-    const parts = pathResult.sanitized.split('/')
-    if (parts.length > 1) {
-      // Sanitize only the filename part
-      const dirs = parts.slice(0, -1)
-      const filename = sanitizeFilename(parts[parts.length - 1])
-      return [...dirs, filename].join('/')
-    }
-    
-    // Single filename
-    return sanitizeFilename(pathResult.sanitized)
-  }
-  
-  /**
-   * Strip sensitive data from metadata before storage or export
-   */
-  stripSensitiveData(metadata: Record<string, any>): Record<string, any> {
-    const sensitiveKeys = [
-      'apikey', 'api_key', 'apiKey',
-      'password', 'passwd', 'pwd',
-      'token', 'accesstoken', 'access_token',
-      'secret', 'secretkey', 'secret_key',
-      'privatekey', 'private_key', 'privateKey',
-      'credential', 'credentials',
-      'auth', 'authorization'
-    ]
-    
-    const cleaned: Record<string, any> = {}
-    
-    for (const [key, value] of Object.entries(metadata)) {
-      const lowerKey = key.toLowerCase()
-      
-      // Check if key contains any sensitive keywords
-      const isSensitive = sensitiveKeys.some(sensitive => 
-        lowerKey.includes(sensitive.toLowerCase())
-      )
-      
-      if (!isSensitive) {
-        cleaned[key] = value
-      } else {
-        logger.warn('[MediaService] Stripped sensitive key from metadata:', key)
+        if (url) {
+          mediaWithUrls.push({
+            id: item.id,
+            url,
+            metadata: item.metadata
+          })
+        }
       }
-    }
-    
-    return cleaned
-  }
-  
-  /**
-   * Validate that media type matches file extension
-   */
-  validateMediaType(filename: string, type: MediaType): boolean {
-    const ext = filename.split('.').pop()?.toLowerCase()
-    if (!ext) return false
-    
-    const typeExtensions: Record<MediaType, string[]> = {
-      image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'],
-      video: ['mp4', 'webm', 'mov', 'avi', 'mkv'],
-      audio: ['mp3', 'wav', 'ogg', 'webm', 'm4a', 'flac'],
-      caption: ['vtt', 'srt', 'sbv']
-    }
-    
-    const validExtensions = typeExtensions[type] || []
-    const isValid = validExtensions.includes(ext)
-    
-    if (!isValid) {
-      logger.warn(`[MediaService] File extension '${ext}' does not match media type '${type}'`)
-    }
-    
-    return isValid
-  }
-
-  // Helper methods
-  private getExtension(mimeType: string): string {
-    const extensions: Record<string, string> = {
-      'image/jpeg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'image/svg+xml': 'svg',
-      'video/mp4': 'mp4',
-      'video/webm': 'webm',
-      'audio/mpeg': 'mp3',
-      'audio/wav': 'wav',
-      'audio/webm': 'webm',
-      'text/vtt': 'vtt'
-    }
-    return extensions[mimeType] || 'bin'
-  }
-  
-  private getDefaultMimeType(type: MediaType): string {
-    const defaults: Record<MediaType, string> = {
-      'image': 'image/jpeg',
-      'video': 'video/mp4',
-      'audio': 'audio/mpeg',
-      'caption': 'text/vtt'
-    }
-    return defaults[type] || 'application/octet-stream'
-  }
-  
-  private getTypeFromId(mediaId: string): MediaType {
-    if (mediaId.includes('audio')) return 'audio'
-    if (mediaId.includes('video')) return 'video'
-    if (mediaId.includes('caption')) return 'caption'
-    return 'image'
-  }
-  
-  private getPageFromId(mediaId: string): string {
-    // Extract page from ID format: 
-    // New format: "audio-0-welcome" -> "welcome"
-    // Old format: "welcome-audio-0" -> "welcome"
-    const parts = mediaId.split('-')
-    
-    // Check for new format (type-number-page)
-    if (parts.length >= 3 && ['audio', 'video', 'image', 'caption'].includes(parts[0])) {
-      return parts.slice(2).join('-') // Handle page IDs with dashes like "topic-1"
-    }
-    
-    // Fall back to old format (page-type-number)
-    if (parts.length >= 2) {
-      return parts[0]
-    }
-    
-    return 'unknown'
-  }
-  
-  /**
-   * Store media in the appropriate backend
-   */
-  private async storeInBackend(id: string, data: Uint8Array, fileName: string, mimeType: string): Promise<void> {
-    switch (this.storageBackend) {
-      case 'tauri':
-        if (!invoke) {
-          throw new Error('Tauri API not available')
-        }
-        await invoke('store_media', {
-          project_id: this.projectId,
-          media_id: id,
-          data: Array.from(data), // Convert to array for Tauri
-          file_name: fileName,
-          mime_type: mimeType
-        })
-        break
-        
-      case 'indexeddb':
-        if (!this.indexedDB) {
-          throw new Error('IndexedDB not initialized')
-        }
-        
-        const transaction = this.indexedDB.transaction(['media'], 'readwrite')
-        const store = transaction.objectStore('media')
-        
-        await new Promise((resolve, reject) => {
-          const request = store.put({
-            id: `${this.projectId}_${id}`,
-            data: data,
-            fileName: fileName,
-            mimeType: mimeType,
-            timestamp: Date.now()
-          })
-          
-          request.onsuccess = () => resolve(undefined)
-          request.onerror = () => reject(request.error)
-        })
-        break
-        
-      case 'memory':
-        this.memoryStorage.set(`${this.projectId}_${id}`, {
-          data: data,
-          metadata: { fileName, mimeType }
-        })
-        break
+      
+      debugLogger.info('MediaService.getAllMedia', 'Retrieved all media with URLs', {
+        count: mediaWithUrls.length
+      })
+      
+      logger.info('[MediaService] Got all media with asset URLs, count:', mediaWithUrls.length)
+      return mediaWithUrls
+    } catch (error) {
+      debugLogger.error('MediaService.getAllMedia', 'Failed to get all media', error)
+      logger.error('[MediaService] Failed to get all media:', error)
+      return []
     }
   }
   
   /**
-   * Get media from the appropriate backend
+   * Delete media from file system
    */
-  private async getFromBackend(id: string): Promise<{ data: Uint8Array; metadata: any } | null> {
-    switch (this.storageBackend) {
-      case 'tauri':
-        if (!invoke) {
-          return null
-        }
-        
-        try {
-          const result = await invoke<{ data: number[]; metadata: any }>('get_media', {
-            project_id: this.projectId,
-            media_id: id
-          })
-          
-          if (!result || !result.data) return null
-          
-          return {
-            data: new Uint8Array(result.data),
-            metadata: result.metadata
-          }
-        } catch {
-          return null
-        }
-        
-      case 'indexeddb':
-        if (!this.indexedDB) return null
-        
-        const transaction = this.indexedDB.transaction(['media'], 'readonly')
-        const store = transaction.objectStore('media')
-        
-        return new Promise((resolve) => {
-          const request = store.get(`${this.projectId}_${id}`)
-          
-          request.onsuccess = () => {
-            const result = request.result
-            if (!result) {
-              resolve(null)
-            } else {
-              resolve({
-                data: result.data,
-                metadata: { fileName: result.fileName, mimeType: result.mimeType }
-              })
-            }
-          }
-          
-          request.onerror = () => resolve(null)
-        })
-        
-      case 'memory':
-        const stored = this.memoryStorage.get(`${this.projectId}_${id}`)
-        return stored || null
+  async deleteMedia(mediaId: string): Promise<boolean> {
+    debugLogger.info('MediaService.deleteMedia', 'Deleting media', { mediaId })
+    
+    try {
+      // FileStorage doesn't have a delete method yet, but it should
+      debugLogger.warn('MediaService.deleteMedia', 'Delete not implemented in FileStorage yet', { mediaId })
+      logger.warn('[MediaService] Delete not implemented in FileStorage yet')
+      this.mediaCache.delete(mediaId)
+      return true
+    } catch (error) {
+      logger.error('[MediaService] Failed to delete media:', error)
+      return false
     }
   }
   
-  /**
-   * Delete media from the appropriate backend
-   */
-  private async deleteFromBackend(id: string): Promise<void> {
-    switch (this.storageBackend) {
-      case 'tauri':
-        if (!invoke) return
-        
-        try {
-          await invoke('delete_media', {
-            project_id: this.projectId,
-            media_id: id
-          })
-        } catch {
-          // Ignore errors
-        }
-        break
-        
-      case 'indexeddb':
-        if (!this.indexedDB) return
-        
-        const transaction = this.indexedDB.transaction(['media'], 'readwrite')
-        const store = transaction.objectStore('media')
-        store.delete(`${this.projectId}_${id}`)
-        break
-        
-      case 'memory':
-        this.memoryStorage.delete(`${this.projectId}_${id}`)
-        break
-    }
-  }
-  
-  /**
-   * List all media from the appropriate backend
-   */
-  private async listFromBackend(): Promise<Array<{ id: string; fileName: string; mimeType: string }>> {
-    switch (this.storageBackend) {
-      case 'tauri':
-        if (!invoke) return []
-        
-        try {
-          return await invoke<Array<{ id: string; fileName: string; mimeType: string }>>('list_media', {
-            project_id: this.projectId
-          })
-        } catch {
-          return []
-        }
-        
-      case 'indexeddb':
-        if (!this.indexedDB) return []
-        
-        const transaction = this.indexedDB.transaction(['media'], 'readonly')
-        const store = transaction.objectStore('media')
-        
-        return new Promise((resolve) => {
-          const request = store.getAll()
-          
-          request.onsuccess = () => {
-            const results = request.result || []
-            const projectPrefix = `${this.projectId}_`
-            
-            resolve(
-              results
-                .filter(item => item.id.startsWith(projectPrefix))
-                .map(item => ({
-                  id: item.id.substring(projectPrefix.length),
-                  fileName: item.fileName || '',
-                  mimeType: item.mimeType || ''
-                }))
-            )
-          }
-          
-          request.onerror = () => resolve([])
-        })
-        
-      case 'memory':
-        const projectPrefix = `${this.projectId}_`
-        return Array.from(this.memoryStorage.entries())
-          .filter(([key]) => key.startsWith(projectPrefix))
-          .map(([key, value]) => ({
-            id: key.substring(projectPrefix.length),
-            fileName: value.metadata?.fileName || '',
-            mimeType: value.metadata?.mimeType || ''
-          }))
+  private getExtension(type: MediaType): string {
+    switch (type) {
+      case 'image': return 'jpg'
+      case 'video': return 'mp4'
+      case 'audio': return 'mp3'
+      case 'caption': return 'vtt'
+      default: return 'bin'
     }
   }
 }
 
-// Export a factory function for getting singleton instances
-export function createMediaService(projectId: string): MediaService {
-  return MediaService.getInstance({ projectId })
+// Export factory function for getting singleton instances
+export function createMediaService(projectId: string, fileStorage?: FileStorage): MediaService {
+  return MediaService.getInstance({ projectId, fileStorage })
 }
+
+// Export as default to replace the old MediaService
+export default MediaService

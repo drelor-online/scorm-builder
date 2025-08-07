@@ -120,7 +120,6 @@ export default defineConfig({
       '@/types': path.resolve(__dirname, './src/types'),
       '@/components': path.resolve(__dirname, './src/components'),
       '@/services': path.resolve(__dirname, './src/services'),
-      '@/services/FileStorage': path.resolve(__dirname, './src/services/FileStorage.refactored.ts'),
       '@/hooks': path.resolve(__dirname, './src/hooks'),
       '@/utils': path.resolve(__dirname, './src/utils'),
       '@/styles': path.resolve(__dirname, './src/styles'),

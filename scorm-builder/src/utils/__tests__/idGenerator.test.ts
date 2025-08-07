@@ -75,7 +75,7 @@ describe('idGenerator', () => {
       expect(idGenerator.generateMediaId('caption', 'topic-1')).toBe('caption-2')
     })
 
-    it('should generate sequential image IDs regardless of page', () => {
+    it('should generate page-based image IDs', () => {
       const id1 = idGenerator.generateMediaId('image', 'welcome')
       const id2 = idGenerator.generateMediaId('image', 'objectives')
       const id3 = idGenerator.generateMediaId('image', 'topic-1')
@@ -85,12 +85,12 @@ describe('idGenerator', () => {
       expect(id3).toBe('image-2')
     })
 
-    it('should generate sequential video IDs', () => {
+    it('should generate page-based video IDs', () => {
       const id1 = idGenerator.generateMediaId('video', 'welcome')
       const id2 = idGenerator.generateMediaId('video', 'topic-1')
       
       expect(id1).toBe('video-0')
-      expect(id2).toBe('video-1')
+      expect(id2).toBe('video-2')
     })
 
     it('should handle legacy page IDs', () => {
@@ -299,7 +299,7 @@ describe('idGenerator', () => {
   })
 
   describe('ID counter persistence', () => {
-    it('should maintain separate counters for each media type', async () => {
+    it('should maintain page-based IDs for all media types', async () => {
       // Use the current instance
       const genId = idGenerator.generateMediaId
       
@@ -313,7 +313,7 @@ describe('idGenerator', () => {
       expect(img1).toBe('image-0')
       expect(aud1).toBe('audio-0')
       expect(img2).toBe('image-1')
-      expect(vid1).toBe('video-0')
+      expect(vid1).toBe('video-2')
       expect(img3).toBe('image-2')
     })
   })
