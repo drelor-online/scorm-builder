@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.2.1",
-    "@cucumber/pretty-formatter": "^1.0.1",
+    "@cucumber/pretty-formatter": "^2.0.1",
     "@eslint/js": "^9.20.0",
     "@playwright/test": "^1.50.1",
     "@tauri-apps/cli": "^2.5.0",
