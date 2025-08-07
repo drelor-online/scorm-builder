@@ -7,6 +7,10 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build-tauri:
     strategy:
@@ -164,7 +168,13 @@ jobs:
           path: artifacts
 
       - name: Display structure of downloaded files
-        run: ls -la artifacts/
+        run: |
+          ls -la artifacts/
+          echo "--- Portable package contents ---"
+          ls -la artifacts/portable-package/ || true
+          echo "--- Windows installers contents ---"
+          ls -la artifacts/windows-installers/ || true
+          find artifacts -type f -name "*.msi" -o -name "*.exe" -o -name "*.zip" | head -20
 
       - name: Generate release notes
         id: release_notes
@@ -209,8 +219,8 @@ jobs:
           prerelease: false
           files: |
             artifacts/portable-package/*.zip
-            artifacts/windows-installers/*.msi
-            artifacts/windows-installers/*.exe
+            artifacts/windows-installers/**/*.msi
+            artifacts/windows-installers/**/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
