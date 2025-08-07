@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::scorm::generator::{generate_scorm_package, GenerateScormRequest, GeneratedFile, MediaFile};
+    use crate::scorm::CourseMetadata;
     use serde_json::json;
 
     #[tokio::test]
@@ -26,9 +27,12 @@ mod tests {
         // In production, this should return an error if no files are provided
         let result = generate_scorm_package(request).await;
         
-        // Currently this succeeds because of the fallback
-        // TODO: Change this to ensure generated_files is never empty
-        assert!(result.is_ok(), "Should handle empty generated_files");
+        // This should now fail with empty generated_files
+        assert!(result.is_err(), "Should reject empty generated_files");
+        
+        if let Err(e) = result {
+            assert!(e.contains("generated_files"), "Error should mention generated_files");
+        }
     }
 
     #[tokio::test]

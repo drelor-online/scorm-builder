@@ -26,8 +26,9 @@ const mediaService = new MediaService('project-123')
 
 ```typescript
 async storeMedia(
-  file: File,
-  mediaType: 'image' | 'video' | 'audio',
+  file: File | Blob,
+  pageId: string,
+  type: 'image' | 'video' | 'audio',
   metadata?: Record<string, any>,
   progressCallback?: (progress: ProgressInfo) => void
 ): Promise<MediaItem>
@@ -36,10 +37,10 @@ async storeMedia(
 Stores a media file in the project.
 
 **Parameters:**
-- `file` (File): The file to upload
-- `mediaType` ('image' | 'video' | 'audio'): Type of media
+- `file` (File | Blob): The file or blob to upload
+- `pageId` (string): The page ID where this media belongs (e.g., 'welcome', 'objectives', 'topic-1')
+- `type` ('image' | 'video' | 'audio'): Type of media
 - `metadata` (Record<string, any>, optional): Additional metadata
-  - `pageId` (string): Associated page/topic ID
   - `alt` (string): Alternative text for images
   - Any other custom metadata
 - `progressCallback` (function, optional): Progress tracking callback
@@ -56,15 +57,39 @@ const imageFile = new File([blob], 'diagram.png', { type: 'image/png' })
 
 const mediaItem = await mediaService.storeMedia(
   imageFile,
-  'image',
+  'topic-1',  // pageId - where this media belongs
+  'image',    // type - the media type
   { 
-    pageId: 'topic-1',
     alt: 'Architecture diagram'
   },
   (progress) => {
     console.log(`Upload ${progress.percent}% complete`)
   }
 )
+```
+
+### storeMediaLegacy (DEPRECATED)
+
+```typescript
+async storeMediaLegacy(
+  file: File | Blob,
+  mediaType: 'image' | 'video' | 'audio',
+  metadata?: Record<string, any>,
+  progressCallback?: (progress: ProgressInfo) => void
+): Promise<MediaItem>
+```
+
+**⚠️ DEPRECATED**: This method is provided for backward compatibility only. Use `storeMedia` instead.
+
+Legacy method that matches the old documentation. It will use 'global' as the default pageId if not specified in metadata.
+
+**Migration Guide:**
+```typescript
+// OLD (deprecated)
+await mediaService.storeMediaLegacy(file, 'image', { pageId: 'topic-1', alt: 'Test' })
+
+// NEW (recommended)
+await mediaService.storeMedia(file, 'topic-1', 'image', { alt: 'Test' })
 ```
 
 ### storeYouTubeVideo

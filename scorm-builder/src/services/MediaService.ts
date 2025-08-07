@@ -146,6 +146,11 @@ export class MediaService {
   
   /**
    * Store media from File/Blob - ALWAYS to file system
+   * @param file - The file or blob to store
+   * @param pageId - The page ID where this media belongs (e.g., 'welcome', 'topic-1')
+   * @param type - The media type ('image' | 'video' | 'audio')
+   * @param metadata - Optional metadata
+   * @param progressCallback - Optional progress callback
    */
   async storeMedia(
     file: File | Blob,
@@ -235,6 +240,29 @@ export class MediaService {
     }
   }
   
+  /**
+   * Legacy method for backward compatibility - DEPRECATED
+   * @deprecated Use storeMedia(file, pageId, type, metadata?, progressCallback?) instead
+   */
+  async storeMediaLegacy(
+    file: File | Blob,
+    mediaType: MediaType,
+    metadata?: Partial<MediaMetadata>,
+    progressCallback?: ProgressCallback
+  ): Promise<MediaItem> {
+    console.warn(
+      '[MediaService] storeMediaLegacy is deprecated. ' +
+      'Please use storeMedia(file, pageId, type, metadata?, progressCallback?) instead. ' +
+      'Using default pageId "global" for backward compatibility.'
+    )
+    
+    // Use a default pageId for backward compatibility
+    const pageId = metadata?.pageId || 'global'
+    
+    // Call the new method with corrected parameters
+    return this.storeMedia(file, pageId, mediaType, metadata, progressCallback)
+  }
+
   /**
    * Internal method to store media data - ALWAYS to file system
    */
@@ -648,12 +676,22 @@ export class MediaService {
     debugLogger.info('MediaService.deleteMedia', 'Deleting media', { mediaId })
     
     try {
-      // FileStorage doesn't have a delete method yet, but it should
-      debugLogger.warn('MediaService.deleteMedia', 'Delete not implemented in FileStorage yet', { mediaId })
-      logger.warn('[MediaService] Delete not implemented in FileStorage yet')
-      this.mediaCache.delete(mediaId)
-      return true
+      // Call FileStorage to delete from backend
+      const deleted = await this.fileStorage.deleteMedia(mediaId)
+      
+      if (deleted) {
+        // Remove from cache only if deletion succeeded
+        this.mediaCache.delete(mediaId)
+        debugLogger.info('MediaService.deleteMedia', 'Media deleted successfully', { mediaId })
+        logger.info('[MediaService] Deleted media:', mediaId)
+        return true
+      } else {
+        debugLogger.warn('MediaService.deleteMedia', 'Media not found', { mediaId })
+        logger.warn('[MediaService] Media not found:', mediaId)
+        return false
+      }
     } catch (error) {
+      debugLogger.error('MediaService.deleteMedia', 'Failed to delete media', { mediaId, error })
       logger.error('[MediaService] Failed to delete media:', error)
       return false
     }

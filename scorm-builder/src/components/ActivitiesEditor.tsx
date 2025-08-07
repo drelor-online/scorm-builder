@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { CourseContent, LegacyCourseContent, CourseContentUnion, KnowledgeCheckQuestion, AssessmentQuestion, Activity } from '../types/aiPrompt'
 import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
@@ -139,13 +139,13 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     setContent(courseContent)
   }, [courseContent])
   
-  // FIX: Update parent whenever content changes
+  // FIX: Update parent whenever content changes - include all dependencies to avoid stale closures
   useEffect(() => {
     // Skip initial mount and only update if content has actually changed
     if (onUpdateContent && content !== courseContent) {
       onUpdateContent(content)
     }
-  }, [content])
+  }, [content, onUpdateContent, courseContent])
   const [editingKnowledgeCheck, setEditingKnowledgeCheck] = useState<EditingKnowledgeCheck | null>(null)
   const [editingAssessment, setEditingAssessment] = useState<EditingAssessment | null>(null)
   const [editingActivity, setEditingActivity] = useState<string | null>(null)
@@ -215,7 +215,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     return () => clearTimeout(timeoutId)
   }, [content, storage, onSave])
 
-  const addActivity = () => {
+  const addActivity = useCallback(() => {
     if (!isOldFormat(content)) return;
     const newActivity = { 
       id: generateActivityId(), 
@@ -228,7 +228,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       if (!isOldFormat(prev)) return prev;
       return { ...prev, activities: [...prev.activities, newActivity] };
     });
-  }
+  }, [])
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity.id)

@@ -89,10 +89,11 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
     const anyContent = content as any
     if (anyContent.welcomePage?.narration) {
       blocks.push({
-        id: `${anyContent.welcomePage.id || 'welcome'}-narration`,
+        id: `welcome-narration`,
         text: anyContent.welcomePage.narration,
         blockNumber: String(blockCounter++).padStart(4, '0'),
-        pageId: anyContent.welcomePage.id || 'welcome',
+        // Always use 'welcome' for consistency with media ID generation
+        pageId: 'welcome',
         pageTitle: anyContent.welcomePage.title
       })
     }
@@ -100,10 +101,11 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
     // Add learning objectives page narration
     if (anyContent.learningObjectivesPage?.narration) {
       blocks.push({
-        id: `${anyContent.learningObjectivesPage.id || 'objectives'}-narration`,
+        id: `objectives-narration`,
         text: anyContent.learningObjectivesPage.narration,
         blockNumber: String(blockCounter++).padStart(4, '0'),
-        pageId: anyContent.learningObjectivesPage.id || 'objectives',
+        // Always use 'objectives' for consistency with media ID generation
+        pageId: 'objectives',
         pageTitle: anyContent.learningObjectivesPage.title
       })
     }
