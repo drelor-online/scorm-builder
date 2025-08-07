@@ -302,9 +302,7 @@ impl<'a> HtmlGenerator<'a> {
             .audio_file
             .as_ref()
             .map(|f| Self::ensure_media_path(f));
-        eprintln!(
-            "[HTML Generator] Audio file path for template: {audio_file_path:?}"
-        );
+        eprintln!("[HTML Generator] Audio file path for template: {audio_file_path:?}");
 
         let data = json!({
             "id": topic.id,

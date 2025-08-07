@@ -9,8 +9,7 @@ use super::navigation_generator::NavigationGenerator;
 use super::output_validator::OutputValidator;
 use super::style_generator::StyleGenerator;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Topic {
     pub id: String,
     pub title: String,
@@ -26,7 +25,6 @@ pub struct Topic {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub media: Option<Vec<MediaItem>>,
 }
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KnowledgeCheck {

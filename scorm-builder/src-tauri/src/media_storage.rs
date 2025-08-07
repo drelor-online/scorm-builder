@@ -200,9 +200,7 @@ pub fn get_all_project_media(
                     metadata,
                 });
 
-                println!(
-                    "[media_storage] Loaded media {media_id} ({data_len} bytes)"
-                );
+                println!("[media_storage] Loaded media {media_id} ({data_len} bytes)");
             } else {
                 println!(
                     "[media_storage] Warning: metadata exists but data missing for {media_id}"
@@ -255,8 +253,8 @@ pub fn get_media(
 
     // Read metadata
     let metadata_path = get_metadata_path(&actual_project_id, &mediaId)?;
-    let metadata_json = fs::read_to_string(&metadata_path)
-        .map_err(|e| format!("Failed to read metadata: {e}"))?;
+    let metadata_json =
+        fs::read_to_string(&metadata_path).map_err(|e| format!("Failed to read metadata: {e}"))?;
     let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
         .map_err(|e| format!("Failed to parse metadata: {e}"))?;
 

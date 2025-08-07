@@ -153,8 +153,8 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
     let temp_path = file_path.with_extension("scormproj.tmp");
 
     {
-        let mut file = fs::File::create(&temp_path)
-            .map_err(|e| format!("Failed to create temp file: {e}"))?;
+        let mut file =
+            fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {e}"))?;
 
         file.write_all(json.as_bytes())
             .map_err(|e| format!("Failed to write temp file: {e}"))?;
@@ -233,8 +233,7 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
     // Delete the backup file if it exists
     let backup_path = file_path.with_extension("scormproj.backup");
     if backup_path.exists() {
-        fs::remove_file(&backup_path)
-            .map_err(|e| format!("Failed to delete backup file: {e}"))?;
+        fs::remove_file(&backup_path).map_err(|e| format!("Failed to delete backup file: {e}"))?;
     }
 
     // Delete the project folder if it exists

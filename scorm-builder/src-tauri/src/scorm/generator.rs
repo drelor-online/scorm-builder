@@ -282,8 +282,8 @@ pub async fn generate_scorm_package(
     )?;
 
     // Get file size
-    let metadata = std::fs::metadata(&output_path)
-        .map_err(|e| format!("Failed to get file metadata: {e}"))?;
+    let metadata =
+        std::fs::metadata(&output_path).map_err(|e| format!("Failed to get file metadata: {e}"))?;
 
     // Move file to permanent location
     let final_path = get_scorm_output_path(&request.course_metadata.title)?;
@@ -460,9 +460,7 @@ async fn collect_media_resources(
                                 println!("[SCORM] Loaded caption file: {media_id}");
                             }
                             Err(e) => {
-                                println!(
-                                    "[SCORM] Warning: Failed to load caption {media_id}: {e}"
-                                );
+                                println!("[SCORM] Warning: Failed to load caption {media_id}: {e}");
                             }
                         }
                     }

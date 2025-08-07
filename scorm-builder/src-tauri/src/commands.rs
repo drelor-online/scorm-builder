@@ -203,9 +203,7 @@ pub async fn generate_scorm_enhanced(
     // Convert the course data to our enhanced request format
     let enhanced_request: EnhancedRequest =
         serde_json::from_value(course_data.clone()).map_err(|e| {
-            eprintln!(
-                "[generate_scorm_enhanced] Failed to parse course data: {e}"
-            );
+            eprintln!("[generate_scorm_enhanced] Failed to parse course data: {e}");
             eprintln!(
                 "[generate_scorm_enhanced] Course data structure: {}",
                 serde_json::to_string_pretty(&course_data).unwrap_or_default()
