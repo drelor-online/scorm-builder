@@ -1,6 +1,24 @@
 import React, { useState, useEffect } from 'react'
-import { AutoSaveIndicator } from './AutoSaveIndicator'
 import { useAutoSaveState } from '../contexts/AutoSaveContext'
+
+// Simple inline AutoSaveIndicator component
+const AutoSaveIndicator = ({ 
+  isSaving, 
+  hasDraft, 
+  timeSinceLastSave 
+}: { 
+  isSaving: boolean; 
+  hasDraft: boolean; 
+  timeSinceLastSave: string 
+}) => {
+  if (isSaving) {
+    return <span style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Saving...</span>
+  }
+  if (hasDraft) {
+    return <span style={{ color: '#10b981', fontSize: '0.875rem' }}>Saved {timeSinceLastSave}</span>
+  }
+  return <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No changes</span>
+}
 
 /**
  * Connected version of AutoSaveIndicator that uses the AutoSaveContext

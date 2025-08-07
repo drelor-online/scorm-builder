@@ -4,10 +4,10 @@ import { PageLayout } from './PageLayout';
 import { TemplateEditor } from './TemplateEditor';
 import { useFormChanges } from '../hooks/useFormChanges';
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected';
-import { Input } from './Input';
 import { 
   Card, 
   Button,
+  Input,
   ButtonGroup,
   Section,
   Grid,

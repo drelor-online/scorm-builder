@@ -13,8 +13,6 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap } from 'lucide-react'
 import './DesignSystem/transitions.css'
-import { runFullAutomation } from '../utils/fullWorkflowAutomation'
-import { startRecording, stopRecording } from '../utils/ManualTestRecorder'
 import { envConfig } from '../config/environment'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 
@@ -568,31 +566,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   }
 
   async function handleRunAutomation() {
-    if (runningAutomation) return
-    
-    try {
-      setRunningAutomation(true)
-      showInfo('Starting automation test...')
-      
-      const result = await runFullAutomation({
-        showProgress: true,
-        scenario: 'standard',
-        keepProject: false
-      })
-      
-      if (result.success) {
-        showSuccess(`Automation completed successfully in ${(result.duration / 1000).toFixed(1)}s`)
-        // Reload projects to show any changes
-        await loadProjects()
-      } else {
-        showError(`Automation failed: ${result.errors.join(', ')}`)
-      }
-    } catch (error) {
-      console.error('Automation error:', error)
-      showError(`Automation error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setRunningAutomation(false)
-    }
+    // Automation features have been removed
+    showInfo('Automation features are currently disabled')
   }
   
   if (loading) {
@@ -666,19 +641,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             <Tooltip content={isRecording ? "Stop recording your actions" : "Record your manual testing session"} position="bottom">
               <Button
                 onClick={() => {
-                  if (isRecording) {
-                    stopRecording()
-                    setIsRecording(false)
-                    showSuccess('Recording stopped. Report generated and downloaded.')
-                  } else {
-                    startRecording({
-                      autoScreenshot: true,
-                      capturePerformance: true,
-                      annotationsEnabled: true
-                    })
-                    setIsRecording(true)
-                    showInfo('Recording started! Use the app normally. Press Ctrl+Shift+S for screenshots.')
-                  }
+                  // Recording features have been removed
+                  showInfo('Recording features are currently disabled')
                 }}
                 variant={isRecording ? "danger" : "secondary"}
                 data-testid="manual-recording-button"

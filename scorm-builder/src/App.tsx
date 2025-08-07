@@ -6,7 +6,6 @@ import { COLORS, SPACING, DURATIONS } from '@/constants'
 
 // Services
 import { apiKeyStorage } from '@/services/ApiKeyStorage'
-import { mapAudioIds } from '@/services/courseContentAudioIdMapper'
 
 // Utils
 import { logger } from '@/utils/logger'
@@ -484,7 +483,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // Map audioIds from backend if courseContent was loaded
         if (loadedCourseContent && storage.currentProjectId) {
           try {
-            loadedCourseContent = await mapAudioIds(loadedCourseContent, storage.currentProjectId)
+            // Audio IDs are now handled correctly by MediaService
             debugLogger.info('App.loadProject', 'Mapped audioIds from backend')
           } catch (error) {
             console.warn('[App] Failed to map audioIds from backend:', error)

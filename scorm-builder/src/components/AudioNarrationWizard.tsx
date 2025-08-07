@@ -685,7 +685,7 @@ export function AudioNarrationWizard({
               
               // Track blob URL for cleanup if it's a blob URL
               if (blobUrl && blobUrl.startsWith('blob:')) {
-                blobUrlsRef.current.push(blobUrl)
+                if (blobUrl) blobUrlsRef.current.push(blobUrl)
               }
               
               const audioFile: AudioFile = {
@@ -710,7 +710,7 @@ export function AudioNarrationWizard({
               
               // Track blob URL for cleanup if it's a blob URL
               if (blobUrl && blobUrl.startsWith('blob:')) {
-                blobUrlsRef.current.push(blobUrl)
+                if (blobUrl) blobUrlsRef.current.push(blobUrl)
               }
               
               // Create a placeholder file for UI consistency (no actual data needed)
@@ -1979,14 +1979,14 @@ export function AudioNarrationWizard({
           if (mediaData?.data) {
             try {
               // Get asset URL from media context instead of creating blob URL
-              url = await createBlobUrl(storedItem.id)
+              url = await createBlobUrl(storedItem.id) || undefined
               logger.log(`[AudioNarrationWizard] Got asset URL for audio ${storedItem.id}:`, url)
               
               // Track blob URL for cleanup
               if (!blobUrlsRef.current) {
                 blobUrlsRef.current = []
               }
-              blobUrlsRef.current.push(blobUrl)
+              if (url) blobUrlsRef.current.push(url)
             } catch (e) {
               logger.error('[AudioNarrationWizard] Failed to create blob URL:', e)
               

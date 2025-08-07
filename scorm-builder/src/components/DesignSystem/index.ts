@@ -78,7 +78,3 @@ export type { LoadingStateProps } from './LoadingState'
 export { ErrorState, NetworkError, NotFoundError, PermissionError } from './ErrorState'
 export type { ErrorStateProps } from './ErrorState'
 
-// Demo components (only for development)
-export { LoadingErrorDemo } from './LoadingErrorDemo'
-export { IconDemo } from './IconDemo'
-export { TransitionsDemo } from './TransitionsDemo'
