@@ -50,7 +50,7 @@ pub async fn generate_scorm_package(
     request: GenerateScormRequest,
 ) -> Result<ScormGenerationResult, String> {
     // Create a temporary directory for the SCORM package
-    let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp directory: {e}"))?;
 
     let output_path = temp_dir.path().join(format!(
         "{}.zip",
@@ -136,7 +136,7 @@ pub async fn generate_scorm_package(
         "[SCORM] Found {} media IDs in course content",
         media_ids.len()
     );
-    println!("[SCORM] Media IDs: {:?}", media_ids);
+    println!("[SCORM] Media IDs: {media_ids:?}");
 
     // List all files in the media directory to debug
     if base_path.exists() {
@@ -156,7 +156,7 @@ pub async fn generate_scorm_package(
         );
     }
 
-    println!("[SCORM] Media extension map: {:?}", media_extension_map);
+    println!("[SCORM] Media extension map: {media_extension_map:?}");
 
     // First, add all media from course content
     for media_id in &media_ids {
@@ -174,7 +174,7 @@ pub async fn generate_scorm_package(
             (".mp4", true) // Video files are usually large
         } else if media_id.starts_with("image-") && !media_id.contains("logo") {
             // Fallback: Check the actual file to determine extension
-            let jpg_path = base_path.join(format!("{}.bin", media_id));
+            let jpg_path = base_path.join(format!("{media_id}.bin"));
             if jpg_path.exists() {
                 (".jpg", true) // Large images should be streamed
             } else {
@@ -187,10 +187,10 @@ pub async fn generate_scorm_package(
         };
 
         if is_large {
-            let file_path = base_path.join(format!("{}.bin", media_id));
+            let file_path = base_path.join(format!("{media_id}.bin"));
             if file_path.exists() {
                 streamable_resources.push(StreamableResource {
-                    zip_path: format!("media/{}{}", media_id, extension),
+                    zip_path: format!("media/{media_id}{extension}"),
                     file_path: file_path.clone(),
                 });
                 println!(
@@ -251,7 +251,7 @@ pub async fn generate_scorm_package(
                         if should_stream {
                             let file_path = entry.path();
                             streamable_resources.push(StreamableResource {
-                                zip_path: format!("media/{}{}", media_id, extension),
+                                zip_path: format!("media/{media_id}{extension}"),
                                 file_path: file_path.clone(),
                             });
                             println!(
@@ -283,12 +283,12 @@ pub async fn generate_scorm_package(
 
     // Get file size
     let metadata = std::fs::metadata(&output_path)
-        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
+        .map_err(|e| format!("Failed to get file metadata: {e}"))?;
 
     // Move file to permanent location
     let final_path = get_scorm_output_path(&request.course_metadata.title)?;
     std::fs::rename(&output_path, &final_path)
-        .map_err(|e| format!("Failed to move SCORM package: {}", e))?;
+        .map_err(|e| format!("Failed to move SCORM package: {e}"))?;
 
     Ok(ScormGenerationResult {
         success: true,
@@ -454,15 +454,14 @@ async fn collect_media_resources(
                         {
                             Ok(media_data) => {
                                 resources.push(Resource {
-                                    path: format!("media/{}.vtt", media_id),
+                                    path: format!("media/{media_id}.vtt"),
                                     content: media_data.data,
                                 });
-                                println!("[SCORM] Loaded caption file: {}", media_id);
+                                println!("[SCORM] Loaded caption file: {media_id}");
                             }
                             Err(e) => {
                                 println!(
-                                    "[SCORM] Warning: Failed to load caption {}: {}",
-                                    media_id, e
+                                    "[SCORM] Warning: Failed to load caption {media_id}: {e}"
                                 );
                             }
                         }
@@ -489,12 +488,12 @@ async fn collect_media_resources(
                     };
 
                     resources.push(Resource {
-                        path: format!("media/{}{}", media_id, extension),
+                        path: format!("media/{media_id}{extension}"),
                         content: media_data.data,
                     });
                 }
                 Err(e) => {
-                    println!("[SCORM] Warning: Failed to load media {}: {}", media_id, e);
+                    println!("[SCORM] Warning: Failed to load media {media_id}: {e}");
                 }
             }
         }
@@ -588,10 +587,10 @@ pub fn stream_file_to_zip<W: Write + Seek>(
         zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored); // No compression for media files
 
     zip.start_file(zip_path, options)
-        .map_err(|e| format!("Failed to start file in ZIP: {}", e))?;
+        .map_err(|e| format!("Failed to start file in ZIP: {e}"))?;
 
     let mut reader = std::io::BufReader::new(file);
-    copy(&mut reader, zip).map_err(|e| format!("Failed to stream file to ZIP: {}", e))?;
+    copy(&mut reader, zip).map_err(|e| format!("Failed to stream file to ZIP: {e}"))?;
 
     Ok(())
 }

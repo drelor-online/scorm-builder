@@ -38,7 +38,7 @@ pub fn create_project(name: String) -> Result<project_storage::ProjectMetadata, 
         Err(e)
             if e.kind() == std::io::ErrorKind::AlreadyExists
                 || (cfg!(windows) && e.raw_os_error() == Some(183)) => {}
-        Err(e) => return Err(format!("Failed to create project folder: {}", e)),
+        Err(e) => return Err(format!("Failed to create project folder: {e}")),
     }
 
     // Create media folder
@@ -48,12 +48,12 @@ pub fn create_project(name: String) -> Result<project_storage::ProjectMetadata, 
         Err(e)
             if e.kind() == std::io::ErrorKind::AlreadyExists
                 || (cfg!(windows) && e.raw_os_error() == Some(183)) => {}
-        Err(e) => return Err(format!("Failed to create media folder: {}", e)),
+        Err(e) => return Err(format!("Failed to create media folder: {e}")),
     }
 
     // Create project file path
     let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
-    let project_file_name = format!("{}_{}.scormproj", safe_name, project_id);
+    let project_file_name = format!("{safe_name}_{project_id}.scormproj");
     let project_file_path = projects_dir.join(&project_file_name);
 
     // Create project data
@@ -204,14 +204,13 @@ pub async fn generate_scorm_enhanced(
     let enhanced_request: EnhancedRequest =
         serde_json::from_value(course_data.clone()).map_err(|e| {
             eprintln!(
-                "[generate_scorm_enhanced] Failed to parse course data: {}",
-                e
+                "[generate_scorm_enhanced] Failed to parse course data: {e}"
             );
             eprintln!(
                 "[generate_scorm_enhanced] Course data structure: {}",
                 serde_json::to_string_pretty(&course_data).unwrap_or_default()
             );
-            format!("Failed to parse course data: {}", e)
+            format!("Failed to parse course data: {e}")
         })?;
 
     // Debug: Log knowledge check data
@@ -349,12 +348,12 @@ async fn load_project_media_files(project_id: &str) -> Result<HashMap<String, Ve
     if base_path.exists() {
         let mut entries = fs::read_dir(&base_path)
             .await
-            .map_err(|e| format!("Failed to read media directory: {}", e))?;
+            .map_err(|e| format!("Failed to read media directory: {e}"))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| format!("Failed to read directory entry: {}", e))?
+            .map_err(|e| format!("Failed to read directory entry: {e}"))?
         {
             let path = entry.path();
             if path.is_file() {
@@ -365,9 +364,9 @@ async fn load_project_media_files(project_id: &str) -> Result<HashMap<String, Ve
 
                 let content = fs::read(&path)
                     .await
-                    .map_err(|e| format!("Failed to read file {}: {}", file_name, e))?;
+                    .map_err(|e| format!("Failed to read file {file_name}: {e}"))?;
 
-                media_files.insert(format!("media/{}", file_name), content);
+                media_files.insert(format!("media/{file_name}"), content);
             }
         }
     }

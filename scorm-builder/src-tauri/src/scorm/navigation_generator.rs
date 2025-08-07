@@ -18,7 +18,7 @@ impl<'a> NavigationGenerator<'a> {
         let navigation_template = include_str!("templates/navigation.js.hbs");
         handlebars
             .register_template_string("navigation", navigation_template)
-            .map_err(|e| format!("Failed to register navigation template: {}", e))?;
+            .map_err(|e| format!("Failed to register navigation template: {e}"))?;
 
         Ok(Self { handlebars })
     }
@@ -51,7 +51,7 @@ impl<'a> NavigationGenerator<'a> {
 
         self.handlebars
             .render("navigation", &data)
-            .map_err(|e| format!("Failed to render navigation template: {}", e))
+            .map_err(|e| format!("Failed to render navigation template: {e}"))
     }
 
     pub fn validate_navigation_js(&self, js_content: &str) -> Result<(), Vec<String>> {
@@ -68,10 +68,10 @@ impl<'a> NavigationGenerator<'a> {
         ];
 
         for func in &required_functions {
-            if !js_content.contains(&format!("function {}", func))
-                && !js_content.contains(&format!("window.{} =", func))
+            if !js_content.contains(&format!("function {func}"))
+                && !js_content.contains(&format!("window.{func} ="))
             {
-                errors.push(format!("Missing required function: {}", func));
+                errors.push(format!("Missing required function: {func}"));
             }
         }
 

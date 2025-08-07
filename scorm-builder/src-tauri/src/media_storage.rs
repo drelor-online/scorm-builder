@@ -36,7 +36,7 @@ fn extract_project_id(project_id_or_path: &str) -> String {
                         if underscore_pos < dot_pos {
                             let potential_id = &file_str[underscore_pos + 1..dot_pos];
                             // Check if it's all digits
-                            if potential_id.chars().all(|c| c.is_digit(10)) {
+                            if potential_id.chars().all(|c| c.is_ascii_digit()) {
                                 return potential_id.to_string();
                             }
                         }
@@ -45,7 +45,7 @@ fn extract_project_id(project_id_or_path: &str) -> String {
                 // Fallback: try to get ID from the beginning if no underscore pattern
                 if let Some(dot_pos) = file_str.find('.') {
                     let potential_id = &file_str[..dot_pos];
-                    if potential_id.chars().all(|c| c.is_digit(10)) {
+                    if potential_id.chars().all(|c| c.is_ascii_digit()) {
                         return potential_id.to_string();
                     }
                 }
@@ -59,7 +59,7 @@ fn extract_project_id(project_id_or_path: &str) -> String {
 
 pub fn get_media_directory(project_id: &str) -> Result<PathBuf, String> {
     let projects_dir =
-        get_projects_directory().map_err(|e| format!("Failed to get projects directory: {}", e))?;
+        get_projects_directory().map_err(|e| format!("Failed to get projects directory: {e}"))?;
 
     let media_dir = projects_dir.join(project_id).join("media");
 
@@ -74,7 +74,7 @@ pub fn get_media_directory(project_id: &str) -> Result<PathBuf, String> {
             {
                 Ok(media_dir)
             } else {
-                Err(format!("Failed to create media directory: {}", e))
+                Err(format!("Failed to create media directory: {e}"))
             }
         }
     }
@@ -82,12 +82,12 @@ pub fn get_media_directory(project_id: &str) -> Result<PathBuf, String> {
 
 pub fn get_media_path(project_id: &str, media_id: &str) -> Result<PathBuf, String> {
     let media_dir = get_media_directory(project_id)?;
-    Ok(media_dir.join(format!("{}.bin", media_id)))
+    Ok(media_dir.join(format!("{media_id}.bin")))
 }
 
 pub fn get_metadata_path(project_id: &str, media_id: &str) -> Result<PathBuf, String> {
     let media_dir = get_media_directory(project_id)?;
-    Ok(media_dir.join(format!("{}.json", media_id)))
+    Ok(media_dir.join(format!("{media_id}.json")))
 }
 
 #[tauri::command]
@@ -100,20 +100,19 @@ pub fn store_media(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Storing media {} for project {} (extracted: {})",
-        id, projectId, actual_project_id
+        "[media_storage] Storing media {id} for project {projectId} (extracted: {actual_project_id})"
     );
 
     // Store the binary data
     let data_path = get_media_path(&actual_project_id, &id)?;
-    fs::write(&data_path, &data).map_err(|e| format!("Failed to write media data: {}", e))?;
+    fs::write(&data_path, &data).map_err(|e| format!("Failed to write media data: {e}"))?;
 
     // Store the metadata
     let metadata_path = get_metadata_path(&actual_project_id, &id)?;
     let metadata_json = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+        .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
     fs::write(&metadata_path, metadata_json)
-        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+        .map_err(|e| format!("Failed to write metadata: {e}"))?;
 
     println!(
         "[media_storage] Successfully stored media {} ({} bytes)",
@@ -133,15 +132,14 @@ pub fn store_media_base64(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Storing media {} from base64 for project {} (extracted: {})",
-        id, projectId, actual_project_id
+        "[media_storage] Storing media {id} from base64 for project {projectId} (extracted: {actual_project_id})"
     );
 
     // Decode base64 to Vec<u8>
     use base64::{engine::general_purpose, Engine as _};
     let data = general_purpose::STANDARD
         .decode(&dataBase64)
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        .map_err(|e| format!("Failed to decode base64: {e}"))?;
 
     println!("[media_storage] Decoded {} bytes from base64", data.len());
 
@@ -156,8 +154,7 @@ pub fn get_all_project_media(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Loading all media for project {} (extracted: {})",
-        projectId, actual_project_id
+        "[media_storage] Loading all media for project {projectId} (extracted: {actual_project_id})"
     );
 
     let media_dir = get_media_directory(&actual_project_id)?;
@@ -170,10 +167,10 @@ pub fn get_all_project_media(
 
     // Read all .json files in the media directory
     let entries =
-        fs::read_dir(&media_dir).map_err(|e| format!("Failed to read media directory: {}", e))?;
+        fs::read_dir(&media_dir).map_err(|e| format!("Failed to read media directory: {e}"))?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {e}"))?;
         let path = entry.path();
 
         // Only process .json files
@@ -185,15 +182,15 @@ pub fn get_all_project_media(
 
             // Read metadata
             let metadata_json = fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read metadata for {}: {}", media_id, e))?;
+                .map_err(|e| format!("Failed to read metadata for {media_id}: {e}"))?;
             let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
-                .map_err(|e| format!("Failed to parse metadata for {}: {}", media_id, e))?;
+                .map_err(|e| format!("Failed to parse metadata for {media_id}: {e}"))?;
 
             // Read binary data
             let data_path = get_media_path(&actual_project_id, media_id)?;
             if data_path.exists() {
                 let data = fs::read(&data_path)
-                    .map_err(|e| format!("Failed to read media data for {}: {}", media_id, e))?;
+                    .map_err(|e| format!("Failed to read media data for {media_id}: {e}"))?;
 
                 let data_len = data.len();
 
@@ -204,13 +201,11 @@ pub fn get_all_project_media(
                 });
 
                 println!(
-                    "[media_storage] Loaded media {} ({} bytes)",
-                    media_id, data_len
+                    "[media_storage] Loaded media {media_id} ({data_len} bytes)"
                 );
             } else {
                 println!(
-                    "[media_storage] Warning: metadata exists but data missing for {}",
-                    media_id
+                    "[media_storage] Warning: metadata exists but data missing for {media_id}"
                 );
             }
         }
@@ -228,23 +223,22 @@ pub fn delete_media(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Deleting media {} from project {} (extracted: {})",
-        mediaId, projectId, actual_project_id
+        "[media_storage] Deleting media {mediaId} from project {projectId} (extracted: {actual_project_id})"
     );
 
     // Delete data file
     let data_path = get_media_path(&actual_project_id, &mediaId)?;
     if data_path.exists() {
-        fs::remove_file(&data_path).map_err(|e| format!("Failed to delete media data: {}", e))?;
+        fs::remove_file(&data_path).map_err(|e| format!("Failed to delete media data: {e}"))?;
     }
 
     // Delete metadata file
     let metadata_path = get_metadata_path(&actual_project_id, &mediaId)?;
     if metadata_path.exists() {
-        fs::remove_file(&metadata_path).map_err(|e| format!("Failed to delete metadata: {}", e))?;
+        fs::remove_file(&metadata_path).map_err(|e| format!("Failed to delete metadata: {e}"))?;
     }
 
-    println!("[media_storage] Successfully deleted media {}", mediaId);
+    println!("[media_storage] Successfully deleted media {mediaId}");
     Ok(())
 }
 
@@ -256,20 +250,19 @@ pub fn get_media(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Getting media {} from project {} (extracted: {})",
-        mediaId, projectId, actual_project_id
+        "[media_storage] Getting media {mediaId} from project {projectId} (extracted: {actual_project_id})"
     );
 
     // Read metadata
     let metadata_path = get_metadata_path(&actual_project_id, &mediaId)?;
     let metadata_json = fs::read_to_string(&metadata_path)
-        .map_err(|e| format!("Failed to read metadata: {}", e))?;
+        .map_err(|e| format!("Failed to read metadata: {e}"))?;
     let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
-        .map_err(|e| format!("Failed to parse metadata: {}", e))?;
+        .map_err(|e| format!("Failed to parse metadata: {e}"))?;
 
     // Read binary data
     let data_path = get_media_path(&actual_project_id, &mediaId)?;
-    let data = fs::read(&data_path).map_err(|e| format!("Failed to read media data: {}", e))?;
+    let data = fs::read(&data_path).map_err(|e| format!("Failed to read media data: {e}"))?;
 
     Ok(MediaData {
         id: mediaId,

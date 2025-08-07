@@ -16,12 +16,11 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
     let mut html = format!(
         r#"
 <div class="page-content">
-    <h1>{}</h1>
+    <h1>{title}</h1>
     <div class="content">
-        {}
+        {content}
     </div>
-"#,
-        title, content
+"#
     );
 
     // Add media if present
@@ -39,16 +38,14 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
                         ".png"
                     };
                     html.push_str(&format!(
-                        r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#,
-                        media_id, extension, media_title
+                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
+"#
                     ));
                 }
                 "video" => {
                     html.push_str(&format!(
-                        r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#,
-                        media_id
+                        r#"    <video src="media/{media_id}.mp4" controls class="content-video"></video>
+"#
                     ));
                 }
                 _ => {}
@@ -60,11 +57,10 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
             r#"    <audio id="narration-audio" controls class="narration-audio">
-        <source src="media/{}.mp3" type="audio/mpeg">
-        <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
+        <source src="media/{audio}.mp3" type="audio/mpeg">
+        <track kind="captions" src="media/{caption}.vtt" srclang="en" label="English" default>
     </audio>
-"#,
-            audio, caption
+"#
         ));
     }
 
@@ -83,9 +79,8 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
     let mut html = format!(
         r#"
 <div class="page-content">
-    {}
-"#,
-        content
+    {content}
+"#
     );
 
     // Add media if present
@@ -103,16 +98,14 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
                         ".png"
                     };
                     html.push_str(&format!(
-                        r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#,
-                        media_id, extension, media_title
+                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
+"#
                     ));
                 }
                 "video" => {
                     html.push_str(&format!(
-                        r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#,
-                        media_id
+                        r#"    <video src="media/{media_id}.mp4" controls class="content-video"></video>
+"#
                     ));
                 }
                 _ => {}
@@ -124,11 +117,10 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
             r#"    <audio id="narration-audio" controls class="narration-audio">
-        <source src="media/{}.mp3" type="audio/mpeg">
-        <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
+        <source src="media/{audio}.mp3" type="audio/mpeg">
+        <track kind="captions" src="media/{caption}.vtt" srclang="en" label="English" default>
     </audio>
-"#,
-            audio, caption
+"#
         ));
     }
 
@@ -148,12 +140,11 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
     let mut html = format!(
         r#"
 <div class="page-content">
-    <h1>{}</h1>
+    <h1>{title}</h1>
     <div class="content">
-        {}
+        {content}
     </div>
-"#,
-        title, content
+"#
     );
 
     // Add sections if present
@@ -162,10 +153,9 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
             if let Some(section_content) = section.get("content").and_then(|v| v.as_str()) {
                 html.push_str(&format!(
                     r#"    <div class="section">
-        {}
+        {section_content}
     </div>
-"#,
-                    section_content
+"#
                 ));
             }
         }
@@ -188,16 +178,14 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
                         ".jpg"
                     };
                     html.push_str(&format!(
-                        r#"    <img src="media/{}{}" alt="{}" class="content-image" />
-"#,
-                        media_id, extension, media_title
+                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
+"#
                     ));
                 }
                 "video" => {
                     html.push_str(&format!(
-                        r#"    <video src="media/{}.mp4" controls class="content-video"></video>
-"#,
-                        media_id
+                        r#"    <video src="media/{media_id}.mp4" controls class="content-video"></video>
+"#
                     ));
                 }
                 _ => {}
@@ -226,9 +214,8 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
 
         html.push_str(&format!(
             r#"        <div class="question">
-            <p>{}</p>
-"#,
-            question
+            <p>{question}</p>
+"#
         ));
 
         if kc_type == "multiple-choice" {
@@ -246,7 +233,7 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
                 </label>"#,
                         i,
                         if is_correct {
-                            format!(r#"data-correct="{}""#, i)
+                            format!(r#"data-correct="{i}""#)
                         } else {
                             String::new()
                         },
@@ -263,12 +250,11 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
         html.push_str(&format!(
             r#"
             <div class="explanation" style="display:none;">
-                <p>{}</p>
+                <p>{explanation}</p>
             </div>
         </div>
     </div>
-"#,
-            explanation
+"#
         ));
     }
 
@@ -276,11 +262,10 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
     if let (Some(audio), Some(caption)) = (audio_id, caption_id) {
         html.push_str(&format!(
             r#"    <audio id="narration-audio" controls class="narration-audio">
-        <source src="media/{}.mp3" type="audio/mpeg">
-        <track kind="captions" src="media/{}.vtt" srclang="en" label="English" default>
+        <source src="media/{audio}.mp3" type="audio/mpeg">
+        <track kind="captions" src="media/{caption}.vtt" srclang="en" label="English" default>
     </audio>
-"#,
-            audio, caption
+"#
         ));
     }
 
@@ -296,11 +281,10 @@ pub fn generate_assessment_page_html(assessment: &Value) -> String {
 
     let mut html = format!(
         r#"
-<div class="page-content" data-pass-mark="{}">
+<div class="page-content" data-pass-mark="{pass_mark}">
     <h1>Assessment</h1>
     <div class="assessment-questions">
-"#,
-        pass_mark
+"#
     );
 
     // Add questions if present
@@ -325,10 +309,9 @@ pub fn generate_assessment_page_html(assessment: &Value) -> String {
                 .unwrap_or("");
 
             html.push_str(&format!(
-                r#"        <div class="question" data-question-id="{}">
-            <p>{}</p>
-"#,
-                q_id, q_text
+                r#"        <div class="question" data-question-id="{q_id}">
+            <p>{q_text}</p>
+"#
             ));
 
             match q_type {
@@ -353,7 +336,7 @@ pub fn generate_assessment_page_html(assessment: &Value) -> String {
                                 q_id,
                                 i,
                                 if is_correct {
-                                    format!(r#"data-correct="{}""#, i)
+                                    format!(r#"data-correct="{i}""#)
                                 } else {
                                     String::new()
                                 },
@@ -412,11 +395,10 @@ pub fn generate_assessment_page_html(assessment: &Value) -> String {
             html.push_str(&format!(
                 r#"
             <div class="explanation" style="display:none;">
-                <p>{}</p>
+                <p>{explanation}</p>
             </div>
         </div>
-"#,
-                explanation
+"#
             ));
         }
     }
@@ -491,8 +473,8 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
                 .and_then(|v| v.as_str())
                 .unwrap_or(&default_title);
             html.push_str(&format!(
-                r#"        <button id="nav-topic-{}" class="nav-btn" onclick="showPage('topic-{}')">{}</button>
-"#, i, i, topic_title
+                r#"        <button id="nav-topic-{i}" class="nav-btn" onclick="showPage('topic-{i}')">{topic_title}</button>
+"#
             ));
         }
     }
@@ -528,7 +510,7 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
         let welcome_content = welcome_html
             .trim_start_matches("<div class=\"page-content\">\n")
             .trim_end_matches("</div>\n");
-        html.push_str(&format!("            {}", welcome_content));
+        html.push_str(&format!("            {welcome_content}"));
         html.push_str(
             r#"        </div>
 "#,
@@ -550,7 +532,7 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
         let objectives_content = objectives_html
             .trim_start_matches("<div class=\"page-content\">\n")
             .trim_end_matches("</div>\n");
-        html.push_str(&format!("            {}", objectives_content));
+        html.push_str(&format!("            {objectives_content}"));
         html.push_str(
             r#"        </div>
 "#,
@@ -561,16 +543,15 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
     if let Some(topics) = course_content.get("topics").and_then(|v| v.as_array()) {
         for (i, topic) in topics.iter().enumerate() {
             html.push_str(&format!(
-                r#"        <div id="page-topic-{}" class="page-content">
-"#,
-                i
+                r#"        <div id="page-topic-{i}" class="page-content">
+"#
             ));
             let topic_html = generate_topic_page_html(topic, i);
             // Remove the outer div wrapper
             let topic_content = topic_html
                 .trim_start_matches("<div class=\"page-content\">\n")
                 .trim_end_matches("</div>\n");
-            html.push_str(&format!("            {}", topic_content));
+            html.push_str(&format!("            {topic_content}"));
             html.push_str(
                 r#"        </div>
 "#,
@@ -590,7 +571,7 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
         let assessment_content = assessment_html
             .trim_start_matches("<div class=\"page-content\" data-pass-mark=\"80\">\n")
             .trim_end_matches("</div>\n");
-        html.push_str(&format!("            {}", assessment_content));
+        html.push_str(&format!("            {assessment_content}"));
         html.push_str(
             r#"        </div>
 "#,

@@ -15,7 +15,7 @@ impl<'a> StyleGenerator<'a> {
         let css_template = include_str!("templates/main.css.hbs");
         handlebars
             .register_template_string("main_css", css_template)
-            .map_err(|e| format!("Failed to register CSS template: {}", e))?;
+            .map_err(|e| format!("Failed to register CSS template: {e}"))?;
 
         Ok(Self { handlebars })
     }
@@ -30,7 +30,7 @@ impl<'a> StyleGenerator<'a> {
 
         self.handlebars
             .render("main_css", &data)
-            .map_err(|e| format!("Failed to render CSS template: {}", e))
+            .map_err(|e| format!("Failed to render CSS template: {e}"))
     }
 
     pub fn validate_css(&self, css_content: &str) -> Result<(), Vec<String>> {

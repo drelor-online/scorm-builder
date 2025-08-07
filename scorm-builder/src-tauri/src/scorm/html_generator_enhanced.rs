@@ -19,7 +19,7 @@ impl<'a> HtmlGenerator<'a> {
         } else if path.starts_with("media/") {
             path.to_string()
         } else {
-            format!("media/{}", path)
+            format!("media/{path}")
         }
     }
 
@@ -42,23 +42,23 @@ impl<'a> HtmlGenerator<'a> {
 
         handlebars
             .register_template_string("index", index_template)
-            .map_err(|e| format!("Failed to register index template: {}", e))?;
+            .map_err(|e| format!("Failed to register index template: {e}"))?;
 
         handlebars
             .register_template_string("topic", topic_template)
-            .map_err(|e| format!("Failed to register topic template: {}", e))?;
+            .map_err(|e| format!("Failed to register topic template: {e}"))?;
 
         handlebars
             .register_template_string("welcome", welcome_template)
-            .map_err(|e| format!("Failed to register welcome template: {}", e))?;
+            .map_err(|e| format!("Failed to register welcome template: {e}"))?;
 
         handlebars
             .register_template_string("objectives", objectives_template)
-            .map_err(|e| format!("Failed to register objectives template: {}", e))?;
+            .map_err(|e| format!("Failed to register objectives template: {e}"))?;
 
         handlebars
             .register_template_string("assessment", assessment_template)
-            .map_err(|e| format!("Failed to register assessment template: {}", e))?;
+            .map_err(|e| format!("Failed to register assessment template: {e}"))?;
 
         Ok(Self {
             handlebars,
@@ -78,7 +78,7 @@ impl<'a> HtmlGenerator<'a> {
 
         self.handlebars
             .render("index", &data)
-            .map_err(|e| format!("Failed to render index template: {}", e))
+            .map_err(|e| format!("Failed to render index template: {e}"))
     }
 
     pub fn generate_welcome_page(&self, welcome: &WelcomePage) -> Result<String, String> {
@@ -100,7 +100,7 @@ impl<'a> HtmlGenerator<'a> {
                         && !url.starts_with("https://")
                         && !url.starts_with("media/")
                     {
-                        url = format!("media/{}", url);
+                        url = format!("media/{url}");
                     }
 
                     // Determine if this is a YouTube video
@@ -140,7 +140,7 @@ impl<'a> HtmlGenerator<'a> {
 
         self.handlebars
             .render("welcome", &data)
-            .map_err(|e| format!("Failed to render welcome template: {}", e))
+            .map_err(|e| format!("Failed to render welcome template: {e}"))
     }
 
     pub fn generate_objectives_page(&self, objectives: &ObjectivesPage) -> Result<String, String> {
@@ -161,7 +161,7 @@ impl<'a> HtmlGenerator<'a> {
                         && !url.starts_with("https://")
                         && !url.starts_with("media/")
                     {
-                        url = format!("media/{}", url);
+                        url = format!("media/{url}");
                     }
 
                     // Determine if this is a YouTube video
@@ -197,7 +197,7 @@ impl<'a> HtmlGenerator<'a> {
 
         self.handlebars
             .render("objectives", &data)
-            .map_err(|e| format!("Failed to render objectives template: {}", e))
+            .map_err(|e| format!("Failed to render objectives template: {e}"))
     }
 
     pub fn generate_topic_page(&self, topic: &Topic) -> Result<String, String> {
@@ -303,8 +303,7 @@ impl<'a> HtmlGenerator<'a> {
             .as_ref()
             .map(|f| Self::ensure_media_path(f));
         eprintln!(
-            "[HTML Generator] Audio file path for template: {:?}",
-            audio_file_path
+            "[HTML Generator] Audio file path for template: {audio_file_path:?}"
         );
 
         let data = json!({
@@ -329,7 +328,7 @@ impl<'a> HtmlGenerator<'a> {
                     let mut url = item.url.clone();
                     // If URL doesn't start with http/https, prefix with media/
                     if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("media/") {
-                        url = format!("media/{}", url);
+                        url = format!("media/{url}");
                     }
 
                     // Determine if this is a YouTube video
@@ -373,7 +372,7 @@ impl<'a> HtmlGenerator<'a> {
         let rendered_html = self
             .handlebars
             .render("topic", &data)
-            .map_err(|e| format!("Failed to render topic template: {}", e))?;
+            .map_err(|e| format!("Failed to render topic template: {e}"))?;
 
         // Check if knowledge check was rendered
         if !kc_questions.is_empty() {
@@ -415,7 +414,7 @@ impl<'a> HtmlGenerator<'a> {
 
         self.handlebars
             .render("assessment", &data)
-            .map_err(|e| format!("Failed to render assessment template: {}", e))
+            .map_err(|e| format!("Failed to render assessment template: {e}"))
     }
 
     pub fn with_objectives(mut self, has_objectives: bool) -> Self {
@@ -450,12 +449,12 @@ fn eq_helper<'reg, 'rc>(
 
     // For block helpers, we need to render the template block if the condition is true
     if result {
-        if let Some(ref template) = h.template() {
+        if let Some(template) = h.template() {
             template.render(r, ctx, rc, out)?;
         }
     } else {
         // Render the else block if present
-        if let Some(ref template) = h.inverse() {
+        if let Some(template) = h.inverse() {
             template.render(r, ctx, rc, out)?;
         }
     }
@@ -497,12 +496,12 @@ fn or_helper<'reg, 'rc>(
 
     // For block helpers, render the template block if condition is true
     if result {
-        if let Some(ref template) = h.template() {
+        if let Some(template) = h.template() {
             template.render(r, ctx, rc, out)?;
         }
     } else {
         // Render the else block if present
-        if let Some(ref template) = h.inverse() {
+        if let Some(template) = h.inverse() {
             template.render(r, ctx, rc, out)?;
         }
     }
@@ -530,12 +529,12 @@ fn is_youtube_helper<'reg, 'rc>(
 
     // For block helpers, render the template block if condition is true
     if is_youtube {
-        if let Some(ref template) = h.template() {
+        if let Some(template) = h.template() {
             template.render(r, ctx, rc, out)?;
         }
     } else {
         // Render the else block if present
-        if let Some(ref template) = h.inverse() {
+        if let Some(template) = h.inverse() {
             template.render(r, ctx, rc, out)?;
         }
     }

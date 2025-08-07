@@ -140,7 +140,7 @@ impl OutputValidator {
     pub fn validate_scorm_package(&self, zip_data: &[u8]) -> Result<ValidationReport, String> {
         let cursor = std::io::Cursor::new(zip_data);
         let mut archive =
-            ZipArchive::new(cursor).map_err(|e| format!("Failed to open ZIP archive: {}", e))?;
+            ZipArchive::new(cursor).map_err(|e| format!("Failed to open ZIP archive: {e}"))?;
 
         let mut report = ValidationReport::new();
 
@@ -150,7 +150,7 @@ impl OutputValidator {
                 Ok(mut file) => {
                     let mut content = String::new();
                     file.read_to_string(&mut content)
-                        .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+                        .map_err(|e| format!("Failed to read {path}: {e}"))?;
 
                     match validator(&content) {
                         Ok(()) => {
@@ -239,7 +239,7 @@ impl ValidationReport {
         if !self.errors.is_empty() {
             summary.push_str("\nErrors:\n");
             for (file, error) in &self.errors {
-                summary.push_str(&format!("  - {}: {}\n", file, error));
+                summary.push_str(&format!("  - {file}: {error}\n"));
             }
         }
 

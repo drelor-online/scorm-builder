@@ -29,7 +29,7 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     // Write XML declaration
     writer
         .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-        .map_err(|e| format!("Failed to write XML declaration: {}", e))?;
+        .map_err(|e| format!("Failed to write XML declaration: {e}"))?;
 
     // Start manifest element
     let mut manifest_elem = BytesStart::new("manifest");
@@ -62,26 +62,26 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
 
     writer
         .write_event(Event::Start(manifest_elem))
-        .map_err(|e| format!("Failed to write manifest element: {}", e))?;
+        .map_err(|e| format!("Failed to write manifest element: {e}"))?;
 
     // Write metadata
     writer
         .write_event(Event::Start(BytesStart::new("metadata")))
-        .map_err(|e| format!("Failed to write metadata start: {}", e))?;
+        .map_err(|e| format!("Failed to write metadata start: {e}"))?;
 
     writer
         .write_event(Event::Start(BytesStart::new("schema")))
-        .map_err(|e| format!("Failed to write schema start: {}", e))?;
+        .map_err(|e| format!("Failed to write schema start: {e}"))?;
     writer
         .write_event(Event::Text(BytesText::new("ADL SCORM")))
-        .map_err(|e| format!("Failed to write schema text: {}", e))?;
+        .map_err(|e| format!("Failed to write schema text: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("schema")))
-        .map_err(|e| format!("Failed to write schema end: {}", e))?;
+        .map_err(|e| format!("Failed to write schema end: {e}"))?;
 
     writer
         .write_event(Event::Start(BytesStart::new("schemaversion")))
-        .map_err(|e| format!("Failed to write schemaversion start: {}", e))?;
+        .map_err(|e| format!("Failed to write schemaversion start: {e}"))?;
     let version_text = match options.scorm_version.as_str() {
         "1.2" => "1.2",
         "2004" => "2004 3rd Edition",
@@ -91,14 +91,14 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     };
     writer
         .write_event(Event::Text(BytesText::new(version_text)))
-        .map_err(|e| format!("Failed to write schemaversion text: {}", e))?;
+        .map_err(|e| format!("Failed to write schemaversion text: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("schemaversion")))
-        .map_err(|e| format!("Failed to write schemaversion end: {}", e))?;
+        .map_err(|e| format!("Failed to write schemaversion end: {e}"))?;
 
     writer
         .write_event(Event::End(BytesEnd::new("metadata")))
-        .map_err(|e| format!("Failed to write metadata end: {}", e))?;
+        .map_err(|e| format!("Failed to write metadata end: {e}"))?;
 
     // Write organizations
     let mut orgs_elem = BytesStart::new("organizations");
@@ -106,24 +106,24 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     orgs_elem.push_attribute(("default", default_org.as_str()));
     writer
         .write_event(Event::Start(orgs_elem))
-        .map_err(|e| format!("Failed to write organizations start: {}", e))?;
+        .map_err(|e| format!("Failed to write organizations start: {e}"))?;
 
     let mut org_elem = BytesStart::new("organization");
     let org_id = format!("{}_org", options.course.identifier);
     org_elem.push_attribute(("identifier", org_id.as_str()));
     writer
         .write_event(Event::Start(org_elem))
-        .map_err(|e| format!("Failed to write organization start: {}", e))?;
+        .map_err(|e| format!("Failed to write organization start: {e}"))?;
 
     writer
         .write_event(Event::Start(BytesStart::new("title")))
-        .map_err(|e| format!("Failed to write title start: {}", e))?;
+        .map_err(|e| format!("Failed to write title start: {e}"))?;
     writer
         .write_event(Event::Text(BytesText::from_escaped(&options.course.title)))
-        .map_err(|e| format!("Failed to write title text: {}", e))?;
+        .map_err(|e| format!("Failed to write title text: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("title")))
-        .map_err(|e| format!("Failed to write title end: {}", e))?;
+        .map_err(|e| format!("Failed to write title end: {e}"))?;
 
     // Add a default item
     let mut item_elem = BytesStart::new("item");
@@ -131,33 +131,33 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     item_elem.push_attribute(("identifierref", "resource_1"));
     writer
         .write_event(Event::Start(item_elem))
-        .map_err(|e| format!("Failed to write item start: {}", e))?;
+        .map_err(|e| format!("Failed to write item start: {e}"))?;
 
     writer
         .write_event(Event::Start(BytesStart::new("title")))
-        .map_err(|e| format!("Failed to write item title start: {}", e))?;
+        .map_err(|e| format!("Failed to write item title start: {e}"))?;
     writer
         .write_event(Event::Text(BytesText::from_escaped(&options.course.title)))
-        .map_err(|e| format!("Failed to write item title text: {}", e))?;
+        .map_err(|e| format!("Failed to write item title text: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("title")))
-        .map_err(|e| format!("Failed to write item title end: {}", e))?;
+        .map_err(|e| format!("Failed to write item title end: {e}"))?;
 
     writer
         .write_event(Event::End(BytesEnd::new("item")))
-        .map_err(|e| format!("Failed to write item end: {}", e))?;
+        .map_err(|e| format!("Failed to write item end: {e}"))?;
 
     writer
         .write_event(Event::End(BytesEnd::new("organization")))
-        .map_err(|e| format!("Failed to write organization end: {}", e))?;
+        .map_err(|e| format!("Failed to write organization end: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("organizations")))
-        .map_err(|e| format!("Failed to write organizations end: {}", e))?;
+        .map_err(|e| format!("Failed to write organizations end: {e}"))?;
 
     // Write resources
     writer
         .write_event(Event::Start(BytesStart::new("resources")))
-        .map_err(|e| format!("Failed to write resources start: {}", e))?;
+        .map_err(|e| format!("Failed to write resources start: {e}"))?;
 
     let mut resource_elem = BytesStart::new("resource");
     resource_elem.push_attribute(("identifier", "resource_1"));
@@ -170,28 +170,28 @@ pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     }
     writer
         .write_event(Event::Start(resource_elem))
-        .map_err(|e| format!("Failed to write resource start: {}", e))?;
+        .map_err(|e| format!("Failed to write resource start: {e}"))?;
 
     let mut file_elem = BytesStart::new("file");
     file_elem.push_attribute(("href", "index.html"));
     writer
         .write_event(Event::Empty(file_elem))
-        .map_err(|e| format!("Failed to write file element: {}", e))?;
+        .map_err(|e| format!("Failed to write file element: {e}"))?;
 
     writer
         .write_event(Event::End(BytesEnd::new("resource")))
-        .map_err(|e| format!("Failed to write resource end: {}", e))?;
+        .map_err(|e| format!("Failed to write resource end: {e}"))?;
     writer
         .write_event(Event::End(BytesEnd::new("resources")))
-        .map_err(|e| format!("Failed to write resources end: {}", e))?;
+        .map_err(|e| format!("Failed to write resources end: {e}"))?;
 
     // Close manifest
     writer
         .write_event(Event::End(BytesEnd::new("manifest")))
-        .map_err(|e| format!("Failed to write manifest end: {}", e))?;
+        .map_err(|e| format!("Failed to write manifest end: {e}"))?;
 
     let result = writer.into_inner().into_inner();
-    String::from_utf8(result).map_err(|e| format!("Failed to convert to UTF-8: {}", e))
+    String::from_utf8(result).map_err(|e| format!("Failed to convert to UTF-8: {e}"))
 }
 
 #[cfg(test)]

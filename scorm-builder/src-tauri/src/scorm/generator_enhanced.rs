@@ -10,6 +10,7 @@ use super::output_validator::OutputValidator;
 use super::style_generator::StyleGenerator;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Default)]
 pub struct Topic {
     pub id: String,
     pub title: String,
@@ -26,20 +27,6 @@ pub struct Topic {
     pub media: Option<Vec<MediaItem>>,
 }
 
-impl Default for Topic {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            title: String::new(),
-            content: String::new(),
-            knowledge_check: None,
-            audio_file: None,
-            caption_file: None,
-            image_url: None,
-            media: None,
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KnowledgeCheck {
@@ -171,9 +158,9 @@ impl EnhancedScormGenerator {
                 .map_err(|errors| errors.join("\n"))?;
 
             zip.start_file("scripts/navigation.js", options)
-                .map_err(|e| format!("Failed to create navigation.js: {}", e))?;
+                .map_err(|e| format!("Failed to create navigation.js: {e}"))?;
             zip.write_all(navigation_js.as_bytes())
-                .map_err(|e| format!("Failed to write navigation.js: {}", e))?;
+                .map_err(|e| format!("Failed to write navigation.js: {e}"))?;
 
             // Generate main.css
             let main_css = self.style_generator.generate_main_css(&request)?;
@@ -182,69 +169,69 @@ impl EnhancedScormGenerator {
                 .map_err(|errors| errors.join("\n"))?;
 
             zip.start_file("styles/main.css", options)
-                .map_err(|e| format!("Failed to create main.css: {}", e))?;
+                .map_err(|e| format!("Failed to create main.css: {e}"))?;
             zip.write_all(main_css.as_bytes())
-                .map_err(|e| format!("Failed to write main.css: {}", e))?;
+                .map_err(|e| format!("Failed to write main.css: {e}"))?;
 
             // Generate index.html
             let index_html = self.html_generator.generate_index_html(&request)?;
             zip.start_file("index.html", options)
-                .map_err(|e| format!("Failed to create index.html: {}", e))?;
+                .map_err(|e| format!("Failed to create index.html: {e}"))?;
             zip.write_all(index_html.as_bytes())
-                .map_err(|e| format!("Failed to write index.html: {}", e))?;
+                .map_err(|e| format!("Failed to write index.html: {e}"))?;
 
             // Generate page HTML files
             if let Some(welcome) = &request.welcome_page {
                 let welcome_html = self.html_generator.generate_welcome_page(welcome)?;
                 zip.start_file("pages/welcome.html", options)
-                    .map_err(|e| format!("Failed to create welcome.html: {}", e))?;
+                    .map_err(|e| format!("Failed to create welcome.html: {e}"))?;
                 zip.write_all(welcome_html.as_bytes())
-                    .map_err(|e| format!("Failed to write welcome.html: {}", e))?;
+                    .map_err(|e| format!("Failed to write welcome.html: {e}"))?;
             }
 
             if let Some(objectives) = &request.learning_objectives_page {
                 let objectives_html = self.html_generator.generate_objectives_page(objectives)?;
                 zip.start_file("pages/objectives.html", options)
-                    .map_err(|e| format!("Failed to create objectives.html: {}", e))?;
+                    .map_err(|e| format!("Failed to create objectives.html: {e}"))?;
                 zip.write_all(objectives_html.as_bytes())
-                    .map_err(|e| format!("Failed to write objectives.html: {}", e))?;
+                    .map_err(|e| format!("Failed to write objectives.html: {e}"))?;
             }
 
             // Generate topic pages
             for topic in &request.topics {
                 let topic_html = self.html_generator.generate_topic_page(topic)?;
-                zip.start_file(&format!("pages/{}.html", topic.id), options)
-                    .map_err(|e| format!("Failed to create topic page: {}", e))?;
+                zip.start_file(format!("pages/{}.html", topic.id), options)
+                    .map_err(|e| format!("Failed to create topic page: {e}"))?;
                 zip.write_all(topic_html.as_bytes())
-                    .map_err(|e| format!("Failed to write topic page: {}", e))?;
+                    .map_err(|e| format!("Failed to write topic page: {e}"))?;
             }
 
             // Generate assessment page
             if let Some(assessment) = &request.assessment {
                 let assessment_html = self.html_generator.generate_assessment_page(assessment)?;
                 zip.start_file("pages/assessment.html", options)
-                    .map_err(|e| format!("Failed to create assessment.html: {}", e))?;
+                    .map_err(|e| format!("Failed to create assessment.html: {e}"))?;
                 zip.write_all(assessment_html.as_bytes())
-                    .map_err(|e| format!("Failed to write assessment.html: {}", e))?;
+                    .map_err(|e| format!("Failed to write assessment.html: {e}"))?;
             }
 
             // Add manifest
             let manifest = self.generate_simple_manifest(&request)?;
             zip.start_file("imsmanifest.xml", options)
-                .map_err(|e| format!("Failed to create manifest: {}", e))?;
+                .map_err(|e| format!("Failed to create manifest: {e}"))?;
             zip.write_all(manifest.as_bytes())
-                .map_err(|e| format!("Failed to write manifest: {}", e))?;
+                .map_err(|e| format!("Failed to write manifest: {e}"))?;
 
             // Add media files
             for (path, data) in media_files {
                 zip.start_file(&path, options)
-                    .map_err(|e| format!("Failed to create media file {}: {}", path, e))?;
+                    .map_err(|e| format!("Failed to create media file {path}: {e}"))?;
                 zip.write_all(&data)
-                    .map_err(|e| format!("Failed to write media file {}: {}", path, e))?;
+                    .map_err(|e| format!("Failed to write media file {path}: {e}"))?;
             }
 
             zip.finish()
-                .map_err(|e| format!("Failed to finish ZIP: {}", e))?;
+                .map_err(|e| format!("Failed to finish ZIP: {e}"))?;
         }
 
         // Validate the generated package
@@ -312,7 +299,7 @@ impl EnhancedScormGenerator {
 {}
     </resources>
 </manifest>"#,
-            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4(),
             request.course_title,
             request.course_title,
             resources

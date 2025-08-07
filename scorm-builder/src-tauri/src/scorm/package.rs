@@ -25,7 +25,7 @@ pub struct StreamableResource {
 
 pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Result<(), String> {
     let file = std::fs::File::create(output_path)
-        .map_err(|e| format!("Failed to create output file: {}", e))?;
+        .map_err(|e| format!("Failed to create output file: {e}"))?;
 
     let mut zip = zip::ZipWriter::new(file);
     let options = FileOptions::default()
@@ -34,15 +34,15 @@ pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Res
 
     // Write manifest file
     zip.start_file("imsmanifest.xml", options)
-        .map_err(|e| format!("Failed to start manifest file: {}", e))?;
+        .map_err(|e| format!("Failed to start manifest file: {e}"))?;
     zip.write_all(content.manifest.as_bytes())
-        .map_err(|e| format!("Failed to write manifest content: {}", e))?;
+        .map_err(|e| format!("Failed to write manifest content: {e}"))?;
 
     // Write main HTML file
     zip.start_file("index.html", options)
-        .map_err(|e| format!("Failed to start HTML file: {}", e))?;
+        .map_err(|e| format!("Failed to start HTML file: {e}"))?;
     zip.write_all(content.html_content.as_bytes())
-        .map_err(|e| format!("Failed to write HTML content: {}", e))?;
+        .map_err(|e| format!("Failed to write HTML content: {e}"))?;
 
     // Write resources
     for resource in &content.resources {
@@ -60,7 +60,7 @@ pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Res
 
         // Create directories if needed
         if let Some(parent) = path.parent() {
-            if parent.to_string_lossy().len() > 0 {
+            if !parent.to_string_lossy().is_empty() {
                 // The zip crate handles directory creation automatically
                 // when we write files with paths containing directories
             }
@@ -73,7 +73,7 @@ pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Res
     }
 
     zip.finish()
-        .map_err(|e| format!("Failed to finish ZIP file: {}", e))?;
+        .map_err(|e| format!("Failed to finish ZIP file: {e}"))?;
 
     Ok(())
 }
@@ -88,7 +88,7 @@ pub fn create_scorm_package_streaming(
     use crate::scorm::generator::stream_file_to_zip;
 
     let file = std::fs::File::create(output_path)
-        .map_err(|e| format!("Failed to create output file: {}", e))?;
+        .map_err(|e| format!("Failed to create output file: {e}"))?;
 
     let mut zip = zip::ZipWriter::new(file);
     let options = FileOptions::default()
@@ -98,17 +98,17 @@ pub fn create_scorm_package_streaming(
     // Write manifest file (only if not already provided by JavaScript)
     if !manifest.is_empty() {
         zip.start_file("imsmanifest.xml", options)
-            .map_err(|e| format!("Failed to start manifest file: {}", e))?;
+            .map_err(|e| format!("Failed to start manifest file: {e}"))?;
         zip.write_all(manifest.as_bytes())
-            .map_err(|e| format!("Failed to write manifest content: {}", e))?;
+            .map_err(|e| format!("Failed to write manifest content: {e}"))?;
     }
 
     // Write main HTML file (only if not already provided by JavaScript)
     if !html_content.is_empty() {
         zip.start_file("index.html", options)
-            .map_err(|e| format!("Failed to start HTML file: {}", e))?;
+            .map_err(|e| format!("Failed to start HTML file: {e}"))?;
         zip.write_all(html_content.as_bytes())
-            .map_err(|e| format!("Failed to write HTML content: {}", e))?;
+            .map_err(|e| format!("Failed to write HTML content: {e}"))?;
     }
 
     // Write in-memory resources
@@ -125,7 +125,7 @@ pub fn create_scorm_package_streaming(
     }
 
     zip.finish()
-        .map_err(|e| format!("Failed to finish ZIP file: {}", e))?;
+        .map_err(|e| format!("Failed to finish ZIP file: {e}"))?;
 
     Ok(())
 }

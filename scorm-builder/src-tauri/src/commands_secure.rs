@@ -30,7 +30,7 @@ pub fn log_debug(message: &str) {
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_file) {
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
-        let _ = writeln!(file, "[{}] {}", timestamp, message);
+        let _ = writeln!(file, "[{timestamp}] {message}");
     }
 }
 
@@ -75,11 +75,11 @@ fn validate_project_path(file_path: &str) -> Result<PathBuf, String> {
                 ))
             }
         })
-        .map_err(|e| format!("Invalid path: {}", e))?;
+        .map_err(|e| format!("Invalid path: {e}"))?;
 
     let canonical_projects_dir = projects_dir
         .canonicalize()
-        .map_err(|e| format!("Failed to resolve projects directory: {}", e))?;
+        .map_err(|e| format!("Failed to resolve projects directory: {e}"))?;
 
     // Ensure the path is within the projects directory
     if !canonical_parent.starts_with(&canonical_projects_dir) {
@@ -120,12 +120,11 @@ fn validate_image_url(url_str: &str) -> Result<Url, String> {
 
     let is_allowed = ALLOWED_IMAGE_DOMAINS
         .iter()
-        .any(|&domain| host == domain || host.ends_with(&format!(".{}", domain)));
+        .any(|&domain| host == domain || host.ends_with(&format!(".{domain}")));
 
     if !is_allowed {
         return Err(format!(
-            "Domain '{}' is not in the allowed list. Allowed domains: {:?}",
-            host, ALLOWED_IMAGE_DOMAINS
+            "Domain '{host}' is not in the allowed list. Allowed domains: {ALLOWED_IMAGE_DOMAINS:?}"
         ));
     }
 
@@ -234,13 +233,12 @@ fn validate_package_output_path(path_str: &str) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub async fn save_project(project_data: ProjectFile, file_path: String) -> Result<(), String> {
-    log_debug(&format!("save_project called with path: {}", file_path));
+    log_debug(&format!("save_project called with path: {file_path}"));
 
     // Log what we're saving
     if let Some(ref seed_data) = project_data.course_seed_data {
         log_debug(&format!(
-            "Saving project with course_seed_data: {}",
-            seed_data
+            "Saving project with course_seed_data: {seed_data}"
         ));
     } else {
         log_debug("Saving project WITHOUT course_seed_data");
@@ -255,7 +253,7 @@ pub async fn save_project(project_data: ProjectFile, file_path: String) -> Resul
 
 #[tauri::command]
 pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
-    log_debug(&format!("load_project called with path: {}", file_path));
+    log_debug(&format!("load_project called with path: {file_path}"));
 
     let path = validate_project_path(&file_path)?;
     let project = load_project_file(&path)?;
@@ -263,8 +261,7 @@ pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
     // Log what we're loading
     if let Some(ref seed_data) = project.course_seed_data {
         log_debug(&format!(
-            "Loaded project with course_seed_data: {}",
-            seed_data
+            "Loaded project with course_seed_data: {seed_data}"
         ));
     } else {
         log_debug("Loaded project WITHOUT course_seed_data");
@@ -356,7 +353,7 @@ pub async fn append_to_log(content: String) -> Result<(), String> {
 
     // Create logs directory if it doesn't exist
     std::fs::create_dir_all(&log_dir)
-        .map_err(|e| format!("Failed to create log directory: {}", e))?;
+        .map_err(|e| format!("Failed to create log directory: {e}"))?;
 
     let log_file = log_dir.join(format!("debug-{}.log", Local::now().format("%Y-%m-%d")));
 
@@ -374,7 +371,7 @@ pub async fn append_to_log(content: String) -> Result<(), String> {
         .create(true)
         .append(true)
         .open(&log_file)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
+        .map_err(|e| format!("Failed to open log file: {e}"))?;
 
     writeln!(
         file,
@@ -382,7 +379,7 @@ pub async fn append_to_log(content: String) -> Result<(), String> {
         Local::now().format("%Y-%m-%d %H:%M:%S"),
         content
     )
-    .map_err(|e| format!("Failed to write to log file: {}", e))?;
+    .map_err(|e| format!("Failed to write to log file: {e}"))?;
 
     Ok(())
 }
@@ -423,14 +420,14 @@ pub async fn download_image(url: String) -> Result<DownloadImageResponse, String
         .timeout(std::time::Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::limited(3)) // Limit redirects
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
     // Download the image
     let response = client
         .get(validated_url.as_str())
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch image: {}", e))?;
+        .map_err(|e| format!("Failed to fetch image: {e}"))?;
 
     // Check status
     if !response.status().is_success() {
@@ -447,8 +444,7 @@ pub async fn download_image(url: String) -> Result<DownloadImageResponse, String
 
     if !content_type.starts_with("image/") {
         return Err(format!(
-            "Invalid content type: {}. Only images are allowed",
-            content_type
+            "Invalid content type: {content_type}. Only images are allowed"
         ));
     }
 
@@ -457,8 +453,7 @@ pub async fn download_image(url: String) -> Result<DownloadImageResponse, String
     if let Some(content_length) = response.content_length() {
         if content_length > MAX_SIZE {
             return Err(format!(
-                "Image too large: {} bytes (max 10MB)",
-                content_length
+                "Image too large: {content_length} bytes (max 10MB)"
             ));
         }
     }
@@ -467,7 +462,7 @@ pub async fn download_image(url: String) -> Result<DownloadImageResponse, String
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read image data: {}", e))?;
+        .map_err(|e| format!("Failed to read image data: {e}"))?;
 
     // Double-check size after download
     if bytes.len() > MAX_SIZE as usize {

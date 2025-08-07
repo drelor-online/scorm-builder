@@ -27,7 +27,7 @@ fn get_settings_path() -> Result<PathBuf, String> {
     // Create directory if it doesn't exist
     if !app_config_dir.exists() {
         fs::create_dir_all(&app_config_dir)
-            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+            .map_err(|e| format!("Failed to create config directory: {e}"))?;
     }
 
     Ok(app_config_dir.join("settings.json"))
@@ -43,10 +43,10 @@ pub fn load_settings() -> Result<AppSettings, String> {
     }
 
     let contents = fs::read_to_string(&settings_path)
-        .map_err(|e| format!("Failed to read settings file: {}", e))?;
+        .map_err(|e| format!("Failed to read settings file: {e}"))?;
 
     let settings: AppSettings = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse settings file: {}", e))?;
+        .map_err(|e| format!("Failed to parse settings file: {e}"))?;
 
     Ok(settings)
 }
@@ -56,9 +56,9 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let settings_path = get_settings_path()?;
 
     let json = serde_json::to_string_pretty(settings)
-        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+        .map_err(|e| format!("Failed to serialize settings: {e}"))?;
 
-    fs::write(&settings_path, json).map_err(|e| format!("Failed to write settings file: {}", e))?;
+    fs::write(&settings_path, json).map_err(|e| format!("Failed to write settings file: {e}"))?;
 
     Ok(())
 }
@@ -82,7 +82,7 @@ pub fn get_projects_directory() -> Result<PathBuf, String> {
     // Create directory if it doesn't exist
     if !default_dir.exists() {
         fs::create_dir_all(&default_dir)
-            .map_err(|e| format!("Failed to create projects directory: {}", e))?;
+            .map_err(|e| format!("Failed to create projects directory: {e}"))?;
     }
 
     Ok(default_dir)

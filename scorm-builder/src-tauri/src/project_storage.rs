@@ -113,7 +113,7 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
     let file_lock = {
         let mut locks = FILE_LOCKS
             .lock()
-            .map_err(|e| format!("Failed to acquire lock map: {}", e))?;
+            .map_err(|e| format!("Failed to acquire lock map: {e}"))?;
         locks
             .entry(file_path_buf.clone())
             .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -142,11 +142,11 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
 
     // Serialize to pretty JSON
     let json = serde_json::to_string_pretty(&project)
-        .map_err(|e| format!("Failed to serialize project: {}", e))?;
+        .map_err(|e| format!("Failed to serialize project: {e}"))?;
 
     // Create parent directory if needed
     if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
     }
 
     // Write to a temporary file first, then rename (atomic operation)
@@ -154,20 +154,20 @@ pub fn save_project_file(project: &ProjectFile, file_path: &Path) -> Result<(), 
 
     {
         let mut file = fs::File::create(&temp_path)
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+            .map_err(|e| format!("Failed to create temp file: {e}"))?;
 
         file.write_all(json.as_bytes())
-            .map_err(|e| format!("Failed to write temp file: {}", e))?;
+            .map_err(|e| format!("Failed to write temp file: {e}"))?;
 
         file.sync_all()
-            .map_err(|e| format!("Failed to sync temp file: {}", e))?;
+            .map_err(|e| format!("Failed to sync temp file: {e}"))?;
     }
 
     // Atomic rename to prevent partial writes
     fs::rename(&temp_path, file_path).map_err(|e| {
         // Clean up temp file if rename fails
         let _ = fs::remove_file(&temp_path);
-        format!("Failed to rename temp file to final location: {}", e)
+        format!("Failed to rename temp file to final location: {e}")
     })?;
 
     Ok(())
@@ -180,10 +180,10 @@ pub fn load_project_file(file_path: &Path) -> Result<ProjectFile, String> {
     }
 
     let contents =
-        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
     let mut project: ProjectFile = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse project file: {}", e))?;
+        .map_err(|e| format!("Failed to parse project file: {e}"))?;
 
     project.project.path = Some(file_path.to_string_lossy().to_string());
 
@@ -228,13 +228,13 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
     };
 
     // Delete the main project file
-    fs::remove_file(file_path).map_err(|e| format!("Failed to delete project file: {}", e))?;
+    fs::remove_file(file_path).map_err(|e| format!("Failed to delete project file: {e}"))?;
 
     // Delete the backup file if it exists
     let backup_path = file_path.with_extension("scormproj.backup");
     if backup_path.exists() {
         fs::remove_file(&backup_path)
-            .map_err(|e| format!("Failed to delete backup file: {}", e))?;
+            .map_err(|e| format!("Failed to delete backup file: {e}"))?;
     }
 
     // Delete the project folder if it exists
@@ -244,7 +244,7 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
             let uuid_folder = projects_dir.join(&id);
             if uuid_folder.exists() && uuid_folder.is_dir() {
                 fs::remove_dir_all(&uuid_folder)
-                    .map_err(|e| format!("Failed to delete project UUID folder: {}", e))?;
+                    .map_err(|e| format!("Failed to delete project UUID folder: {e}"))?;
             }
         }
     }
@@ -255,7 +255,7 @@ pub fn delete_project_file(file_path: &Path) -> Result<(), String> {
             let project_folder = parent.join(file_stem);
             if project_folder.exists() && project_folder.is_dir() {
                 fs::remove_dir_all(&project_folder)
-                    .map_err(|e| format!("Failed to delete project folder: {}", e))?;
+                    .map_err(|e| format!("Failed to delete project folder: {e}"))?;
             }
         }
     }
