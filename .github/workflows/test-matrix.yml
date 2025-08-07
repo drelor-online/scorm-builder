@@ -1,0 +1,164 @@
+name: Test Matrix
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  schedule:
+    # Run full test suite daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  test-matrix:
+    name: Tests - Node ${{ matrix.node }} - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 20]
+        include:
+          # Include specific test configurations
+          - os: ubuntu-latest
+            node: 20
+            coverage: true
+          - os: windows-latest
+            node: 20
+            e2e: true
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: scorm-builder/package-lock.json
+      
+      # Linux dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      
+      # macOS dependencies
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install --cask basictex
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        if: matrix.e2e || runner.os == 'Windows'
+      
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        if: matrix.e2e || runner.os == 'Windows'
+        with:
+          workspaces: './scorm-builder/src-tauri -> target'
+      
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: npm ci
+      
+      - name: Install Playwright
+        if: matrix.e2e
+        working-directory: ./scorm-builder
+        run: npx playwright install chromium --with-deps
+      
+      # Type checking
+      - name: Type check
+        working-directory: ./scorm-builder
+        run: npm run typecheck
+      
+      # Linting
+      - name: Lint
+        working-directory: ./scorm-builder
+        run: npm run lint
+        continue-on-error: true
+      
+      # Unit tests
+      - name: Run unit tests
+        working-directory: ./scorm-builder
+        run: npm test -- --run
+        env:
+          CI: true
+      
+      # Coverage
+      - name: Generate coverage
+        if: matrix.coverage
+        working-directory: ./scorm-builder
+        run: npm run test:coverage
+      
+      - name: Upload coverage to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./scorm-builder/coverage
+          flags: unittests
+          name: codecov-umbrella
+      
+      # E2E tests
+      - name: Build for E2E
+        if: matrix.e2e
+        working-directory: ./scorm-builder
+        run: npm run build
+      
+      - name: Run E2E tests
+        if: matrix.e2e
+        working-directory: ./scorm-builder
+        run: |
+          npm run preview &
+          node scripts/wait-for-server.js
+          npm run test:e2e
+        env:
+          CI: true
+          PORT: 1421
+      
+      # Build validation
+      - name: Build Tauri app
+        if: runner.os == 'Windows'
+        working-directory: ./scorm-builder
+        run: npm run tauri:build
+        continue-on-error: true
+      
+      # Upload test results
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-node${{ matrix.node }}
+          path: |
+            scorm-builder/test-results/
+            scorm-builder/coverage/
+            scorm-builder/playwright-report/
+          retention-days: 7
+
+  test-status:
+    name: Test Status Check
+    runs-on: ubuntu-latest
+    needs: test-matrix
+    if: always()
+    
+    steps:
+      - name: Check test matrix status
+        run: |
+          if [ "${{ needs.test-matrix.result }}" == "success" ]; then
+            echo "✅ All tests passed successfully!"
+            exit 0
+          else
+            echo "❌ Some tests failed. Check the logs for details."
+            exit 1
+          fi

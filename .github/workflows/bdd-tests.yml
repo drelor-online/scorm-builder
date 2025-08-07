@@ -1,0 +1,288 @@
+name: BDD Tests
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths:
+      - 'scorm-builder/src/**'
+      - 'scorm-builder/tests/bdd/**'
+      - 'scorm-builder/package.json'
+      - '.github/workflows/bdd-tests.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'scorm-builder/src/**'
+      - 'scorm-builder/tests/bdd/**'
+      - 'scorm-builder/package.json'
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Cucumber tags to run (e.g., @smoke, @critical)'
+        required: false
+        default: 'not @wip'
+
+jobs:
+  bdd-smoke-tests:
+    name: BDD Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: scorm-builder/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      
+      - name: Build frontend
+        working-directory: ./scorm-builder
+        run: npm run build
+      
+      - name: Start test server
+        working-directory: ./scorm-builder
+        run: |
+          npx vite preview --port 1421 &
+          echo "Waiting for server to start..."
+          npx wait-on http://localhost:1421 --timeout 30000
+        env:
+          PORT: 1421
+      
+      - name: Run smoke tests
+        working-directory: ./scorm-builder
+        run: |
+          npx cucumber-js \
+            --config cucumber.ci.mjs \
+            --tags "@smoke or @critical" \
+            --format json:tests/bdd/reports/smoke-results.json
+        env:
+          CI: true
+          BASE_URL: http://localhost:1421
+          HEADLESS: true
+      
+      - name: Upload smoke test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-smoke-results
+          path: scorm-builder/tests/bdd/reports/smoke-results.json
+          retention-days: 7
+
+  bdd-full-suite:
+    name: BDD Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: bdd-smoke-tests
+    
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
+        total-shards: [3]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: scorm-builder/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      
+      - name: Build frontend
+        working-directory: ./scorm-builder
+        run: npm run build
+      
+      - name: Start test server
+        working-directory: ./scorm-builder
+        run: |
+          npx vite preview --port 1421 &
+          npx wait-on http://localhost:1421 --timeout 30000
+        env:
+          PORT: 1421
+      
+      - name: Run BDD tests (Shard ${{ matrix.shard }}/${{ matrix.total-shards }})
+        working-directory: ./scorm-builder
+        run: |
+          npx cucumber-js \
+            --config cucumber.ci.mjs \
+            --tags "${{ github.event.inputs.tags || 'not @wip' }}" \
+            --format json:tests/bdd/reports/results-shard-${{ matrix.shard }}.json \
+            --format html:tests/bdd/reports/report-shard-${{ matrix.shard }}.html \
+            --parallel ${{ matrix.total-shards }} \
+            --shard ${{ matrix.shard }}/${{ matrix.total-shards }}
+        env:
+          CI: true
+          BASE_URL: http://localhost:1421
+          HEADLESS: true
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-results-shard-${{ matrix.shard }}
+          path: |
+            scorm-builder/tests/bdd/reports/results-shard-${{ matrix.shard }}.json
+            scorm-builder/tests/bdd/reports/report-shard-${{ matrix.shard }}.html
+          retention-days: 7
+      
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-screenshots-shard-${{ matrix.shard }}
+          path: scorm-builder/tests/bdd/screenshots/
+          retention-days: 7
+
+  bdd-report:
+    name: Generate BDD Report
+    runs-on: ubuntu-latest
+    needs: bdd-full-suite
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bdd-results-*
+          path: test-results
+      
+      - name: Merge test results
+        run: |
+          mkdir -p merged-reports
+          echo '{"features": []}' > merged-reports/merged.json
+          
+          # Merge all JSON reports
+          for file in test-results/*/results-shard-*.json; do
+            if [ -f "$file" ]; then
+              node -e "
+                const fs = require('fs');
+                const merged = JSON.parse(fs.readFileSync('merged-reports/merged.json'));
+                const shard = JSON.parse(fs.readFileSync('$file'));
+                merged.features.push(...(shard.features || []));
+                fs.writeFileSync('merged-reports/merged.json', JSON.stringify(merged, null, 2));
+              "
+            fi
+          done
+      
+      - name: Generate summary
+        run: |
+          echo "## BDD Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          node -e "
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('merged-reports/merged.json'));
+            
+            let scenarios = 0;
+            let passed = 0;
+            let failed = 0;
+            let skipped = 0;
+            
+            report.features.forEach(feature => {
+              (feature.elements || []).forEach(scenario => {
+                scenarios++;
+                const status = scenario.steps.every(s => s.result.status === 'passed') ? 'passed' :
+                               scenario.steps.some(s => s.result.status === 'failed') ? 'failed' : 'skipped';
+                if (status === 'passed') passed++;
+                else if (status === 'failed') failed++;
+                else skipped++;
+              });
+            });
+            
+            console.log('| Metric | Count |');
+            console.log('|--------|-------|');
+            console.log('| Total Scenarios | ' + scenarios + ' |');
+            console.log('| ✅ Passed | ' + passed + ' |');
+            console.log('| ❌ Failed | ' + failed + ' |');
+            console.log('| ⏭️ Skipped | ' + skipped + ' |');
+            console.log('| Pass Rate | ' + (scenarios > 0 ? Math.round(passed/scenarios * 100) : 0) + '% |');
+          " >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-merged-report
+          path: merged-reports/
+          retention-days: 30
+
+  bdd-visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: scorm-builder/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./scorm-builder
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      
+      - name: Build frontend
+        working-directory: ./scorm-builder
+        run: npm run build
+      
+      - name: Start test server
+        working-directory: ./scorm-builder
+        run: |
+          npx vite preview --port 1421 &
+          npx wait-on http://localhost:1421 --timeout 30000
+        env:
+          PORT: 1421
+      
+      - name: Run visual regression tests
+        working-directory: ./scorm-builder
+        run: |
+          npx cucumber-js \
+            --config cucumber.ci.mjs \
+            --tags "@visual" \
+            --format json:tests/bdd/reports/visual-results.json
+        env:
+          CI: true
+          BASE_URL: http://localhost:1421
+          HEADLESS: true
+          VISUAL_REGRESSION: true
+      
+      - name: Upload visual diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-diffs
+          path: |
+            scorm-builder/tests/bdd/screenshots/diffs/
+            scorm-builder/tests/bdd/screenshots/actual/
+            scorm-builder/tests/bdd/screenshots/expected/
+          retention-days: 30
