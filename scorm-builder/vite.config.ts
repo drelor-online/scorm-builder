@@ -5,6 +5,8 @@ import path from 'path'
 import { compression } from 'vite-plugin-compression2'
 
 export default defineConfig({
+  // Disable caching to ensure fresh builds
+  cacheDir: '.vite-temp',
   plugins: [
     react(),
     visualizer({

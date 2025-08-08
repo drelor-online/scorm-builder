@@ -60,19 +60,19 @@ export class MediaService {
   private mediaCache: Map<string, MediaItem> = new Map()
   
   private constructor(config: MediaServiceConfig) {
-    // VERSION MARKER: v2.0.1 - MediaService with project ID extraction
+    // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks
     // Project ID should already be extracted by getInstance
     this.projectId = config.projectId
     // Use provided FileStorage or create new one
     this.fileStorage = config.fileStorage || new FileStorage()
     
-    debugLogger.info('MediaService.constructor v2.0.1', 'Initialized MediaService', {
+    debugLogger.info('MediaService.constructor v2.0.5', 'Initialized MediaService', {
       projectId: this.projectId,
       storageType: 'FILE_STORAGE_ONLY',
       sharedInstance: !!config.fileStorage,
-      version: 'v2.0.1'
+      version: 'v2.0.5'
     })
-    console.log('[MediaService v2.0.1] Initialized with project ID:', this.projectId)
+    console.log('[MediaService v2.0.5] Initialized with project ID:', this.projectId)
     
     logger.info('[MediaService] Initialized for project:', this.projectId, 'using FILE STORAGE ONLY', 
       config.fileStorage ? '(shared instance)' : '(new instance)')
@@ -459,8 +459,22 @@ export class MediaService {
       // Generate URL based on media type
       let url: string | undefined
       
+      // Log metadata to debug URL generation
+      logger.info('[MediaService] Checking metadata for URL generation', {
+        mediaId,
+        source: metadata.source,
+        embedUrl: metadata.embedUrl,
+        youtubeUrl: metadata.youtubeUrl,
+        hasSource: 'source' in metadata,
+        hasEmbedUrl: 'embedUrl' in metadata,
+        hasYoutubeUrl: 'youtubeUrl' in metadata,
+        isYouTube: metadata.isYouTube,
+        type: metadata.type,
+        metadataKeys: Object.keys(metadata)
+      })
+      
       // For YouTube videos, return the embed URL directly
-      if (metadata.source === 'youtube' && metadata.embedUrl) {
+      if ((metadata.source === 'youtube' || metadata.isYouTube) && metadata.embedUrl) {
         url = metadata.embedUrl
         debugLogger.debug('MediaService.getMedia', 'Using YouTube embed URL', { mediaId, url })
         logger.info('[MediaService] Using YouTube embed URL:', url)
@@ -468,32 +482,84 @@ export class MediaService {
         url = metadata.youtubeUrl
         debugLogger.debug('MediaService.getMedia', 'Using YouTube URL', { mediaId, url })
         logger.info('[MediaService] Using YouTube URL:', url)
+      } else if (metadata.source === 'youtube' || metadata.isYouTube || metadata.embedUrl || metadata.youtubeUrl) {
+        // YouTube video but missing URL - should not happen
+        logger.error('[MediaService] YouTube video detected but no URL available', {
+          mediaId,
+          source: metadata.source,
+          isYouTube: metadata.isYouTube,
+          hasEmbedUrl: !!metadata.embedUrl,
+          hasYoutubeUrl: !!metadata.youtubeUrl
+        })
       } else {
         // For regular files, use the asset protocol via MediaUrlService
-        const mediaUrl = await mediaUrlService.getMediaUrl(this.projectId, mediaId)
+        logger.info('[MediaService v2.0.5] Processing regular media file', { 
+          projectId: this.projectId, 
+          mediaId,
+          mediaType: metadata.type,
+          hasData: !!mediaInfo.data,
+          dataSize: mediaInfo.data?.byteLength || 0
+        })
         
-        if (mediaUrl) {
-          url = mediaUrl
-          debugLogger.debug('MediaService.getMedia', 'Generated asset URL', { mediaId, url })
-          logger.info('[MediaService] Generated asset URL:', url)
-        } else {
-          // MediaUrlService returned null - file may not exist yet
-          // Try to generate a proper asset URL as fallback
-          try {
-            const { invoke } = await import('@tauri-apps/api/core')
-            const { convertFileSrc } = await import('@tauri-apps/api/core')
-            const { join } = await import('@tauri-apps/api/path')
-            
-            const projectsDir = await invoke<string>('get_projects_dir')
-            const mediaPath = await join(projectsDir, this.projectId, 'media', `${mediaId}.bin`)
-            url = convertFileSrc(mediaPath)
-            
-            debugLogger.debug('MediaService.getMedia', 'Generated fallback asset URL', { mediaId, url })
-            logger.info('[MediaService] Generated fallback asset URL:', url)
-          } catch (error) {
-            debugLogger.warn('MediaService.getMedia', 'Failed to generate fallback URL', { mediaId, error })
-            logger.warn('[MediaService] Failed to generate fallback URL for:', mediaId)
+        console.log('[MediaService v2.0.5] About to generate URL for:', mediaId)
+        
+        try {
+          logger.info('[MediaService v2.0.5] Calling mediaUrlService.getMediaUrl', { 
+            projectId: this.projectId, 
+            mediaId 
+          })
+          
+          const mediaUrl = await mediaUrlService.getMediaUrl(this.projectId, mediaId)
+          
+          logger.info('[MediaService v2.0.5] mediaUrlService.getMediaUrl returned', { 
+            mediaId,
+            projectId: this.projectId,
+            returnedUrl: mediaUrl,
+            hasUrl: !!mediaUrl,
+            urlLength: mediaUrl?.length || 0
+          })
+          
+          console.log('[MediaService v2.0.5] mediaUrlService returned:', mediaUrl)
+          
+          if (mediaUrl) {
+            url = mediaUrl
+            debugLogger.debug('MediaService.getMedia', 'Generated asset URL', { mediaId, url })
+            logger.info('[MediaService v2.0.5] Successfully generated asset URL:', url)
+          } else {
+            logger.error('[MediaService v2.0.5] mediaUrlService.getMediaUrl returned null!', { 
+              projectId: this.projectId, 
+              mediaId,
+              extractedProjectId: MediaService.extractNumericProjectId(this.projectId)
+            })
+            // Generate fallback URL immediately
+            const numericId = MediaService.extractNumericProjectId(this.projectId)
+            url = `asset://localhost/${numericId}/media/${mediaId}.bin`
+            logger.warn('[MediaService v2.0.5] Using direct fallback URL:', url)
           }
+        } catch (urlError) {
+          logger.error('[MediaService v2.0.5] Exception when calling mediaUrlService.getMediaUrl:', {
+            error: urlError,
+            errorMessage: (urlError as any)?.message || 'Unknown error',
+            projectId: this.projectId,
+            mediaId
+          })
+          // Don't throw - generate fallback URL instead
+          const numericId = MediaService.extractNumericProjectId(this.projectId)
+          url = `asset://localhost/${numericId}/media/${mediaId}.bin`
+          logger.warn('[MediaService v2.0.5] Using fallback URL after error:', url)
+        }
+        
+        // Final fallback if still no URL
+        if (!url) {
+          const numericId = MediaService.extractNumericProjectId(this.projectId)
+          url = `asset://localhost/${numericId}/media/${mediaId}.bin`
+          logger.error('[MediaService v2.0.6] No URL generated! Using final fallback:', { 
+            mediaId, 
+            url,
+            projectId: this.projectId,
+            numericId 
+          })
+          console.error('[MediaService v2.0.6] CRITICAL - No URL, using final fallback:', url)
         }
       }
       
@@ -515,7 +581,13 @@ export class MediaService {
         type: metadata.type
       })
       
-      logger.info('[MediaService] Retrieved media from FILE SYSTEM:', mediaId, 'url:', url)
+      logger.info('[MediaService v2.0.6] Retrieved media from FILE SYSTEM:', mediaId, 'url:', url)
+      console.log('[MediaService v2.0.6] Final result for getMedia:', { 
+        mediaId, 
+        url, 
+        hasUrl: !!url,
+        urlType: url ? (url.startsWith('asset://') ? 'asset' : url.startsWith('blob:') ? 'blob' : 'other') : 'none'
+      })
       
       const result = {
         data,
@@ -547,23 +619,67 @@ export class MediaService {
    * Create asset URL for media from file system
    */
   async createBlobUrl(mediaId: string): Promise<string | null> {
-    debugLogger.debug('MediaService.createBlobUrl', 'Creating asset URL', { mediaId })
+    debugLogger.debug('MediaService.createBlobUrl', 'Creating blob URL', { mediaId })
+    console.log('[MediaService v2.0.7] createBlobUrl called for:', mediaId)
     
     try {
-      // Use MediaUrlService to get asset protocol URL
-      const url = await mediaUrlService.getMediaUrl(this.projectId, mediaId)
-      if (!url) {
-        debugLogger.warn('MediaService.createBlobUrl', 'No URL found', { mediaId })
-        logger.warn('[MediaService] No URL found for media:', mediaId)
+      // Get the media with data
+      const media = await this.getMedia(mediaId)
+      if (!media) {
+        debugLogger.warn('MediaService.createBlobUrl', 'No media found', { mediaId })
+        logger.warn('[MediaService v2.0.7] No media found for:', mediaId)
         return null
       }
       
-      debugLogger.debug('MediaService.createBlobUrl', 'Asset URL created', { mediaId, url })
-      logger.info('[MediaService] Created asset URL from FILE SYSTEM:', mediaId, 'URL:', url)
-      return url
+      // If we have data, create a real blob URL
+      if (media.data && media.data.length > 0) {
+        console.log('[MediaService v2.0.7] Creating blob URL from data:', {
+          mediaId,
+          dataSize: media.data.length,
+          mimeType: media.metadata?.mimeType || media.metadata?.mime_type
+        })
+        
+        // Determine MIME type
+        let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+        
+        // Fix common MIME type issues
+        if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
+          mimeType = 'image/jpeg' // Default for images
+        } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
+          mimeType = 'audio/mpeg' // Default for audio (mp3)
+        } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
+          mimeType = 'video/mp4' // Default for video
+        }
+        
+        // Create blob from Uint8Array data
+        const blob = new Blob([media.data], { type: mimeType })
+        const blobUrl = URL.createObjectURL(blob)
+        
+        debugLogger.debug('MediaService.createBlobUrl', 'Blob URL created', { mediaId, blobUrl })
+        logger.info('[MediaService v2.0.7] Created blob URL:', mediaId, 'URL:', blobUrl)
+        console.log('[MediaService v2.0.7] Blob URL created:', {
+          mediaId,
+          blobUrl,
+          blobSize: blob.size,
+          mimeType: blob.type
+        })
+        
+        return blobUrl
+      }
+      
+      // If we have a URL but no data, return the URL (might be external)
+      if (media.url) {
+        console.log('[MediaService v2.0.7] Using existing URL:', media.url)
+        return media.url
+      }
+      
+      debugLogger.warn('MediaService.createBlobUrl', 'No data or URL found', { mediaId })
+      logger.warn('[MediaService v2.0.7] No data or URL found for media:', mediaId)
+      return null
     } catch (error) {
-      debugLogger.error('MediaService.createBlobUrl', 'Failed to create asset URL', { mediaId, error })
-      logger.error('[MediaService] Failed to create asset URL:', error)
+      debugLogger.error('MediaService.createBlobUrl', 'Failed to create blob URL', { mediaId, error })
+      logger.error('[MediaService v2.0.7] Failed to create blob URL:', error)
+      console.error('[MediaService v2.0.7] Error creating blob URL:', error)
       return null
     }
   }

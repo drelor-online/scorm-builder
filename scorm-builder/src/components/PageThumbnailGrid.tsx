@@ -69,8 +69,45 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
           } else {
             console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', firstMediaRef.url)
           }
+        } else if (firstMediaRef.url && firstMediaRef.url.startsWith('data:image/svg+xml')) {
+          // SVG data URLs work directly, no conversion needed
+          console.log('[PageThumbnailGrid] Using SVG data URL directly')
+          setMediaUrl(firstMediaRef.url)
+        } else if (firstMediaRef.url && (firstMediaRef.url.includes('asset://') || firstMediaRef.url.includes('asset.localhost'))) {
+          // Handle asset:// URLs - need to convert to blob URLs for browser compatibility
+          const mediaId = firstMediaRef.id
+          console.log('[PageThumbnailGrid] Converting asset URL to blob URL for media ID:', mediaId)
+          
+          // Store the media ID for cleanup
+          mediaIdRef.current = mediaId
+          
+          try {
+            const url = await createBlobUrl(mediaId)
+            console.log('[PageThumbnailGrid] Blob URL result for asset URL conversion:', {
+              mediaId,
+              originalUrl: firstMediaRef.url,
+              newUrl: url,
+              isValidBlobUrl: url ? url.startsWith('blob:') : false
+            })
+            
+            if (!url) {
+              console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for asset URL:', firstMediaRef.url)
+              // Fallback to original URL if conversion fails
+              setMediaUrl(firstMediaRef.url)
+            } else {
+              setMediaUrl(url)
+            }
+          } catch (error) {
+            console.error('[PageThumbnailGrid] Error converting asset URL to blob:', error)
+            // Fallback to original URL
+            setMediaUrl(firstMediaRef.url)
+          }
+        } else if (firstMediaRef.url && firstMediaRef.url.startsWith('blob:')) {
+          // Already a blob URL, use directly
+          console.log('[PageThumbnailGrid] Using existing blob URL')
+          setMediaUrl(firstMediaRef.url)
         } else {
-          // Use id directly - storageId was from old system
+          // For other cases, try to create a blob URL from the media ID
           const mediaId = firstMediaRef.id
           console.log('[PageThumbnailGrid] Creating blob URL for media ID:', mediaId)
           
@@ -78,22 +115,27 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
           mediaIdRef.current = mediaId
           
           try {
+            console.log('[PageThumbnailGrid v2.0.6] Creating blob URL for mediaId:', mediaId)
             const url = await createBlobUrl(mediaId)
-            console.log('[PageThumbnailGrid] Blob URL result:', {
+            console.log('[PageThumbnailGrid v2.0.6] Blob URL result:', {
               mediaId,
               url,
               urlLength: url ? url.length : 0,
-              isValidBlobUrl: url ? url.startsWith('blob:') : false
+              isAssetUrl: url ? url.startsWith('asset://') : false,
+              isBlobUrl: url ? url.startsWith('blob:') : false,
+              urlType: url ? (url.startsWith('asset://') ? 'asset' : url.startsWith('blob:') ? 'blob' : 'other') : 'none'
             })
             
             if (!url) {
-              console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for:', mediaId)
+              console.error('[PageThumbnailGrid v2.0.6] createBlobUrl returned null/undefined for:', mediaId)
             } else if (url === '') {
-              console.error('[PageThumbnailGrid] createBlobUrl returned empty string for:', mediaId)
+              console.error('[PageThumbnailGrid v2.0.6] createBlobUrl returned empty string for:', mediaId)
+            } else {
+              console.log('[PageThumbnailGrid v2.0.6] Setting media URL:', url)
             }
             setMediaUrl(url)
           } catch (error) {
-            console.error('[PageThumbnailGrid] Error creating blob URL:', error, 'for media:', mediaId)
+            console.error('[PageThumbnailGrid v2.0.6] Error creating blob URL:', error, 'for media:', mediaId)
           }
         }
       } else {

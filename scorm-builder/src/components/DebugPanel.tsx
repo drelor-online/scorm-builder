@@ -5,6 +5,8 @@ export function DebugPanel() {
   const [isVisible, setIsVisible] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
+  const [searchFilter, setSearchFilter] = useState('')
+  const [logLevelFilter, setLogLevelFilter] = useState<'ALL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG'>('ALL')
   
   useEffect(() => {
     // Update logs every 500ms
@@ -65,6 +67,30 @@ export function DebugPanel() {
     setLogs([])
   }
   
+  // Filter logs based on search and log level
+  const getFilteredLogs = () => {
+    let filtered = logs
+    
+    // Apply log level filter
+    if (logLevelFilter !== 'ALL') {
+      filtered = filtered.filter(log => {
+        if (logLevelFilter === 'ERROR') return log.includes('[ERROR]') || log.includes('ERROR')
+        if (logLevelFilter === 'WARN') return log.includes('[WARN]') || log.includes('WARN')
+        if (logLevelFilter === 'INFO') return log.includes('[INFO]') || log.includes('INFO')
+        if (logLevelFilter === 'DEBUG') return log.includes('[DEBUG]') || log.includes('DEBUG')
+        return true
+      })
+    }
+    
+    // Apply search filter
+    if (searchFilter) {
+      const searchLower = searchFilter.toLowerCase()
+      filtered = filtered.filter(log => log.toLowerCase().includes(searchLower))
+    }
+    
+    return filtered
+  }
+  
   // Always render the toggle button
   return (
     <>
@@ -123,7 +149,7 @@ export function DebugPanel() {
             paddingBottom: '10px',
             borderBottom: '1px solid #00ff00'
           }}>
-            <h3 style={{ margin: 0, color: '#00ff00' }}>🐛 Debug Logs ({logs.length} entries)</h3>
+            <h3 style={{ margin: 0, color: '#00ff00' }}>🐛 Debug Logs ({getFilteredLogs().length}/{logs.length} entries)</h3>
             <button
               onClick={() => setIsVisible(false)}
               style={{
@@ -136,6 +162,51 @@ export function DebugPanel() {
             >
               ✕
             </button>
+          </div>
+          
+          {/* Filter Controls */}
+          <div style={{
+            display: 'flex',
+            gap: '10px',
+            marginBottom: '10px',
+            alignItems: 'center'
+          }}>
+            <input
+              type="text"
+              placeholder="Search logs..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '5px 10px',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                color: '#00ff00',
+                border: '1px solid #00ff00',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '12px'
+              }}
+            />
+            <select
+              value={logLevelFilter}
+              onChange={(e) => setLogLevelFilter(e.target.value as any)}
+              style={{
+                padding: '5px 10px',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                color: '#00ff00',
+                border: '1px solid #00ff00',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="ALL">All Levels</option>
+              <option value="ERROR">Errors</option>
+              <option value="WARN">Warnings</option>
+              <option value="INFO">Info</option>
+              <option value="DEBUG">Debug</option>
+            </select>
           </div>
           
           {/* Controls */}
@@ -257,8 +328,10 @@ export function DebugPanel() {
           }}>
             {logs.length === 0 ? (
               <div style={{ color: '#666' }}>No logs yet...</div>
+            ) : getFilteredLogs().length === 0 ? (
+              <div style={{ color: '#666' }}>No logs match the current filter</div>
             ) : (
-              logs.map((log, index) => (
+              getFilteredLogs().map((log, index) => (
                 <div
                   key={index}
                   style={{

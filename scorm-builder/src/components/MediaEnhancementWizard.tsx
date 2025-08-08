@@ -27,6 +27,7 @@ import { PageThumbnailGrid } from './PageThumbnailGrid'
 import { RichTextEditor } from './RichTextEditor'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import DOMPurify from 'dompurify'
+import { logger } from '../utils/logger'
 
 
 interface SearchResult {
@@ -128,7 +129,7 @@ const setPageMedia = (page: Page | Topic | undefined, media: Media[]): Page | To
     updated.mediaReferences = media
   }
   
-  console.log(`[setPageMedia] Updated page ${updated.id} with ${media.length} media items`)
+  // console.log(`[setPageMedia] Updated page ${updated.id} with ${media.length} media items`)
   
   return updated
 }
@@ -216,7 +217,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   const storage = useStorage()
   
-  console.log('[MediaEnhancement] Component render - UnifiedMedia ready')
+  // console.log('[MediaEnhancement] Component render - UnifiedMedia ready')
   
   // Track blob URLs (using state to persist across re-renders)
   const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map())
@@ -1244,36 +1245,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const getImageSource = (url: string, isSearchResult: boolean = false, storageId?: string): string | undefined => {
     // Handle undefined/null URLs - return undefined to avoid empty src warning
     if (!url) {
+      console.log('[MediaEnhancement v2.0.6] getImageSource: URL is null/undefined')
       return undefined
     }
     
     // Handle blob URLs directly
     if (url.startsWith('blob:')) {
+      console.log('[MediaEnhancement v2.0.6] getImageSource: Using blob URL directly')
       return url
     }
     
-    // Handle asset:// and asset.localhost URLs - these need blob URLs to display properly
-    if ((url.startsWith('asset://') || url.includes('asset.localhost')) && storageId) {
-      const blobUrl = blobUrls.get(storageId)
-      if (blobUrl) {
-        return blobUrl
-      }
-      // If no blob URL yet, try to create one immediately
-      createBlobUrl(storageId).then(newBlobUrl => {
-        if (newBlobUrl) {
-          setBlobUrls(prev => {
-            const newMap = new Map(prev)
-            newMap.set(storageId, newBlobUrl)
-            return newMap
-          })
-          // Force re-render to update the image
-          setCurrentPageIndex(prev => prev)
-        }
-      }).catch(err => {
-        console.error('[MediaEnhancement] Failed to create blob URL for asset:', storageId, err)
-      })
-      // Return empty string to avoid broken image while loading
-      return ''
+    // Handle asset:// and asset.localhost URLs - these should work directly in Tauri
+    if (url.startsWith('asset://') || url.includes('asset.localhost')) {
+      logger.info('[MediaEnhancement v2.0.6] Using asset URL directly', { url, storageId })
+      console.log('[MediaEnhancement v2.0.6] getImageSource: Using asset URL:', url)
+      // Asset URLs should work directly in Tauri WebView
+      return url
     }
     
     // For media references, try to get the URL from cache
@@ -1323,6 +1310,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           // Create blob URLs for all images, including those with asset:// or asset.localhost URLs
           try {
             if (media.storageId) {
+              console.log('[MediaEnhancement v2.0.6] Creating blob URL for storageId:', media.storageId)
               const blobUrl = await createBlobUrl(media.storageId)
               if (blobUrl) {
                 setBlobUrls(prev => {
@@ -1330,7 +1318,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   newMap.set(media.storageId!, blobUrl)
                   return newMap
                 })
-                console.log('[MediaEnhancement] Created blob URL for', media.storageId, ':', blobUrl)
+                console.log('[MediaEnhancement v2.0.6] Created blob URL for', media.storageId, ':', {
+                  url: blobUrl,
+                  isAssetUrl: blobUrl.startsWith('asset://'),
+                  isBlobUrl: blobUrl.startsWith('blob:')
+                })
+              } else {
+                console.error('[MediaEnhancement v2.0.6] Failed to create blob URL for:', media.storageId)
               }
             }
           } catch (error) {
@@ -1530,6 +1524,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           height: '150px', 
                           objectFit: 'cover' 
                         }}
+                        onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
+                        onError={(e) => console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)}
                         onError={(e) => {
                           const target = e.target as HTMLImageElement
                           target.style.display = 'none'

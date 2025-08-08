@@ -750,12 +750,14 @@ export class FileStorage {
         return null;
       }
       
-      debugLogger.debug('FileStorage.getMedia', 'Media retrieved', {
-        id: media.id,
+      debugLogger.info('FileStorage.getMedia', 'Media retrieved successfully', {
+        id,
+        mediaId: media.id,
         hasData: !!(media?.data),
         dataType: media?.data ? typeof media.data : 'undefined',
         dataLength: Array.isArray(media?.data) ? media.data.length : 
                     typeof media?.data === 'string' ? media.data.length : 0,
+        mediaType: media?.metadata?.media_type,
         metadataKeys: media?.metadata ? Object.keys(media.metadata) : []
       });
       
@@ -1513,15 +1515,14 @@ export class FileStorage {
         return media.metadata.embed_url;
       }
       
-      // For other media, create a blob URL from the data
-      const blob = new Blob([new Uint8Array(media.data)], { 
-        type: media.metadata.mime_type || 'application/octet-stream' 
-      });
-      const url = URL.createObjectURL(blob);
+      // For other media, use the MediaUrlService to get asset URL
+      const { mediaUrlService } = await import('./mediaUrl');
+      const projectId = this._currentProjectId || '';
+      const assetUrl = await mediaUrlService.getMediaUrl(projectId, id);
       
-      debugLogger.debug('FileStorage.getMediaUrl', `Created blob URL for media: ${id}`);
+      debugLogger.info('FileStorage.getMediaUrl', 'Got asset URL for media', { id, projectId, assetUrl });
       
-      return url;
+      return assetUrl;
     } catch (error) {
       debugLogger.error('FileStorage.getMediaUrl', `Failed to get media URL: ${id}`, error);
       return null;

@@ -234,50 +234,96 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      console.log('[UnifiedMediaContext] Getting media for asset URL:', mediaId)
+      console.log('[UnifiedMediaContext v2.0.7] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
-      // Get media with asset URL from MediaService
+      // Get media with data from MediaService
       const media = await mediaService.getMedia(mediaId)
-      console.log('[UnifiedMediaContext] Media data retrieved:', {
+      console.log('[UnifiedMediaContext v2.0.7] Media data retrieved:', {
         found: !!media,
         hasUrl: !!(media?.url),
+        hasData: !!(media?.data),
+        dataSize: media?.data?.length || 0,
         url: media?.url,
-        metadata: media?.metadata
+        urlType: media?.url ? (media.url.startsWith('asset://') ? 'asset' : media.url.startsWith('blob:') ? 'blob' : 'other') : 'none',
+        metadata: media?.metadata,
+        metadataKeys: media?.metadata ? Object.keys(media.metadata) : []
       })
       
       if (!media) {
-        console.error('[UnifiedMediaContext] No media found for ID:', mediaId)
+        console.error('[UnifiedMediaContext v2.0.7] No media found for ID:', mediaId)
         return null
       }
       
-      // Always use asset URL from MediaService (no blob URLs!)
-      // MediaService already handles asset:// protocol correctly
-      if (media.url) {
-        console.log('[UnifiedMediaContext] Using asset URL from MediaService:', {
-          mediaId,
-          url: media.url,
-          isAssetUrl: media.url.startsWith('asset://'),
-          isDataUrl: media.url.startsWith('data:'),
-          isYouTubeUrl: media.url.startsWith('http')
-        })
+      // Check if it's a YouTube or external URL
+      if (media.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
+        console.log('[UnifiedMediaContext v2.0.7] Using external/data URL directly:', media.url)
         return media.url
       }
       
-      // If no URL, try to get one from MediaService
-      const assetUrl = await mediaService.createBlobUrl(mediaId)
-      if (assetUrl) {
-        console.log('[UnifiedMediaContext] Created asset URL via MediaService:', {
-          mediaId,
-          url: assetUrl
-        })
-        return assetUrl
+      // Check if we already have a blob URL
+      if (media.url && media.url.startsWith('blob:')) {
+        console.log('[UnifiedMediaContext v2.0.7] Using existing blob URL:', media.url)
+        return media.url
       }
       
-      // No URL available
-      console.warn('[UnifiedMediaContext] Media has no URL:', mediaId)
+      // CRITICAL FIX: Create real blob URL from data instead of using asset://
+      // Since asset:// protocol is not registered, we need to use blob URLs
+      if (media.data && media.data.length > 0) {
+        console.log('[UnifiedMediaContext v2.0.7] Creating blob URL from data:', {
+          mediaId,
+          dataSize: media.data.length,
+          mimeType: media.metadata?.mimeType || media.metadata?.mime_type
+        })
+        
+        // Determine MIME type
+        let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+        
+        // Fix common MIME type issues
+        if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
+          mimeType = 'image/jpeg' // Default for images
+        } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
+          mimeType = 'audio/mpeg' // Default for audio (mp3)
+        } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
+          mimeType = 'video/mp4' // Default for video
+        } else if (media.metadata?.type === 'caption') {
+          mimeType = 'text/vtt' // For captions
+        }
+        
+        // Create blob from Uint8Array data
+        const blob = new Blob([media.data], { type: mimeType })
+        const blobUrl = URL.createObjectURL(blob)
+        
+        console.log('[UnifiedMediaContext v2.0.7] Created blob URL:', {
+          mediaId,
+          blobUrl,
+          blobSize: blob.size,
+          mimeType: blob.type
+        })
+        
+        // Track this blob URL for cleanup
+        // Store in a map or manager if needed
+        
+        return blobUrl
+      }
+      
+      // If no data but we have an asset URL, warn about the issue
+      if (media.url && media.url.startsWith('asset://')) {
+        console.error('[UnifiedMediaContext v2.0.7] Asset URL without data - asset protocol not working:', media.url)
+        console.log('[UnifiedMediaContext v2.0.7] Attempting to fetch media data directly...')
+        
+        // Try to get the data if we don't have it
+        const assetUrl = await mediaService.createBlobUrl(mediaId)
+        if (assetUrl) {
+          console.log('[UnifiedMediaContext v2.0.7] Got URL from createBlobUrl:', assetUrl)
+          return assetUrl
+        }
+      }
+      
+      // No URL or data available
+      console.error('[UnifiedMediaContext v2.0.7] FAILED - No URL or data for media:', mediaId)
       return null
     } catch (err) {
-      logger.error('[UnifiedMediaContext] Failed to create blob URL:', mediaId, err)
+      logger.error('[UnifiedMediaContext v2.0.7] Failed to create blob URL:', mediaId, err)
       setError(err as Error)
       return null
     }

@@ -10,6 +10,10 @@ import { apiKeyStorage } from '@/services/ApiKeyStorage'
 // Utils
 import { logger } from '@/utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
+import { initializeLoggerConfig } from '@/config/loggerConfig'
+
+// Initialize logger configuration to reduce console noise
+initializeLoggerConfig()
 
 // Styles - Emergency text visibility fix
 // import './styles/ensure-text-visible.css' // Uncomment if text is not visible
@@ -678,24 +682,27 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           })
         }
       
-      // Now save the COMPLETE course seed data - not just metadata
-      await storage.saveContent('courseSeedData', data)
-      await storage.saveContent('currentStep', { step: 'prompt' })
-      
-      // Also save to metadata for backward compatibility
-      await storage.saveCourseMetadata({
-        courseTitle: data.courseTitle,
-        difficulty: data.difficulty,
-        topics: data.customTopics,
-        template: data.template,
-        lastModified: new Date().toISOString()
-      })
-      
-      // Only update state and navigate after everything is saved successfully
-      setCourseSeedData(data)
-      setCurrentStep('prompt')
-      navigation.navigateToStep(stepNumbers.prompt)
-      setHasUnsavedChanges(true)
+        // Now save the COMPLETE course seed data - not just metadata
+        await storage.saveContent('courseSeedData', data)
+        await storage.saveContent('currentStep', { step: 'prompt' })
+        
+        // Also save to metadata for backward compatibility
+        await storage.saveCourseMetadata({
+          courseTitle: data.courseTitle,
+          difficulty: data.difficulty,
+          topics: data.customTopics,
+          template: data.template,
+          lastModified: new Date().toISOString()
+        })
+        
+        // Only update state and navigate after everything is saved successfully
+        setCourseSeedData(data)
+        setCurrentStep('prompt')
+        navigation.navigateToStep(stepNumbers.prompt)
+        setHasUnsavedChanges(true)
+        
+        // Return success to resolve the promise
+        return true
       }) // End of measureAsync
     } catch (error) {
       console.error('Failed to save course seed data:', error)

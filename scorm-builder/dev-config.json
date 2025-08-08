@@ -1,0 +1,43 @@
+{
+  "environment": "development",
+  "features": {
+    "debugPanel": true,
+    "verboseLogging": true,
+    "performanceMonitoring": true,
+    "errorBoundaryDetails": true
+  },
+  "paths": {
+    "projectsDir": "relative",
+    "assetProtocol": "asset://localhost",
+    "useProductionPaths": true
+  },
+  "api": {
+    "timeout": 30000,
+    "retryAttempts": 3,
+    "useProductionEndpoints": true
+  },
+  "storage": {
+    "autoSaveInterval": 30000,
+    "maxProjectSize": 104857600,
+    "compressionEnabled": true
+  },
+  "media": {
+    "maxFileSize": 52428800,
+    "supportedImageFormats": ["jpg", "jpeg", "png", "gif", "svg", "webp"],
+    "supportedAudioFormats": ["mp3", "wav", "ogg", "m4a"],
+    "useAssetProtocol": true,
+    "urlCacheDuration": 3600000
+  },
+  "development": {
+    "hotReload": true,
+    "sourceMaps": true,
+    "reactDevTools": true,
+    "skipTDDGuard": false,
+    "clearCacheOnStart": false
+  },
+  "testing": {
+    "mockBackend": false,
+    "seedData": false,
+    "testProjects": []
+  }
+}

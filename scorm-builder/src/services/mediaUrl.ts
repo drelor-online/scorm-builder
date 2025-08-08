@@ -46,19 +46,19 @@ export class MediaUrlService {
   }
   
   async getMediaUrl(projectId: string, mediaId: string): Promise<string | null> {
-    // VERSION MARKER: v2.0.2 - Fixed asset URL generation on Windows
-    logger.info('[MediaUrlService v2.0.2] Getting media URL for', mediaId, 'in project', projectId)
+    // VERSION MARKER: v2.0.3 - Added detailed logging
+    logger.info('[MediaUrlService v2.0.3] Getting media URL', { mediaId, projectId })
     
     // Extract numeric project ID from any format
     const numericProjectId = this.extractNumericProjectId(projectId)
-    logger.info('[MediaUrlService v2.0.2] Extracted numeric project ID:', numericProjectId, 'from:', projectId)
+    logger.info('[MediaUrlService v2.0.3] Extracted numeric project ID:', { numericProjectId, originalProjectId: projectId })
     
     const cacheKey = `${numericProjectId}/${mediaId}`
     
     // Check cache first
     if (this.urlCache.has(cacheKey)) {
       const cachedUrl = this.urlCache.get(cacheKey)!
-      logger.info('[MediaUrlService v2.0.2] Using cached URL for', mediaId)
+      logger.info('[MediaUrlService v2.0.3] Using cached URL', { mediaId, url: cachedUrl })
       return cachedUrl
     }
     
@@ -74,9 +74,21 @@ export class MediaUrlService {
         })
         isSvg = mediaData?.metadata?.mime_type === 'image/svg+xml'
       } catch (e) {
-        // Media not found
-        logger.error('[MediaUrlService v2.0.2] Failed to get media:', e)
-        return null
+        // Media not found - this is the critical issue!
+        logger.error('[MediaUrlService v2.0.3] Failed to get media from backend!', {
+          error: e,
+          errorMessage: (e as any)?.message || 'Unknown error',
+          projectId: numericProjectId,
+          mediaId: mediaId,
+          originalProjectId: projectId,
+          details: 'This means the media file does not exist in the backend storage yet!'
+        })
+        
+        // Even if get_media fails, we should still generate the URL
+        // The file might exist but get_media might be failing for other reasons
+        logger.warn('[MediaUrlService v2.0.3] Attempting to generate URL anyway despite get_media failure')
+        // Don't return null here - continue to generate the URL
+        // return null
       }
       
       // For SVG files, use data URL instead of asset protocol
@@ -110,13 +122,19 @@ export class MediaUrlService {
       // 2. Normalize the path for URL usage (replace backslashes with forward slashes).
       const urlPath = relativePath.replace(/\\/g, '/');
       
-      // 3. Create the final URL using the https://asset.localhost convention.
-      const url = `https://asset.localhost/${urlPath}`;
+      // 3. Create the final URL using the asset:// protocol.
+      const url = `asset://localhost/${urlPath}`;
 
       // Cache the URL
       this.urlCache.set(cacheKey, url)
       
-      logger.info('[MediaUrlService v2.0.2] Generated URL for', mediaId, ':', url)
+      logger.info('[MediaUrlService v2.0.3] Generated asset URL', { 
+        mediaId, 
+        numericProjectId,
+        relativePath,
+        urlPath,
+        finalUrl: url 
+      })
       
       return url
     } catch (error) {

@@ -57,14 +57,32 @@ fn extract_project_id(project_id_or_path: &str) -> String {
 
 /// Get the path for a project file
 fn get_project_path(project_id_or_path: &str) -> PathBuf {
+    // If it already contains .scormproj, it's likely a full path
     if project_id_or_path.contains(".scormproj") {
-        PathBuf::from(project_id_or_path)
-    } else {
-        // If it's just an ID, we need to find the actual project file
-        // For now, just return a path based on the ID
-        // In a real implementation, you'd look this up from your project registry
-        PathBuf::from(format!("{}.scormproj", project_id_or_path))
+        return PathBuf::from(project_id_or_path);
     }
+    
+    // Otherwise, it's just an ID - search for the actual project file
+    // Projects are named: Title_ProjectId.scormproj
+    if let Ok(projects_dir) = crate::settings::get_projects_directory() {
+        // Look for files matching *_projectId.scormproj pattern
+        if let Ok(entries) = fs::read_dir(&projects_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    // Check if this file ends with _projectId.scormproj
+                    if file_name.ends_with(&format!("_{}.scormproj", project_id_or_path)) {
+                        println!("[backup] Found project file: {:?}", path);
+                        return path;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback: just return the ID with extension (won't exist but won't crash)
+    // This handles the case where the project hasn't been saved yet
+    PathBuf::from(format!("{}.scormproj", project_id_or_path))
 }
 
 /// Create a backup of the project file

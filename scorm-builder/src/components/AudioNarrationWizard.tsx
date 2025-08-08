@@ -420,7 +420,7 @@ export function AudioNarrationWizard({
               </>
             )}
             
-            {/* Upload Audio - always visible */}
+            {/* Separate Upload Audio button - always shows "Upload Audio" */}
             <input
               type="file"
               accept="audio/*"
@@ -435,25 +435,25 @@ export function AudioNarrationWizard({
                   variant="secondary"
                   style={{ pointerEvents: 'none' }}
                 >
-                  {hasAudio ? '📁 Replace Audio' : '📁 Upload Audio'}
+                  📁 Upload Audio
                 </Button>
               </span>
             </label>
             
-            {/* Record Audio - always visible */}
+            {/* Separate Record Audio button - always shows "Record Audio" */}
             <Button
               size="small"
               variant={isRecording && recordingId === block.id ? "primary" : "secondary"}
               onClick={onToggleRecording}
               style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
             >
-              {isRecording && recordingId === block.id ? '⏹️ Stop' : (hasAudio ? '🎙️ Record New Audio' : '🎙️ Record Audio')}
+              {isRecording && recordingId === block.id ? '⏹️ Stop Recording' : '🎙️ Record Audio'}
             </Button>
             {/* Caption Upload - Always Available */}
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <input
                 type="file"
-                accept=".vtt"
+                accept=".vtt,.srt,.txt"
                 id={`caption-upload-${block.id}`}
                 style={{ display: 'none' }}
                 onChange={(e) => handleCaptionFileChange(e, block)}
@@ -465,7 +465,7 @@ export function AudioNarrationWizard({
                     variant="secondary"
                     style={{ pointerEvents: 'none' }}
                   >
-                    {hasCaption ? '📝 Replace Caption' : '📝 Upload Caption'}
+                    📝 Upload Caption
                   </Button>
                 </span>
               </label>
@@ -680,30 +680,19 @@ export function AudioNarrationWizard({
           
           const cacheKey = `audio_${audioId}`
           
-          // Check cache first - use asset URLs instead of blob URLs
+          // Check cache first - use asset URLs directly
           if (mediaCache.current.has(cacheKey)) {
             logger.log(`[AudioNarrationWizard] Using cached audio for ${audioId}`)
             const cachedData = mediaCache.current.get(cacheKey)
             
             // If we have cached media data, use it
             if (cachedData?.mediaData || cachedData?.url) {
-              let playableUrl = cachedData.url
+              const playableUrl = cachedData.url
               
-              // Check if cached URL is an asset URL that needs conversion
-              const isAssetUrl = playableUrl && (playableUrl.startsWith('asset://') || playableUrl.includes('asset.localhost'))
+              logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
               
-              // Create blob URL if needed
-              if (!playableUrl || isAssetUrl) {
-                const blobUrl = await createBlobUrl(audioId)
-                if (blobUrl) {
-                  playableUrl = blobUrl
-                  // Update cache with new URL
-                  cachedData.url = blobUrl
-                  // Track blob URL for cleanup
-                  blobUrlsRef.current.push(blobUrl)
-                }
-              } else if (playableUrl && playableUrl.startsWith('blob:')) {
-                // Track existing blob URL for cleanup
+              // Only track blob URLs for cleanup (from recordings)
+              if (playableUrl && playableUrl.startsWith('blob:')) {
                 blobUrlsRef.current.push(playableUrl)
               }
               
@@ -718,25 +707,19 @@ export function AudioNarrationWizard({
           }
           
           try {
-            // Get media from UnifiedMedia - always use asset URL
+            // Get media from UnifiedMedia - use asset URL directly
             const mediaData = await getMedia(audioId)
             
             if (mediaData) {
               const fileName = mediaData.metadata?.original_name || mediaData.metadata?.originalName || `${block.blockNumber}-Block.mp3`
               
-              // Check if the URL is an asset:// URL that needs conversion
-              let playableUrl = mediaData.url
-              const isAssetUrl = playableUrl && (playableUrl.startsWith('asset://') || playableUrl.includes('asset.localhost'))
+              // Use the URL directly - asset:// URLs work natively in Tauri
+              const playableUrl = mediaData.url
               
-              // Always create blob URL for asset:// URLs or if no URL exists
-              if (!playableUrl || isAssetUrl) {
-                const blobUrl = await createBlobUrl(audioId)
-                if (blobUrl) {
-                  playableUrl = blobUrl
-                  // Track blob URL for cleanup
-                  blobUrlsRef.current.push(blobUrl)
-                }
-              } else if (playableUrl && playableUrl.startsWith('blob:')) {
+              logger.log(`[AudioNarrationWizard] Got media URL for ${audioId}:`, playableUrl)
+              
+              // Only track blob URLs for cleanup (from recordings)
+              if (playableUrl && playableUrl.startsWith('blob:')) {
                 // Track existing blob URLs for cleanup
                 blobUrlsRef.current.push(playableUrl)
               }
@@ -1120,10 +1103,11 @@ export function AudioNarrationWizard({
     const now = Date.now()
     const timeSinceLastSave = now - lastSaveTime.current
     if (timeSinceLastSave < SAVE_RATE_LIMIT_MS) {
-      logger.log('[AudioNarrationWizard] Skipping auto-save - rate limited', {
-        timeSinceLastSave,
-        rateLimit: SAVE_RATE_LIMIT_MS
-      })
+      // Silently skip - too noisy
+      // logger.log('[AudioNarrationWizard] Skipping auto-save - rate limited', {
+      //   timeSinceLastSave,
+      //   rateLimit: SAVE_RATE_LIMIT_MS
+      // })
       return
     }
     
@@ -1572,47 +1556,36 @@ export function AudioNarrationWizard({
       return
     }
     
+    logger.log('[AudioNarrationWizard] playAudio called for block:', blockNumber, 'audioFile:', audioFile)
+    
     let url = audioFile.url || undefined
     
-    // Check if URL is an asset:// URL that needs conversion to blob URL
-    const isAssetUrl = url && (url.startsWith('asset://') || url.includes('asset.localhost'))
-    
-    // If no URL or it's an asset URL, we need to create/get a playable URL
-    if (!url || isAssetUrl) {
-      logger.log('[AudioNarrationWizard] Need to get playable URL for:', audioFile.mediaId, 'Current URL:', url)
+    // If we have an asset:// URL, use it directly! Tauri can handle these natively
+    if (url && (url.startsWith('asset://') || url.includes('asset.localhost'))) {
+      logger.log('[AudioNarrationWizard] Using asset URL directly for playback:', url)
+      // Asset URLs can be played directly by the audio element
+    }
+    // If no URL, we need to get one
+    else if (!url && audioFile.mediaId) {
+      logger.log('[AudioNarrationWizard] No URL, getting from media service for:', audioFile.mediaId)
       
-      if (audioFile.mediaId) {
-        // Try createBlobUrl first (this creates a blob URL from the stored data)
-        try {
-          const blobUrl = await createBlobUrl(audioFile.mediaId)
-          if (blobUrl) {
-            logger.log('[AudioNarrationWizard] Created blob URL for playback:', blobUrl)
-            url = blobUrl
-            // Update the audioFile with the new URL
-            setAudioFiles(prev => prev.map(f => 
-              f.mediaId === audioFile.mediaId ? { ...f, url: blobUrl } : f
-            ))
-          }
-        } catch (e) {
-          logger.warn('[AudioNarrationWizard] Failed to create blob URL on playback:', e)
+      try {
+        const mediaData = await getMedia(audioFile.mediaId)
+        if (mediaData?.url) {
+          url = mediaData.url
+          logger.log('[AudioNarrationWizard] Got URL from media service:', url)
+          // Update the audioFile with the new URL
+          setAudioFiles(prev => prev.map(f => 
+            f.mediaId === audioFile.mediaId ? { ...f, url } : f
+          ))
         }
-        
-        // If still no playable URL, try getMedia as fallback
-        if (!url || (url.startsWith('asset://') || url.includes('asset.localhost'))) {
-          try {
-            const mediaData = await getMedia(audioFile.mediaId)
-            if (mediaData?.url && !mediaData.url.startsWith('asset://') && !mediaData.url.includes('asset.localhost')) {
-              url = mediaData.url
-              // Update the audioFile with the new URL
-              setAudioFiles(prev => prev.map(f => 
-                f.mediaId === audioFile.mediaId ? { ...f, url } : f
-              ))
-            }
-          } catch (e) {
-            logger.error('[AudioNarrationWizard] Failed to get media URL on playback:', e)
-          }
-        }
+      } catch (e) {
+        logger.error('[AudioNarrationWizard] Failed to get media URL:', e)
       }
+    }
+    // If we have a blob URL (from recording), use it directly
+    else if (url && url.startsWith('blob:')) {
+      logger.log('[AudioNarrationWizard] Using blob URL directly (recording):', url)
     }
     
     if (url) {
@@ -2095,12 +2068,11 @@ export function AudioNarrationWizard({
             }
           }
           
-          // Final check - if still no URL, create a placeholder that will be resolved on playback
+          // If still no URL, create an asset URL as placeholder that will be converted on playback
           if (!url) {
-            logger.error(`[AudioNarrationWizard] Could not get URL for audio ${storedItem.id}, will retry on playback`)
-            // Don't add the file if we can't get a URL - it won't be playable
-            skippedFiles.push({ filename, reason: 'Failed to generate playback URL' })
-            continue
+            // Create a fallback asset URL that TauriAudioPlayer can handle
+            url = `asset://localhost/${storage?.currentProjectId || 'project'}/media/${storedItem.id}.bin`
+            logger.warn(`[AudioNarrationWizard] Using fallback asset URL for ${storedItem.id}: ${url}`)
           }
           
           newAudioFiles.push({

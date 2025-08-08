@@ -13,7 +13,7 @@ interface TauriAudioPlayerProps {
 
 /**
  * Custom audio player that handles Tauri asset:// URLs
- * Converts asset URLs to blob URLs for HTML5 audio compatibility
+ * Uses asset URLs directly with HTML5 audio element
  */
 export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
   src,
@@ -24,30 +24,61 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
   autoPlay = false,
   'data-testid': testId
 }) => {
-  const [blobUrl, setBlobUrl] = useState<string | undefined>()
+  const [audioUrl, setAudioUrl] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
-  const blobUrlRef = useRef<string | undefined>(undefined)
+  
+  // Removed excessive logging - was logging on every render
 
   useEffect(() => {
+    // Log when component receives a src prop
+    logger.info('[TauriAudioPlayer] Component received src', { src, hasSrc: !!src })
+    
     if (!src) {
-      setBlobUrl(undefined)
+      // Silently clear
+      setAudioUrl(undefined)
       return
     }
 
-    // If it's already a blob URL or data URL, use it directly
-    if (src.startsWith('blob:') || src.startsWith('data:')) {
-      setBlobUrl(src)
+    // If it's a data URL (for SVG or inline data), use it directly
+    if (src.startsWith('data:')) {
+      // Silently use data URL
+      setAudioUrl(src)
       return
     }
 
-    // If it's an asset URL or http://asset.localhost URL, fetch and convert to blob
-    if (src.includes('asset.localhost') || src.startsWith('asset://') || src.includes('\\media\\') || src.includes('/media/')) {
+    // If it's an asset URL, use it directly (Tauri handles these natively)
+    if (src.startsWith('asset://') || src.includes('asset.localhost')) {
+      logger.info('[TauriAudioPlayer] Using asset URL directly', { src })
+      setAudioUrl(src)
+      return
+    }
+    
+    // If it's a blob URL, use it directly (for temporary recordings)
+    if (src.startsWith('blob:')) {
+      // Silently use blob URL
+      setAudioUrl(src)
+      return
+    }
+
+    // If it contains media path patterns, get the proper asset URL
+    if (src.includes('\\media\\') || src.includes('/media/')) {
       setLoading(true)
       
       // Extract media ID from the URL
-      const mediaIdMatch = src.match(/(audio-\d+|caption-\d+)/)
-      const mediaId = mediaIdMatch ? mediaIdMatch[1] : null
+      let mediaId: string | null = null
+      
+      // Pattern 1: audio-XXXX or caption-XXXX
+      const standardMatch = src.match(/(audio-\d+|caption-\d+)/)
+      if (standardMatch) {
+        mediaId = standardMatch[1]
+      } else {
+        // Pattern 2: Try to extract from path like /media/audio-cleanup.bin
+        const pathMatch = src.match(/\/media\/([\w-]+)\./)
+        if (pathMatch) {
+          mediaId = pathMatch[1]
+        }
+      }
       
       if (!mediaId) {
         logger.error('[TauriAudioPlayer] Could not extract media ID from URL:', src)
@@ -56,40 +87,20 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
         return
       }
 
-      // Get media data from MediaService
-      import('../contexts/UnifiedMediaContext').then(async (module) => {
+      // Get asset URL from MediaUrlService
+      import('../services/mediaUrl').then(async (module) => {
         try {
-          const mediaContext = module.getMediaFromContext()
-          if (!mediaContext) {
-            throw new Error('Media context not available')
-          }
-
-          const { getMedia } = mediaContext
-          const mediaData = await getMedia(mediaId)
+          const projectId = window.localStorage.getItem('currentProjectId') || ''
+          const assetUrl = await module.mediaUrlService.getMediaUrl(projectId, mediaId)
           
-          if (mediaData?.data) {
-            // Create blob URL from data
-            // Handle both Uint8Array and ArrayBuffer
-            const dataArray = mediaData.data instanceof ArrayBuffer ? new Uint8Array(mediaData.data) : new Uint8Array(mediaData.data as any)
-            const blob = new Blob([dataArray], { type: 'audio/mp3' })
-            const newBlobUrl = URL.createObjectURL(blob)
-            
-            // Clean up old blob URL
-            if (blobUrlRef.current && blobUrlRef.current !== newBlobUrl) {
-              URL.revokeObjectURL(blobUrlRef.current)
-            }
-            
-            blobUrlRef.current = newBlobUrl
-            setBlobUrl(newBlobUrl)
-            logger.info('[TauriAudioPlayer] Created blob URL for media:', mediaId)
-          } else if (mediaData?.url) {
-            // Use the URL from media data
-            setBlobUrl(mediaData.url)
+          if (assetUrl) {
+            // Got asset URL successfully
+            setAudioUrl(assetUrl)
           } else {
-            throw new Error('No media data available')
+            throw new Error('Failed to get asset URL')
           }
         } catch (error) {
-          logger.error('[TauriAudioPlayer] Failed to load media:', error)
+          logger.error('[TauriAudioPlayer] Failed to get asset URL:', error)
           onError?.(error as Error)
         } finally {
           setLoading(false)
@@ -97,19 +108,12 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
       })
     } else {
       // For regular URLs, use them directly
-      setBlobUrl(src)
-    }
-
-    return () => {
-      // Cleanup blob URL on unmount
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current)
-        blobUrlRef.current = undefined
-      }
+      setAudioUrl(src)
     }
   }, [src, onError])
 
   if (loading) {
+    // Component is loading
     return (
       <div style={{ ...style, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         Loading audio...
@@ -117,23 +121,46 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
     )
   }
 
-  if (!blobUrl) {
+  if (!audioUrl) {
+    // No URL available
     return null
   }
 
+  // Rendering audio element
+  
   return (
     <audio
       ref={audioRef}
-      src={blobUrl}
+      src={audioUrl}
       controls={controls}
       autoPlay={autoPlay}
       style={style}
       data-testid={testId}
-      onError={(e) => {
-        logger.error('[TauriAudioPlayer] Audio playback error:', e)
-        onError?.(new Error('Audio playback failed'))
+      onLoadedData={() => {
+        // Audio loaded successfully
       }}
-      onEnded={onEnded}
+      onPlay={() => {
+        // Audio playing
+      }}
+      onPause={() => {
+        // Audio paused
+      }}
+      onError={(e) => {
+        const audio = e.currentTarget as HTMLAudioElement
+        logger.error('[TauriAudioPlayer] Audio playback error:', {
+          error: audio.error,
+          errorCode: audio.error?.code,
+          errorMessage: audio.error?.message,
+          src: audio.src,
+          readyState: audio.readyState,
+          networkState: audio.networkState
+        })
+        onError?.(new Error(`Audio playback failed: ${audio.error?.message || 'Unknown error'}`))
+      }}
+      onEnded={() => {
+        // Playback ended
+        onEnded?.()
+      }}
     />
   )
 }

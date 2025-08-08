@@ -3,19 +3,24 @@
  * Writes to multiple places to ensure we get logs
  */
 
+type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+
 class UltraSimpleLogger {
   private logs: string[] = []
   private maxLogs = 1000
+  private logLevel: LogLevel = 'INFO' // Default to INFO, hiding DEBUG
   
   constructor() {
     // Try to write a startup message everywhere
     this.writeEverywhere('LOGGER', 'UltraSimpleLogger initialized')
     
-    // Load existing logs from localStorage
+    // Load existing logs from localStorage - but limit to last 100 entries
     try {
       const stored = localStorage.getItem('debug_logs')
       if (stored) {
-        this.logs = JSON.parse(stored)
+        const allLogs = JSON.parse(stored)
+        // Only keep the last 100 logs to avoid flooding on startup
+        this.logs = allLogs.slice(-100)
       }
     } catch (e) {
       // Ignore
@@ -29,7 +34,23 @@ class UltraSimpleLogger {
     }
   }
   
-  private writeEverywhere(category: string, message: string, data?: any) {
+  private shouldLog(level: LogLevel): boolean {
+    const levels: LogLevel[] = ['DEBUG', 'INFO', 'WARN', 'ERROR']
+    const currentLevelIndex = levels.indexOf(this.logLevel)
+    const messageLevelIndex = levels.indexOf(level)
+    return messageLevelIndex >= currentLevelIndex
+  }
+  
+  setLogLevel(level: LogLevel) {
+    this.logLevel = level
+    console.log(`Log level set to: ${level}`)
+  }
+  
+  private writeEverywhere(category: string, message: string, data?: any, level: LogLevel = 'INFO') {
+    // Skip if below current log level
+    if (!this.shouldLog(level)) {
+      return
+    }
     const timestamp = new Date().toISOString()
     const logLine = `[${timestamp}] [${category}] ${message}${data ? ' ' + JSON.stringify(data) : ''}`
     
@@ -74,19 +95,19 @@ class UltraSimpleLogger {
   }
   
   info(category: string, message: string, data?: any) {
-    this.writeEverywhere(category, message, data)
+    this.writeEverywhere(category, message, data, 'INFO')
   }
   
   warn(category: string, message: string, data?: any) {
-    this.writeEverywhere(category, `WARN: ${message}`, data)
+    this.writeEverywhere(category, `WARN: ${message}`, data, 'WARN')
   }
   
   error(category: string, message: string, data?: any) {
-    this.writeEverywhere(category, `ERROR: ${message}`, data)
+    this.writeEverywhere(category, `ERROR: ${message}`, data, 'ERROR')
   }
   
   debug(category: string, message: string, data?: any) {
-    this.writeEverywhere(category, `DEBUG: ${message}`, data)
+    this.writeEverywhere(category, `DEBUG: ${message}`, data, 'DEBUG')
   }
   
   // Utility methods
@@ -112,8 +133,20 @@ class UltraSimpleLogger {
   
   clearLogs() {
     this.logs = []
+    
+    // Clear all log arrays
+    if (typeof window !== 'undefined') {
+      if (window.debugLogs) {
+        window.debugLogs.length = 0
+      }
+      if (window.__debugLogs) {
+        window.__debugLogs.length = 0
+      }
+    }
+    
     localStorage.removeItem('debug_logs')
     localStorage.removeItem('last_debug_log')
+    
     if (typeof console !== 'undefined' && console.log) {
       console.log('Logs cleared')
     }
@@ -178,9 +211,12 @@ declare global {
     dumpLogs: () => string
     clearLogs: () => void
     debugLogs: string[]
+    setLogLevel: (level: LogLevel) => void
   }
 }
 
 if (typeof window !== 'undefined') {
   window.debugLogger = debugLogger
+  // Add convenience method to change log level from console
+  window.setLogLevel = (level: LogLevel) => debugLogger.setLogLevel(level)
 }

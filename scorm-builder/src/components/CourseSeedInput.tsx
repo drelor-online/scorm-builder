@@ -225,6 +225,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   
   // Track if we've mounted to prevent initial save
   const hasMountedRef = useRef(false)
+  const isSubmittingRef = useRef(false)
   const previousValuesRef = useRef({
     courseTitle,
     difficulty,
@@ -266,6 +267,11 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     }
     
     const saveMetadata = async () => {
+      // Don't autosave while submitting to prevent race conditions
+      if (isSubmittingRef.current) {
+        return
+      }
+      
       if (courseTitle && storage?.currentProjectId && storage?.isInitialized) {
         try {
           const topicsArray = customTopics
@@ -375,10 +381,20 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       return;
     }
     
-    const topicsArray = customTopics
+    // Get topics from customTopics or template
+    let topicsArray = customTopics
       .split(/[\n,]/)
       .map(topic => topic.trim())
       .filter(topic => topic.length > 0);
+    
+    // If customTopics is empty but we have a template selected, use template topics
+    if (topicsArray.length === 0 && template !== 'None') {
+      if (customTemplates[template]) {
+        topicsArray = customTemplates[template].topics;
+      } else if (templateTopics[template]) {
+        topicsArray = templateTopics[template];
+      }
+    }
     
     if (topicsArray.length === 0) {
       debugLogger.warn('CourseSeedInput v2.0.4', 'Validation failed: No topics');
@@ -388,6 +404,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     
     // Set submitting flag and prepare data
     setIsSubmitting(true);
+    isSubmittingRef.current = true;
     debugLogger.info('CourseSeedInput v2.0.4', 'Submitting form data', { 
       courseTitle, 
       topicsCount: topicsArray.length,
@@ -424,6 +441,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     } finally {
       // Reliably reset the submitting flag when the operation is complete
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       debugLogger.info('CourseSeedInput v2.0.4', 'Submission complete, reset submitting flag');
     }
   }
@@ -438,11 +456,17 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   // Form validation
   const isFormValid = () => {
     const hasTitle = courseTitle.trim().length > 0
-    const topicsArray = customTopics
+    
+    // Check if we have topics from customTopics or template
+    let topicsArray = customTopics
       .split(/[\n,]/)
       .map(topic => topic.trim())
       .filter(topic => topic.length > 0)
-    const hasTopics = topicsArray.length > 0
+    
+    // If no custom topics but template is selected, that's valid
+    const hasTopics = topicsArray.length > 0 || 
+      (template !== 'None' && (customTemplates[template] || templateTopics[template]))
+    
     return hasTitle && hasTopics
   }
   

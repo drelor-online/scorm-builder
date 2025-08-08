@@ -1,10 +1,69 @@
 /**
  * Simple logger utility that can be disabled in production
  * Production-safe: handles missing console methods
+ * Supports category filtering to reduce noise from specific components
  */
 
 const isDevelopment = () => process.env.NODE_ENV === 'development'
 const isDebugEnabled = () => isDevelopment() || localStorage.getItem('debugMode') === 'true'
+
+// Category filtering support
+const disabledCategories = new Set<string>()
+const wildcardPatterns: string[] = []
+
+export function disableCategory(category: string) {
+  if (category.includes('*')) {
+    // Handle wildcard patterns
+    const pattern = category.replace(/\*/g, '.*')
+    wildcardPatterns.push(pattern)
+  } else {
+    disabledCategories.add(category)
+  }
+}
+
+export function enableCategory(category: string) {
+  disabledCategories.delete(category)
+  // Remove from wildcard patterns if it matches
+  const pattern = category.replace(/\*/g, '.*')
+  const index = wildcardPatterns.indexOf(pattern)
+  if (index > -1) {
+    wildcardPatterns.splice(index, 1)
+  }
+}
+
+export function getDisabledCategories(): string[] {
+  return Array.from(disabledCategories).concat(wildcardPatterns.map(p => p.replace(/\.\*/g, '*')))
+}
+
+export function clearDisabledCategories() {
+  disabledCategories.clear()
+  wildcardPatterns.length = 0
+}
+
+function isCategoryDisabled(message: string): boolean {
+  // Extract category from message if it follows [Category] pattern
+  const categoryMatch = message.match(/^\[([^\]]+)\]/)
+  if (!categoryMatch) {
+    return false // No category tag, don't filter
+  }
+  
+  const category = categoryMatch[1]
+  
+  // Check exact match
+  if (disabledCategories.has(category)) {
+    return true
+  }
+  
+  // Check wildcard patterns
+  for (const pattern of wildcardPatterns) {
+    const regex = new RegExp(`^${pattern}$`)
+    if (regex.test(category)) {
+      return true
+    }
+  }
+  
+  return false
+}
 
 // Fallback logging to window object for production debugging
 const fallbackLog = (level: string, args: any[]) => {
@@ -71,29 +130,51 @@ const safeConsole = {
 export const logger = {
   log: (...args: any[]) => {
     if (isDebugEnabled()) {
+      // Check if first argument contains a category to filter
+      const firstArg = args[0]
+      if (typeof firstArg === 'string' && isCategoryDisabled(firstArg)) {
+        return // Skip this log
+      }
       safeConsole.log(...args)
     }
   },
   
   error: (...args: any[]) => {
-    // Always log errors, even in production
+    // Check category filtering for errors too
+    const firstArg = args[0]
+    if (typeof firstArg === 'string' && isCategoryDisabled(firstArg)) {
+      return // Skip this log
+    }
+    // Always log errors that pass filter, even in production
     safeConsole.error(...args)
   },
   
   warn: (...args: any[]) => {
     if (isDebugEnabled()) {
+      const firstArg = args[0]
+      if (typeof firstArg === 'string' && isCategoryDisabled(firstArg)) {
+        return // Skip this log
+      }
       safeConsole.warn(...args)
     }
   },
   
   debug: (...args: any[]) => {
     if (isDebugEnabled()) {
+      const firstArg = args[0]
+      if (typeof firstArg === 'string' && isCategoryDisabled(firstArg)) {
+        return // Skip this log
+      }
       safeConsole.debug(...args)
     }
   },
   
   info: (...args: any[]) => {
     if (isDebugEnabled()) {
+      const firstArg = args[0]
+      if (typeof firstArg === 'string' && isCategoryDisabled(firstArg)) {
+        return // Skip this log
+      }
       safeConsole.info(...args)
     }
   }
@@ -103,5 +184,21 @@ export const logger = {
 declare global {
   interface Window {
     __debugLogs?: string[]
+  }
+}
+
+// Initialize disabled categories from environment or localStorage
+if (typeof process !== 'undefined' && process.env?.LOGGER_DISABLED_CATEGORIES) {
+  const categories = process.env.LOGGER_DISABLED_CATEGORIES.split(',')
+  categories.forEach(cat => disableCategory(cat.trim()))
+} else if (typeof localStorage !== 'undefined') {
+  try {
+    const stored = localStorage.getItem('loggerDisabledCategories')
+    if (stored) {
+      const categories = stored.split(',')
+      categories.forEach(cat => disableCategory(cat.trim()))
+    }
+  } catch (e) {
+    // Ignore localStorage errors
   }
 }
