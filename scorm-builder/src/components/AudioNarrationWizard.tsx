@@ -289,7 +289,6 @@ export function AudioNarrationWizard({
     onPlayAudio,
     onUploadAudio,
     onRemoveAudio,
-    onReplaceAudio,
     onGenerateCaption,
     onPreviewCaption,
     onToggleRecording,
@@ -307,7 +306,6 @@ export function AudioNarrationWizard({
     onPlayAudio: () => void,
     onUploadAudio: (e: React.ChangeEvent<HTMLInputElement>) => void,
     onRemoveAudio: () => void,
-    onReplaceAudio: () => void,
     onGenerateCaption: () => void,
     onPreviewCaption: () => void,
     onToggleRecording: () => void,
@@ -400,7 +398,8 @@ export function AudioNarrationWizard({
             </div>
           )}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-            {hasAudio ? (
+            {/* Audio playback and remove controls - only show when audio exists */}
+            {hasAudio && (
               <>
                 <Button
                   size="small"
@@ -413,73 +412,79 @@ export function AudioNarrationWizard({
                 <Button
                   size="small"
                   variant="secondary"
-                  onClick={onReplaceAudio}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                >
-                  🔄 Replace Audio
-                </Button>
-                <Button
-                  size="small"
-                  variant="secondary"
                   onClick={onRemoveAudio}
                   style={{ color: '#ef4444' }}
                 >
                   Remove Audio
                 </Button>
               </>
-            ) : (
-              <>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  style={{ display: 'none' }}
-                  id={`audio-upload-${block.blockNumber}`}
-                  onChange={onUploadAudio}
-                />
-                <label htmlFor={`audio-upload-${block.blockNumber}`}>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={(e) => e.preventDefault()}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    📁 Upload Audio
-                  </Button>
-                </label>
-                <Button
-                  size="small"
-                  variant={isRecording && recordingId === block.id ? "primary" : "secondary"}
-                  onClick={onToggleRecording}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                >
-                  {isRecording && recordingId === block.id ? '⏹️ Stop' : '🎙️ Record'}
-                </Button>
-              </>
             )}
-            {hasAudio && !hasCaption && (
-              <Button
-                size="small"
-                variant="secondary"
-                onClick={onGenerateCaption}
-              >
-                📝 Create Caption from Text
-              </Button>
-            )}
-            {hasCaption && (
-              <>
-                <span style={{ color: '#10b981', fontSize: '0.875rem', display: 'flex', alignItems: 'center' }}>
-                  ✓ Caption Available
-                </span>
+            
+            {/* Upload Audio - always visible */}
+            <input
+              type="file"
+              accept="audio/*"
+              style={{ display: 'none' }}
+              id={`audio-upload-${block.blockNumber}`}
+              onChange={onUploadAudio}
+            />
+            <label htmlFor={`audio-upload-${block.blockNumber}`} style={{ cursor: 'pointer' }}>
+              <span style={{ display: 'inline-block' }}>
                 <Button
                   size="small"
                   variant="secondary"
-                  onClick={onPreviewCaption}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  style={{ pointerEvents: 'none' }}
                 >
-                  👁️ Preview Caption
+                  {hasAudio ? '📁 Replace Audio' : '📁 Upload Audio'}
                 </Button>
-              </>
-            )}
+              </span>
+            </label>
+            
+            {/* Record Audio - always visible */}
+            <Button
+              size="small"
+              variant={isRecording && recordingId === block.id ? "primary" : "secondary"}
+              onClick={onToggleRecording}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              {isRecording && recordingId === block.id ? '⏹️ Stop' : (hasAudio ? '🎙️ Record New Audio' : '🎙️ Record Audio')}
+            </Button>
+            {/* Caption Upload - Always Available */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input
+                type="file"
+                accept=".vtt"
+                id={`caption-upload-${block.id}`}
+                style={{ display: 'none' }}
+                onChange={(e) => handleCaptionFileChange(e, block)}
+              />
+              <label htmlFor={`caption-upload-${block.id}`} style={{ cursor: 'pointer' }}>
+                <span style={{ display: 'inline-block' }}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {hasCaption ? '📝 Replace Caption' : '📝 Upload Caption'}
+                  </Button>
+                </span>
+              </label>
+              {hasCaption && (
+                <>
+                  <span style={{ color: '#10b981', fontSize: '0.875rem' }}>
+                    ✓
+                  </span>
+                  <Button
+                    size="small"
+                    variant="tertiary"
+                    onClick={onPreviewCaption}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  >
+                    👁️ Preview
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1539,21 +1544,65 @@ export function AudioNarrationWizard({
 
   // Play audio for a specific block
   // FIX: Use TauriAudioPlayer instead of new Audio() for asset:// URL compatibility
-  const playAudio = (blockNumber: string) => {
+  const playAudio = async (blockNumber: string) => {
     const audioFile = audioFiles.find(f => f.blockNumber === blockNumber)
-    if (audioFile?.url) {
+    if (!audioFile) {
+      logger.warn('[AudioNarrationWizard] No audio file found for block:', blockNumber)
+      return
+    }
+    
+    let url = audioFile.url || undefined
+    
+    // If no URL, try to get it now
+    if (!url && audioFile.mediaId) {
+      logger.log('[AudioNarrationWizard] Audio URL missing, attempting to retrieve for:', audioFile.mediaId)
+      
+      // Try createBlobUrl first
+      try {
+        const blobUrl = await createBlobUrl(audioFile.mediaId)
+        if (blobUrl) {
+          url = blobUrl
+          // Update the audioFile with the new URL
+          setAudioFiles(prev => prev.map(f => 
+            f.mediaId === audioFile.mediaId ? { ...f, url } : f
+          ))
+        }
+      } catch (e) {
+        logger.warn('[AudioNarrationWizard] Failed to create blob URL on playback:', e)
+      }
+      
+      // If still no URL, try getMedia
+      if (!url) {
+        try {
+          const mediaData = await getMedia(audioFile.mediaId)
+          if (mediaData?.url) {
+            url = mediaData.url
+            // Update the audioFile with the new URL
+            setAudioFiles(prev => prev.map(f => 
+              f.mediaId === audioFile.mediaId ? { ...f, url } : f
+            ))
+          }
+        } catch (e) {
+          logger.error('[AudioNarrationWizard] Failed to get media URL on playback:', e)
+        }
+      }
+    }
+    
+    if (url) {
       // If already playing the same audio, stop it
-      if (playingAudioUrl === audioFile.url) {
-        logger.log('[AudioNarrationWizard] Stopping audio:', audioFile.url)
+      if (playingAudioUrl === url) {
+        logger.log('[AudioNarrationWizard] Stopping audio:', url)
         setPlayingAudioUrl(null)
         return
       }
       
       // Store the currently playing audio URL for TauriAudioPlayer to handle
-      logger.log('[AudioNarrationWizard] Playing audio with TauriAudioPlayer:', audioFile.url)
-      setPlayingAudioUrl(audioFile.url)
+      logger.log('[AudioNarrationWizard] Playing audio with TauriAudioPlayer:', url)
+      setPlayingAudioUrl(url)
     } else {
-      logger.warn('[AudioNarrationWizard] No audio URL found for block:', blockNumber)
+      logger.error('[AudioNarrationWizard] Could not get audio URL for block:', blockNumber)
+      // Show user feedback
+      setError('Unable to play audio. Please try uploading the file again.')
     }
   }
 
@@ -1973,59 +2022,58 @@ export function AudioNarrationWizard({
           })
           logger.log(`[AudioNarrationWizard] Successfully stored audio ${storedItem.id} for block ${blockNumber}`)
           
-          // Get the stored media item with its data
-          const mediaData = await getMedia(storedItem.id)
-          let url = mediaData?.url || undefined
+          // Always ensure we get a valid URL for playback
+          let url: string | undefined
           
-          // For audio files, create a blob URL from the data for playback
-          if (mediaData?.data) {
-            try {
-              // Get asset URL from media context instead of creating blob URL
-              url = await createBlobUrl(storedItem.id) || undefined
-              logger.log(`[AudioNarrationWizard] Got asset URL for audio ${storedItem.id}:`, url)
-              
+          // First try: createBlobUrl (preferred method)
+          try {
+            const blobUrl = await createBlobUrl(storedItem.id)
+            if (blobUrl) {
+              url = blobUrl
+              logger.log(`[AudioNarrationWizard] Got blob URL for audio ${storedItem.id}:`, url)
               // Track blob URL for cleanup
               if (!blobUrlsRef.current) {
                 blobUrlsRef.current = []
               }
-              if (url) blobUrlsRef.current.push(url)
-            } catch (e) {
-              logger.error('[AudioNarrationWizard] Failed to create blob URL:', e)
-              
-              // Fallback: try to generate asset URL
-              if (storage?.currentProjectId) {
-                try {
-                  const { mediaUrlService } = await import('../services/mediaUrl')
-                  const assetUrl = await mediaUrlService.getMediaUrl(storage.currentProjectId, storedItem.id)
-                  if (assetUrl) {
-                    url = assetUrl
-                    logger.log(`[AudioNarrationWizard] Using asset URL as fallback for ${storedItem.id}: ${assetUrl}`)
-                  }
-                } catch (e2) {
-                  logger.error('[AudioNarrationWizard] Failed to generate URL using mediaUrlService:', e2)
-                }
-              }
+              blobUrlsRef.current.push(url)
             }
-          } else {
-            logger.warn(`[AudioNarrationWizard] No data available for audio ${storedItem.id}, trying asset URL`)
-            
-            // Try to generate asset URL if no data
-            if (storage?.currentProjectId) {
-              try {
-                const { mediaUrlService } = await import('../services/mediaUrl')
-                const assetUrl = await mediaUrlService.getMediaUrl(storage.currentProjectId, storedItem.id)
-                if (assetUrl) {
-                  url = assetUrl
-                  logger.log(`[AudioNarrationWizard] Generated asset URL for ${storedItem.id}: ${assetUrl}`)
-                }
-              } catch (e) {
-                logger.error('[AudioNarrationWizard] Failed to generate URL using mediaUrlService:', e)
+          } catch (e) {
+            logger.warn('[AudioNarrationWizard] Failed to create blob URL:', e)
+          }
+          
+          // Second try: getMedia for URL
+          if (!url) {
+            try {
+              const mediaData = await getMedia(storedItem.id)
+              if (mediaData?.url) {
+                url = mediaData.url
+                logger.log(`[AudioNarrationWizard] Got URL from getMedia for ${storedItem.id}:`, url)
               }
+            } catch (e) {
+              logger.warn('[AudioNarrationWizard] Failed to get media URL:', e)
             }
           }
           
+          // Third try: mediaUrlService direct asset URL
+          if (!url && storage?.currentProjectId) {
+            try {
+              const { mediaUrlService } = await import('../services/mediaUrl')
+              const assetUrl = await mediaUrlService.getMediaUrl(storage.currentProjectId, storedItem.id)
+              if (assetUrl) {
+                url = assetUrl
+                logger.log(`[AudioNarrationWizard] Got asset URL via mediaUrlService for ${storedItem.id}:`, assetUrl)
+              }
+            } catch (e) {
+              logger.error('[AudioNarrationWizard] Failed to generate URL using mediaUrlService:', e)
+            }
+          }
+          
+          // Final check - if still no URL, create a placeholder that will be resolved on playback
           if (!url) {
-            logger.warn(`[AudioNarrationWizard] No URL available for audio ${storedItem.id}`)
+            logger.error(`[AudioNarrationWizard] Could not get URL for audio ${storedItem.id}, will retry on playback`)
+            // Don't add the file if we can't get a URL - it won't be playable
+            skippedFiles.push({ filename, reason: 'Failed to generate playback URL' })
+            continue
           }
           
           newAudioFiles.push({
@@ -2626,9 +2674,6 @@ export function AudioNarrationWizard({
                 onPlayAudio={() => playAudio(block.blockNumber)}
                 onUploadAudio={(e) => handleAudioFileChange(e, block)}
                 onRemoveAudio={() => removeAudio(block.blockNumber)}
-                onReplaceAudio={() => {
-                  setBlockToReplaceAudio(block)
-                }}
                 onGenerateCaption={() => generateCaption(block.blockNumber)}
                 onPreviewCaption={() => {
                   setPreviewBlockId(block.id)

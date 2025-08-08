@@ -218,23 +218,23 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   console.log('[MediaEnhancement] Component render - UnifiedMedia ready')
   
-  // Track blob URLs
-  const blobUrlsRef = useRef<Map<string, string>>(new Map())
+  // Track blob URLs (using state to persist across re-renders)
+  const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map())
   
   // Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
-      blobUrlsRef.current.forEach((url, key) => {
+      blobUrls.forEach((url, key) => {
         revokeBlobUrl(url)
       })
-      blobUrlsRef.current.clear()
+      setBlobUrls(new Map())
     }
   }, [revokeBlobUrl])
   
   // FIX: Properly track and manage blob URLs to prevent memory leaks
   const createTrackedBlobUrl = (blob: Blob, key: string): string => {
     // Revoke existing URL if any to prevent memory leaks
-    const existingUrl = blobUrlsRef.current.get(key)
+    const existingUrl = blobUrls.get(key)
     if (existingUrl) {
       // Use revokeBlobUrl from UnifiedMediaContext for consistent cleanup
       try {
@@ -249,7 +249,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Note: For temporary upload blobs, we must use URL.createObjectURL
     // The UnifiedMediaContext's createBlobUrl is for stored media IDs
     const url = URL.createObjectURL(blob)
-    blobUrlsRef.current.set(key, url)
+    setBlobUrls(prev => {
+      const newMap = new Map(prev)
+      newMap.set(key, url)
+      return newMap
+    })
     
     // This URL will be cleaned up in the useEffect cleanup function
     return url
@@ -429,7 +433,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         
         // Track the blob URL for cleanup
         if (blobUrl) {
-          blobUrlsRef.current.set(storedItem.id, blobUrl)
+          setBlobUrls(prev => {
+            const newMap = new Map(prev)
+            newMap.set(storedItem.id, blobUrl)
+            return newMap
+          })
           console.log('[MediaEnhancement] Created and tracked blob URL for stored image:', storedItem.id)
         }
         
@@ -565,7 +573,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           // Track blob URLs for cleanup
           if (blobUrl) {
-            blobUrlsRef.current.set(item.id, blobUrl)
+            setBlobUrls(prev => {
+              const newMap = new Map(prev)
+              newMap.set(item.id, blobUrl)
+              return newMap
+            })
           }
         }
         
@@ -597,11 +609,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     // Cleanup blob URLs on unmount or page change
     return () => {
-      blobUrlsRef.current.forEach((url, id) => {
+      blobUrls.forEach((url, id) => {
         console.log('[MediaEnhancement] Revoking blob URL for:', id)
         revokeBlobUrl(url)
       })
-      blobUrlsRef.current.clear()
+      setBlobUrls(new Map())
     }
   }, [loadExistingMedia, revokeBlobUrl])
   
@@ -1089,10 +1101,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       await deleteMedia(mediaToRemove.storageId)
       
       // Clean up blob URL if exists
-      const blobUrl = blobUrlsRef.current.get(mediaToRemove.storageId)
-      if (blobUrl) {
-        revokeBlobUrl(blobUrl)
-        blobUrlsRef.current.delete(mediaToRemove.storageId)
+      if (mediaToRemove.storageId) {
+        const blobUrl = blobUrls.get(mediaToRemove.storageId)
+        if (blobUrl) {
+          revokeBlobUrl(blobUrl)
+          setBlobUrls(prev => {
+            const newMap = new Map(prev)
+            newMap.delete(mediaToRemove.storageId!)
+            return newMap
+          })
+        }
       }
     }
     
@@ -1223,7 +1241,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }
 
-  const getImageSource = (url: string, isSearchResult: boolean = false): string | undefined => {
+  const getImageSource = (url: string, isSearchResult: boolean = false, storageId?: string): string | undefined => {
     // Handle undefined/null URLs - return undefined to avoid empty src warning
     if (!url) {
       return undefined
@@ -1234,19 +1252,43 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       return url
     }
     
+    // Handle asset:// and asset.localhost URLs - these need blob URLs to display properly
+    if ((url.startsWith('asset://') || url.includes('asset.localhost')) && storageId) {
+      const blobUrl = blobUrls.get(storageId)
+      if (blobUrl) {
+        return blobUrl
+      }
+      // If no blob URL yet, try to create one immediately
+      createBlobUrl(storageId).then(newBlobUrl => {
+        if (newBlobUrl) {
+          setBlobUrls(prev => {
+            const newMap = new Map(prev)
+            newMap.set(storageId, newBlobUrl)
+            return newMap
+          })
+          // Force re-render to update the image
+          setCurrentPageIndex(prev => prev)
+        }
+      }).catch(err => {
+        console.error('[MediaEnhancement] Failed to create blob URL for asset:', storageId, err)
+      })
+      // Return empty string to avoid broken image while loading
+      return ''
+    }
+    
     // For media references, try to get the URL from cache
     if (url.startsWith('scorm-media://')) {
-      const [, , storageId] = url.split('/')
+      const [, , mediaStorageId] = url.split('/')
       
       // Check if we have a YouTube URL in the media items
-      const mediaItem = existingPageMedia.find(m => m.storageId === storageId)
+      const mediaItem = existingPageMedia.find(m => m.storageId === mediaStorageId)
       if (mediaItem?.embedUrl && (mediaItem.url.includes('youtube.com') || mediaItem.url.includes('youtu.be'))) {
         console.log('[MediaEnhancement] Found YouTube URL:', mediaItem.url)
         return mediaItem.url
       }
       
       // Get blob URL from blob manager if available
-      const blobUrl = blobUrlsRef.current.get(storageId)
+      const blobUrl = blobUrls.get(mediaStorageId)
       if (blobUrl) {
         return blobUrl
       }
@@ -1267,16 +1309,29 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   useEffect(() => {
     const loadBlobUrls = async () => {
       for (const media of existingPageMedia) {
-        if (media.storageId && !blobUrlsRef.current.has(media.storageId)) {
-          // Skip YouTube videos
-          if (media.embedUrl && (media.url.includes('youtube.com') || media.url.includes('youtu.be'))) {
+        if (media.storageId && !blobUrls.has(media.storageId)) {
+          // Skip YouTube videos (they have their own thumbnails)
+          if (media.embedUrl && (media.url?.includes('youtube.com') || media.url?.includes('youtu.be'))) {
             continue
           }
           
+          // Skip data URLs (e.g., inline SVGs)
+          if (media.url?.startsWith('data:')) {
+            continue
+          }
+          
+          // Create blob URLs for all images, including those with asset:// or asset.localhost URLs
           try {
-            const blobUrl = await createBlobUrl(media.storageId)
-            if (blobUrl) {
-              blobUrlsRef.current.set(media.storageId, blobUrl)
+            if (media.storageId) {
+              const blobUrl = await createBlobUrl(media.storageId)
+              if (blobUrl) {
+                setBlobUrls(prev => {
+                  const newMap = new Map(prev)
+                  newMap.set(media.storageId!, blobUrl)
+                  return newMap
+                })
+                console.log('[MediaEnhancement] Created blob URL for', media.storageId, ':', blobUrl)
+              }
             }
           } catch (error) {
             // Properly serialize error for logging
@@ -1285,7 +1340,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               name: error.name,
               stack: error.stack?.split('\n')[0]
             } : error
-            console.error('[MediaEnhancement] Failed to create blob URL:', errorInfo)
+            console.error('[MediaEnhancement] Failed to create blob URL for', media.storageId, ':', errorInfo)
           }
         }
       }
@@ -1466,9 +1521,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           </div>
                         )
                       })()
-                    ) : getImageSource(media.url || '') ? (
+                    ) : getImageSource(media.url || '', false, media.storageId) ? (
                       <img 
-                        src={getImageSource(media.url || '')} 
+                        src={getImageSource(media.url || '', false, media.storageId)} 
                         alt={media.title || 'Media'} 
                         style={{ 
                           width: '100%', 
