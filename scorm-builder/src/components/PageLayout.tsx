@@ -1,11 +1,11 @@
 import React from 'react'
-import { commonButtons } from '../styles/buttonStyles'
-import { tokens } from './DesignSystem/designTokens'
+import { Button } from './DesignSystem/Button'
 import styles from './PageLayout.module.css'
+import stepperStyles from './WorkflowProgress.module.css'
 import { useStepNavigation } from '../contexts/StepNavigationContext'
 import { Tooltip } from './DesignSystem/Tooltip'
 
-// Inline WorkflowProgress component
+// WorkflowProgress component with CSS modules
 const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onStepClick?: (step: number) => void }> = ({ 
   currentStep, 
   onStepClick 
@@ -15,15 +15,9 @@ const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onS
   const visitedSteps = navigation?.visitedSteps || []
   
   return (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      gap: '1rem',
-      padding: '1rem'
-    }}>
+    <div className={stepperStyles.stepperContainer}>
       {steps.map((step, index) => (
-        <div key={step} style={{ display: 'flex', alignItems: 'center' }}>
+        <div key={step} className={stepperStyles.stepWrapper}>
           <Tooltip 
             content={`${step}${visitedSteps.includes(index) ? ' - Click to navigate' : ' - Complete previous steps first'}`} 
             position="bottom"
@@ -34,28 +28,25 @@ const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onS
               disabled={!visitedSteps.includes(index)}
               data-testid={`progress-step-${index}`}
               data-visited={visitedSteps.includes(index) ? 'true' : 'false'}
-              style={{
-                width: '2rem',
-                height: '2rem',
-                borderRadius: '50%',
-                border: visitedSteps.includes(index) ? '2px solid #3b82f6' : '2px solid #374151',
-                backgroundColor: index < currentStep ? '#3b82f6' : index === currentStep ? '#1e40af' : 'transparent',
-                color: visitedSteps.includes(index) ? 'white' : '#9ca3af',
-                cursor: visitedSteps.includes(index) && onStepClick ? 'pointer' : 'not-allowed',
-                transition: 'all 0.2s'
-              }}
+              className={`
+                ${stepperStyles.stepButton}
+                ${visitedSteps.includes(index) ? stepperStyles.visited : ''}
+                ${index < currentStep ? stepperStyles.completed : ''}
+                ${index === currentStep ? stepperStyles.current : ''}
+              `.trim()}
+              aria-label={`Step ${index + 1}: ${step}`}
             >
               {index + 1}
             </button>
           </Tooltip>
           {index < steps.length - 1 && (
-            <div style={{
-              width: '2rem',
-              height: tokens.spacing.xs, // 4px
-              backgroundColor: index < currentStep ? '#3b82f6' : '#374151',
-              marginLeft: '0.5rem',
-              marginRight: '0.5rem'
-            }} />
+            <div 
+              className={`
+                ${stepperStyles.stepConnector}
+                ${index < currentStep ? stepperStyles.completed : ''}
+              `.trim()}
+              aria-hidden="true"
+            />
           )}
         </div>
       ))}
@@ -110,129 +101,128 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
       {/* Fixed Header with Action Bar */}
       <header className={styles.fixedHeader} data-testid="page-header">
         <div className={styles.headerContent}>
-          <div className={styles.actionBar} data-testid="top-bar" style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            gap: '2rem'
-          }}>
+          <div className={styles.actionBar} data-testid="top-bar">
             {/* Left group: Open, Save, AutoSave */}
-            <div data-testid="top-bar-left" style={{
-              display: 'flex',
-              gap: '0.5rem',
-              alignItems: 'center'
-            }}>
+            <div data-testid="top-bar-left" className={styles.headerButtonGroup}>
               <Tooltip content="Open an existing project file" position="bottom">
-                <button 
-                  onClick={onOpen}
-                  type="button"
-                  style={commonButtons.headerButton}
-                  aria-label="Open project"
-                  data-testid="open-button"
-                >
-                  Open
-                </button>
+                <div>
+                  <Button 
+                    onClick={onOpen}
+                    variant="secondary"
+                    size="small"
+                    aria-label="Open project"
+                    data-testid="open-button"
+                  >
+                    Open
+                  </Button>
+                </div>
               </Tooltip>
               <Tooltip content="Save current project (Ctrl+S)" position="bottom">
-                <button 
-                  onClick={() => onSave && onSave()}
-                  type="button"
-                  style={commonButtons.headerButton}
-                  aria-label="Save project"
-                >
-                  Save
-                </button>
+                <div>
+                  <Button 
+                    onClick={() => onSave && onSave()}
+                    variant="secondary"
+                    size="small"
+                    aria-label="Save project"
+                  >
+                    Save
+                  </Button>
+                </div>
               </Tooltip>
               {onSaveAs && (
                 <Tooltip content="Save project with a new name" position="bottom">
-                  <button 
-                    onClick={onSaveAs}
-                    type="button"
-                    style={commonButtons.headerButton}
-                    aria-label="Save project as"
-                  >
-                    Save As...
-                  </button>
+                  <div>
+                    <Button 
+                      onClick={onSaveAs}
+                      variant="secondary"
+                      size="small"
+                      aria-label="Save project as"
+                    >
+                      Save as...
+                    </Button>
+                  </div>
                 </Tooltip>
               )}
               {autoSaveIndicator && (
-                <div className="autoSaveWrapper" data-testid="autosave-indicator" style={{ marginLeft: '0.5rem' }}>
+                <div className={styles.autoSaveWrapper} data-testid="autosave-indicator">
                   {autoSaveIndicator}
                 </div>
               )}
             </div>
             
             {/* Center group: Help, Settings */}
-            <div data-testid="top-bar-center" style={{
-              display: 'flex',
-              gap: '0.5rem',
-              alignItems: 'center'
-            }}>
+            <div data-testid="top-bar-center" className={styles.headerButtonGroup}>
               <Tooltip content="View help documentation (F1)" position="bottom">
-                <button 
-                  onClick={onHelp}
-                  type="button"
-                  style={commonButtons.headerButton}
-                  aria-label="Help documentation"
-                >
-                  Help
-                </button>
+                <div>
+                  <Button 
+                    onClick={onHelp}
+                    variant="secondary"
+                    size="small"
+                    aria-label="Help documentation"
+                  >
+                    Help
+                  </Button>
+                </div>
               </Tooltip>
               <Tooltip content="Configure application settings" position="bottom">
-                <button 
-                  onClick={onSettingsClick}
-                  type="button"
-                  style={commonButtons.headerButton}
-                  aria-label="Application settings"
-                  data-testid="settings-button"
-                >
-                  Settings
-                </button>
+                <div>
+                  <Button 
+                    onClick={onSettingsClick}
+                    variant="secondary"
+                    size="small"
+                    aria-label="Application settings"
+                    data-testid="settings-button"
+                  >
+                    Settings
+                  </Button>
+                </div>
               </Tooltip>
             </div>
             
             {/* Right group: Back, Next/Generate */}
-            <div data-testid="top-bar-right" style={{
-              display: 'flex',
-              gap: '0.5rem',
-              alignItems: 'center'
-            }}>
+            <div data-testid="top-bar-right" className={styles.headerButtonGroup}>
               {onBack && currentStep > 0 && (
                 <Tooltip content="Go to previous step" position="bottom">
-                  <button 
-                    onClick={onBack}
-                    type="button"
-                    style={commonButtons.secondaryAction}
-                    data-testid="back-button"
-                  >
-                    ← Back
-                  </button>
+                  <div>
+                    <Button 
+                      onClick={onBack}
+                      variant="secondary"
+                      size="medium"
+                      data-testid="back-button"
+                    >
+                      ← Back
+                    </Button>
+                  </div>
                 </Tooltip>
               )}
               {currentStep === 6 && onGenerateSCORM ? (
                 <Tooltip content="Generate SCORM package for LMS deployment" position="bottom" disabled={isGenerating}>
-                  <button 
-                    onClick={onGenerateSCORM}
-                    type="button"
-                    style={commonButtons.primaryAction}
-                    disabled={isGenerating}
-                    data-testid="generate-scorm-button"
-                  >
-                    {isGenerating ? 'Generating...' : 'Generate SCORM Package'}
-                  </button>
+                  <div>
+                    <Button 
+                      onClick={onGenerateSCORM}
+                      variant="primary"
+                      size="large"
+                      disabled={isGenerating}
+                      loading={isGenerating}
+                      data-testid="generate-scorm-button"
+                    >
+                      {isGenerating ? 'Generating...' : 'Generate SCORM package'}
+                    </Button>
+                  </div>
                 </Tooltip>
               ) : onNext ? (
                 <Tooltip content="Go to next step" position="bottom">
-                  <button 
-                    onClick={onNext}
-                    type="button"
-                    style={commonButtons.primaryAction}
-                    disabled={nextDisabled}
-                    data-testid="next-button"
-                  >
-                    Next →
-                  </button>
+                  <div>
+                    <Button 
+                      onClick={onNext}
+                      variant="primary"
+                      size="large"
+                      disabled={nextDisabled}
+                      data-testid="next-button"
+                    >
+                      Next →
+                    </Button>
+                  </div>
                 </Tooltip>
               ) : null}
             </div>

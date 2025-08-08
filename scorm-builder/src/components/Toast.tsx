@@ -1,8 +1,11 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
+import { IconButton } from './DesignSystem/IconButton'
+import './DesignSystem/toast.css'
 
 export interface ToastProps {
   message: string
-  type: 'success' | 'error' | 'info'
+  type: 'success' | 'error' | 'info' | 'warning'
   onClose: () => void
   duration?: number
 }
@@ -13,70 +16,38 @@ export const Toast: React.FC<ToastProps> = ({
   onClose, 
   duration = 3000 
 }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, duration)
-    return () => clearTimeout(timer)
-  }, [duration, onClose])
+  const [isClosing, setIsClosing] = useState(false)
 
-  const getBackgroundColor = () => {
-    switch (type) {
-      case 'success':
-        return '#10b981' // green
-      case 'error':
-        return '#ef4444' // red
-      case 'info':
-        return '#3b82f6' // blue
-      default:
-        return '#6b7280' // gray
-    }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleClose()
+    }, duration)
+    return () => clearTimeout(timer)
+  }, [duration])
+
+  const handleClose = () => {
+    setIsClosing(true)
+    // Wait for animation to complete before calling onClose
+    setTimeout(onClose, 200)
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: '2rem',
-        right: '2rem',
-        backgroundColor: getBackgroundColor(),
-        color: 'white',
-        padding: '1rem 1.5rem',
-        borderRadius: '0.5rem',
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-        zIndex: 9999,
-        animation: 'slideIn 0.3s ease-out',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        maxWidth: '400px',
-        wordWrap: 'break-word',
-        overflowWrap: 'break-word'
-      }}
+    <div 
+      className={`toast toast-${type} ${isClosing ? 'toast-fade-out' : 'animate-slideIn'}`}
+      role="alert"
+      aria-live="polite"
     >
-      <span style={{
-        flex: 1,
-        wordWrap: 'break-word',
-        overflowWrap: 'break-word',
-        whiteSpace: 'normal'
-      }}>{message}</span>
-      <button
-        onClick={onClose}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: 'white',
-          cursor: 'pointer',
-          padding: '0.25rem',
-          fontSize: '1.25rem',
-          lineHeight: 1,
-          opacity: 0.8,
-          transition: 'opacity 0.2s'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-        aria-label="Close notification"
-      >
-        ×
-      </button>
+      <span className="toast-message">{message}</span>
+      <div className="toast-close">
+        <IconButton
+          icon={X}
+          onClick={handleClose}
+          variant="ghost"
+          size="sm"
+          ariaLabel="Dismiss notification"
+          className="icon-button"
+        />
+      </div>
     </div>
   )
 }

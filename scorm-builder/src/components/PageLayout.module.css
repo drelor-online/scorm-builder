@@ -126,6 +126,20 @@
   align-items: center;
 }
 
+/* Header Button Groups */
+.headerButtonGroup {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+/* Auto-save indicator wrapper */
+.autoSaveWrapper {
+  margin-left: var(--space-sm);
+  display: flex;
+  align-items: center;
+}
+
 /* Ensure proper spacing for nested content */
 .pageLayout main {
   padding-top: 24px;

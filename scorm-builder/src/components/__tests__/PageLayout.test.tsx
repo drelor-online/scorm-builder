@@ -1,6 +1,23 @@
-import { render, screen } from '../../test/testProviders'
-import { describe, it, expect, vi } from 'vitest'
-import { PageLayout } from '../PageLayout'
+import { render, screen, fireEvent } from '../../test/testProviders'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PageLayout, FormSection } from '../PageLayout'
+import '@testing-library/jest-dom'
+
+// Mock the Button component to track its usage
+vi.mock('../DesignSystem/Button', () => ({
+  Button: ({ children, onClick, variant, size, loading, disabled, ...props }: any) => (
+    <button 
+      onClick={onClick}
+      disabled={disabled || loading}
+      data-variant={variant}
+      data-size={size}
+      data-loading={loading}
+      {...props}
+    >
+      {loading ? 'Loading...' : children}
+    </button>
+  )
+}))
 
 describe('PageLayout Top Bar Standardization', () => {
   const defaultProps = {
@@ -133,6 +150,128 @@ describe('PageLayout Top Bar Standardization', () => {
       // This will be tested in Modal component tests
       // Just a placeholder to track this requirement
       expect(true).toBe(true)
+    })
+  })
+
+  describe('Design System Integration', () => {
+    it('should use Button component for all header buttons', () => {
+      render(
+        <PageLayout
+          {...defaultProps}
+          onOpen={vi.fn()}
+          onSave={vi.fn()}
+          onNext={vi.fn()}
+        />
+      )
+
+      const openButton = screen.getByTestId('open-button')
+      const nextButton = screen.getByTestId('next-button')
+
+      // Check that buttons have design system attributes
+      expect(openButton).toHaveAttribute('data-variant', 'secondary')
+      expect(openButton).toHaveAttribute('data-size', 'small')
+      expect(nextButton).toHaveAttribute('data-variant', 'primary')
+      expect(nextButton).toHaveAttribute('data-size', 'large')
+    })
+
+    it('should show loading state for Generate SCORM button', () => {
+      render(
+        <PageLayout
+          {...defaultProps}
+          currentStep={6}
+          onGenerateSCORM={vi.fn()}
+          isGenerating={true}
+        />
+      )
+
+      const generateButton = screen.getByTestId('generate-scorm-button')
+      expect(generateButton).toHaveAttribute('data-loading', 'true')
+      expect(generateButton).toBeDisabled()
+    })
+  })
+
+  describe('WorkflowProgress Stepper', () => {
+    it('should use CSS modules instead of inline styles', () => {
+      const { container } = render(
+        <PageLayout {...defaultProps} currentStep={2} />
+      )
+
+      const stepperContainer = container.querySelector('.stepperContainer')
+      expect(stepperContainer).toBeInTheDocument()
+
+      const stepButtons = container.querySelectorAll('[data-testid^="progress-step-"]')
+      stepButtons.forEach(button => {
+        expect(button.className).toContain('stepButton')
+      })
+    })
+
+    it('should have proper ARIA labels on step buttons', () => {
+      render(<PageLayout {...defaultProps} currentStep={0} />)
+
+      const step1 = screen.getByLabelText(/Step 1: Seed/i)
+      expect(step1).toBeInTheDocument()
+    })
+  })
+
+  describe('FormSection Component', () => {
+    it('should render with proper CSS classes', () => {
+      const { container } = render(
+        <FormSection title="Test Section">
+          <div>Form content</div>
+        </FormSection>
+      )
+
+      const section = container.querySelector('.formSection')
+      expect(section).toBeInTheDocument()
+      expect(section).toHaveClass('form-section', 'form-card')
+    })
+
+    it('should render title when provided', () => {
+      render(
+        <FormSection title="Test Section">
+          <div>Form content</div>
+        </FormSection>
+      )
+
+      const title = screen.getByText('Test Section')
+      expect(title).toBeInTheDocument()
+      expect(title).toHaveClass('sectionTitle')
+    })
+  })
+
+  describe('Accessibility', () => {
+    it('should have proper ARIA labels for all buttons', () => {
+      render(
+        <PageLayout
+          {...defaultProps}
+          onOpen={vi.fn()}
+          onSave={vi.fn()}
+          onNext={vi.fn()}
+        />
+      )
+
+      expect(screen.getByLabelText('Open project')).toBeInTheDocument()
+      expect(screen.getByLabelText('Save project')).toBeInTheDocument()
+    })
+
+    it('should support keyboard navigation', () => {
+      const onOpen = vi.fn()
+      const onSave = vi.fn()
+
+      render(
+        <PageLayout
+          {...defaultProps}
+          onOpen={onOpen}
+          onSave={onSave}
+        />
+      )
+
+      const openButton = screen.getByTestId('open-button')
+      openButton.focus()
+      expect(document.activeElement).toBe(openButton)
+
+      fireEvent.keyDown(openButton, { key: 'Enter' })
+      expect(onOpen).toHaveBeenCalled()
     })
   })
 })

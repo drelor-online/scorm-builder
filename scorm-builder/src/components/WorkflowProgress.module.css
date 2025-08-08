@@ -1,0 +1,122 @@
+/* WorkflowProgress Stepper Component Styles */
+
+.stepperContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+.stepWrapper {
+  display: flex;
+  align-items: center;
+}
+
+.stepButton {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-default);
+  background-color: transparent;
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  outline: none;
+  position: relative;
+}
+
+.stepButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Visited (clickable) steps */
+.stepButton.visited {
+  border-color: var(--color-primary-500);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.stepButton.visited:hover {
+  background-color: var(--bg-tertiary);
+  transform: scale(1.05);
+}
+
+/* Completed steps */
+.stepButton.completed {
+  background-color: var(--color-primary-500);
+  border-color: var(--color-primary-500);
+  color: white;
+}
+
+/* Current step */
+.stepButton.current {
+  background-color: var(--color-primary-700);
+  border-color: var(--color-primary-700);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+  animation: pulse 2s infinite;
+}
+
+/* Step connector line */
+.stepConnector {
+  width: 2rem;
+  height: var(--space-xs);
+  background-color: var(--border-default);
+  margin-left: var(--space-sm);
+  margin-right: var(--space-sm);
+  transition: background-color var(--transition-normal);
+}
+
+.stepConnector.completed {
+  background-color: var(--color-primary-500);
+}
+
+/* Pulse animation for current step */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .stepperContainer {
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+  }
+  
+  .stepButton {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: var(--font-size-xs);
+  }
+  
+  .stepConnector {
+    width: 1rem;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .stepButton.current {
+    animation: none;
+  }
+  
+  .stepButton,
+  .stepConnector {
+    transition: none;
+  }
+}
