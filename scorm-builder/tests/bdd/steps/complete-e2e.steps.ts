@@ -164,9 +164,10 @@ When('I set the passing score to {string}', async function (score: string) {
   await this.page.fill('[data-testid="passing-score-input"]', score)
 })
 
-When('I click "Generate SCORM Package"', async function () {
-  await this.page.click('[data-testid="generate-scorm-button"]')
-})
+// Commented out - handled by generic "I click {string}" step
+// When('I click "Generate SCORM Package"', async function () {
+//   await this.page.click('[data-testid="generate-scorm-button"]')
+// })
 
 Then('I should see {string}', async function (message: string) {
   await expect(this.page.locator(`text="${message}"`)).toBeVisible({ timeout: 30000 })
@@ -359,9 +360,10 @@ When('I select {string} format', async function (format: string) {
   await this.page.click(`label:has-text("${format}")`)
 })
 
-Then('I should see {string}', async function (text: string) {
-  await expect(this.page.locator(`text="${text}"`)).toBeVisible({ timeout: 5000 })
-})
+// Commented out duplicate - using the definition on line 171 instead
+// Then('I should see {string}', async function (text: string) {
+//   await expect(this.page.locator(`text="${text}"`)).toBeVisible({ timeout: 5000 })
+// })
 
 Then('I should eventually see {string}', async function (text: string) {
   await expect(this.page.locator(`text="${text}"`)).toBeVisible({ timeout: 30000 })

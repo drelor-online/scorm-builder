@@ -10,7 +10,7 @@ import { generateMediaId, type MediaType } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { mediaUrlService } from './mediaUrl'
-import { BlobURLManager } from '../utils/BlobUrlManager'
+import { blobUrlManager } from '../utils/blobUrlManager'
 
 export interface MediaMetadata {
   size?: number
@@ -55,7 +55,7 @@ export type ProgressCallback = (progress: ProgressInfo) => void
 const mediaServiceInstances = new Map<string, MediaService>()
 
 export class MediaService {
-  private projectId: string
+  public readonly projectId: string
   private fileStorage: FileStorage
   private mediaCache: Map<string, MediaItem> = new Map()
   
@@ -684,8 +684,8 @@ export class MediaService {
         // Remove from cache only if deletion succeeded
         this.mediaCache.delete(mediaId)
         // Revoke blob URL if it exists
-        const blobManager = BlobURLManager.getInstance()
-        blobManager.revokeObjectURL(mediaId)
+        const blobManager = blobUrlManager
+        blobManager.revokeUrl(mediaId)
         
         debugLogger.info('MediaService.deleteMedia', 'Media deleted successfully', { mediaId })
         logger.info('[MediaService] Deleted media:', mediaId)
@@ -723,8 +723,7 @@ export class MediaService {
       }
       
       // Revoke all blob URLs for the topic
-      const blobManager = BlobURLManager.getInstance()
-      blobManager.revokeAllForTopic(topicId)
+      // Note: blobUrlManager doesn't have per-topic cleanup, but individual media deletion handles this
       
       debugLogger.info('MediaService.deleteMediaForTopic', 'Deleted media for topic', { 
         projectId, 
@@ -758,8 +757,8 @@ export class MediaService {
       
       // Clear cache and revoke all blob URLs
       this.mediaCache.clear()
-      const blobManager = BlobURLManager.getInstance()
-      blobManager.revokeAll()
+      const blobManager = blobUrlManager
+      blobManager.clearAll()
       
       debugLogger.info('MediaService.deleteAllMedia', 'Deleted all media', { 
         projectId, 
@@ -833,7 +832,7 @@ export class MediaService {
       const allMedia = await this.fileStorage.listMedia()
       
       // Get all topics from content
-      const content = await this.fileStorage.getContent()
+      const content = await this.fileStorage.getContent('course-content')
       const validTopicIds = new Set(content?.topics?.map((t: any) => t.id) || [])
       
       // Find media without valid topics

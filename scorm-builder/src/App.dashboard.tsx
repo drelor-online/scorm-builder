@@ -135,8 +135,8 @@ function DashboardContent() {
   const checkForCrashRecovery = async () => {
     try {
       const recovery = await storage.checkForRecovery()
-      if (recovery.hasBackup && recovery.projectPath && recovery.projectName) {
-        setRecoveryInfo({ backupPath: recovery.projectPath, projectName: recovery.projectName })
+      if (recovery.hasBackup && recovery.backupPath && recovery.projectName) {
+        setRecoveryInfo({ backupPath: recovery.backupPath, projectName: recovery.projectName })
         setShowRecoveryDialog(true)
       }
     } catch (error) {

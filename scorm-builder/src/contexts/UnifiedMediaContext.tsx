@@ -175,7 +175,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const deleteMedia = useCallback(async (mediaId: string): Promise<boolean> => {
     try {
-      const success = await mediaService.deleteMedia(mediaId)
+      const success = await mediaService.deleteMedia(mediaService.projectId, mediaId)
       
       if (success) {
         // Update cache

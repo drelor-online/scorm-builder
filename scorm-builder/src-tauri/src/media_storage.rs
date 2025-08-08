@@ -299,9 +299,6 @@ mod tests {
         let media_dir = temp_dir.path().join(project_id).join("media");
         fs::create_dir_all(&media_dir).unwrap();
 
-        // Set up to use the temp directory
-        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
-
         // Store some media first
         let metadata = MediaMetadata {
             page_id: "page1".to_string(),
@@ -321,9 +318,13 @@ mod tests {
 
         // Try to delete with .scormproj filename format
         let scormproj_filename = format!("TestProject_{}.scormproj", project_id);
+        
+        // Set the test directory for this specific test
+        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
         let result = delete_media(scormproj_filename, media_id.to_string());
+        std::env::remove_var("SCORM_BUILDER_TEST_DIR");
 
-        // This should work after fix (currently will fail)
+        // This works correctly - extract_project_id handles .scormproj filenames
         assert!(
             result.is_ok(),
             "Should be able to delete media with .scormproj filename"
@@ -370,9 +371,13 @@ mod tests {
 
         // Try to get with .scormproj filename format
         let scormproj_filename = format!("TestProject_{}.scormproj", project_id);
+        
+        // Set the test directory for this specific test
+        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
         let result = get_media(scormproj_filename, media_id.to_string());
+        std::env::remove_var("SCORM_BUILDER_TEST_DIR");
 
-        // This should work after fix (currently will fail)
+        // This works correctly - extract_project_id handles .scormproj filenames
         assert!(
             result.is_ok(),
             "Should be able to get media with .scormproj filename"
@@ -389,7 +394,6 @@ mod tests {
 
         // Setup temp directory for testing
         let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
 
         // Create the project directory
         let project_id = "test-project";
@@ -400,6 +404,9 @@ mod tests {
         let test_data = vec![42u8; 1024];
         let base64_data = general_purpose::STANDARD.encode(&test_data);
 
+        // Set the test directory for this specific test
+        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
+        
         // This should work with base64 input
         let result = super::store_media_base64(
             "test-media-id".to_string(),
@@ -432,6 +439,9 @@ mod tests {
         // Verify the data was stored correctly
         let stored_data = fs::read(&data_path).unwrap();
         assert_eq!(stored_data, test_data, "Stored data should match original");
+        
+        // Clean up
+        std::env::remove_var("SCORM_BUILDER_TEST_DIR");
     }
 
     #[test]
@@ -440,12 +450,14 @@ mod tests {
 
         // Setup temp directory for testing
         let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
 
         // Create the project directory
         let project_id = "test-project-large";
         let media_dir = temp_dir.path().join(project_id).join("media");
         fs::create_dir_all(&media_dir).unwrap();
+        
+        // Set the test directory for this specific test
+        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
 
         // Test with a larger file to ensure memory efficiency
         let large_size = 5 * 1024 * 1024; // 5MB for testing
@@ -480,6 +492,9 @@ mod tests {
             large_size,
             "Stored data size should match"
         );
+        
+        // Clean up
+        std::env::remove_var("SCORM_BUILDER_TEST_DIR");
     }
 
     #[test]

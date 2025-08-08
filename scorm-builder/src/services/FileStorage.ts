@@ -95,7 +95,7 @@ export class FileStorage {
       
       // Ensure projectFile has proper structure
       if (!projectFile || !projectFile.project) {
-        const result = { pages: [], metadata: {} };
+        const result: any = { pages: [], metadata: {} };
         if (recoveryInfo && recoveryInfo.hasRecovery) {
           result.hasRecovery = true;
           result.backupTimestamp = recoveryInfo.backupTimestamp;
@@ -116,7 +116,7 @@ export class FileStorage {
       debugLogger.info('FileStorage.openProject', `Project opened successfully: ${projectFile.project.name}`);
       
       // Return data with recovery info if available
-      const result = { pages: [], metadata: {} };
+      const result: any = { pages: [], metadata: {} };
       if (recoveryInfo && recoveryInfo.hasRecovery) {
         result.hasRecovery = true;
         result.backupTimestamp = recoveryInfo.backupTimestamp;
@@ -478,7 +478,12 @@ export class FileStorage {
     }
   }
 
-  async checkForRecovery(): Promise<{ hasBackup: boolean; backupTimestamp?: string }> {
+  async checkForRecovery(): Promise<{ 
+    hasBackup: boolean; 
+    backupTimestamp?: string;
+    backupPath?: string;
+    projectName?: string;
+  }> {
     if (!this._currentProjectPath && !this._currentProjectId) {
       return { hasBackup: false };
     }
@@ -490,7 +495,9 @@ export class FileStorage {
       
       return {
         hasBackup: result.hasRecovery || false,
-        backupTimestamp: result.backupTimestamp
+        backupTimestamp: result.backupTimestamp,
+        backupPath: result.backupPath || undefined,
+        projectName: result.projectName || undefined
       };
     } catch (error) {
       debugLogger.error('FileStorage.checkForRecovery', 'Failed to check for recovery', error);
@@ -1093,6 +1100,26 @@ export class FileStorage {
     }
   }
 
+  async listMedia(projectId?: string): Promise<any[]> {
+    const targetProjectId = projectId || this._currentProjectId;
+    if (!targetProjectId) {
+      debugLogger.error('FileStorage.listMedia', 'No project specified');
+      return [];
+    }
+
+    try {
+      const result = await invoke<any[]>('list_media', {
+        projectId: targetProjectId
+      });
+      
+      debugLogger.info('FileStorage.listMedia', `Listed ${result.length} media items`);
+      return result || [];
+    } catch (error) {
+      debugLogger.error('FileStorage.listMedia', 'Failed to list media', error);
+      return [];
+    }
+  }
+
   async deleteMedia(mediaId: string): Promise<boolean> {
     if (!this._currentProjectId) {
       debugLogger.error('FileStorage.deleteMedia', 'No project open');
@@ -1446,7 +1473,8 @@ export class FileStorage {
       const result = await invoke<any>('clear_recent_files', {});
       
       // Clear internal cache
-      this['recentFiles'] = [];
+      // Clear any cached recent files
+      (this as any).recentFiles = [];
       
       // Emit event for UI updates (only in non-test environment)
       if (typeof window === 'undefined' || !(window as any).__VITEST__) {

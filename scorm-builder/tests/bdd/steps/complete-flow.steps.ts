@@ -245,9 +245,10 @@ Then('the preview should be navigable', async function () {
   await expect(iframe.locator('[data-testid="current-page"]')).toContainText('Objectives')
 })
 
-When('I select SCORM version {string}', async function (version: string) {
-  await this.page.selectOption('[data-testid="scorm-version"]', version)
-})
+// Commented out - duplicate exists in scorm-builder.steps.ts
+// When('I select SCORM version {string}', async function (version: string) {
+//   await this.page.selectOption('[data-testid="scorm-version"]', version)
+// })
 
 When('I wait for package generation to complete', async function () {
   // Wait for download to start

@@ -1,16 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SCORM Course Builder",
-  "version": "0.1.0",
-  "identifier": "com.scorm-builder.app",
+  "productName": "SCORM Course Builder - Portable",
+  "version": "1.0.0",
+  "identifier": "com.scorm-builder.app.portable",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "SCORM Course Builder",
+        "title": "SCORM Course Builder - Portable",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -23,21 +24,46 @@
         "decorations": true,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "titleBarStyle": "Visible"
+        "titleBarStyle": "Visible",
+        "devtools": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "img-src": "'self' asset: http: https: data: blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self' 'unsafe-eval' 'unsafe-inline'",
+        "connect-src": "'self' ipc: http: https:"
+      },
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
     "active": false,
+    "targets": [],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["scormproj"],
+        "name": "SCORM Project File",
+        "description": "SCORM Course Builder Project",
+        "role": "Editor"
+      }
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }
