@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
-use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MigrationResult {
@@ -128,16 +127,10 @@ pub fn clear_recent_files() -> Result<serde_json::Value, String> {
         }
     }
     
-    // Also clear from settings if it exists there
-    if let Ok(mut settings) = crate::settings::load_settings() {
-        if settings.recent_projects.is_some() {
-            let count = settings.recent_projects.as_ref().unwrap().len();
-            settings.recent_projects = Some(Vec::new());
-            if crate::settings::save_settings(&settings).is_ok() {
-                cleared_count += count;
-            }
-        }
-    }
+    // Note: AppSettings doesn't store recent projects list anymore,
+    // only the count preference. The actual recent projects are now
+    // stored separately in the recent_projects.json file which was
+    // already cleared above.
     
     Ok(serde_json::json!({
         "cleared": cleared_count

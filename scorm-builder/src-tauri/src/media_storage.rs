@@ -31,12 +31,14 @@ fn extract_project_id(project_id_or_path: &str) -> String {
         if let Some(file_name) = path.file_name() {
             if let Some(file_str) = file_name.to_str() {
                 // Try to extract ID from pattern like "ProjectName_1234567890.scormproj"
+                // or "ProjectName_abc123.scormproj"
                 if let Some(underscore_pos) = file_str.rfind('_') {
                     if let Some(dot_pos) = file_str.rfind('.') {
                         if underscore_pos < dot_pos {
                             let potential_id = &file_str[underscore_pos + 1..dot_pos];
-                            // Check if it's all digits
-                            if potential_id.chars().all(|c| c.is_ascii_digit()) {
+                            // Accept alphanumeric IDs (including hyphens)
+                            if !potential_id.is_empty() && 
+                               potential_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                                 return potential_id.to_string();
                             }
                         }
@@ -45,7 +47,9 @@ fn extract_project_id(project_id_or_path: &str) -> String {
                 // Fallback: try to get ID from the beginning if no underscore pattern
                 if let Some(dot_pos) = file_str.find('.') {
                     let potential_id = &file_str[..dot_pos];
-                    if potential_id.chars().all(|c| c.is_ascii_digit()) {
+                    // Accept alphanumeric IDs for fallback too
+                    if !potential_id.is_empty() && 
+                       potential_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                         return potential_id.to_string();
                     }
                 }

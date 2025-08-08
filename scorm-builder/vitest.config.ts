@@ -14,15 +14,18 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     reporters: ['default'],
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'src/**/__tests__/**/*.{ts,tsx}'
+    ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
-      '**/tests/**',
-      '**/tests/e2e/**',
-      '**/*.spec.ts'
+      '**/tests/bdd/**',
+      '**/tests/e2e/**'
     ],
     coverage: {
       enabled: true,
