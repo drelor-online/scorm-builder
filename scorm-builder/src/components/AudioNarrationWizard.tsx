@@ -685,20 +685,32 @@ export function AudioNarrationWizard({
             logger.log(`[AudioNarrationWizard] Using cached audio for ${audioId}`)
             const cachedData = mediaCache.current.get(cacheKey)
             
-            // If we have cached media data, use the asset URL
+            // If we have cached media data, use it
             if (cachedData?.mediaData || cachedData?.url) {
-              // Get blob URL from UnifiedMediaContext (creates blob from ArrayBuffer for Windows compatibility)
-              const blobUrl = cachedData.url || await createBlobUrl(audioId)
+              let playableUrl = cachedData.url
               
-              // Track blob URL for cleanup if it's a blob URL
-              if (blobUrl && blobUrl.startsWith('blob:')) {
-                if (blobUrl) blobUrlsRef.current.push(blobUrl)
+              // Check if cached URL is an asset URL that needs conversion
+              const isAssetUrl = playableUrl && (playableUrl.startsWith('asset://') || playableUrl.includes('asset.localhost'))
+              
+              // Create blob URL if needed
+              if (!playableUrl || isAssetUrl) {
+                const blobUrl = await createBlobUrl(audioId)
+                if (blobUrl) {
+                  playableUrl = blobUrl
+                  // Update cache with new URL
+                  cachedData.url = blobUrl
+                  // Track blob URL for cleanup
+                  blobUrlsRef.current.push(blobUrl)
+                }
+              } else if (playableUrl && playableUrl.startsWith('blob:')) {
+                // Track existing blob URL for cleanup
+                blobUrlsRef.current.push(playableUrl)
               }
               
               const audioFile: AudioFile = {
                 blockNumber: block.blockNumber,
                 file: cachedData.file || new File([], cachedData.fileName || `${block.blockNumber}-Block.mp3`),
-                url: blobUrl || undefined,
+                url: playableUrl || undefined,
                 mediaId: audioId
               }
               return audioFile
@@ -712,12 +724,21 @@ export function AudioNarrationWizard({
             if (mediaData) {
               const fileName = mediaData.metadata?.original_name || mediaData.metadata?.originalName || `${block.blockNumber}-Block.mp3`
               
-              // Get blob URL from createBlobUrl (creates blob from ArrayBuffer for Windows compatibility)
-              const blobUrl = mediaData.url || await createBlobUrl(audioId)
+              // Check if the URL is an asset:// URL that needs conversion
+              let playableUrl = mediaData.url
+              const isAssetUrl = playableUrl && (playableUrl.startsWith('asset://') || playableUrl.includes('asset.localhost'))
               
-              // Track blob URL for cleanup if it's a blob URL
-              if (blobUrl && blobUrl.startsWith('blob:')) {
-                if (blobUrl) blobUrlsRef.current.push(blobUrl)
+              // Always create blob URL for asset:// URLs or if no URL exists
+              if (!playableUrl || isAssetUrl) {
+                const blobUrl = await createBlobUrl(audioId)
+                if (blobUrl) {
+                  playableUrl = blobUrl
+                  // Track blob URL for cleanup
+                  blobUrlsRef.current.push(blobUrl)
+                }
+              } else if (playableUrl && playableUrl.startsWith('blob:')) {
+                // Track existing blob URLs for cleanup
+                blobUrlsRef.current.push(playableUrl)
               }
               
               // Create a placeholder file for UI consistency (no actual data needed)
@@ -726,16 +747,16 @@ export function AudioNarrationWizard({
               const audioFile: AudioFile = {
                 blockNumber: block.blockNumber,
                 file: file,
-                url: blobUrl || undefined,
+                url: playableUrl || undefined,
                 mediaId: audioId
               }
               
-              // Cache the media data with asset URL
+              // Cache the media data with playable URL
               mediaCache.current.set(cacheKey, {
                 mediaData: mediaData,
                 fileName: fileName,
                 file: file,
-                url: blobUrl || undefined
+                url: playableUrl || undefined
               })
               
               logger.log(`[AudioNarrationWizard] Loaded audio from MediaRegistry: ${audioId} for block ${block.blockNumber}`)
@@ -1553,37 +1574,43 @@ export function AudioNarrationWizard({
     
     let url = audioFile.url || undefined
     
-    // If no URL, try to get it now
-    if (!url && audioFile.mediaId) {
-      logger.log('[AudioNarrationWizard] Audio URL missing, attempting to retrieve for:', audioFile.mediaId)
+    // Check if URL is an asset:// URL that needs conversion to blob URL
+    const isAssetUrl = url && (url.startsWith('asset://') || url.includes('asset.localhost'))
+    
+    // If no URL or it's an asset URL, we need to create/get a playable URL
+    if (!url || isAssetUrl) {
+      logger.log('[AudioNarrationWizard] Need to get playable URL for:', audioFile.mediaId, 'Current URL:', url)
       
-      // Try createBlobUrl first
-      try {
-        const blobUrl = await createBlobUrl(audioFile.mediaId)
-        if (blobUrl) {
-          url = blobUrl
-          // Update the audioFile with the new URL
-          setAudioFiles(prev => prev.map(f => 
-            f.mediaId === audioFile.mediaId ? { ...f, url } : f
-          ))
-        }
-      } catch (e) {
-        logger.warn('[AudioNarrationWizard] Failed to create blob URL on playback:', e)
-      }
-      
-      // If still no URL, try getMedia
-      if (!url) {
+      if (audioFile.mediaId) {
+        // Try createBlobUrl first (this creates a blob URL from the stored data)
         try {
-          const mediaData = await getMedia(audioFile.mediaId)
-          if (mediaData?.url) {
-            url = mediaData.url
+          const blobUrl = await createBlobUrl(audioFile.mediaId)
+          if (blobUrl) {
+            logger.log('[AudioNarrationWizard] Created blob URL for playback:', blobUrl)
+            url = blobUrl
             // Update the audioFile with the new URL
             setAudioFiles(prev => prev.map(f => 
-              f.mediaId === audioFile.mediaId ? { ...f, url } : f
+              f.mediaId === audioFile.mediaId ? { ...f, url: blobUrl } : f
             ))
           }
         } catch (e) {
-          logger.error('[AudioNarrationWizard] Failed to get media URL on playback:', e)
+          logger.warn('[AudioNarrationWizard] Failed to create blob URL on playback:', e)
+        }
+        
+        // If still no playable URL, try getMedia as fallback
+        if (!url || (url.startsWith('asset://') || url.includes('asset.localhost'))) {
+          try {
+            const mediaData = await getMedia(audioFile.mediaId)
+            if (mediaData?.url && !mediaData.url.startsWith('asset://') && !mediaData.url.includes('asset.localhost')) {
+              url = mediaData.url
+              // Update the audioFile with the new URL
+              setAudioFiles(prev => prev.map(f => 
+                f.mediaId === audioFile.mediaId ? { ...f, url } : f
+              ))
+            }
+          } catch (e) {
+            logger.error('[AudioNarrationWizard] Failed to get media URL on playback:', e)
+          }
         }
       }
     }
