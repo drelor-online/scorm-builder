@@ -1492,8 +1492,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               </div>
             </Card>
           )}
+          </Section>
           
           {/* Add New Media */}
+          <Section>
           <Card>
             <h3 className={styles.cardTitle}>Add New Media</h3>
             
@@ -1542,7 +1544,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   )}
                   
                   {/* Image Search Input */}
-                  <Flex gap="medium" className={styles.mb-lg}>
+                  <Flex gap="medium" className={styles['mb-lg']}>
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -1562,13 +1564,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   </Flex>
                   
                   {searchError && (
-                    <Alert type="warning">
+                    <Alert variant="warning">
                       {searchError}
                     </Alert>
                   )}
                   
                   {successMessage && (
-                    <Alert type="success">
+                    <Alert variant="success">
                       {successMessage}
                     </Alert>
                   )}
@@ -1583,11 +1585,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 <div>
                   {/* Video Prompt Suggestions */}
                   {videoPromptSuggestions.length > 0 && (
-                    <div style={{ marginBottom: '1rem' }}>
-                      <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                    <div className={styles.suggestionContainer}>
+                      <p className={styles.suggestionLabel}>
                         Suggested searches:
                       </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div className={styles.suggestionButtons}>
                         {videoPromptSuggestions.map((suggestion, index) => (
                           <Button
                             key={index}
@@ -1607,31 +1609,27 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   )}
                   
                   {/* Video Search Input */}
-                  <Flex gap="medium" style={{ marginBottom: '1rem' }}>
+                  <Flex gap="medium" className={styles.searchInputContainer}>
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                       placeholder="Search for videos..."
-                      style={{ flex: 1 }}
+                      className={styles.flexInput}
                     />
                     <Button 
                       onClick={handleSearch} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search videos"
                       size="large"
-                      style={{ 
-                        borderWidth: '1px',
-                        height: '40px',  // Force exact height to match input
-                        minHeight: 'unset'  // Override any min-height from CSS
-                      }}
+                      className={styles.searchButton}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
                   </Flex>
                   
                   {youtubeMessage && (
-                    <Alert type="info">
+                    <Alert variant="info">
                       {youtubeMessage}
                     </Alert>
                   )}
@@ -1645,26 +1643,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               >
                 <div 
                   data-testid="upload-dropzone"
-                  style={{
-                    border: `2px dashed ${tokens.colors.border.default}`,
-                    borderRadius: '0.5rem',
-                    padding: '2rem',
-                    textAlign: 'center',
-                    marginBottom: '1rem'
-                  }}
+                  className={styles.uploadDropzoneBox}
                 >
-                  <p style={{ 
-                    marginTop: '0.5rem',
-                    fontSize: '0.75rem',
-                    color: tokens.colors.text.secondary 
-                  }}>
+                  <p className={styles.dropzoneDescription}>
                     Drop files here or click to upload
                   </p>
-                  <p style={{ 
-                    marginTop: '0.5rem',
-                    fontSize: '0.75rem',
-                    color: tokens.colors.text.secondary 
-                  }}>
+                  <p className={styles.dropzoneDescription}>
                     Accepted: Images (JPG, PNG, GIF) and Videos (MP4, MOV)
                   </p>
                   
@@ -1672,7 +1656,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     type="file"
                     accept="image/*,video/*"
                     onChange={handleFileUpload}
-                    style={{ display: 'none' }}
+                    className={styles.uploadHiddenInput}
                     id="media-upload"
                     data-testid="file-input"
                     // FIXED: Removed 'multiple' - only one media per page allowed
@@ -1680,18 +1664,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   />
                   <label
                     htmlFor="media-upload"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.75rem 1.5rem',
-                      backgroundColor: tokens.colors.primary[500],
-                      color: 'white',
-                      borderRadius: '0.5rem',
-                      cursor: isFileProcessing ? 'not-allowed' : 'pointer',
-                      opacity: isFileProcessing ? 0.6 : 1,
-                      marginTop: '1rem'
-                    }}
+                    className={isFileProcessing ? `${styles.uploadButton} ${styles.uploadButtonDisabled}` : styles.uploadButton}
                   >
                     <Icon icon={Upload} size="md" />
                     {isFileProcessing ? 'Processing...' : 'Select Files'}
@@ -1699,8 +1672,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 </div>
                 
                 {uploadProgress && (
-                  <div style={{ marginTop: '1rem' }} data-testid="upload-progress">
-                    <p style={{ color: tokens.colors.text.secondary, marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                  <div className={styles.uploadProgressContainer} data-testid="upload-progress">
+                    <p className={styles.uploadProgressText}>
                       Uploading {uploadProgress.fileName}...
                     </p>
                     <ProgressBar 
@@ -1712,8 +1685,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 )}
                 
                 {uploadedMedia.length > 0 && (
-                  <div style={{ marginTop: '1rem' }}>
-                    <p style={{ color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                  <div className={styles.uploadCompleteContainer}>
+                    <p className={styles.uploadCompleteText}>
                       Uploaded Files ({uploadedMedia.length})
                     </p>
                   </div>
@@ -1726,35 +1699,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 icon={<ImageIcon size={16} data-testid="ai-icon" />}
               >
                 <div>
-                  <h4 style={{ marginBottom: '1rem', color: tokens.colors.text.primary }}>
+                  <h4 className={styles.aiToolsHeader}>
                     AI Image Generation Helper
                   </h4>
                   
                   {/* AI Prompt Based on Page Content */}
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem',
-                      color: tokens.colors.text.secondary,
-                      fontWeight: 600
-                    }}>
+                  <div className={styles.providerInputContainer}>
+                    <label className={styles.aiPromptLabel}>
                       AI Prompt for This Page
                     </label>
-                    <div style={{
-                      padding: '1rem',
-                      backgroundColor: tokens.colors.background.secondary,
-                      borderRadius: '0.5rem',
-                      border: `1px solid ${tokens.colors.border.default}`,
-                      marginBottom: '0.75rem'
-                    }}>
-                      <p style={{
-                        fontFamily: tokens.typography.fontFamilyMono,
-                        fontSize: '0.875rem',
-                        color: tokens.colors.text.primary,
-                        margin: 0,
-                        lineHeight: 1.6
-                      }}>
+                    <div className={styles.aiPromptBox}>
+                      <p className={styles.aiPromptText}>
                         {(() => {
                           const page = getCurrentPage()
                           
@@ -1794,90 +1749,82 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         navigator.clipboard.writeText(prompt)
                         // Could add a toast notification here
                       }}
-                      style={{ marginBottom: '1rem' }}
+                      className={styles.searchInputContainer}
                     >
-                      <Copy size={16} style={{ marginRight: '0.5rem' }} />
+                      <Copy size={16} className={styles.buttonIcon} />
                       Copy Prompt to Clipboard
                     </Button>
                   </div>
                   
                   {/* External AI Tools Links */}
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <h5 style={{ 
-                      marginBottom: '1rem', 
-                      color: tokens.colors.text.primary,
-                      fontSize: '1rem'
-                    }}>
+                  <div className={styles.aiToolsSection}>
+                    <h5 className={styles.aiToolsTitle}>
                       Popular AI Image Generation Tools
                     </h5>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div className={styles.aiToolCard}
-                      }}>
-                        <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
+                    <div className={styles.aiToolsGrid}>
+                      <div className={styles.aiToolCard}>
+                        <h6 className={styles.aiToolTitle}>
                           🎨 DALL-E 3 (OpenAI)
                         </h6>
-                        <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                        <p className={styles.aiToolDescription}>
                           High-quality, creative images with excellent prompt understanding
                         </p>
                         <a 
                           href="https://chat.openai.com" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          style={{ color: tokens.colors.primary[500], fontSize: '0.875rem' }}
+                          className={styles.aiToolLink}
                         >
                           Visit ChatGPT →
                         </a>
                       </div>
                       
-                      <div className={styles.aiToolCard}
-                      }}>
-                        <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
+                      <div className={styles.aiToolCard}>
+                        <h6 className={styles.aiToolTitle}>
                           🚀 Midjourney
                         </h6>
-                        <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                        <p className={styles.aiToolDescription}>
                           Artistic and stylized images, great for creative visuals
                         </p>
                         <a 
                           href="https://www.midjourney.com" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          style={{ color: tokens.colors.primary[500], fontSize: '0.875rem' }}
+                          className={styles.aiToolLink}
                         >
                           Visit Midjourney →
                         </a>
                       </div>
                       
-                      <div className={styles.aiToolCard}
-                      }}>
-                        <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
+                      <div className={styles.aiToolCard}>
+                        <h6 className={styles.aiToolTitle}>
                           🖼️ Stable Diffusion (Free)
                         </h6>
-                        <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                        <p className={styles.aiToolDescription}>
                           Open-source, customizable, runs locally or online
                         </p>
                         <a 
                           href="https://stablediffusionweb.com" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          style={{ color: tokens.colors.primary[500], fontSize: '0.875rem' }}
+                          className={styles.aiToolLink}
                         >
                           Try Online →
                         </a>
                       </div>
                       
-                      <div className={styles.aiToolCard}
-                      }}>
-                        <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
+                      <div className={styles.aiToolCard}>
+                        <h6 className={styles.aiToolTitle}>
                           🎯 Microsoft Designer
                         </h6>
-                        <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                        <p className={styles.aiToolDescription}>
                           Free AI image generation with DALL-E integration
                         </p>
                         <a 
                           href="https://designer.microsoft.com" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          style={{ color: tokens.colors.primary[500], fontSize: '0.875rem' }}
+                          className={styles.aiToolLink}
                         >
                           Visit Designer →
                         </a>
@@ -1886,7 +1833,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   </div>
                   
                   {/* Instructions */}
-                  <Alert type="info">
+                  <Alert variant="info">
                     <strong>How to use:</strong><br />
                     1. Copy the AI prompt above<br />
                     2. Visit one of the AI image generation tools<br />
@@ -1900,12 +1847,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {/* Results Grid */}
             {(searchResults.length > 0 || uploadedMedia.length > 0) && (
               <>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                  gap: '1rem',
-                  marginTop: '1.5rem'
-                }}>
+                <div className={styles.resultsGrid}>
                   {paginateResults([...searchResults, ...uploadedMedia]).map((result, index) => {
                     const isVideo = result.embedUrl || (result.url && result.url.includes('youtube'))
                     const imageSource = getImageSource(result.thumbnail || result.url, true)
@@ -1916,66 +1858,33 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         key={`${result.id}-${index}`}
                         data-testid={`search-result-${index}`}
                         data-selected={selectedResults[result.id] ? "true" : "false"}
-                        className={selectedResults[result.id] ? 'selected' : ''}
-                        style={{
-                          border: `2px solid ${selectedResults[result.id] ? tokens.colors.success[500] : tokens.colors.border.default}`,
-                          borderRadius: '0.5rem',
-                          overflow: 'hidden',
-                          cursor: isRestricted ? 'not-allowed' : isSearching ? 'wait' : 'pointer',
-                          opacity: isRestricted ? 0.5 : 1,
-                          transition: 'all 0.2s',
-                          backgroundColor: selectedResults[result.id] ? tokens.colors.success[50] : 'transparent',
-                          pointerEvents: isSearching ? 'none' : 'auto'
-                        }}
+                        className={`${styles.resultCard} ${selectedResults[result.id] ? styles.resultCardSelected : ''} ${isRestricted ? styles.resultCardRestricted : ''} ${isSearching ? styles.resultCardSearching : ''}`}
                         onClick={() => !isRestricted && !isSearching && handleToggleSelection(result.id)}
                       >
                         {isVideo ? (
-                          <div style={{
-                            width: '100%',
-                            height: '150px',
-                            backgroundColor: tokens.colors.background.secondary,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative'
-                          }}>
+                          <div className={styles.videoThumbnailContainer}>
                             {videoThumbnails[result.id] ? (
                               <img 
                                 src={videoThumbnails[result.id]} 
                                 alt={result.title}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                className={styles.videoThumbnailImage}
                               />
                             ) : (
-                              <span style={{ color: tokens.colors.text.secondary }}>📹 Video</span>
+                              <span className={styles.videoThumbnailPlaceholder}>📹 Video</span>
                             )}
                           </div>
                         ) : isRestricted ? (
-                          <div style={{
-                            width: '100%',
-                            height: '150px',
-                            backgroundColor: tokens.colors.background.secondary,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexDirection: 'column',
-                            padding: '1rem',
-                            textAlign: 'center'
-                          }}>
-                            <span style={{ color: tokens.colors.text.secondary, fontSize: '0.875rem' }}>
+                          <div className={styles.restrictedImageContainer}>
+                            <span className={styles.restrictedImageText}>
                               This image cannot be previewed due to site restrictions
                             </span>
                           </div>
                         ) : (
-                          <div style={{ position: 'relative' }}>
+                          <div className={styles.resultImageContainer}>
                             <img 
                               src={imageSource}
                               alt={result.title}
-                              style={{ 
-                                width: '100%', 
-                                height: '150px', 
-                                objectFit: 'cover',
-                                display: imageErrors.has(result.id) ? 'none' : 'block'
-                              }}
+                              className={`${styles.resultImage} ${imageErrors.has(result.id) ? styles.resultImageHidden : ''}`}
                               onError={() => {
                                 setImageErrors(prev => new Set([...prev, result.id]))
                               }}
@@ -2004,7 +1913,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 
                 {/* Pagination */}
                 {totalResultPages > 1 && (
-                  <div className={styles.mt-lg}>
+                  <div className={styles['mt-lg']}>
                     <Pagination
                       currentPage={resultPage}
                       hasNextPage={resultPage < totalResultPages}
@@ -2020,7 +1929,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {/* No Results Message - Only show for search tabs */}
             {hasSearched && searchResults.length === 0 && !searchError && !youtubeMessage && 
              (activeTab === 'images' || activeTab === 'videos') && (
-              <Alert type="info">
+              <Alert variant="info">
                 No results found. Try different search terms or upload your own media.
               </Alert>
             )}

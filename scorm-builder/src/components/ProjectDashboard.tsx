@@ -595,12 +595,11 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   
   return (
     <div 
-      className="dashboard-container"
+      className={`${styles.dashboardContainer} ${isDragging ? styles.dropZoneActive : ''}`}
       data-testid="project-drop-zone"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`${styles.dashboardContainer} ${isDragging ? styles.dropZoneActive : ''}`}
     >
       <div className="dashboard-header">
         <h1>SCORM Builder Projects</h1>
@@ -725,71 +724,32 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               <Card 
                 key={`recent-${project.id}`}
                 data-testid="recent-project-card"
-                className="project-card recent-card animate-fadeInUp"
-                style={{ animationDelay: `${index * 0.05}s` }}
+                className={`${styles.projectCard} ${styles.projectCardAnimated}`}
+                style={{ '--animation-index': index } as React.CSSProperties}
                 role="article"
                 aria-label={`Project: ${project.name}`}
               >
-                <div style={{ position: 'relative', padding: '1rem', overflow: 'hidden' }}>
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: '0.5rem', 
-                    right: '0.5rem',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
+                <div className={styles.projectCardInner}>
+                  <div className={styles.recentBadge}>
                     Recent
                   </div>
-                  <div className="project-info" style={{ marginBottom: '1rem', overflow: 'hidden' }}>
-                    <h3 style={{ 
-                      margin: '0 0 0.5rem 0',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>{project.name}</h3>
-                    <p className="project-date" style={{ 
-                      margin: 0, 
-                      color: '#888',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
+                  <div className={styles.projectInfo}>
+                    <h3 className={styles.projectName}>{project.name}</h3>
+                    <p className={styles.projectDate}>
                       Last accessed {formatLastAccessed(project)}
                     </p>
-                    <p className="project-date-full" style={{ 
-                      margin: 0, 
-                      color: '#666', 
-                      fontSize: '0.875rem',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
+                    <p className={styles.projectDateFull}>
                       {formatProjectDate(project)}
                     </p>
                     {(project as any).path && (
                       <Tooltip content={(project as any).path} position="top">
-                        <p className="project-path" style={{ 
-                          margin: '0.25rem 0 0 0', 
-                          color: '#999', 
-                          fontSize: '0.75rem',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          cursor: 'help'
-                        }}>
+                        <p className={styles.projectPath}>
                           <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
                         </p>
                       </Tooltip>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className={styles.projectButtons}>
                     {selectionMode && (
                       <input
                         type="checkbox"
@@ -891,65 +851,35 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         <div className="main-projects-section">
           {projects.length > 0 && (
             <>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>All Projects</h2>
-              <div className="projects-grid stagger-children" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: '1.5rem'
-              }}>
+              <h2 className={styles.sectionTitle}>All Projects</h2>
+              <div className={styles.projectGrid}>
           {projects.map((project, index) => (
             <Card 
               key={project.id}
               data-testid="project-card"
-              className="project-card animate-fadeInUp"
-              style={{ animationDelay: `${index * 0.05}s` }}
+              className={`${styles.projectCard} ${styles.projectCardAnimated}`}
+              style={{ '--animation-index': index } as React.CSSProperties}
               role="article"
               aria-label={`Project: ${project.name}`}
             >
-              <div style={{ padding: '1rem', overflow: 'hidden' }}>
-                <div className="project-info" style={{ marginBottom: '1rem' }}>
-                  <h3 style={{ 
-                    margin: '0 0 0.5rem 0',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>{project.name}</h3>
-                  <p className="project-date" style={{ 
-                    margin: 0, 
-                    color: '#888',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
+              <div className={styles.projectCardInner}>
+                <div className={styles.projectInfo}>
+                  <h3 className={styles.projectName}>{project.name}</h3>
+                  <p className={styles.projectDate}>
                     Last accessed {formatLastAccessed(project)}
                   </p>
-                  <p className="project-date-full" style={{ 
-                    margin: 0, 
-                    color: '#666', 
-                    fontSize: '0.875rem',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
+                  <p className={styles.projectDateFull}>
                     {formatProjectDate(project)}
                   </p>
                   {(project as any).path && (
                     <Tooltip content={(project as any).path} position="top">
-                      <p className="project-path" style={{ 
-                        margin: '0.25rem 0 0 0', 
-                        color: '#999', 
-                        fontSize: '0.75rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        cursor: 'help'
-                      }}>
+                      <p className={styles.projectPath}>
                         <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
                       </p>
                     </Tooltip>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className={styles.projectButtons}>
                   {selectionMode && (
                     <input
                       type="checkbox"
@@ -994,20 +924,12 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       )}
       
       {selectionMode && selectedProjects.size > 0 && (
-        <div style={{
-          position: 'fixed',
-          bottom: '2rem',
-          right: '2rem',
-          zIndex: 1000
-        }}>
+        <div className={styles.bulkExportBar}>
           <Button
             variant="primary"
             size="large"
             onClick={handleBulkExport}
-            style={{
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-              padding: '1rem 2rem'
-            }}
+            className={styles.bulkExportButton}
           >
             Export Selected ({selectedProjects.size})
           </Button>
@@ -1032,16 +954,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             autoFocus
             aria-label="Project title"
             data-testid="project-name-input"
-            style={{
-              width: 'calc(100% - 2rem)',
-              padding: '0.75rem',
-              fontSize: '1rem',
-              borderRadius: '0.375rem',
-              border: '1px solid #27272a',
-              backgroundColor: '#09090b',
-              color: '#e4e4e7',
-              marginBottom: '1rem'
-            }}
+            className={styles.projectNameInput}
           />
           <div className="modal-actions">
             <Button

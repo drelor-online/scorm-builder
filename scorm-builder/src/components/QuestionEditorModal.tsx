@@ -53,7 +53,15 @@ const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
 
   const handleSave = () => {
     if (editedQuestion) {
-      onSave(editedQuestion)
+      // For fill-in-the-blank questions, ensure the question field is also set
+      let questionToSave = editedQuestion
+      if (editedQuestion.type === 'fill-in-the-blank' && 'blank' in editedQuestion) {
+        questionToSave = {
+          ...editedQuestion,
+          question: (editedQuestion as any).blank || editedQuestion.question || ''
+        }
+      }
+      onSave(questionToSave)
       onClose()
     }
   }

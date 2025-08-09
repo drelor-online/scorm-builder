@@ -114,6 +114,7 @@
 .projectCardAnimated {
   animation: fadeInUp 0.5s ease-out;
   animation-fill-mode: both;
+  animation-delay: calc(var(--animation-index, 0) * 0.05s);
 }
 
 @keyframes fadeInUp {
@@ -139,6 +140,96 @@
   right: var(--space-sm);
   display: flex;
   gap: var(--space-xs);
+}
+
+/* Recent Badge */
+.recentBadge {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  background-color: var(--color-primary);
+  color: white;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Project Info Section */
+.projectInfo {
+  margin-bottom: var(--space-lg);
+  overflow: hidden;
+}
+
+.projectName {
+  margin: 0 0 var(--space-sm) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.projectDate {
+  margin: 0;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+}
+
+.projectDateFull {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectPath {
+  margin: var(--space-xs) 0 0 0;
+  color: var(--text-quaternary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+}
+
+.projectButtons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Bulk Export Bar */
+.bulkExportBar {
+  position: fixed;
+  bottom: var(--space-2xl);
+  right: var(--space-2xl);
+  z-index: 1000;
+}
+
+.bulkExportButton {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: var(--space-lg) var(--space-2xl);
+}
+
+/* New Project Input */
+.projectNameInput {
+  width: calc(100% - 2rem);
+  padding: var(--space-md);
+  font-size: var(--font-size-base);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
 }
 
 /* Main Content */

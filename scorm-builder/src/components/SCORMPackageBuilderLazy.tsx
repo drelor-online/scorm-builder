@@ -4,6 +4,7 @@ import type { CourseMetadata } from '../types/metadata'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { loadCourseContentConverter, loadSCORMGenerator } from '../utils/dynamicImports'
+import { useStorage } from '../contexts/PersistentStorageContext'
 
 import { PageLayout } from './PageLayout'
 import { CoursePreview } from './CoursePreview'
@@ -80,6 +81,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
   onHelp,
   onStepClick 
 }) => {
+  const storage = useStorage()
   const [version, setVersion] = useState('1.0')
   const [isGenerating, setIsGenerating] = useState(false)
   const [packageGenerated, setPackageGenerated] = useState(false)
@@ -157,9 +159,18 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
       setGenerationProgress(80)
       setGenerationMessage(`Generating SCORM package (${mediaCount} media files, ~${estimatedTime}s)...`)
       
-      // Generate SCORM package
-      console.log('[SCORM Export] Calling generateSCORM...')
-      const result = await generateSCORM(enhancedContent)
+      // Generate SCORM package with all required parameters
+      console.log('[SCORM Export] Calling generateSCORM with projectId:', storage?.currentProjectId)
+      const projectId = storage?.currentProjectId || 'default-project'
+      
+      // Create progress callback that updates UI
+      const onProgressCallback = (message: string, progress: number) => {
+        console.log('[SCORM Export] Progress:', message, progress)
+        setGenerationMessage(message)
+        setGenerationProgress(progress)
+      }
+      
+      const result = await generateSCORM(enhancedContent, projectId, onProgressCallback)
       console.log('[SCORM Export] Generated result type:', typeof result, 'length:', result?.length)
       // generateRustSCORM returns the buffer directly as a Uint8Array
       const buffer = result

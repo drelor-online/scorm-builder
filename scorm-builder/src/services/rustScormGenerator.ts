@@ -1240,7 +1240,7 @@ export async function generateRustSCORM(
   
   // Set up progress event listener
   let unlisten: (() => void) | undefined
-  if (onProgress) {
+  if (onProgress && typeof onProgress === 'function') {
     listen<{ message: string; progress: number }>('scorm-generation-progress', (event) => {
       console.log('[Rust SCORM] Progress event:', event.payload)
       onProgress(event.payload.message, event.payload.progress)
@@ -1254,7 +1254,7 @@ export async function generateRustSCORM(
   
   try {
     console.log('[Rust SCORM] Converting course content to Rust format')
-    if (onProgress) {
+    if (onProgress && typeof onProgress === 'function') {
       onProgress('Converting course content...', 10)
     }
     const { courseData: rustCourseData, mediaFiles: convertedMediaFiles } = await convertToRustFormat(courseContent, projectId)
@@ -1298,7 +1298,7 @@ export async function generateRustSCORM(
     console.log('[Rust SCORM] Invoking Rust generator')
     console.log('[Rust SCORM] Sample topic data being sent:', JSON.stringify(rustCourseData.topics[0], null, 2))
     
-    if (onProgress) {
+    if (onProgress && typeof onProgress === 'function') {
       onProgress('Processing media files...', 30)
     }
     
@@ -1310,7 +1310,7 @@ export async function generateRustSCORM(
     
     console.log(`[Rust SCORM] Dynamic timeout calculated: ${calculatedTimeout}ms (${Math.round(calculatedTimeout / 1000)}s) for ${mediaFiles.length} media files`)
     
-    if (onProgress) {
+    if (onProgress && typeof onProgress === 'function') {
       onProgress(`Generating SCORM package (${mediaFiles.length} media files)...`, 50)
     }
     
@@ -1343,7 +1343,7 @@ export async function generateRustSCORM(
     // Unlock blob URLs after successful generation
     blobUrlManager.unlockAll()
     
-    if (onProgress) {
+    if (onProgress && typeof onProgress === 'function') {
       onProgress('SCORM package generated successfully!', 100)
     }
     

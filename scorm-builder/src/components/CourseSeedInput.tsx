@@ -16,6 +16,7 @@ import {
 } from './DesignSystem';
 import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
+import styles from './CourseSeedInput.module.css';
 import { useStorage } from '../contexts/PersistentStorageContext';
 import { debugLogger } from '../utils/ultraSimpleLogger';
 
@@ -31,15 +32,7 @@ interface CourseSeedInputProps {
 
 // Alert component for error messages
 const Alert: React.FC<{ type: 'error' | 'info'; children: React.ReactNode }> = ({ type, children }) => (
-  <div className={`alert alert-${type}`} style={{
-    padding: '1rem',
-    backgroundColor: type === 'error' ? 'rgba(185, 28, 28, 0.2)' : 'rgba(59, 130, 246, 0.1)',
-    border: `1px solid ${type === 'error' ? 'rgba(185, 28, 28, 0.3)' : 'rgba(59, 130, 246, 0.2)'}`,
-    borderRadius: '0.5rem',
-    color: type === 'error' ? '#f87171' : '#93c5fd',
-    fontSize: '0.875rem',
-    marginBottom: '1.5rem'
-  }}>
+  <div className={`${styles.alert} ${type === 'error' ? styles.alertError : styles.alertInfo}`}>
     {children}
   </div>
 )
@@ -66,17 +59,8 @@ const Select: React.FC<{
         id={inputId}
         value={value}
         onChange={onChange}
-        className="input"
+        className={`input ${styles.selectField}`}
         data-testid={dataTestId}
-        style={{
-          appearance: 'none',
-          backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'right 0.7rem center',
-          backgroundSize: '1.5em 1.5em',
-          paddingRight: '2.5rem',
-          color: 'var(--color-text-primary, #e5e7eb)'
-        }}
       >
         {children}
       </select>
@@ -520,7 +504,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     >
       <form ref={formRef} aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
         {/* Error announcement region for screen readers */}
-        <div role="alert" aria-live="assertive" style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}>
+        <div role="alert" aria-live="assertive" className={styles.srOnly}>
           {error}
         </div>
         
@@ -530,28 +514,23 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         )}
         
         {/* Required field legend */}
-        <div style={{ fontSize: '0.875rem', color: '#71717a', marginBottom: '1rem' }}>
-          <span style={{ color: 'rgb(220, 38, 38)' }}>*</span> indicates required field
+        <div className={styles.requiredNote}>
+          <span className={styles.requiredStar}>*</span> indicates required field
         </div>
         
         {/* Course Details Section */}
         <Section>
           <Card title="Course Details">
             {/* Course Title */}
-            <div style={{ marginBottom: '2rem' }}>
+            <div className={styles.formSection}>
               <div className="input-wrapper">
-                <label htmlFor="course-title" className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  Course Title <span style={{ color: 'rgb(220, 38, 38)' }}>*</span>
+                <label htmlFor="course-title" className={`input-label ${styles.inputLabel}`}>
+                  Course Title <span className={styles.requiredStar}>*</span>
                   {isTitleLocked && (
                     <span 
                       data-testid="title-lock-icon"
                       title="Title is locked from project creation"
-                      style={{ 
-                        color: '#71717a',
-                        fontSize: '0.875rem',
-                        display: 'inline-flex',
-                        alignItems: 'center'
-                      }}
+                      className={styles.lockIcon}
                     >
                       🔒
                     </span>
@@ -565,29 +544,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   required
                   readOnly={isTitleLocked}
                   data-testid="course-title-input"
-                  className="input"
-                  style={{
-                    width: `calc(100% - ${tokens.spacing.md} * 2)`,
-                    padding: tokens.spacing.md,
-                    backgroundColor: isTitleLocked 
-                      ? tokens.colors.background.tertiary 
-                      : tokens.colors.background.secondary,
-                    color: tokens.colors.text.primary,
-                    border: `1px solid ${tokens.colors.border.default}`,
-                    borderRadius: tokens.borderRadius.md,
-                    fontFamily: tokens.typography.fontFamily,
-                    fontSize: tokens.typography.fontSize.base,
-                    cursor: isTitleLocked ? 'not-allowed' : 'text',
-                    opacity: isTitleLocked ? 0.7 : 1
-                  }}
+                  className={isTitleLocked ? styles.inputFieldLocked : styles.inputFieldNormal}
                 />
               </div>
-              <div style={{ 
-                fontSize: '0.75rem', 
-                color: '#71717a', 
-                marginTop: '0.25rem',
-                textAlign: 'right'
-              }}>
+              <div className={styles.characterCount}>
                 {courseTitle.length}/100 characters
                 {isTitleLocked && ' (locked from project)'}
               </div>
@@ -597,10 +557,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
             <Grid cols={2} gap="large">
               {/* Difficulty */}
               <div>
-                <label htmlFor="difficulty-slider" className="input-label" style={{ marginBottom: '0.75rem', display: 'block' }}>
+                <label htmlFor="difficulty-slider" className={`input-label ${styles.inputLabelOptional}`}>
                   Difficulty Level
                 </label>
-                <div style={{ width: 'fit-content' }}>
+                <div>
                   <ButtonGroup gap="small" className="difficulty-button-group">
                     {difficultyLabels.map((label, index) => {
                       const isSelected = difficulty === index + 1
@@ -622,7 +582,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                       )
                     })}
                   </ButtonGroup>
-                  <div style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.5rem' }}>
+                  <div className={styles.difficultyHelpText}>
                     Select the complexity level for your learners
                   </div>
                   <input
@@ -637,18 +597,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     aria-valuemin={1}
                     aria-valuemax={5}
                     aria-valuenow={difficulty}
-                    style={{
-                      width: '100%',
-                      marginTop: '0.5rem',
-                      accentColor: '#3b82f6'
-                    }}
+                    className={styles.difficultySlider}
                   />
                 </div>
               </div>
 
               {/* Template */}
               <div>
-                <label htmlFor="course-template-select" className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Course Template (Optional)</label>
+                <label htmlFor="course-template-select" className={`input-label ${styles.inputLabelOptional}`}>Course Template (Optional)</label>
                 <Select
                   id="course-template-select"
                   value={template}
@@ -687,7 +643,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           <Card title="Learning Topics">
             <div className="input-wrapper">
               <label htmlFor="topics-textarea" className="input-label">
-                Topics <span style={{ color: 'rgb(220, 38, 38)' }}>*</span>
+                Topics <span className={styles.requiredStar}>*</span>
               </label>
               <textarea
                 id="topics-textarea"
@@ -710,23 +666,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                 }}
                 data-testid="topics-textarea"
                 required
-                style={{
-                  width: `calc(100% - ${tokens.spacing.md} * 2)`,
-                  minHeight: '200px',
-                  padding: tokens.spacing.md,
-                  border: `1px solid ${tokens.colors.border.default}`,
-                  borderRadius: tokens.borderRadius.md,
-                  fontFamily: tokens.typography.fontFamily,
-                  fontSize: tokens.typography.fontSize.base,
-                  backgroundColor: tokens.colors.background.secondary,
-                  color: tokens.colors.text.primary,
-                  resize: 'vertical'
-                }}
+                className={styles.textareaField}
               />
             </div>
-            <Flex gap="large" style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#71717a' }}>
-              <span style={{ whiteSpace: 'nowrap' }}>📝 Recommended: 10-20 topics</span>
-              <span style={{ whiteSpace: 'nowrap' }}>⏱️ Aim for 2-3 minutes per topic</span>
+            <Flex gap="large" className={styles.tipText}>
+              <span className={styles.tipItem}>📝 Recommended: 10-20 topics</span>
+              <span className={styles.tipItem}>⏱️ Aim for 2-3 minutes per topic</span>
             </Flex>
           </Card>
         </Section>
@@ -745,12 +690,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           onClose={() => setShowTopicWarning(false)}
           title="Replace Existing Topics?"
         >
-          <div style={{ padding: '1rem' }}>
-            <p style={{ marginBottom: '1rem' }}>
+          <div className={styles.modalContent}>
+            <p className={styles.modalMessage}>
               Your existing topics will be cleared and replaced with the template topics. 
               This action cannot be undone.
             </p>
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div className={styles.modalActions}>
               <Button
                 variant="secondary"
                 onClick={() => setShowTopicWarning(false)}
@@ -777,12 +722,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           onClose={() => setShowComingSoon(false)}
           title="Coming Soon"
         >
-          <div style={{ padding: '1rem' }}>
-            <p style={{ marginBottom: '1rem' }}>
+          <div className={styles.modalContent}>
+            <p className={styles.modalMessage}>
               The template management feature will be implemented in a future release. 
               Stay tuned for updates!
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className={styles.modalActions}>
               <Button
                 variant="primary"
                 onClick={() => setShowComingSoon(false)}

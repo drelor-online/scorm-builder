@@ -12,6 +12,7 @@ import {
 import { tokens } from './DesignSystem/designTokens'
 import { Toast } from './Toast'
 import './DesignSystem/designSystem.css'
+import styles from './TemplateEditor.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 
 interface TemplateEditorProps {
@@ -213,8 +214,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
     return (
       <>
         <Section>
-          <Flex justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: 0 }}>Custom Templates</h3>
+          <Flex justify="space-between" align="center" className={styles.header}>
+            <h3 className={styles.headerTitle}>Custom Templates</h3>
             <Button variant="primary" onClick={handleCreateNew}>
               Add New Template
             </Button>
@@ -222,8 +223,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
           
           {templates.length === 0 ? (
             <Card>
-              <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                <p style={{ color: '#a1a1aa', marginBottom: '1rem' }}>
+              <div className={styles.emptyState}>
+                <p className={styles.emptyMessage}>
                   No custom templates yet
                 </p>
                 <Button variant="primary" onClick={handleCreateNew}>
@@ -232,13 +233,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
               </div>
             </Card>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className={styles.templatesList}>
               {templates.map(templateName => (
-                <Card key={templateName} style={{ padding: '1rem' }}>
+                <Card key={templateName} className={styles.templateCard}>
                   <Flex justify="space-between" align="center">
                     <div>
-                      <h4 style={{ margin: '0 0 0.5rem 0' }}>{templateName}</h4>
-                      <p style={{ margin: 0, fontSize: '0.875rem', color: '#a1a1aa' }}>
+                      <h4 className={styles.templateTitle}>{templateName}</h4>
+                      <p className={styles.templateDescription}>
                         {customTemplates[templateName].topics.length} topics
                       </p>
                     </div>
@@ -273,9 +274,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
             title="Delete Template"
             size="small"
           >
-            <div style={{ padding: '1rem' }}>
+            <div className={styles.modalContent}>
               <p>Are you sure you want to delete "{showDeleteConfirm}"?</p>
-              <Flex gap="medium" justify="end" style={{ marginTop: '1.5rem' }}>
+              <Flex gap="medium" justify="end" className={styles.modalActions}>
                 <Button 
                   variant="secondary"
                   onClick={() => setShowDeleteConfirm(null)}
@@ -306,8 +307,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
 
     return (
       <Section>
-        <Flex justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: 0 }}>
+        <Flex justify="space-between" align="center" className={styles.header}>
+          <h3 className={styles.headerTitle}>
             {editMode === 'create' ? 'Create New Template' : `Edit "${currentTemplate}"`}
           </h3>
           <Button variant="secondary" onClick={() => setEditMode('list')}>
@@ -316,14 +317,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
         </Flex>
 
         {error && (
-          <div style={{ 
-            backgroundColor: 'rgba(220, 38, 38, 0.1)', 
-            border: '1px solid rgba(220, 38, 38, 0.3)',
-            borderRadius: '0.375rem',
-            padding: '0.75rem',
-            marginBottom: '1rem',
-            color: '#ef4444'
-          }}>
+          <div className={styles.errorAlert}>
             {error}
           </div>
         )}
@@ -345,36 +339,26 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
           <div>
             <label htmlFor="template-topics" className="input-label">
               Topics
-              <span style={{ color: '#a1a1aa', fontSize: '0.875rem', marginLeft: '0.5rem' }}>
+              <span className={styles.inlineDescription}>
                 (one per line)
               </span>
             </label>
             <textarea
               id="template-topics"
+              className={styles.topicsTextarea}
               value={topics}
               onChange={(e) => setTopics(e.target.value)}
               placeholder="Topic 1&#10;Topic 2&#10;Topic 3"
-              style={{
-                width: '100%',
-                minHeight: '150px',
-                padding: '0.75rem',
-                borderRadius: '0.5rem',
-                backgroundColor: '#18181b',
-                border: `1px solid ${tokens.colors.border.default}`,
-                color: '#e4e4e7',
-                fontSize: '0.875rem',
-                resize: 'vertical'
-              }}
             />
           </div>
 
           {/* Prompt Builder */}
           <div>
-            <h4 style={{ marginBottom: '1rem' }}>Prompt Builder</h4>
+            <h4 className={styles.sectionTitle}>Prompt Builder</h4>
             
             {/* Tag Buttons */}
-            <div style={{ marginBottom: '1rem' }}>
-              <p style={{ fontSize: '0.875rem', color: '#a1a1aa', marginBottom: '0.5rem' }}>
+            <div className={styles.tagButtonsContainer}>
+              <p className={styles.tagButtonsLabel}>
                 Click to insert tags:
               </p>
               <ButtonGroup gap="small">
@@ -398,35 +382,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
                 <div key={section}>
                   <label htmlFor={`prompt-${section}`} className="input-label">
                     {section.charAt(0).toUpperCase() + section.slice(1)} Section
-                    <span style={{ 
-                      display: 'block', 
-                      fontSize: '0.75rem', 
-                      color: '#71717a',
-                      fontWeight: 'normal',
-                      marginTop: '0.25rem'
-                    }}>
+                    <span className={styles.sectionDescription}>
                       {sectionDescriptions[section as keyof typeof sectionDescriptions]}
                     </span>
                   </label>
                   <textarea
                     id={`prompt-${section}`}
                     ref={(el) => { textareaRefs.current[section] = el }}
+                    className={`${styles.promptTextarea} ${activeSection === section ? styles.promptTextareaActive : ''}`}
                     value={value}
                     onChange={(e) => setPromptSections({ ...promptSections, [section]: e.target.value })}
                     onFocus={() => setActiveSection(section as keyof typeof promptSections)}
                     placeholder={`Enter ${section} section...`}
-                    style={{
-                      width: '100%',
-                      minHeight: '100px',
-                      padding: '0.75rem',
-                      borderRadius: '0.5rem',
-                      backgroundColor: '#18181b',
-                      border: activeSection === section ? '1px solid #3b82f6' : '1px solid #3f3f46',
-                      color: '#e4e4e7',
-                      fontSize: '0.875rem',
-                      resize: 'vertical',
-                      transition: 'border-color 0.2s'
-                    }}
                   />
                 </div>
               ))}
@@ -435,37 +402,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
 
           {/* Preview */}
           <Card>
-            <h4 style={{ marginTop: 0, marginBottom: '1rem' }}>Preview</h4>
-            <div style={{
-              backgroundColor: '#09090b',
-              border: '1px solid #27272a',
-              borderRadius: '0.375rem',
-              padding: '1rem',
-              fontSize: '0.875rem',
-              color: '#a1a1aa',
-              whiteSpace: 'pre-wrap',
-              maxHeight: '300px',
-              overflowY: 'auto'
-            }}>
+            <h4 className={styles.sectionTitle}>Preview</h4>
+            <div className={styles.previewBox}>
               {getPreview()}
             </div>
           </Card>
 
           {/* Available Tags Reference */}
           <Card>
-            <h4 style={{ marginTop: 0, marginBottom: '1rem' }}>Available Tags</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <h4 className={styles.sectionTitle}>Available Tags</h4>
+            <div className={styles.templatesList}>
               {AVAILABLE_TAGS.map(({ tag, description }) => (
-                <div key={tag} style={{ fontSize: '0.875rem' }}>
-                  <code style={{ 
-                    backgroundColor: '#27272a', 
-                    padding: '0.125rem 0.375rem',
-                    borderRadius: '0.25rem',
-                    color: '#3b82f6'
-                  }}>
+                <div key={tag} className={styles.tagItem}>
+                  <code className={styles.tagCode}>
                     {tag}
                   </code>
-                  <span style={{ marginLeft: '0.5rem', color: '#a1a1aa' }}>
+                  <span className={styles.tagDescription}>
                     - {description}
                   </span>
                 </div>
@@ -489,30 +441,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
 
   return (
     <>
-      <div style={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0
-      }}>
-        <div style={{ 
-          padding: '1.5rem 1.5rem 0 1.5rem',
-          flexShrink: 0 
-        }}>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ margin: '0 0 0.5rem 0' }}>Template Editor</h2>
-            <p style={{ margin: 0, color: '#a1a1aa' }}>
+      <div className={styles.modalContainer}>
+        <div className={styles.modalHeader}>
+          <div className={styles.header}>
+            <h2 className={styles.modalTitle}>Template Editor</h2>
+            <p className={styles.modalSubtitle}>
               Manage custom templates for your courses
             </p>
           </div>
         </div>
 
-        <div style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '0 1.5rem 1.5rem 1.5rem',
-          minHeight: 0
-        }}>
+        <div className={styles.modalBody}>
           {editMode === 'list' ? renderTemplateList() : renderTemplateForm()}
         </div>
       </div>

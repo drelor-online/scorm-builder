@@ -5,6 +5,7 @@ import { tokens } from './DesignSystem/designTokens'
 import { Home, Target, Image as ImageIcon, Video } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import styles from './PageThumbnailGrid.module.css'
 // Removed blobUrlManager - now using asset URLs
 
 interface PageThumbnailGridProps {
@@ -160,58 +161,24 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
   
   if (!mediaUrl) {
     return (
-      <div style={{
-        width: '100%',
-        height: '80px',
-        backgroundColor: tokens.colors.background.secondary,
-        borderRadius: '0.25rem',
-        marginBottom: '0.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: tokens.colors.text.tertiary
-      }}>
+      <div className={styles.thumbnailPlaceholder}>
         {hasVideo ? <Video size={24} /> : <ImageIcon size={24} />}
       </div>
     )
   }
   
   return (
-    <div style={{
-      width: '100%',
-      height: '80px',
-      borderRadius: '0.25rem',
-      marginBottom: '0.5rem',
-      overflow: 'hidden',
-      position: 'relative',
-      backgroundColor: tokens.colors.background.secondary
-    }}>
+    <div className={styles.thumbnailContent}>
       {/* Always use img element for thumbnails, including YouTube */}
       <img 
         src={mediaUrl || undefined}
         alt=""
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover'
-        }}
+        className={styles.thumbnailImage}
         loading="lazy"
       />
       {/* Show video overlay indicator for video content */}
       {hasVideo && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          borderRadius: '50%',
-          width: '2rem',
-          height: '2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div className={styles.videoOverlaySmall}>
           <Video size={16} color="white" />
         </div>
       )}
@@ -226,18 +193,10 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
 }) => {
   if (!courseContent) {
     return (
-      <div data-testid="loading-skeleton" style={{ padding: '1rem' }}>
-        <div style={{ 
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: '1rem'
-        }}>
+      <div data-testid="loading-skeleton" className={styles.loadingContainer}>
+        <div className={styles.loadingGrid}>
           {[1, 2, 3, 4].map(i => (
-            <Card key={i} style={{ 
-              height: '200px',
-              backgroundColor: tokens.colors.background.secondary,
-              animation: 'pulse 1.5s infinite'
-            }}>
+            <Card key={i} className={styles.loadingSkeleton}>
               <div />
             </Card>
           ))}
@@ -277,12 +236,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
   return (
     <div 
       data-testid="page-thumbnail-grid"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: '1rem',
-        padding: '1rem'
-      }}
+      className={styles.thumbnailGrid}
     >
       {allPages.map((page, index) => {
         // Debug logging to verify page structure
@@ -302,7 +256,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
           <Card
             key={page.id}
             data-testid={`page-thumbnail-${page.id}`}
-            className={isCurrent ? 'selected' : ''}
+            className={isCurrent ? styles.thumbnailCardSelected : styles.thumbnailCard}
             onClick={(e) => {
               console.log('[PageThumbnailGrid] Card clicked:', page.id, page.title)
               console.log('[PageThumbnailGrid] Event target:', e.target)
@@ -310,38 +264,14 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
               // Don't stop propagation - let it bubble
               onPageSelect(page.id)
             }}
-            style={{
-              cursor: 'pointer',
-              border: isCurrent ? `2px solid ${tokens.colors.primary[500]}` : 'none',  // Only show border when selected
-              transition: 'all 0.2s',
-              position: 'relative',
-              overflow: 'hidden',
-              ...(isCurrent && {
-                boxShadow: `0 0 0 3px ${tokens.colors.primary[500]}33`
-              })
-            }}
           >
             {/* Page Type Icon */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginBottom: '0.5rem'
-            }}>
+            <div className={styles.pageHeader}>
               {isWelcome ? (
                 <div 
                   data-testid="page-icon-welcome"
                   data-icon="home"
-                  style={{
-                    width: '2rem',
-                    height: '2rem',
-                    borderRadius: '50%',
-                    backgroundColor: tokens.colors.primary[100],
-                    color: tokens.colors.primary[600],
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
+                  className={`${styles.pageIcon} ${styles.pageIconWelcome}`}
                 >
                   <Home size={16} />
                 </div>
@@ -349,43 +279,16 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
                 <div 
                   data-testid="page-icon-objectives"
                   data-icon="target"
-                  style={{
-                    width: '2rem',
-                    height: '2rem',
-                    borderRadius: '50%',
-                    backgroundColor: tokens.colors.success[100],
-                    color: tokens.colors.success[600],
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
+                  className={`${styles.pageIcon} ${styles.pageIconObjectives}`}
                 >
                   <Target size={16} />
                 </div>
               ) : (
-                <div style={{
-                  width: '2rem',
-                  height: '2rem',
-                  borderRadius: '50%',
-                  backgroundColor: tokens.colors.background.secondary,
-                  color: tokens.colors.text.primary,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold'
-                }}>
+                <div className={`${styles.pageIcon} ${styles.pageIconDefault}`}>
                   {index - 1}
                 </div>
               )}
-              <h4 style={{ 
-                margin: 0,
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                flex: 1
-              }}>
+              <h4 className={styles.pageTitle}>
                 {page.title}
               </h4>
             </div>
@@ -399,18 +302,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
             {!hasMedia(page) && (
               <div 
                 data-testid={`content-preview-${page.id}`}
-                style={{
-                  fontSize: '0.75rem',
-                  color: tokens.colors.text.secondary,
-                  lineHeight: 1.4,
-                  marginBottom: '0.5rem',
-                  minHeight: '4rem',  // Reduced minimum height for flexibility
-                  maxHeight: '12rem',  // Increased max height for more content
-                  overflowY: 'auto',
-                  paddingRight: '0.25rem',
-                  // Make it flexible - will grow with content but won't exceed max
-                  height: 'auto'
-                }}
+                className={styles.contentPreview}
               >
                 {getContentPreview(page.content)}
               </div>
@@ -420,42 +312,17 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
             {hasMedia(page) && (
               <div 
                 data-testid="media-indicator"
-                style={{
-                  position: 'absolute',
-                  top: '0.5rem',
-                  right: '0.5rem',
-                  backgroundColor: tokens.colors.success[500],
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '1.5rem',
-                  height: '1.5rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem'
-                  // Removed pointerEvents: 'none' to allow clicks to bubble
-                }}
+                className={styles.mediaIndicator}
                 title="Has media"
               >
-                <span style={{ display: 'none' }}>✓ Has media</span>
+                <span className={styles.srOnly}>✓ Has media</span>
                 ✓
               </div>
             )}
 
             {/* Media Count Badge */}
             {mediaCount > 1 && (
-              <div style={{
-                position: 'absolute',
-                bottom: '0.5rem',
-                right: '0.5rem',
-                backgroundColor: tokens.colors.background.secondary,
-                color: tokens.colors.text.primary,
-                borderRadius: '0.25rem',
-                padding: '0.125rem 0.5rem',
-                fontSize: '0.625rem',
-                fontWeight: 500
-                // Removed pointerEvents: 'none' to allow clicks to bubble
-              }}>
+              <div className={styles.mediaCount}>
                 {mediaCount} media items
               </div>
             )}

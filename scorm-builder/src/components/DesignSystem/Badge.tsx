@@ -42,12 +42,12 @@ export const Badge = React.memo(BadgeComponent)
 
 // Pre-configured badges for common use cases
 export const QuestionTypeBadge: React.FC<{ 
-  type: 'multiple-choice' | 'true-false' | 'fill-in-blank' 
+  type: 'multiple-choice' | 'true-false' | 'fill-in-the-blank' 
 }> = ({ type }) => {
   const labels = {
     'multiple-choice': 'Multiple Choice',
     'true-false': 'True/False',
-    'fill-in-blank': 'Fill in the Blank'
+    'fill-in-the-blank': 'Fill in the Blank'
   }
   
   return (

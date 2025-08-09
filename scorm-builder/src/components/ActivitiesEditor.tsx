@@ -60,8 +60,7 @@ interface EditingAssessment {
   question: AssessmentQuestion
 }
 
-// Import QuestionTypeBadge from design system
-import { QuestionTypeBadge } from './DesignSystem/Badge'
+// QuestionTypeBadge already imported from DesignSystem above
 
 // Modal component removed - using QuestionEditorModal instead
 
@@ -319,13 +318,13 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
           <Section>
             <Card title="Summary Statistics" padding="large">
               <Grid cols={3} gap="medium">
-                <Alert type="info">
+                <Alert variant="info">
                   <strong>Total Questions:</strong> {stats.total}
                 </Alert>
-                <Alert type="info">
+                <Alert variant="info">
                   <strong>Knowledge Check Questions:</strong> {stats.knowledgeCheck}
                 </Alert>
-                <Alert type="info">
+                <Alert variant="info">
                   <strong>Assessment Questions:</strong> {stats.assessment}
                 </Alert>
               </Grid>
@@ -550,7 +549,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     </Button>
                   </div>
                 ) : (
-                  <Alert type="info">
+                  <Alert variant="info">
                     Pass Mark: {content.assessment?.passMark || 80}%
                     <Button
                       onClick={() => {

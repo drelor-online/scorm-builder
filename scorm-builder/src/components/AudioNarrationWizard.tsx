@@ -2378,7 +2378,7 @@ export function AudioNarrationWizard({
       onSettingsClick={onSettingsClick}
     >
       <div className={styles.bulkUploadContainer}>
-        {/* Summary */>
+        {/* Summary */}
         <Card variant="default" padding="medium">
           <h3 className={styles.bulkUploadTitle}>Narration Blocks</h3>
           <Grid cols={2} gap="medium">
@@ -2402,7 +2402,7 @@ export function AudioNarrationWizard({
         <Card variant="default" padding="medium">
           <h3 className={styles.bulkUploadTitle}>Bulk Audio Upload</h3>
           
-          {/* Workflow Instructions */>
+          {/* Workflow Instructions */}
           <div className={styles.workflowSection}>
             <h4 className={styles.workflowTitle}>Workflow</h4>
             <Grid cols={2} gap="medium">
@@ -2719,7 +2719,6 @@ export function AudioNarrationWizard({
                   <TauriAudioPlayer
                     controls
                     src={recordingPreviewUrl}
-                    className={styles.recordingPreview}
                   />
                   <ButtonGroup gap="medium" align="center">
                     <Button
@@ -2772,7 +2771,6 @@ export function AudioNarrationWizard({
                       data-testid="caption-preview-audio"
                       controls
                       src={audioFiles.find(f => f.blockNumber === block.blockNumber)?.url}
-                      className={styles.recordingPreview}
                     />
                   )}
                   <div className={styles.captionPreviewContainer}>
