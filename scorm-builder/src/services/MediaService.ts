@@ -1000,6 +1000,122 @@ export class MediaService {
     }
   }
   
+  /**
+   * Load media from saved project data into cache
+   * This method populates the MediaService cache when a project is opened
+   */
+  async loadMediaFromProject(audioNarrationData: any, mediaEnhancementsData: any, mediaRegistryData?: any): Promise<void> {
+    debugLogger.info('MediaService.loadMediaFromProject', 'Loading media from project data', {
+      hasAudioNarration: !!audioNarrationData,
+      hasMediaEnhancements: !!mediaEnhancementsData,
+      hasMediaRegistry: !!mediaRegistryData
+    })
+    
+    try {
+      // Clear existing cache
+      this.mediaCache.clear()
+      
+      let mediaCount = 0
+      
+      // Load audio narration data
+      if (audioNarrationData && typeof audioNarrationData === 'object') {
+        for (const [pageId, audioData] of Object.entries(audioNarrationData)) {
+          if (audioData && typeof audioData === 'object') {
+            const audioItem = audioData as any
+            const mediaItem: MediaItem = {
+              id: audioItem.id,
+              type: 'audio',
+              pageId: audioItem.pageId || pageId,
+              fileName: audioItem.metadata?.fileName || audioItem.metadata?.originalName || `${audioItem.id}.mp3`,
+              metadata: {
+                ...audioItem.metadata,
+                type: 'audio',
+                pageId: audioItem.pageId || pageId,
+                uploadedAt: audioItem.metadata?.uploadedAt || new Date().toISOString()
+              }
+            }
+            this.mediaCache.set(audioItem.id, mediaItem)
+            mediaCount++
+            debugLogger.debug('MediaService.loadMediaFromProject', 'Loaded audio narration', {
+              id: audioItem.id,
+              pageId: pageId
+            })
+          }
+        }
+      }
+      
+      // Load media enhancements data
+      if (mediaEnhancementsData && typeof mediaEnhancementsData === 'object') {
+        for (const [pageId, mediaArray] of Object.entries(mediaEnhancementsData)) {
+          if (Array.isArray(mediaArray)) {
+            for (const mediaData of mediaArray) {
+              if (mediaData && typeof mediaData === 'object') {
+                const mediaItem: MediaItem = {
+                  id: mediaData.id,
+                  type: mediaData.type || 'image',
+                  pageId: mediaData.pageId || pageId,
+                  fileName: mediaData.metadata?.fileName || mediaData.metadata?.originalName || `${mediaData.id}.${this.getExtension(mediaData.type || 'image')}`,
+                  metadata: {
+                    ...mediaData.metadata,
+                    type: mediaData.type || 'image',
+                    pageId: mediaData.pageId || pageId,
+                    uploadedAt: mediaData.metadata?.uploadedAt || new Date().toISOString()
+                  }
+                }
+                this.mediaCache.set(mediaData.id, mediaItem)
+                mediaCount++
+                debugLogger.debug('MediaService.loadMediaFromProject', 'Loaded media enhancement', {
+                  id: mediaData.id,
+                  type: mediaData.type,
+                  pageId: pageId
+                })
+              }
+            }
+          }
+        }
+      }
+      
+      // Load media registry data if available (for backward compatibility)
+      if (mediaRegistryData && typeof mediaRegistryData === 'object') {
+        for (const [mediaId, registryData] of Object.entries(mediaRegistryData)) {
+          // Only add if not already in cache (avoid duplicates)
+          if (!this.mediaCache.has(mediaId) && registryData && typeof registryData === 'object') {
+            const regData = registryData as any
+            const mediaItem: MediaItem = {
+              id: mediaId,
+              type: regData.type || 'image',
+              pageId: regData.pageId || 'unknown',
+              fileName: regData.fileName || regData.originalName || `${mediaId}.${this.getExtension(regData.type || 'image')}`,
+              metadata: {
+                ...regData,
+                type: regData.type || 'image',
+                pageId: regData.pageId || 'unknown',
+                uploadedAt: regData.uploadedAt || new Date().toISOString()
+              }
+            }
+            this.mediaCache.set(mediaId, mediaItem)
+            mediaCount++
+            debugLogger.debug('MediaService.loadMediaFromProject', 'Loaded from media registry', {
+              id: mediaId,
+              type: regData.type
+            })
+          }
+        }
+      }
+      
+      debugLogger.info('MediaService.loadMediaFromProject', 'Media loaded into cache', {
+        totalItems: mediaCount,
+        cacheSize: this.mediaCache.size
+      })
+      
+      logger.info('[MediaService] Loaded media from project:', mediaCount, 'items into cache')
+    } catch (error) {
+      debugLogger.error('MediaService.loadMediaFromProject', 'Failed to load media from project', error)
+      logger.error('[MediaService] Failed to load media from project:', error)
+      throw error
+    }
+  }
+  
   private getExtension(type: MediaType): string {
     switch (type) {
       case 'image': return 'jpg'

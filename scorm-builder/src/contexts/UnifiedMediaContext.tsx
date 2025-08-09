@@ -123,6 +123,26 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     setError(null)
     
     try {
+      // First, try to load media from saved project data
+      logger.info('[UnifiedMediaContext] Attempting to load media from project data')
+      
+      // Get saved media data from storage
+      const audioNarrationData = await storage.getContent('audioNarration')
+      const mediaEnhancementsData = await storage.getContent('media-enhancements')
+      const mediaRegistryData = await storage.getContent('media')
+      
+      logger.info('[UnifiedMediaContext] Retrieved media data from storage:', {
+        hasAudioNarration: !!audioNarrationData,
+        hasMediaEnhancements: !!mediaEnhancementsData,
+        hasMediaRegistry: !!mediaRegistryData
+      })
+      
+      // Load media into MediaService cache
+      if (audioNarrationData || mediaEnhancementsData || mediaRegistryData) {
+        await mediaService.loadMediaFromProject(audioNarrationData, mediaEnhancementsData, mediaRegistryData)
+      }
+      
+      // Now get all media from the service (which should now include loaded items)
       const allMedia = await mediaService.listAllMedia()
       const newCache = new Map<string, MediaItem>()
       allMedia.forEach(item => {
@@ -136,7 +156,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     } finally {
       setIsLoading(false)
     }
-  }, [mediaService])
+  }, [mediaService, storage])
   
   const storeMedia = useCallback(async (
     file: File | Blob,

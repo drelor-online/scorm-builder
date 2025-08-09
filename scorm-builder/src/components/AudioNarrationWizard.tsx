@@ -1062,9 +1062,9 @@ export function AudioNarrationWizard({
 
   // Auto-save function to update course content with audio IDs
   // Using useRef to avoid recreating this function and causing infinite loops
-  const autoSaveToCourseContentRef = useRef<(() => void) | null>(null)
+  const autoSaveToCourseContentRef = useRef<(() => Promise<void>) | null>(null)
   
-  autoSaveToCourseContentRef.current = () => {
+  autoSaveToCourseContentRef.current = async () => {
     if (!onSave) return
     
     // Skip if already saving
@@ -1267,6 +1267,13 @@ export function AudioNarrationWizard({
     try {
       if (storage && storage.currentProjectId) {
         storage.saveContent('audioNarration', contentWithAudio)
+        
+        // Update metadata flag to indicate we have audio narration
+        const metadata = await storage.getCourseMetadata() || {}
+        await storage.saveCourseMetadata({
+          ...metadata,
+          hasAudioNarration: true
+        })
       }
       if (onSave) {
         // Pass the updated content to parent so it updates its state
