@@ -635,8 +635,11 @@ export function AudioNarrationWizard({
       
       logger.log('[AudioNarrationWizard] Found in course content:', audioIdsInContent.length, 'audio IDs,', captionIdsInContent.length, 'caption IDs')
       
+      // Check if we have any non-null audio IDs in content
+      const hasValidAudioIds = audioIdsInContent.some(id => id !== null)
+      
       // If we have audio IDs in content, try to load from MediaRegistry
-      if (audioIdsInContent.length > 0) {
+      if (hasValidAudioIds) {
         logger.log('[AudioNarrationWizard] Starting to load audio from course content...')
         const audioLoadStart = Date.now()
         
@@ -877,10 +880,14 @@ export function AudioNarrationWizard({
         }
         
         logger.log('[AudioNarrationWizard] Loaded from course content:', newAudioFiles.length, 'audio files,', newCaptionFiles.length, 'caption files')
-        return
+        
+        // Don't return early - continue to check getAllMedia as fallback
+        // This ensures we catch any media that wasn't in the course content arrays
+      } else {
+        logger.log('[AudioNarrationWizard] No valid audio IDs in course content, will check getAllMedia')
       }
       
-      // Get all media items
+      // Always check getAllMedia as a fallback to catch media not in course content
       const allMediaItems = getAllMedia()
       logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
       allMediaItems.forEach(item => {

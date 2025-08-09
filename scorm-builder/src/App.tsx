@@ -330,6 +330,112 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
             loadedCourseContent = directCourseContent as CourseContent
             
+            // Also load audioNarration and media-enhancements to populate media arrays
+            const audioNarrationData = await storage.getContent('audioNarration')
+            const mediaEnhancementsData = await storage.getContent('media-enhancements')
+            
+            debugLogger.info('App.loadProject', 'Loading media persistence data', {
+              hasAudioNarration: !!audioNarrationData,
+              hasMediaEnhancements: !!mediaEnhancementsData
+            })
+            
+            // Populate media arrays with saved media IDs if they exist
+            if (loadedCourseContent && (audioNarrationData || mediaEnhancementsData)) {
+              // Process welcome page
+              if (loadedCourseContent.welcomePage) {
+                if (!loadedCourseContent.welcomePage.media) {
+                  loadedCourseContent.welcomePage.media = []
+                }
+                // Add audio references
+                if (audioNarrationData?.welcome) {
+                  const audioItem = { 
+                    id: audioNarrationData.welcome.id || 'audio-0',
+                    type: 'audio' as const,
+                    pageId: 'welcome'
+                  }
+                  if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
+                    loadedCourseContent.welcomePage.media.push(audioItem)
+                  }
+                }
+                // Add media enhancement references
+                if (mediaEnhancementsData?.welcome) {
+                  const mediaItems = Array.isArray(mediaEnhancementsData.welcome) 
+                    ? mediaEnhancementsData.welcome 
+                    : [mediaEnhancementsData.welcome]
+                  mediaItems.forEach((item: any) => {
+                    if (!loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
+                      loadedCourseContent.welcomePage!.media!.push(item)
+                    }
+                  })
+                }
+              }
+              
+              // Process learning objectives page
+              if (loadedCourseContent.learningObjectivesPage) {
+                if (!loadedCourseContent.learningObjectivesPage.media) {
+                  loadedCourseContent.learningObjectivesPage.media = []
+                }
+                // Add audio references
+                if (audioNarrationData?.objectives) {
+                  const audioItem = {
+                    id: audioNarrationData.objectives.id || 'audio-1',
+                    type: 'audio' as const,
+                    pageId: 'objectives'
+                  }
+                  if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
+                    loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                  }
+                }
+                // Add media enhancement references
+                if (mediaEnhancementsData?.objectives) {
+                  const mediaItems = Array.isArray(mediaEnhancementsData.objectives)
+                    ? mediaEnhancementsData.objectives
+                    : [mediaEnhancementsData.objectives]
+                  mediaItems.forEach((item: any) => {
+                    if (!loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
+                      loadedCourseContent.learningObjectivesPage!.media!.push(item)
+                    }
+                  })
+                }
+              }
+              
+              // Process topics
+              if (loadedCourseContent.topics) {
+                loadedCourseContent.topics.forEach((topic, index) => {
+                  if (!topic.media) {
+                    topic.media = []
+                  }
+                  const topicKey = `topic-${index}`
+                  
+                  // Add audio references
+                  if (audioNarrationData?.[topicKey]) {
+                    const audioItem = {
+                      id: audioNarrationData[topicKey].id || `audio-${index + 2}`,
+                      type: 'audio' as const,
+                      pageId: topicKey
+                    }
+                    if (!topic.media.some(m => m.id === audioItem.id)) {
+                      topic.media.push(audioItem)
+                    }
+                  }
+                  
+                  // Add media enhancement references
+                  if (mediaEnhancementsData?.[topicKey]) {
+                    const mediaItems = Array.isArray(mediaEnhancementsData[topicKey])
+                      ? mediaEnhancementsData[topicKey]
+                      : [mediaEnhancementsData[topicKey]]
+                    mediaItems.forEach((item: any) => {
+                      if (!topic.media!.some(m => m.id === item.id)) {
+                        topic.media!.push(item)
+                      }
+                    })
+                  }
+                })
+              }
+              
+              debugLogger.info('App.loadProject', 'Populated media arrays from persistence data')
+            }
+            
             // Validate and fix fill-in-the-blank questions
             if (loadedCourseContent.topics) {
               loadedCourseContent.topics.forEach(topic => {
