@@ -4,6 +4,7 @@
 .dashboardContainer {
   min-height: 100vh;
   background-color: var(--bg-primary);
+  padding: var(--space-3xl);
   transition: all 0.2s;
 }
 
@@ -14,9 +15,11 @@
 
 /* Header Section */
 .dashboardHeader {
-  padding: var(--space-xl) var(--space-2xl);
+  padding: var(--space-2xl);
   background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  margin-bottom: var(--space-2xl);
 }
 
 .headerContent {
@@ -74,11 +77,11 @@
 
 /* Default Folder Section */
 .defaultFolderSection {
-  margin-top: var(--space-2xl);
-  margin-bottom: var(--space-2xl);
-  padding: var(--space-lg);
+  margin-bottom: var(--space-3xl);
+  padding: var(--space-xl);
   background-color: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -98,6 +101,10 @@
 .folderPath {
   color: var(--text-primary);
   font-style: normal;
+  max-width: 600px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .folderPathEmpty {
@@ -247,6 +254,20 @@
   margin-bottom: var(--space-2xl);
 }
 
+/* Center grid for few items */
+.projectGridCentered {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2xl);
+  max-width: 100%;
+}
+
+.projectGridCentered .projectCard {
+  flex: 0 1 380px;
+}
+
 /* Project Card */
 .projectCard {
   background-color: var(--bg-secondary);
@@ -340,6 +361,7 @@
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
+  margin-top: var(--space-3xl);
   margin-bottom: var(--space-xl);
   display: flex;
   align-items: center;

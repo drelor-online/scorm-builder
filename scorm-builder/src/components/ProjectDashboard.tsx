@@ -573,8 +573,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   
   if (loading) {
     return (
-      <div className="dashboard-container">
-        <div className="loading-state">
+      <div className={styles.dashboardContainer}>
+        <div className={styles.loadingState}>
           <LoadingSpinner />
           <p>Loading projects...</p>
         </div>
@@ -584,8 +584,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   
   if (importingProject) {
     return (
-      <div className="dashboard-container">
-        <div className="loading-state">
+      <div className={styles.dashboardContainer}>
+        <div className={styles.loadingState}>
           <LoadingSpinner />
           <p>Importing project...</p>
         </div>
@@ -601,9 +601,9 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="dashboard-header">
-        <h1>SCORM Builder Projects</h1>
-        <div className="header-actions">
+      <div className={styles.dashboardHeader}>
+        <h1 className={styles.headerTitle}>SCORM Builder Projects</h1>
+        <div className={styles.headerActions}>
           <Tooltip content="Open a .scormproj file from your computer" position="bottom">
             <Button 
               variant="secondary"
@@ -692,7 +692,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       <div className={styles.defaultFolderSection}>
         <div className={styles.folderInfo}>
           <span className={styles.folderLabel}>Default Folder:</span>
-          <span className={defaultFolder ? styles.folderPath : styles.folderPathEmpty}>
+          <span 
+            className={defaultFolder ? styles.folderPath : styles.folderPathEmpty}
+            title={defaultFolder || 'Not set'}
+          >
             {defaultFolder || 'Not set'}
           </span>
         </div>
@@ -848,11 +851,11 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
           </div>
         </div>
       ) : (
-        <div className="main-projects-section">
+        <div className={styles.mainContent}>
           {projects.length > 0 && (
             <>
               <h2 className={styles.sectionTitle}>All Projects</h2>
-              <div className={styles.projectGrid}>
+              <div className={projects.length <= 2 ? styles.projectGridCentered : styles.projectGrid}>
           {projects.map((project, index) => (
             <Card 
               key={project.id}
@@ -1004,184 +1007,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
           </div>
         </div>
       </Modal>
-      
-      <style>{`
-        .dashboard-container {
-          padding: 2rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-        
-        .loading-state {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 1rem;
-          padding: 4rem 2rem;
-        }
-        
-        .loading-state p {
-          margin: 0;
-          color: #a1a1aa;
-        }
-        
-        .dashboard-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-        }
-        
-        .dashboard-header h1 {
-          margin: 0;
-          font-size: 2rem;
-          color: #e4e4e7;
-        }
-        
-        .header-actions {
-          display: flex;
-          gap: 1rem;
-        }
-        
-        .empty-state {
-          text-align: center;
-          padding: 4rem 2rem;
-          max-width: 600px;
-          margin: 0 auto;
-        }
-        
-        .empty-state-icon {
-          margin-bottom: 2rem;
-          color: #a1a1aa;
-        }
-        
-        .empty-state-icon svg {
-          width: 120px;
-          height: 120px;
-        }
-        
-        .empty-state h2 {
-          font-size: 2rem;
-          margin-bottom: 1rem;
-          color: #e4e4e7;
-          font-weight: 600;
-        }
-        
-        .empty-state-description {
-          margin-bottom: 2rem;
-          color: #a1a1aa;
-          font-size: 1.125rem;
-          line-height: 1.75;
-        }
-        
-        .empty-state-get-started {
-          margin: 2rem 0 3rem 0;
-          color: #d4d4d8;
-          font-size: 1rem;
-        }
-        
-        .empty-state-features {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          text-align: left;
-          max-width: 400px;
-          margin-left: auto;
-          margin-right: auto;
-        }
-        
-        .feature {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          color: #d4d4d8;
-          font-size: 1rem;
-        }
-        
-        .feature-icon {
-          font-size: 1.5rem;
-          width: 2rem;
-          text-align: center;
-        }
-        
-        .empty-state-actions {
-          display: flex;
-          gap: 1rem;
-          justify-content: center;
-        }
-        
-        .projects-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-          gap: 1.5rem;
-        }
-        
-        .project-card {
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          position: relative;
-          padding: 1.5rem;
-        }
-        
-        .project-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        
-        .project-info h3 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1.25rem;
-          color: #e4e4e7;
-        }
-        
-        .project-date {
-          margin: 0;
-          font-size: 0.875rem;
-          color: #a1a1aa;
-        }
-        
-        .delete-button {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          background: none;
-          border: none;
-          font-size: 1.25rem;
-          cursor: pointer;
-          opacity: 0.6;
-          transition: opacity 0.2s;
-        }
-        
-        .delete-button:hover {
-          opacity: 1;
-        }
-        
-        .new-project-form input {
-          width: 100%;
-          padding: 0.75rem;
-          font-size: 1rem;
-          border: 1px solid #374151;
-          border-radius: 4px;
-          margin-bottom: 1.5rem;
-          background-color: #1f2937;
-          color: #e4e4e7;
-        }
-        
-        .new-project-form input::placeholder {
-          color: #6b7280;
-        }
-        
-        .modal-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 0.75rem;
-        }
-        
-        .delete-confirm p {
-          margin-bottom: 1.5rem;
-          color: #d4d4d8;
-        }
-      `}</style>
     </div>
   )
 }
