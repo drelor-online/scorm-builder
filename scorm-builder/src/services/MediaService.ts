@@ -1115,6 +1115,116 @@ export class MediaService {
       throw error
     }
   }
+
+  /**
+   * Load media from course content structure (welcome page, objectives, topics)
+   * This handles the actual course content format where media is in arrays
+   */
+  async loadMediaFromCourseContent(courseContent: any): Promise<void> {
+    debugLogger.info('MediaService.loadMediaFromCourseContent', 'Loading media from course content', {
+      hasWelcome: !!courseContent.welcomePage,
+      hasObjectives: !!courseContent.learningObjectivesPage,
+      topicsCount: courseContent.topics?.length || 0
+    })
+    
+    try {
+      let mediaCount = 0
+      
+      // Process welcome page media
+      if (courseContent.welcomePage?.media && Array.isArray(courseContent.welcomePage.media)) {
+        for (const mediaRef of courseContent.welcomePage.media) {
+          if (mediaRef && typeof mediaRef === 'object') {
+            const mediaItem: MediaItem = {
+              id: mediaRef.id,
+              type: mediaRef.type || 'image',
+              pageId: mediaRef.pageId || courseContent.welcomePage.id || 'welcome',
+              fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+              metadata: {
+                ...mediaRef.metadata,
+                type: mediaRef.type || 'image',
+                pageId: mediaRef.pageId || courseContent.welcomePage.id || 'welcome',
+                uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+              }
+            }
+            this.mediaCache.set(mediaRef.id, mediaItem)
+            mediaCount++
+            debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded welcome page media', {
+              id: mediaRef.id,
+              type: mediaRef.type
+            })
+          }
+        }
+      }
+      
+      // Process objectives page media
+      if (courseContent.learningObjectivesPage?.media && Array.isArray(courseContent.learningObjectivesPage.media)) {
+        for (const mediaRef of courseContent.learningObjectivesPage.media) {
+          if (mediaRef && typeof mediaRef === 'object') {
+            const mediaItem: MediaItem = {
+              id: mediaRef.id,
+              type: mediaRef.type || 'image',
+              pageId: mediaRef.pageId || courseContent.learningObjectivesPage.id || 'objectives',
+              fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+              metadata: {
+                ...mediaRef.metadata,
+                type: mediaRef.type || 'image',
+                pageId: mediaRef.pageId || courseContent.learningObjectivesPage.id || 'objectives',
+                uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+              }
+            }
+            this.mediaCache.set(mediaRef.id, mediaItem)
+            mediaCount++
+            debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded objectives page media', {
+              id: mediaRef.id,
+              type: mediaRef.type
+            })
+          }
+        }
+      }
+      
+      // Process topics media
+      if (courseContent.topics && Array.isArray(courseContent.topics)) {
+        for (const topic of courseContent.topics) {
+          if (topic?.media && Array.isArray(topic.media)) {
+            for (const mediaRef of topic.media) {
+              if (mediaRef && typeof mediaRef === 'object') {
+                const mediaItem: MediaItem = {
+                  id: mediaRef.id,
+                  type: mediaRef.type || 'image',
+                  pageId: mediaRef.pageId || topic.id,
+                  fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+                  metadata: {
+                    ...mediaRef.metadata,
+                    type: mediaRef.type || 'image',
+                    pageId: mediaRef.pageId || topic.id,
+                    uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+                  }
+                }
+                this.mediaCache.set(mediaRef.id, mediaItem)
+                mediaCount++
+                debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded topic media', {
+                  id: mediaRef.id,
+                  type: mediaRef.type,
+                  topicId: topic.id
+                })
+              }
+            }
+          }
+        }
+      }
+      
+      debugLogger.info('MediaService.loadMediaFromCourseContent', 'Course content media loaded', {
+        totalItems: mediaCount,
+        cacheSize: this.mediaCache.size
+      })
+      
+      logger.info('[MediaService] Loaded media from course content:', mediaCount, 'items into cache')
+    } catch (error) {
+      debugLogger.error('MediaService.loadMediaFromCourseContent', 'Failed to load media from course content', error)
+      logger.error('[MediaService] Failed to load media from course content:', error)
+      throw error
+    }
+  }
   
   private getExtension(type: MediaType): string {
     switch (type) {

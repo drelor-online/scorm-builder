@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { logger } from '../utils/logger'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 interface TauriAudioPlayerProps {
   src?: string
@@ -47,9 +48,24 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
       return
     }
 
-    // If it's an asset URL, use it directly (Tauri handles these natively)
-    if (src.startsWith('asset://') || src.includes('asset.localhost')) {
-      logger.info('[TauriAudioPlayer] Using asset URL directly', { src })
+    // If it's an asset URL, convert it for proper platform support
+    // IMPORTANT: Only convert raw asset:// URLs, not already-converted URLs containing asset.localhost
+    if (src.startsWith('asset://')) {
+      logger.info('[TauriAudioPlayer] Converting asset URL for platform', { src })
+      try {
+        const convertedUrl = convertFileSrc(src)
+        logger.info('[TauriAudioPlayer] Converted URL', { original: src, converted: convertedUrl })
+        setAudioUrl(convertedUrl)
+      } catch (error) {
+        logger.error('[TauriAudioPlayer] Failed to convert asset URL:', error)
+        onError?.(error as Error)
+      }
+      return
+    }
+    
+    // If it's already a converted asset.localhost URL, use it directly (no conversion needed)
+    if (src.includes('asset.localhost')) {
+      logger.info('[TauriAudioPlayer] Using already-converted asset.localhost URL directly', { src })
       setAudioUrl(src)
       return
     }

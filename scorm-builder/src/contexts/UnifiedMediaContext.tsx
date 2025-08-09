@@ -130,16 +130,23 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       const audioNarrationData = await storage.getContent('audioNarration')
       const mediaEnhancementsData = await storage.getContent('media-enhancements')
       const mediaRegistryData = await storage.getContent('media')
+      const courseContent = await storage.getContent('course-content')
       
       logger.info('[UnifiedMediaContext] Retrieved media data from storage:', {
         hasAudioNarration: !!audioNarrationData,
         hasMediaEnhancements: !!mediaEnhancementsData,
-        hasMediaRegistry: !!mediaRegistryData
+        hasMediaRegistry: !!mediaRegistryData,
+        hasCourseContent: !!courseContent
       })
       
       // Load media into MediaService cache
       if (audioNarrationData || mediaEnhancementsData || mediaRegistryData) {
         await mediaService.loadMediaFromProject(audioNarrationData, mediaEnhancementsData, mediaRegistryData)
+      }
+      
+      // Also load media from course content (where media is stored in page arrays)
+      if (courseContent) {
+        await mediaService.loadMediaFromCourseContent(courseContent)
       }
       
       // Now get all media from the service (which should now include loaded items)
