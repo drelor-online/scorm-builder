@@ -37,6 +37,23 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
   }) as T
 }
 
+// Page ID normalization helper
+function normalizePageId(pageId: string): string {
+  // Normalize welcome page variations
+  if (pageId === 'welcomePage' || pageId === 'welcome-page') {
+    return 'welcome'
+  }
+  // Normalize objectives page variations
+  if (pageId === 'learningObjectivesPage' || pageId === 'learning-objectives' || pageId === 'objectives-page' || pageId === 'learningObjectives') {
+    return 'objectives'
+  }
+  // Keep topic IDs as-is
+  if (pageId.includes('topic')) {
+    return pageId
+  }
+  return pageId
+}
+
 interface AudioNarrationWizardProps {
   courseContent: CourseContentUnion
   courseSeedData?: CourseSeedData
@@ -278,6 +295,11 @@ export function AudioNarrationWizard({
   
   // Track if we have any active operations to prevent auto-save and reloads
   const activeOperationsRef = useRef<Set<string>>(new Set())
+  
+  // Auto-save batching
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingSaveRef = useRef<boolean>(false)
+  const SAVE_BATCH_DELAY = 500 // Batch saves within 500ms window
   
   // Memoized component for narration block items to prevent re-renders
   const NarrationBlockItem = memo(({ 
@@ -674,9 +696,10 @@ export function AudioNarrationWizard({
               
               logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
               
-              // Only track blob URLs for cleanup (from recordings)
+              // Track blob URLs for cleanup (including those from MediaService)
               if (playableUrl && playableUrl.startsWith('blob:')) {
                 blobUrlsRef.current.push(playableUrl)
+                logger.log(`[AudioNarrationWizard] Tracking blob URL for cleanup: ${playableUrl}`)
               }
               
               const audioFile: AudioFile = {
@@ -705,10 +728,11 @@ export function AudioNarrationWizard({
               
               logger.log(`[AudioNarrationWizard] Got media URL for ${audioId}:`, playableUrl)
               
-              // Only track blob URLs for cleanup (from recordings)
+              // Track blob URLs for cleanup (including those from MediaService)
               if (playableUrl && playableUrl.startsWith('blob:')) {
                 // Track existing blob URLs for cleanup
                 blobUrlsRef.current.push(playableUrl)
+                logger.log(`[AudioNarrationWizard] Tracking blob URL for cleanup: ${playableUrl}`)
               }
               
               // Create a placeholder file for UI consistency (no actual data needed)
@@ -939,7 +963,8 @@ export function AudioNarrationWizard({
       const loadedAudioFiles: AudioFile[] = []
       for (const item of allAudioItems) {
         // Find the corresponding narration block
-        const block = narrationBlocks.find(b => b.pageId === item.pageId)
+        const normalizedPageId = normalizePageId(item.pageId)
+        const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
         if (block) {
           const mediaData = await getMedia(item.id)
           if (mediaData) {
@@ -985,7 +1010,8 @@ export function AudioNarrationWizard({
       const loadedCaptionFiles: CaptionFile[] = []
       for (const item of allCaptionItems) {
         // Find the corresponding narration block
-        const block = narrationBlocks.find(b => b.pageId === item.pageId)
+        const normalizedPageId = normalizePageId(item.pageId)
+        const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
         if (block) {
           const mediaData = await getMedia(item.id)
           if (mediaData) {
@@ -1176,7 +1202,7 @@ export function AudioNarrationWizard({
     
     const contentWithAudio = JSON.parse(JSON.stringify(courseContent))
     
-    // CRITICAL FIX: Sync edited narration text back to course content during autosave
+    // Sync edited narration text back to course content during autosave
     // Process welcome page
     if ('welcomePage' in contentWithAudio) {
       const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome')
@@ -1364,9 +1390,22 @@ export function AudioNarrationWizard({
   
   // Create stable callback that doesn't change
   const autoSaveToCourseContent = useCallback(() => {
-    if (autoSaveToCourseContentRef.current) {
-      autoSaveToCourseContentRef.current()
+    // Mark that we need to save
+    pendingSaveRef.current = true
+    
+    // Clear existing timer if any
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
     }
+    
+    // Set new timer to batch saves
+    saveTimerRef.current = setTimeout(() => {
+      if (pendingSaveRef.current && autoSaveToCourseContentRef.current) {
+        logger.log('[AudioNarrationWizard] Executing batched save')
+        autoSaveToCourseContentRef.current()
+        pendingSaveRef.current = false
+      }
+    }, SAVE_BATCH_DELAY)
   }, [])
 
   // Auto-save whenever audio, caption files, or narration text changes
@@ -1404,7 +1443,7 @@ export function AudioNarrationWizard({
     // Create enhanced content for navigation (media is already in media arrays)
     const contentWithAudio = JSON.parse(JSON.stringify(courseContent))
     
-    // CRITICAL FIX: Sync edited narration text back to course content
+    // Sync edited narration text back to course content
     // Update welcome page narration and caption
     if (contentWithAudio.welcomePage) {
       const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome' || b.pageId === contentWithAudio.welcomePage?.id)
