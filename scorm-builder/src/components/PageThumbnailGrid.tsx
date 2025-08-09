@@ -5,6 +5,7 @@ import { tokens } from './DesignSystem/designTokens'
 import { Home, Target, Image as ImageIcon, Video } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 import styles from './PageThumbnailGrid.module.css'
 // Removed blobUrlManager - now using asset URLs
 
@@ -74,39 +75,50 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
           // SVG data URLs work directly, no conversion needed
           console.log('[PageThumbnailGrid] Using SVG data URL directly')
           setMediaUrl(firstMediaRef.url)
-        } else if (firstMediaRef.url && (firstMediaRef.url.includes('asset://') || firstMediaRef.url.includes('asset.localhost'))) {
-          // Handle asset:// URLs - need to convert to blob URLs for browser compatibility
-          const mediaId = firstMediaRef.id
-          console.log('[PageThumbnailGrid] Converting asset URL to blob URL for media ID:', mediaId)
+        } else if (firstMediaRef.url) {
+          // Normalize the URL first to fix double-encoding issues
+          const normalizedUrl = normalizeAssetUrl(firstMediaRef.url)
+          console.log('[PageThumbnailGrid] URL normalized:', {
+            original: firstMediaRef.url,
+            normalized: normalizedUrl,
+            hasChanged: normalizedUrl !== firstMediaRef.url
+          })
           
-          // Store the media ID for cleanup
-          mediaIdRef.current = mediaId
-          
-          try {
-            const url = await createBlobUrl(mediaId)
-            console.log('[PageThumbnailGrid] Blob URL result for asset URL conversion:', {
-              mediaId,
-              originalUrl: firstMediaRef.url,
-              newUrl: url,
-              isValidBlobUrl: url ? url.startsWith('blob:') : false
-            })
+          // For asset:// URLs or blob URLs that need regeneration
+          if (normalizedUrl.includes('asset://') || normalizedUrl.includes('asset.localhost') || normalizedUrl.startsWith('blob:')) {
+            // Always regenerate blob URLs (don't reuse stale ones)
+            const mediaId = firstMediaRef.id
+            console.log('[PageThumbnailGrid] Creating fresh blob URL for media ID:', mediaId)
             
-            if (!url) {
-              console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for asset URL:', firstMediaRef.url)
-              // Fallback to original URL if conversion fails
-              setMediaUrl(firstMediaRef.url)
-            } else {
-              setMediaUrl(url)
+            // Store the media ID for cleanup
+            mediaIdRef.current = mediaId
+            
+            try {
+              const url = await createBlobUrl(mediaId)
+              console.log('[PageThumbnailGrid] Blob URL result:', {
+                mediaId,
+                originalUrl: firstMediaRef.url,
+                normalizedUrl,
+                newUrl: url,
+                isValidBlobUrl: url ? url.startsWith('blob:') : false
+              })
+              
+              if (!url) {
+                console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for:', mediaId)
+                // Fallback to normalized URL if conversion fails
+                setMediaUrl(normalizedUrl)
+              } else {
+                setMediaUrl(url)
+              }
+            } catch (error) {
+              console.error('[PageThumbnailGrid] Error creating blob URL:', error)
+              // Fallback to normalized URL
+              setMediaUrl(normalizedUrl)
             }
-          } catch (error) {
-            console.error('[PageThumbnailGrid] Error converting asset URL to blob:', error)
-            // Fallback to original URL
-            setMediaUrl(firstMediaRef.url)
+          } else {
+            // For regular URLs, use the normalized URL directly
+            setMediaUrl(normalizedUrl)
           }
-        } else if (firstMediaRef.url && firstMediaRef.url.startsWith('blob:')) {
-          // Already a blob URL, use directly
-          console.log('[PageThumbnailGrid] Using existing blob URL')
-          setMediaUrl(firstMediaRef.url)
         } else {
           // For other cases, try to create a blob URL from the media ID
           const mediaId = firstMediaRef.id
