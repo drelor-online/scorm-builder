@@ -652,7 +652,7 @@ export class MediaService {
         }
         
         // Create blob from Uint8Array data
-        const blob = new Blob([media.data], { type: mimeType })
+        const blob = new Blob([media.data.buffer as ArrayBuffer], { type: mimeType })
         const blobUrl = URL.createObjectURL(blob)
         
         debugLogger.debug('MediaService.createBlobUrl', 'Blob URL created', { mediaId, blobUrl })

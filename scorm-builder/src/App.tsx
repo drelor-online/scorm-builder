@@ -351,6 +351,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const audioItem = { 
                     id: audioNarrationData.welcome.id || 'audio-0',
                     type: 'audio' as const,
+                    url: '',
+                    title: 'Audio Narration',
                     pageId: 'welcome'
                   }
                   if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
@@ -363,7 +365,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     ? mediaEnhancementsData.welcome 
                     : [mediaEnhancementsData.welcome]
                   mediaItems.forEach((item: any) => {
-                    if (!loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
+                    if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
                       loadedCourseContent.welcomePage!.media!.push(item)
                     }
                   })
@@ -380,6 +382,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const audioItem = {
                     id: audioNarrationData.objectives.id || 'audio-1',
                     type: 'audio' as const,
+                    url: '',
+                    title: 'Audio Narration',
                     pageId: 'objectives'
                   }
                   if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
@@ -392,7 +396,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     ? mediaEnhancementsData.objectives
                     : [mediaEnhancementsData.objectives]
                   mediaItems.forEach((item: any) => {
-                    if (!loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
+                    if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
                       loadedCourseContent.learningObjectivesPage!.media!.push(item)
                     }
                   })
@@ -412,6 +416,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     const audioItem = {
                       id: audioNarrationData[topicKey].id || `audio-${index + 2}`,
                       type: 'audio' as const,
+                      url: '',
+                      title: 'Audio Narration',
                       pageId: topicKey
                     }
                     if (!topic.media.some(m => m.id === audioItem.id)) {

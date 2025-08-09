@@ -317,7 +317,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         }
         
         // Create blob from Uint8Array data
-        const blob = new Blob([media.data], { type: mimeType })
+        const blob = new Blob([media.data.buffer as ArrayBuffer], { type: mimeType })
         const blobUrl = URL.createObjectURL(blob)
         
         console.log('[UnifiedMediaContext v2.0.7] Created blob URL:', {

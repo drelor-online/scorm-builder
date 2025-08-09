@@ -528,7 +528,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     console.log('[MediaEnhancement] Loading media for page:', pageId)
     
     // Get media items for the current page
-    let pageMediaItems = []
+    let pageMediaItems: any[] = []
     try {
       const result = getMediaForPage(pageId)
       // Handle both promise and direct return

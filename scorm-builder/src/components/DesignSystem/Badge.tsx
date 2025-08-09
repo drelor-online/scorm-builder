@@ -5,7 +5,7 @@ import './badge.css'
 export interface BadgeProps {
   variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info'
   size?: 'small' | 'medium' | 'large'
-  type?: 'multiple-choice' | 'true-false' | 'fill-in-blank' | 'drag-and-drop' | 'scenario'
+  type?: 'multiple-choice' | 'true-false' | 'fill-in-the-blank' | 'drag-and-drop' | 'scenario'
   children: React.ReactNode
   className?: string
   icon?: React.ReactNode
