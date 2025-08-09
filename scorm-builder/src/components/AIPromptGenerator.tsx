@@ -290,7 +290,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         <div role="status" aria-live="polite" className={styles.srOnly}>
           Prompt copied to clipboard
         </div>
-      )
+      )}
 
       {/* Course Information */}
       <div className={styles.sectionWrapper}>

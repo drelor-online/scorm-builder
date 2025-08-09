@@ -25,7 +25,7 @@ import { DebugPanel } from '@/components/DebugPanel'
 
 // Lazy load step components
 const AIPromptGenerator = lazy(() => 
-  import('@/components/AIPromptGenerator').then(m => ({ default: m.AIPromptGenerator }))
+  import('@/components/AIPromptGenerator')
 )
 const JSONImportValidator = lazy(() => 
   import('@/components/JSONImportValidator').then(m => ({ default: m.JSONImportValidator }))
