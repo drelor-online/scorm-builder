@@ -887,15 +887,30 @@ export function AudioNarrationWizard({
         logger.log('[AudioNarrationWizard] No valid audio IDs in course content, will check getAllMedia')
       }
       
-      // Always check getAllMedia as a fallback to catch media not in course content
-      const allMediaItems = getAllMedia()
-      logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
-      allMediaItems.forEach(item => {
-        logger.log('[AudioNarrationWizard] Media item:', item.id, item.type, item.pageId)
-      })
+      // Always check getAllMedia as a fallback to catch media not in course content  
+      let allMediaItems: any[] = []
       
-      let allAudioItems = allMediaItems.filter(item => item.type === 'audio')
-      let allCaptionItems = allMediaItems.filter(item => item.type === 'caption')
+      try {
+        const mediaResult = getAllMedia ? getAllMedia() : []
+        
+        // Ensure allMediaItems is an array
+        if (Array.isArray(mediaResult)) {
+          allMediaItems = mediaResult
+          logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
+          allMediaItems.forEach(item => {
+            logger.log('[AudioNarrationWizard] Media item:', item.id, item.type, item.pageId)
+          })
+        } else {
+          logger.warn('[AudioNarrationWizard] getAllMedia did not return an array:', mediaResult)
+          logger.log('[AudioNarrationWizard] Using empty array for media items')
+        }
+      } catch (err) {
+        logger.error('[AudioNarrationWizard] Error calling getAllMedia:', err)
+        logger.log('[AudioNarrationWizard] Using empty array for media items')
+      }
+      
+      let allAudioItems = allMediaItems.filter(item => item && item.type === 'audio')
+      let allCaptionItems = allMediaItems.filter(item => item && item.type === 'caption')
       
       logger.log('[AudioNarrationWizard] Found media items:', allAudioItems.length, 'audio,', allCaptionItems.length, 'caption')
       
@@ -910,8 +925,9 @@ export function AudioNarrationWizard({
             // Use the asset URL from MediaService
             const url = mediaData.url || undefined
             
-            // Create a placeholder file for UI consistency
-            const file = new File([], item.fileName, { type: mediaData.metadata?.mimeType || 'audio/mpeg' })
+            // Create a placeholder file for UI consistency  
+            const fileName = item.metadata?.fileName || item.fileName || 'audio.mp3'
+            const file = new File([], fileName, { type: mediaData.metadata?.mimeType || 'audio/mpeg' })
             
             loadedAudioFiles.push({
               blockNumber: block.blockNumber,
@@ -921,9 +937,28 @@ export function AudioNarrationWizard({
             })
             logger.log(`[AudioNarrationWizard] Loaded audio from getAllMedia: ${item.id} for block ${block.blockNumber} with URL: ${url}`)
           }
+        } else {
+          logger.warn('[AudioNarrationWizard] No narration block found for media item:', item.id, 'with pageId:', item.pageId)
         }
       }
-      setAudioFiles(loadedAudioFiles)
+      
+      // Merge with existing audio files instead of replacing
+      if (loadedAudioFiles.length > 0) {
+        setAudioFiles(prev => {
+          const existingBlocks = new Set(prev.map(f => f.blockNumber))
+          const newFilesToAdd = loadedAudioFiles.filter(f => !existingBlocks.has(f.blockNumber))
+          if (newFilesToAdd.length > 0) {
+            logger.log('[AudioNarrationWizard] Adding audio files from getAllMedia:', newFilesToAdd.length)
+            return [...prev, ...newFilesToAdd]
+          }
+          // If we have no existing files, use the loaded ones
+          if (prev.length === 0) {
+            logger.log('[AudioNarrationWizard] Setting initial audio files from getAllMedia')
+            return loadedAudioFiles
+          }
+          return prev
+        })
+      }
       
       // Load caption files
       const loadedCaptionFiles: CaptionFile[] = []
@@ -955,7 +990,24 @@ export function AudioNarrationWizard({
           }
         }
       }
-      setCaptionFiles(loadedCaptionFiles)
+      
+      // Merge with existing caption files instead of replacing
+      if (loadedCaptionFiles.length > 0) {
+        setCaptionFiles(prev => {
+          const existingBlocks = new Set(prev.map(f => f.blockNumber))
+          const newFilesToAdd = loadedCaptionFiles.filter(f => !existingBlocks.has(f.blockNumber))
+          if (newFilesToAdd.length > 0) {
+            logger.log('[AudioNarrationWizard] Adding caption files from getAllMedia:', newFilesToAdd.length)
+            return [...prev, ...newFilesToAdd]
+          }
+          // If we have no existing files, use the loaded ones
+          if (prev.length === 0) {
+            logger.log('[AudioNarrationWizard] Setting initial caption files from getAllMedia')
+            return loadedCaptionFiles
+          }
+          return prev
+        })
+      }
       
       logger.log('[AudioNarrationWizard] Loaded from MediaRegistry:', loadedAudioFiles.length, 'audio files,', loadedCaptionFiles.length, 'caption files')
     } catch (error) {

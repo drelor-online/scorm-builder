@@ -539,8 +539,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
         let url = item.metadata.youtubeUrl || item.metadata.embedUrl
         
-        // For non-YouTube media, create blob URLs
-        if (!url && !item.metadata.youtubeUrl) {
+        // For all non-YouTube media (including images with asset:// URLs), create blob URLs
+        if (!item.metadata.youtubeUrl && !item.metadata.embedUrl) {
           const blobUrl = await createBlobUrl(item.id)
           url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
           
@@ -1227,12 +1227,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       return url
     }
     
-    // Handle asset:// and asset.localhost URLs - these should work directly in Tauri
+    // Handle asset:// and asset.localhost URLs - need blob URLs for display
     if (url.startsWith('asset://') || url.includes('asset.localhost')) {
-      logger.info('[MediaEnhancement v2.0.6] Using asset URL directly', { url, storageId })
-      console.log('[MediaEnhancement v2.0.6] getImageSource: Using asset URL:', url)
-      // Asset URLs should work directly in Tauri WebView
-      return url
+      logger.info('[MediaEnhancement v2.0.6] Asset URL detected, need blob URL', { url, storageId })
+      console.log('[MediaEnhancement v2.0.6] getImageSource: Asset URL needs blob conversion:', url)
+      
+      // If we have a storageId, check if we have a blob URL for it
+      if (storageId) {
+        const blobUrl = blobUrls.get(storageId)
+        if (blobUrl) {
+          console.log('[MediaEnhancement v2.0.6] Found blob URL for asset:', blobUrl)
+          return blobUrl
+        }
+      }
+      
+      // Return empty string - blob URL will be created asynchronously
+      return ''
     }
     
     // For media references, try to get the URL from cache
@@ -1431,9 +1441,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           </div>
                         )
                       })()
-                    ) : getImageSource(media.url || '', false, media.storageId) ? (
+                    ) : (media.storageId && blobUrls.get(media.storageId)) || getImageSource(media.url || '', false, media.storageId) ? (
                       <img 
-                        src={getImageSource(media.url || '', false, media.storageId)} 
+                        src={(media.storageId && blobUrls.get(media.storageId)) || getImageSource(media.url || '', false, media.storageId)} 
                         alt={media.title || 'Media'} 
                         className={styles.mediaThumbnail}
                         onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
