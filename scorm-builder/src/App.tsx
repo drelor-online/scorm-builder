@@ -944,6 +944,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
+        // Save welcome and objectives pages with media
+        if (courseData.welcomePage) {
+          await storage.saveContent('welcome', {
+            ...courseData.welcomePage,
+            media: courseData.welcomePage.media || []
+          })
+        }
+        
+        if (courseData.learningObjectivesPage) {
+          await storage.saveContent('objectives', {
+            ...courseData.learningObjectivesPage,
+            media: courseData.learningObjectivesPage.media || []
+          })
+        }
+        
         // Update each topic with media using numeric IDs
         for (let i = 0; i < courseData.topics.length; i++) {
           const topic = courseData.topics[i]
@@ -957,7 +972,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             videoSearchTerms: topic.videoSearchTerms || [],
             duration: topic.duration || 5,
             knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media
+            media: topic.media || []
           })
           
           // Store media files if they exist
@@ -1015,6 +1030,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
+        // Save welcome and objectives pages with audio/media
+        if (courseData.welcomePage) {
+          await storage.saveContent('welcome', {
+            ...courseData.welcomePage,
+            media: courseData.welcomePage.media || []
+          })
+        }
+        
+        if (courseData.learningObjectivesPage) {
+          await storage.saveContent('objectives', {
+            ...courseData.learningObjectivesPage,
+            media: courseData.learningObjectivesPage.media || []
+          })
+        }
+        
         // Update each topic with audio using numeric IDs
         for (let i = 0; i < courseData.topics.length; i++) {
           const topic = courseData.topics[i]
@@ -1028,7 +1058,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             videoSearchTerms: topic.videoSearchTerms || [],
             duration: topic.duration || 5,
             knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media
+            media: topic.media || []
           })
         }
       } catch (error) {

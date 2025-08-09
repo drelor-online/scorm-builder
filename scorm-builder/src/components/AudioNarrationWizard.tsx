@@ -17,6 +17,7 @@ import {
 } from './DesignSystem'
 import { FileAudio, FileText, Eye, Mic, Circle, Save } from 'lucide-react'
 import { TauriAudioPlayer } from './TauriAudioPlayer'
+import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import styles from './AudioNarrationWizard.module.css'
@@ -206,6 +207,7 @@ export function AudioNarrationWizard({
   
   // Loading state for persisted data
   const [isLoadingPersistedData, setIsLoadingPersistedData] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
@@ -637,6 +639,12 @@ export function AudioNarrationWizard({
       
       // Check if we have any non-null audio IDs in content
       const hasValidAudioIds = audioIdsInContent.some(id => id !== null)
+      const hasValidCaptionIds = captionIdsInContent.some(id => id !== null)
+      const totalToLoad = audioIdsInContent.filter(id => id !== null).length + 
+                          captionIdsInContent.filter(id => id !== null).length
+      
+      // Set loading progress
+      setLoadingProgress({ current: 0, total: totalToLoad })
       
       // If we have audio IDs in content, try to load from MediaRegistry
       if (hasValidAudioIds) {
@@ -663,7 +671,7 @@ export function AudioNarrationWizard({
             
             // If we have cached media data, use it
             if (cachedData?.mediaData || cachedData?.url) {
-              const playableUrl = cachedData.url
+              const playableUrl = normalizeAssetUrl(cachedData.url)
               
               logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
               
@@ -678,6 +686,10 @@ export function AudioNarrationWizard({
                 url: playableUrl || undefined,
                 mediaId: audioId
               }
+              
+              // Update progress
+              setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
+              
               return audioFile
             }
           }
@@ -689,8 +701,8 @@ export function AudioNarrationWizard({
             if (mediaData) {
               const fileName = mediaData.metadata?.original_name || mediaData.metadata?.originalName || `${block.blockNumber}-Block.mp3`
               
-              // Use the URL directly - asset:// URLs work natively in Tauri
-              const playableUrl = mediaData.url
+              // Normalize the URL to fix double-encoding issues
+              const playableUrl = normalizeAssetUrl(mediaData.url)
               
               logger.log(`[AudioNarrationWizard] Got media URL for ${audioId}:`, playableUrl)
               
@@ -922,8 +934,8 @@ export function AudioNarrationWizard({
         if (block) {
           const mediaData = await getMedia(item.id)
           if (mediaData) {
-            // Use the asset URL from MediaService
-            const url = mediaData.url || undefined
+            // Normalize the asset URL from MediaService
+            const url = mediaData.url ? normalizeAssetUrl(mediaData.url) : undefined
             
             // Create a placeholder file for UI consistency  
             const fileName = item.metadata?.fileName || item.fileName || 'audio.mp3'
@@ -1611,7 +1623,7 @@ export function AudioNarrationWizard({
       try {
         const mediaData = await getMedia(audioFile.mediaId)
         if (mediaData?.url) {
-          url = mediaData.url
+          url = normalizeAssetUrl(mediaData.url)
           logger.log('[AudioNarrationWizard] Got URL from media service:', url)
           // Update the audioFile with the new URL
           setAudioFiles(prev => prev.map(f => 
@@ -2085,7 +2097,7 @@ export function AudioNarrationWizard({
             try {
               const mediaData = await getMedia(storedItem.id)
               if (mediaData?.url) {
-                url = mediaData.url
+                url = normalizeAssetUrl(mediaData.url)
                 logger.log(`[AudioNarrationWizard] Got URL from getMedia for ${storedItem.id}:`, url)
               }
             } catch (e) {
@@ -2451,7 +2463,14 @@ export function AudioNarrationWizard({
               <div className={styles.spinner} data-testid="loading-spinner" />
               <div className={styles.loadingText}>
                 <h3>Loading audio files...</h3>
-                <p className={styles.loadingSubtext}>Please wait while we load your saved audio and caption files</p>
+                {loadingProgress.total > 0 && (
+                  <p className={styles.loadingSubtext}>
+                    Loading {loadingProgress.current} of {loadingProgress.total} files...
+                  </p>
+                )}
+                {loadingProgress.total === 0 && (
+                  <p className={styles.loadingSubtext}>Please wait while we load your saved audio and caption files</p>
+                )}
               </div>
             </div>
           </Card>

@@ -196,8 +196,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // Track blob URLs (using state to persist across re-renders)
   const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map())
   
-  // Cleanup blob URLs on unmount
+  // Clear any stale blob URLs on mount to force regeneration
   useEffect(() => {
+    // Clear on mount to ensure fresh blob URLs for new session
+    setBlobUrls(new Map())
+    
+    // Cleanup blob URLs on unmount
     return () => {
       blobUrls.forEach((url, key) => {
         revokeBlobUrl(url)
@@ -559,8 +563,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
         let url = item.metadata.youtubeUrl || item.metadata.embedUrl
         
-        // For all non-YouTube media (including images with asset:// URLs), create blob URLs
+        // For all non-YouTube media (including images with asset:// URLs), ALWAYS create fresh blob URLs
+        // Don't trust any stored blob: URLs as they're session-specific
         if (!item.metadata.youtubeUrl && !item.metadata.embedUrl) {
+          // Always regenerate blob URLs, ignoring any stored blob: URLs
           const blobUrl = await createBlobUrl(item.id)
           url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
           
