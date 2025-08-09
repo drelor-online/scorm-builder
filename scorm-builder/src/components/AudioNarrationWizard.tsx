@@ -17,7 +17,6 @@ import {
 } from './DesignSystem'
 import { FileAudio, FileText, Eye, Mic, Circle, Save } from 'lucide-react'
 import { TauriAudioPlayer } from './TauriAudioPlayer'
-import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import styles from './AudioNarrationWizard.module.css'
@@ -671,7 +670,7 @@ export function AudioNarrationWizard({
             
             // If we have cached media data, use it
             if (cachedData?.mediaData || cachedData?.url) {
-              const playableUrl = normalizeAssetUrl(cachedData.url)
+              const playableUrl = cachedData.url
               
               logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
               
@@ -702,7 +701,7 @@ export function AudioNarrationWizard({
               const fileName = mediaData.metadata?.original_name || mediaData.metadata?.originalName || `${block.blockNumber}-Block.mp3`
               
               // Normalize the URL to fix double-encoding issues
-              const playableUrl = normalizeAssetUrl(mediaData.url)
+              const playableUrl = mediaData.url
               
               logger.log(`[AudioNarrationWizard] Got media URL for ${audioId}:`, playableUrl)
               
@@ -945,7 +944,7 @@ export function AudioNarrationWizard({
           const mediaData = await getMedia(item.id)
           if (mediaData) {
             // Normalize the asset URL from MediaService
-            const url = mediaData.url ? normalizeAssetUrl(mediaData.url) : undefined
+            const url = mediaData.url || undefined
             
             // Create a placeholder file for UI consistency  
             const fileName = item.metadata?.fileName || item.fileName || 'audio.mp3'
@@ -1633,7 +1632,7 @@ export function AudioNarrationWizard({
       try {
         const mediaData = await getMedia(audioFile.mediaId)
         if (mediaData?.url) {
-          url = normalizeAssetUrl(mediaData.url)
+          url = mediaData.url
           logger.log('[AudioNarrationWizard] Got URL from media service:', url)
           // Update the audioFile with the new URL
           setAudioFiles(prev => prev.map(f => 
@@ -2107,7 +2106,7 @@ export function AudioNarrationWizard({
             try {
               const mediaData = await getMedia(storedItem.id)
               if (mediaData?.url) {
-                url = normalizeAssetUrl(mediaData.url)
+                url = mediaData.url
                 logger.log(`[AudioNarrationWizard] Got URL from getMedia for ${storedItem.id}:`, url)
               }
             } catch (e) {
