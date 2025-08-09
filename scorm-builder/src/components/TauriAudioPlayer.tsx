@@ -62,15 +62,22 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
       return
     }
 
-    // If it's an asset URL, convert it for proper platform support
+    // If it's an asset URL, use it directly - asset:// URLs work natively in Tauri
     if (normalizedSrc.startsWith('asset://')) {
-      logger.info('[TauriAudioPlayer] Converting normalized asset URL for platform', { normalizedSrc })
+      logger.info('[TauriAudioPlayer] Using asset URL directly (no conversion needed)', { normalizedSrc })
+      setAudioUrl(normalizedSrc)
+      return
+    }
+    
+    // Only convert file:// URLs if needed
+    if (normalizedSrc.startsWith('file://')) {
+      logger.info('[TauriAudioPlayer] Converting file URL for platform', { normalizedSrc })
       try {
         const convertedUrl = convertFileSrc(normalizedSrc)
-        logger.info('[TauriAudioPlayer] Converted URL', { original: normalizedSrc, converted: convertedUrl })
+        logger.info('[TauriAudioPlayer] Converted file URL', { original: normalizedSrc, converted: convertedUrl })
         setAudioUrl(convertedUrl)
       } catch (error) {
-        logger.error('[TauriAudioPlayer] Failed to convert asset URL:', error)
+        logger.error('[TauriAudioPlayer] Failed to convert file URL:', error)
         onError?.(error as Error)
       }
       return

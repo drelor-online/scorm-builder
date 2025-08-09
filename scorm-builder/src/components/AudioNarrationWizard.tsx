@@ -731,6 +731,10 @@ export function AudioNarrationWizard({
               })
               
               logger.log(`[AudioNarrationWizard] Loaded audio from MediaRegistry: ${audioId} for block ${block.blockNumber}`)
+              
+              // Update progress after successful load
+              setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
+              
               return audioFile
             }
           } catch (error) {
@@ -769,6 +773,8 @@ export function AudioNarrationWizard({
           // Check cache first
           if (mediaCache.current.has(cacheKey)) {
             logger.log(`[AudioNarrationWizard] Using cached caption for ${captionId}`)
+            // Update progress for cached caption
+            setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
             return mediaCache.current.get(cacheKey)
           }
           
@@ -817,6 +823,10 @@ export function AudioNarrationWizard({
                 // Cache the data
                 mediaCache.current.set(cacheKey, captionFile)
                 logger.log(`[AudioNarrationWizard] Loaded caption from MediaRegistry: ${captionId} for block ${block.blockNumber}`)
+                
+                // Update progress after successful caption load
+                setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
+                
                 return captionFile
               } else {
                 logger.warn(`[AudioNarrationWizard] No caption content found for ${captionId}`)
