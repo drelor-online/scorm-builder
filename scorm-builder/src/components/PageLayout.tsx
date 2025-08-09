@@ -18,27 +18,30 @@ const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onS
     <div className={stepperStyles.stepperContainer}>
       {steps.map((step, index) => (
         <div key={step} className={stepperStyles.stepWrapper}>
-          <Tooltip 
-            content={`${step}${visitedSteps.includes(index) ? ' - Click to navigate' : ' - Complete previous steps first'}`} 
-            position="bottom"
-            disabled={!visitedSteps.includes(index)}
-          >
-            <button
-              onClick={() => onStepClick?.(index)}
+          <div className={stepperStyles.stepItem}>
+            <Tooltip 
+              content={`${step}${visitedSteps.includes(index) ? ' - Click to navigate' : ' - Complete previous steps first'}`} 
+              position="bottom"
               disabled={!visitedSteps.includes(index)}
-              data-testid={`progress-step-${index}`}
-              data-visited={visitedSteps.includes(index) ? 'true' : 'false'}
-              className={`
-                ${stepperStyles.stepButton}
-                ${visitedSteps.includes(index) ? stepperStyles.visited : ''}
-                ${index < currentStep ? stepperStyles.completed : ''}
-                ${index === currentStep ? stepperStyles.current : ''}
-              `.trim()}
-              aria-label={`Step ${index + 1}: ${step}`}
             >
-              {index + 1}
-            </button>
-          </Tooltip>
+              <button
+                onClick={() => onStepClick?.(index)}
+                disabled={!visitedSteps.includes(index)}
+                data-testid={`progress-step-${index}`}
+                data-visited={visitedSteps.includes(index) ? 'true' : 'false'}
+                className={`
+                  ${stepperStyles.stepButton}
+                  ${visitedSteps.includes(index) ? stepperStyles.visited : ''}
+                  ${index < currentStep ? stepperStyles.completed : ''}
+                  ${index === currentStep ? stepperStyles.current : ''}
+                `.trim()}
+                aria-label={`Step ${index + 1}: ${step}`}
+              >
+                {index + 1}
+              </button>
+            </Tooltip>
+            <span className={stepperStyles.stepLabel}>{step}</span>
+          </div>
           {index < steps.length - 1 && (
             <div 
               className={`

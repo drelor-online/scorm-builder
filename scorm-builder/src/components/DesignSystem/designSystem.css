@@ -114,6 +114,9 @@
   --space-3xl: 3rem;
   --space-4xl: 4rem;
   
+  /* Consistent spacing for cards */
+  --card-spacing: var(--space-2xl);
+  
   /* Border radius */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
