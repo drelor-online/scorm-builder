@@ -1198,7 +1198,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         <video
           src={media.url}
           controls
-          style={{ width: '100%', maxHeight: '400px' }}
+          className={styles.mediaVideo}
           title={media.title}
         />
       )
@@ -1208,7 +1208,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         <img
           src={media.url}
           alt={media.title}
-          style={{ width: '100%', maxHeight: '400px', objectFit: 'contain' }}
+          className={styles.mediaImage}
         />
       )
     }
@@ -1389,13 +1389,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 {existingPageMedia.map((media) => (
                   <div 
                     key={media.id} 
-                    style={{ 
-                      position: 'relative',
-                      border: `1px solid ${tokens.colors.border.default}`,
-                      borderRadius: '0.5rem',
-                      overflow: 'hidden',
-                      cursor: 'pointer'
-                    }}
+                    className={styles.mediaItem}
                     onClick={() => handleMediaClick(media.id)}
                   >
                     {media.type === 'video' && media.isYouTube && media.url ? (
@@ -1406,15 +1400,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
                         
                         return thumbnailUrl ? (
-                          <div style={{ position: 'relative' }}>
+                          <div className={styles.mediaItemInner}>
                             <img
                               src={thumbnailUrl}
                               alt={media.title || 'Video thumbnail'}
-                              style={{
-                                width: '100%',
-                                height: '150px',
-                                objectFit: 'cover'
-                              }}
+                              className={styles.mediaThumbnail}
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement
                                 target.style.display = 'none'
@@ -1436,15 +1426,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                             </div>
                           </div>
                         ) : (
-                          <div style={{
-                            width: '100%',
-                            height: '150px',
-                            backgroundColor: tokens.colors.background.secondary,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: tokens.colors.text.secondary
-                          }}>
+                          <div className={styles.noPreview}>
                             <span>📹 Video</span>
                           </div>
                         )
@@ -1453,11 +1435,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       <img 
                         src={getImageSource(media.url || '', false, media.storageId)} 
                         alt={media.title || 'Media'} 
-                        style={{ 
-                          width: '100%', 
-                          height: '150px', 
-                          objectFit: 'cover' 
-                        }}
+                        className={styles.mediaThumbnail}
                         onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
                         onError={(e) => {
                           console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)
@@ -1492,12 +1470,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         e.stopPropagation()
                         handleRemoveMedia(media.id)
                       }}
-                      style={{
-                        position: 'absolute',
-                        top: '0.5rem',
-                        right: '0.5rem',
-                        padding: '0.25rem 0.5rem'
-                      }}
+                      className={styles.removeButton}
                     >
                       Remove
                     </Button>
@@ -1539,17 +1512,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               >
                 <div>
                   {/* Search History Dropdown */}
-                  <div data-testid="search-history-dropdown" style={{ marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: tokens.colors.text.secondary }}>Recent searches</span>
+                  <div data-testid="search-history-dropdown" className={styles.searchHistory}>
+                    <span className={styles.searchHistoryLabel}>Recent searches</span>
                   </div>
                   
                   {/* Image Prompt Suggestions */}
                   {imagePromptSuggestions.length > 0 && (
-                    <div style={{ marginBottom: '1rem' }}>
-                      <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.5rem' }}>
+                    <div className={styles.suggestionSection}>
+                      <p className={styles.suggestionLabel}>
                         Suggested searches:
                       </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div className={styles.suggestionList}>
                         {imagePromptSuggestions.map((suggestion, index) => (
                           <Button
                             key={index}
@@ -1569,24 +1542,20 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   )}
                   
                   {/* Image Search Input */}
-                  <Flex gap="medium" style={{ marginBottom: '1rem' }}>
+                  <Flex gap="medium" className={styles.mb-lg}>
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                       placeholder="Search for images..."
-                      style={{ flex: 1 }}
+                      className={styles.flex1}
                     />
                     <Button 
                       onClick={handleSearch} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search images"
                       size="large"
-                      style={{ 
-                        borderWidth: '1px',
-                        height: '40px',  // Force exact height to match input
-                        minHeight: 'unset'  // Override any min-height from CSS
-                      }}
+                      className={styles.searchButton}
                     >
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
@@ -2012,36 +1981,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                               }}
                             />
                             {imageErrors.has(result.id) && (
-                              <div style={{
-                                width: '100%',
-                                height: '150px',
-                                backgroundColor: tokens.colors.background.secondary,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: tokens.colors.text.secondary
-                              }}>
+                              <div className={styles.noPreview}>
                                 <span>Image unavailable</span>
                               </div>
                             )}
                           </div>
                         )}
-                        <div style={{ padding: '0.5rem' }}>
-                          <p style={{ 
-                            fontSize: '0.875rem',
-                            margin: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
+                        <div className={styles.searchResultInfo}>
+                          <p className={styles.searchResultTitle}>
                             {result.title}
                           </p>
                           {result.source && (
-                            <p style={{ 
-                              fontSize: '0.75rem',
-                              color: tokens.colors.text.secondary,
-                              margin: 0
-                            }}>
+                            <p className={styles.searchResultMeta}>
                               {result.source}
                             </p>
                           )}
@@ -2053,7 +2004,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 
                 {/* Pagination */}
                 {totalResultPages > 1 && (
-                  <div style={{ marginTop: '2rem' }}>
+                  <div className={styles.mt-lg}>
                     <Pagination
                       currentPage={resultPage}
                       hasNextPage={resultPage < totalResultPages}
