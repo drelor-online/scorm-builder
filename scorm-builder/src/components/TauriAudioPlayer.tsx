@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { logger } from '../utils/logger'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 
 interface TauriAudioPlayerProps {
   src?: string
@@ -41,20 +42,32 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
       return
     }
 
+    // CRITICAL: Normalize the URL first to fix double-encoding issues
+    const normalizedSrc = normalizeAssetUrl(src)
+    if (normalizedSrc !== src) {
+      logger.info('[TauriAudioPlayer] URL normalized', { original: src, normalized: normalizedSrc })
+    }
+
     // If it's a data URL (for SVG or inline data), use it directly
-    if (src.startsWith('data:')) {
+    if (normalizedSrc.startsWith('data:')) {
       // Silently use data URL
-      setAudioUrl(src)
+      setAudioUrl(normalizedSrc)
+      return
+    }
+
+    // If it's a blob URL, use it directly
+    if (normalizedSrc.startsWith('blob:')) {
+      // Silently use blob URL
+      setAudioUrl(normalizedSrc)
       return
     }
 
     // If it's an asset URL, convert it for proper platform support
-    // IMPORTANT: Only convert raw asset:// URLs, not already-converted URLs containing asset.localhost
-    if (src.startsWith('asset://')) {
-      logger.info('[TauriAudioPlayer] Converting asset URL for platform', { src })
+    if (normalizedSrc.startsWith('asset://')) {
+      logger.info('[TauriAudioPlayer] Converting normalized asset URL for platform', { normalizedSrc })
       try {
-        const convertedUrl = convertFileSrc(src)
-        logger.info('[TauriAudioPlayer] Converted URL', { original: src, converted: convertedUrl })
+        const convertedUrl = convertFileSrc(normalizedSrc)
+        logger.info('[TauriAudioPlayer] Converted URL', { original: normalizedSrc, converted: convertedUrl })
         setAudioUrl(convertedUrl)
       } catch (error) {
         logger.error('[TauriAudioPlayer] Failed to convert asset URL:', error)
@@ -63,41 +76,34 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
       return
     }
     
-    // If it's already a converted asset.localhost URL, use it directly (no conversion needed)
-    if (src.includes('asset.localhost')) {
-      logger.info('[TauriAudioPlayer] Using already-converted asset.localhost URL directly', { src })
-      setAudioUrl(src)
-      return
-    }
-    
-    // If it's a blob URL, use it directly (for temporary recordings)
-    if (src.startsWith('blob:')) {
-      // Silently use blob URL
-      setAudioUrl(src)
+    // If it's already a properly formatted http(s)://asset.localhost URL after normalization
+    if (normalizedSrc.includes('asset.localhost')) {
+      logger.info('[TauriAudioPlayer] Using asset.localhost URL directly', { normalizedSrc })
+      setAudioUrl(normalizedSrc)
       return
     }
 
     // If it contains media path patterns, get the proper asset URL
-    if (src.includes('\\media\\') || src.includes('/media/')) {
+    if (normalizedSrc.includes('\\media\\') || normalizedSrc.includes('/media/')) {
       setLoading(true)
       
       // Extract media ID from the URL
       let mediaId: string | null = null
       
       // Pattern 1: audio-XXXX or caption-XXXX
-      const standardMatch = src.match(/(audio-\d+|caption-\d+)/)
+      const standardMatch = normalizedSrc.match(/(audio-\d+|caption-\d+)/)
       if (standardMatch) {
         mediaId = standardMatch[1]
       } else {
         // Pattern 2: Try to extract from path like /media/audio-cleanup.bin
-        const pathMatch = src.match(/\/media\/([\w-]+)\./)
+        const pathMatch = normalizedSrc.match(/\/media\/([\w-]+)\./)
         if (pathMatch) {
           mediaId = pathMatch[1]
         }
       }
       
       if (!mediaId) {
-        logger.error('[TauriAudioPlayer] Could not extract media ID from URL:', src)
+        logger.error('[TauriAudioPlayer] Could not extract media ID from URL:', normalizedSrc)
         onError?.(new Error('Invalid media URL'))
         setLoading(false)
         return
@@ -123,8 +129,8 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
         }
       })
     } else {
-      // For regular URLs, use them directly
-      setAudioUrl(src)
+      // For regular URLs, use them directly (after normalization)
+      setAudioUrl(normalizedSrc)
     }
   }, [src, onError])
 
