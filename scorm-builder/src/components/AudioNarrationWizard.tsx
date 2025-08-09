@@ -19,6 +19,7 @@ import { FileAudio, FileText, Eye, Mic, Circle, Save } from 'lucide-react'
 import { TauriAudioPlayer } from './TauriAudioPlayer'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
+import styles from './AudioNarrationWizard.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import { useStepData } from '../hooks/useStepData'
@@ -318,38 +319,20 @@ export function AudioNarrationWizard({
     
     return (
     <Card>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-        <div style={{ 
-          backgroundColor: '#1f2937', 
-          color: '#9ca3af', 
-          padding: '0.5rem', 
-          borderRadius: '0.25rem',
-          minWidth: '40px',
-          textAlign: 'center',
-          fontSize: '0.875rem',
-          fontWeight: 500
-        }}>
+      <div className={styles.narrationBlockContainer}>
+        <div className={styles.blockNumber}>
           {block.blockNumber}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '0.25rem' }}>
+        <div className={styles.blockContent}>
+          <div className={styles.pageTitle}>
             {block.pageTitle}
           </div>
           {isEditing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className={styles.editContainer}>
               <textarea
                 ref={textareaRef}
                 defaultValue={block.text}
-                style={{
-                  width: '100%',
-                  minHeight: '120px',
-                  padding: '0.5rem',
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #374151',
-                  borderRadius: '0.25rem',
-                  color: '#e5e7eb',
-                  resize: 'vertical'
-                }}
+                className={styles.editTextarea}
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
@@ -357,7 +340,7 @@ export function AudioNarrationWizard({
                   }
                 }}
               />
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <div className={styles.editActions}>
                 <Button
                   size="small"
                   variant="secondary"
@@ -381,23 +364,13 @@ export function AudioNarrationWizard({
             </div>
           ) : (
             <div 
-              style={{ 
-                color: '#e5e7eb',
-                lineHeight: 1.6,
-                cursor: 'pointer',
-                padding: '0.5rem',
-                borderRadius: '0.25rem',
-                transition: 'background-color 0.2s',
-                backgroundColor: 'transparent'
-              }}
+              className={styles.narrationText}
               onClick={onEdit}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f2937'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               {block.text}
             </div>
           )}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+          <div className={styles.actionButtons}>
             {/* Audio playback and remove controls - only show when audio exists */}
             {hasAudio && (
               <>
@@ -405,7 +378,7 @@ export function AudioNarrationWizard({
                   size="small"
                   variant={isPlaying ? "primary" : "secondary"}
                   onClick={onPlayAudio}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  className={styles.buttonWithIcon}
                 >
                   {isPlaying ? '⏹️ Stop' : '▶️ Play'}
                 </Button>
@@ -413,7 +386,7 @@ export function AudioNarrationWizard({
                   size="small"
                   variant="secondary"
                   onClick={onRemoveAudio}
-                  style={{ color: '#ef4444' }}
+                  className={styles.dangerButton}
                 >
                   Remove Audio
                 </Button>
@@ -424,16 +397,16 @@ export function AudioNarrationWizard({
             <input
               type="file"
               accept="audio/*"
-              style={{ display: 'none' }}
+              className={styles.hiddenInput}
               id={`audio-upload-${block.blockNumber}`}
               onChange={onUploadAudio}
             />
-            <label htmlFor={`audio-upload-${block.blockNumber}`} style={{ cursor: 'pointer' }}>
-              <span style={{ display: 'inline-block' }}>
+            <label htmlFor={`audio-upload-${block.blockNumber}`} className={styles.uploadLabel}>
+              <span className={styles.uploadLabelSpan}>
                 <Button
                   size="small"
                   variant="secondary"
-                  style={{ pointerEvents: 'none' }}
+                  className={styles.uploadButtonDisabled}
                 >
                   📁 Upload Audio
                 </Button>
@@ -445,25 +418,25 @@ export function AudioNarrationWizard({
               size="small"
               variant={isRecording && recordingId === block.id ? "primary" : "secondary"}
               onClick={onToggleRecording}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              className={styles.buttonWithIcon}
             >
               {isRecording && recordingId === block.id ? '⏹️ Stop Recording' : '🎙️ Record Audio'}
             </Button>
             {/* Caption Upload - Always Available */}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <div className={styles.captionUploadContainer}>
               <input
                 type="file"
                 accept=".vtt,.srt,.txt"
                 id={`caption-upload-${block.id}`}
-                style={{ display: 'none' }}
+                className={styles.hiddenInput}
                 onChange={(e) => handleCaptionFileChange(e, block)}
               />
-              <label htmlFor={`caption-upload-${block.id}`} style={{ cursor: 'pointer' }}>
-                <span style={{ display: 'inline-block' }}>
+              <label htmlFor={`caption-upload-${block.id}`} className={styles.uploadLabel}>
+                <span className={styles.uploadLabelSpan}>
                   <Button
                     size="small"
                     variant="secondary"
-                    style={{ pointerEvents: 'none' }}
+                    className={styles.uploadButtonDisabled}
                   >
                     📝 Upload Caption
                   </Button>
@@ -471,14 +444,14 @@ export function AudioNarrationWizard({
               </label>
               {hasCaption && (
                 <>
-                  <span style={{ color: '#10b981', fontSize: '0.875rem' }}>
+                  <span className={styles.successCheck}>
                     ✓
                   </span>
                   <Button
                     size="small"
                     variant="tertiary"
                     onClick={onPreviewCaption}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    className={styles.buttonWithIcon}
                   >
                     👁️ Preview
                   </Button>
@@ -2404,10 +2377,10 @@ export function AudioNarrationWizard({
       onStepClick={onStepClick}
       onSettingsClick={onSettingsClick}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {/* Summary */}
+      <div className={styles.bulkUploadContainer}>
+        {/* Summary */>
         <Card variant="default" padding="medium">
-          <h3 style={{ marginBottom: '1rem' }}>Narration Blocks</h3>
+          <h3 className={styles.bulkUploadTitle}>Narration Blocks</h3>
           <Grid cols={2} gap="medium">
             <Alert variant={audioUploaded ? 'success' : 'info'}>
               <strong>Audio Files:</strong> {audioUploaded ? `${audioFiles.length} files uploaded` : 'Not uploaded'}
@@ -2427,25 +2400,25 @@ export function AudioNarrationWizard({
 
         {/* Bulk Upload Section */}
         <Card variant="default" padding="medium">
-          <h3 style={{ marginBottom: '1rem' }}>Bulk Audio Upload</h3>
+          <h3 className={styles.bulkUploadTitle}>Bulk Audio Upload</h3>
           
-          {/* Workflow Instructions */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: tokens.colors.text.primary }}>Workflow</h4>
+          {/* Workflow Instructions */>
+          <div className={styles.workflowSection}>
+            <h4 className={styles.workflowTitle}>Workflow</h4>
             <Grid cols={2} gap="medium">
-              <div>
-                <h5 style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: tokens.colors.text.secondary }}>
+              <div className={styles.workflowOption}>
+                <h5 className={styles.workflowOptionTitle}>
                   Option 1: Individual Recording
                 </h5>
-                <p style={{ fontSize: '0.875rem', color: tokens.colors.text.tertiary }}>
+                <p className={styles.workflowOptionDescription}>
                   Record or upload audio files for each narration block individually using the controls below.
                 </p>
               </div>
-              <div>
-                <h5 style={{ fontSize: '0.875rem', marginBottom: '0.5rem', color: tokens.colors.text.secondary }}>
+              <div className={styles.workflowOption}>
+                <h5 className={styles.workflowOptionTitle}>
                   Option 2: Bulk Upload via Murf.ai
                 </h5>
-                <p style={{ fontSize: '0.875rem', color: tokens.colors.text.tertiary }}>
+                <p className={styles.workflowOptionDescription}>
                   Download all narration text, generate audio using Murf.ai, then upload the ZIP files.
                 </p>
               </div>
@@ -2453,7 +2426,7 @@ export function AudioNarrationWizard({
           </div>
 
           {/* Download Button */}
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div className={styles.downloadSection}>
             <Button
               onClick={downloadNarrationFile}
               variant="primary"
@@ -2471,11 +2444,11 @@ export function AudioNarrationWizard({
           {/* Upload Grid */}
           <Grid cols={2} gap="large">
             {/* Audio Upload */}
-            <div style={{ textAlign: 'center' }}>
-              <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+            <div className={styles.uploadGridContainer}>
+              <h4 className={styles.uploadSectionTitle}>
                 Audio Files (.zip)
               </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <div className={styles.uploadButtonContainer}>
                 <Button
                   onClick={() => document.getElementById('audio-zip-input')?.click()}
                   variant="secondary"
@@ -2489,13 +2462,13 @@ export function AudioNarrationWizard({
                   type="file"
                   accept=".zip"
                   onChange={handleAudioZipUpload}
-                  style={{ display: 'none' }}
+                  className={styles.hiddenInput}
                   aria-label="Upload audio zip"
                   data-testid="audio-zip-input"
                 />
                 {uploadProgress && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <p style={{ fontSize: '0.875rem', color: tokens.colors.text.secondary, marginBottom: '0.25rem' }}>
+                  <div className={styles.uploadProgressContainer}>
+                    <p className={styles.uploadProgressText}>
                       Uploading {uploadProgress.fileName}
                     </p>
                     <ProgressBar 
@@ -2514,11 +2487,11 @@ export function AudioNarrationWizard({
             </div>
 
             {/* Caption Upload */}
-            <div style={{ textAlign: 'center' }}>
-              <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+            <div className={styles.uploadGridContainer}>
+              <h4 className={styles.uploadSectionTitle}>
                 Caption Files (.zip)
               </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <div className={styles.uploadButtonContainer}>
                 <Button
                   onClick={() => document.getElementById('captions-zip-input')?.click()}
                   variant="secondary"
@@ -2531,7 +2504,7 @@ export function AudioNarrationWizard({
                   type="file"
                   accept=".zip"
                   onChange={handleCaptionZipUpload}
-                  style={{ display: 'none' }}
+                  className={styles.hiddenInput}
                   aria-label="Upload captions zip"
                   data-testid="captions-zip-input"
                 />
@@ -2545,33 +2518,33 @@ export function AudioNarrationWizard({
           </Grid>
 
           {/* Detailed Instructions */}
-          <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: `1px solid ${tokens.colors.border.light}` }}>
-            <h4 style={{ fontSize: '1rem', fontWeight: 500, color: tokens.colors.text.primary, margin: '0 0 1rem 0' }}>
+          <div className={styles.instructionsSection}>
+            <h4 className={styles.instructionsTitle}>
               How to use Murf.ai for professional voiceovers:
             </h4>
             
             <Grid cols={2} gap="large">
               {/* Steps */}
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+              <div className={styles.instructionColumn}>
+                <h5 className={styles.instructionSubtitle}>
                   Step-by-step guide:
                 </h5>
-                <ol style={{ fontSize: '0.875rem', color: tokens.colors.text.tertiary, paddingLeft: '1.5rem', margin: '0 0 1rem 0' }}>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                <ol className={styles.instructionList}>
+                  <li className={styles.instructionListItem}>
                     Download narration text using the button above
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     Go to murf.ai and create a new project
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     Upload the narration script, select "Split by paragraphs"
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     Select an appropriate voice and preview
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     <strong>For Audio:</strong>
-                    <ul style={{ listStyle: 'none', paddingLeft: '1rem', marginTop: '0.25rem' }}>
+                    <ul className={styles.instructionSubList}>
                       <li>Select Export → Voice only</li>
                       <li>Download as: Split by blocks</li>
                       <li>Format: .MP3</li>
@@ -2579,63 +2552,54 @@ export function AudioNarrationWizard({
                       <li>Channel: Stereo</li>
                     </ul>
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     <strong>For Captions:</strong>
-                    <ul style={{ listStyle: 'none', paddingLeft: '1rem', marginTop: '0.25rem' }}>
+                    <ul className={styles.instructionSubList}>
                       <li>Select Export → Script</li>
                       <li>Download as: Split by blocks</li>
                       <li>Format: .VTT</li>
                     </ul>
                   </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
+                  <li className={styles.instructionListItem}>
                     Upload the ZIP files here
                   </li>
                 </ol>
 
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+                <h5 className={styles.instructionSubtitle}>
                   File naming convention:
                 </h5>
-                <div style={{ 
-                  backgroundColor: tokens.colors.background.secondary, 
-                  border: `1px solid ${tokens.colors.border.default}`, 
-                  borderRadius: tokens.borderRadius.sm, 
-                  padding: '0.75rem',
-                  fontSize: '0.75rem',
-                  fontFamily: 'monospace',
-                  color: tokens.colors.text.tertiary,
-                  marginBottom: '1rem'
-                }}>
-                  <div>0001-Block.mp3</div>
-                  <div>0002-Block.mp3</div>
-                  <div>0003-Block.mp3</div>
-                  <div>...</div>
+                <div className={styles.fileNamingBox}>
+                  0001-Block.mp3
+                  0002-Block.mp3
+                  0003-Block.mp3
+                  ...
                 </div>
-                <p style={{ fontSize: '0.75rem', color: tokens.colors.text.quaternary, fontStyle: 'italic' }}>
+                <p className={styles.fileNamingNote}>
                   Name your audio files exactly as shown above to match block numbers
                 </p>
               </div>
 
               {/* Features and Tips */}
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+              <div className={styles.instructionColumn}>
+                <h5 className={styles.instructionSubtitle}>
                   Murf.ai features:
                 </h5>
-                <ul style={{ fontSize: '0.875rem', color: tokens.colors.text.tertiary, paddingLeft: '1.5rem', margin: '0 0 1rem 0' }}>
-                  <li style={{ marginBottom: '0.5rem' }}>120+ AI voices in different accents</li>
-                  <li style={{ marginBottom: '0.5rem' }}>20+ languages supported</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Adjustable speed and pitch</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Add pauses and emphasis</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Background music options</li>
+                <ul className={styles.featureList}>
+                  <li className={styles.featureListItem}>120+ AI voices in different accents</li>
+                  <li className={styles.featureListItem}>20+ languages supported</li>
+                  <li className={styles.featureListItem}>Adjustable speed and pitch</li>
+                  <li className={styles.featureListItem}>Add pauses and emphasis</li>
+                  <li className={styles.featureListItem}>Background music options</li>
                 </ul>
 
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.colors.text.secondary, marginBottom: '0.75rem' }}>
+                <h5 className={styles.instructionSubtitle}>
                   Tips for best results:
                 </h5>
-                <ul style={{ fontSize: '0.875rem', color: tokens.colors.text.tertiary, paddingLeft: '1.5rem', margin: 0 }}>
-                  <li style={{ marginBottom: '0.5rem' }}>Preview different voices before committing</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Add pauses between sentences for natural flow</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Use the same voice for consistent narration throughout</li>
-                  <li style={{ marginBottom: '0.5rem' }}>Export at high quality (minimum 128kbps)</li>
+                <ul className={styles.tipsList}>
+                  <li className={styles.tipsListItem}>Preview different voices before committing</li>
+                  <li className={styles.tipsListItem}>Add pauses between sentences for natural flow</li>
+                  <li className={styles.tipsListItem}>Use the same voice for consistent narration throughout</li>
+                  <li className={styles.tipsListItem}>Export at high quality (minimum 128kbps)</li>
                 </ul>
               </div>
             </Grid>
@@ -2643,7 +2607,7 @@ export function AudioNarrationWizard({
         </Card>
 
         {/* Individual narration blocks */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className={styles.narrationBlocksList}>
           {narrationBlocks.map((block) => {
             const hasAudio = audioFiles.some(f => f.blockNumber === block.blockNumber)
             const hasCaption = captionFiles.some(f => f.blockNumber === block.blockNumber)
@@ -2701,31 +2665,11 @@ export function AudioNarrationWizard({
                 const currentBlock = narrationBlocks.find(b => b.id === recordingBlockId)
                 if (currentBlock?.text) {
                   return (
-                    <div style={{
-                      backgroundColor: tokens.colors.background.tertiary,
-                      border: `1px solid ${tokens.colors.border.default}`,
-                      borderRadius: tokens.borderRadius.md,
-                      padding: '1.5rem',
-                      marginBottom: '1.5rem',
-                      maxHeight: '200px',
-                      overflowY: 'auto'
-                    }}>
-                      <h4 style={{
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        color: tokens.colors.text.secondary,
-                        marginBottom: '0.75rem',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
+                    <div className={styles.recordingTextContainer}>
+                      <h4 className={styles.recordingTextTitle}>
                         Narration Text
                       </h4>
-                      <p style={{
-                        fontSize: '1.125rem',
-                        lineHeight: 1.6,
-                        color: tokens.colors.text.primary,
-                        margin: 0
-                      }}>
+                      <p className={styles.recordingTextContent}>
                         {currentBlock.text}
                       </p>
                     </div>
@@ -2734,10 +2678,10 @@ export function AudioNarrationWizard({
                 return null
               })()}
               
-              <div style={{ textAlign: 'center' }}>
+              <div className={styles.recordingModalContent}>
                 {!isRecording && !recordingPreviewUrl && (
                   <div>
-                    <p style={{ marginBottom: '1.5rem' }}>
+                    <p className={styles.recordingPrompt}>
                       Click the button below to start recording
                     </p>
                     <Button
@@ -2753,10 +2697,10 @@ export function AudioNarrationWizard({
               
               {isRecording && (
                 <div>
-                  <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem', color: '#ef4444' }}>
+                  <div className={styles.recordingTimer}>
                     <Icon icon={Circle} size="sm" color="#ef4444" /> {formatTime(recordingTime)}
                   </div>
-                  <p style={{ marginBottom: '1.5rem', color: '#a1a1aa' }}>
+                  <p className={styles.recordingStatus}>
                     Recording in progress...
                   </p>
                   <Button
@@ -2775,7 +2719,7 @@ export function AudioNarrationWizard({
                   <TauriAudioPlayer
                     controls
                     src={recordingPreviewUrl}
-                    style={{ width: '100%', marginBottom: '1.5rem' }}
+                    className={styles.recordingPreview}
                   />
                   <ButtonGroup gap="medium" align="center">
                     <Button
@@ -2828,19 +2772,11 @@ export function AudioNarrationWizard({
                       data-testid="caption-preview-audio"
                       controls
                       src={audioFiles.find(f => f.blockNumber === block.blockNumber)?.url}
-                      style={{ width: '100%', marginBottom: '1.5rem' }}
+                      className={styles.recordingPreview}
                     />
                   )}
-                  <div
-                    style={{
-                      backgroundColor: tokens.colors.background.secondary,
-                      padding: '1rem',
-                      borderRadius: '0.5rem',
-                      maxHeight: '400px',
-                      overflowY: 'auto'
-                    }}
-                  >
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                  <div className={styles.captionPreviewContainer}>
+                    <pre className={styles.captionPreviewText}>
                       {block && captionFiles.find(f => f.blockNumber === block.blockNumber)?.content}
                     </pre>
                   </div>
@@ -2871,7 +2807,7 @@ export function AudioNarrationWizard({
         
         {/* Hidden TauriAudioPlayer for asset:// URL playback */}
         {playingAudioUrl && (
-          <div style={{ display: 'none' }}>
+          <div className={styles.hiddenAudioPlayer}>
             <TauriAudioPlayer
               src={playingAudioUrl}
               controls={false}

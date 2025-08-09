@@ -576,12 +576,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                   >
                     <Flex justify="space-between" align="start" className={styles.assessmentQuestionHeader}>
                       <div className={styles.questionContent}>
-                        <p style={{
-                          color: COLORS.text,
-                          fontWeight: 500,
-                          margin: '0 0 0.5rem 0',
-                          fontSize: '1rem'
-                        }}
+                        <p className={styles.assessmentQuestionText}
                           dangerouslySetInnerHTML={{
                             __html: DOMPurify.sanitize(question.question, {
                               ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'p', 'span'],
@@ -592,7 +587,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         />
                         <QuestionTypeBadge type={question.type} />
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <div className={styles.questionActions}>
                         <Button
                           onClick={() => setEditingAssessment({ 
                             questionId: question.id, 
@@ -625,11 +620,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     
                     {/* Show question details */}
                     {question.type === 'multiple-choice' && question.options && (
-                      <ul style={{
-                        margin: '0.5rem 0 0 0',
-                        paddingLeft: '1.5rem',
-                        color: '#a1a1aa'
-                      }}>
+                      <ul className={styles.optionsList}>
                         {question.options.map((opt, idx) => (
                           <li key={idx} className={styles.optionItem}>
                             <span dangerouslySetInnerHTML={{
@@ -647,7 +638,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       </ul>
                     )}
                     {question.type === 'true-false' && (
-                      <p style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}>
+                      <p className={styles.answerDisplay}>
                         Correct Answer: <span className={styles.correctAnswerText}>{question.correctAnswer}</span>
                       </p>
                     )}
@@ -846,7 +837,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                           onChange={(e) => setEditText(prev => ({ ...prev, title: e.target.value }))}
                           placeholder="Activity title"
                           fullWidth
-                          style={{ marginBottom: '0.75rem' }}
+                          className={styles.editInput}
                         />
                         <Input
                           multiline
@@ -855,7 +846,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                           onChange={(e) => setEditText(prev => ({ ...prev, instructions: e.target.value }))}
                           placeholder="Activity instructions"
                           fullWidth
-                          style={{ marginBottom: '0.75rem', minHeight: '200px' }}
+                          className={styles.editTextarea}
                         />
                         <ButtonGroup gap="small">
                           <Button
@@ -911,19 +902,11 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     key={question.id}
                     className="enhanced-padding"
                   >
-                    <p style={{
-                      color: COLORS.text,
-                      fontWeight: 500,
-                      margin: '0 0 0.75rem 0'
-                    }}>
+                    <p className={styles.questionText}>
                       {question.question}
                     </p>
                     {question.options && (
-                      <ul style={{
-                        margin: '0 0 0.75rem 0',
-                        paddingLeft: '1.5rem',
-                        color: '#a1a1aa'
-                      }}>
+                      <ul className={styles.optionsList}>
                         {question.options.map((opt, idx) => (
                           <li key={idx} className={styles.optionItem}>
                             {opt} {opt === question.correctAnswer && (
