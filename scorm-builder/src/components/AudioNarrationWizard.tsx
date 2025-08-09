@@ -2443,6 +2443,21 @@ export function AudioNarrationWizard({
       onStepClick={onStepClick}
       onSettingsClick={onSettingsClick}
     >
+      {/* Loading indicator */}
+      {isLoadingPersistedData && (
+        <div className={styles.loadingOverlay} data-testid="audio-loading-overlay">
+          <Card variant="default" className={styles.loadingCard}>
+            <div className={styles.loadingContent}>
+              <div className={styles.spinner} data-testid="loading-spinner" />
+              <div className={styles.loadingText}>
+                <h3>Loading audio files...</h3>
+                <p className={styles.loadingSubtext}>Please wait while we load your saved audio and caption files</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+      
       <div className={styles.bulkUploadContainer}>
         {/* Summary */}
         <Card variant="default" padding="medium">

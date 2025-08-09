@@ -1216,3 +1216,50 @@
     padding: var(--space-xl);
   }
 }
+
+/* Loading State Styles */
+.loadingCard {
+  margin-bottom: var(--space-xl);
+  background: var(--bg-secondary);
+}
+
+.loadingContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loadingText {
+  flex: 1;
+}
+
+.loadingText p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+}
+
+.progressText {
+  margin-top: var(--space-xs) !important;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}

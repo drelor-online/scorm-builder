@@ -146,6 +146,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const fileInputIdRef = useRef<string>('media-upload')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isFileProcessing, setIsFileProcessing] = useState(false)
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
   
   // FIX: Track current page index with ref to prevent stale closures in async operations
   const currentPageIndexRef = useRef(currentPageIndex)
@@ -503,6 +505,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Directly determine page based on index to avoid dependency on getCurrentPage
     if (!courseContent) return
     
+    setIsLoadingMedia(true)
+    setLoadingProgress({ current: 0, total: 0 })
+    
     const content = courseContent as CourseContent
     let currentPage: Page | Topic | undefined
     
@@ -523,7 +528,20 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     console.log('[MediaEnhancement] Loading media for page:', pageId)
     
     // Get media items for the current page
-    const pageMediaItems = getMediaForPage(pageId)
+    let pageMediaItems = []
+    try {
+      const result = getMediaForPage(pageId)
+      // Handle both promise and direct return
+      pageMediaItems = Array.isArray(result) ? result : await result
+      // Ensure it's always an array
+      if (!Array.isArray(pageMediaItems)) {
+        console.warn('[MediaEnhancement] getMediaForPage did not return an array:', pageMediaItems)
+        pageMediaItems = []
+      }
+    } catch (error) {
+      console.error('[MediaEnhancement] Error loading media for page:', error)
+      pageMediaItems = []
+    }
     
     // Only get image and video items (not audio/captions)
     const imageAndVideoItems = pageMediaItems.filter(item => 
@@ -534,8 +552,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     if (imageAndVideoItems.length > 0) {
       console.log('[MediaEnhancement] Loading', imageAndVideoItems.length, 'media items')
+      setLoadingProgress({ current: 0, total: imageAndVideoItems.length })
       
       // Create media items from MediaService items with real blob URLs
+      let loadedCount = 0
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
         let url = item.metadata.youtubeUrl || item.metadata.embedUrl
         
@@ -554,7 +574,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           }
         }
         
-        return {
+        const mediaItem = {
           id: item.id,
           type: item.type as 'image' | 'video',
           title: item.metadata.title || item.fileName,
@@ -565,6 +585,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           storageId: item.id,
           mimeType: item.metadata.mimeType || 'video/mp4'
         }
+        
+        // Update progress
+        loadedCount++
+        setLoadingProgress({ current: loadedCount, total: imageAndVideoItems.length })
+        
+        return mediaItem
       })
       
       const mediaItems = await Promise.all(mediaItemsPromises)
@@ -574,6 +600,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       console.log('[MediaEnhancement] No media found for page')
       setExistingPageMedia([])
     }
+    
+    setIsLoadingMedia(false)
+    setLoadingProgress({ current: 0, total: 0 })
   }, [currentPageIndex, courseContent, getMediaForPage, createBlobUrl])
   
   // Load existing media on mount and page change
@@ -1391,8 +1420,25 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               />
             </Card>
             
+            {/* Loading indicator */}
+            {isLoadingMedia && (
+              <Card className={styles.loadingCard} data-testid="media-loading-card">
+                <div className={styles.loadingContainer}>
+                  <div className={styles.spinner} data-testid="loading-spinner" />
+                  <div className={styles.loadingText}>
+                    <p>Loading media...</p>
+                    {loadingProgress.total > 0 && (
+                      <p className={styles.progressText} data-testid="loading-progress">
+                        {loadingProgress.current} / {loadingProgress.total} items loaded
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+            
             {/* Existing Media */}
-            {existingPageMedia.length > 0 && (
+            {!isLoadingMedia && existingPageMedia.length > 0 && (
             <Card className={styles.mediaCard}>
               <h3 className={styles.mediaTitle}>Current Media</h3>
               <div className={styles.mediaGrid}>
