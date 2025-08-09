@@ -1509,15 +1509,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           {/* Show "No media" message when page has no media */}
           {existingPageMedia.length === 0 && (
-            <Card style={{ marginBottom: '2rem' }}>
-              <h3 style={{ marginBottom: '1rem' }}>Current Media</h3>
-              <div style={{ 
-                padding: '2rem',
-                textAlign: 'center',
-                color: tokens.colors.text.secondary
-              }}>
+            <Card className={styles.noMediaCard}>
+              <h3 className={styles.cardTitle}>Current Media</h3>
+              <div className={styles.noMediaMessage}>
                 <p>No media added yet</p>
-                <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                <p className={styles.noMediaHint}>
                   Use the options below to add images or videos to this page
                 </p>
               </div>
@@ -1526,7 +1522,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           {/* Add New Media */}
           <Card>
-            <h3 style={{ marginBottom: '1rem' }}>Add New Media</h3>
+            <h3 className={styles.cardTitle}>Add New Media</h3>
             
             {/* Tabbed Interface */}
             <Tabs activeTab={activeTab} onChange={(tab) => {
@@ -1846,11 +1842,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       Popular AI Image Generation Tools
                     </h5>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div style={{
-                        padding: '1rem',
-                        backgroundColor: tokens.colors.background.secondary,
-                        borderRadius: '0.5rem',
-                        border: `1px solid ${tokens.colors.border.default}`
+                      <div className={styles.aiToolCard}
                       }}>
                         <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
                           🎨 DALL-E 3 (OpenAI)
@@ -1868,11 +1860,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         </a>
                       </div>
                       
-                      <div style={{
-                        padding: '1rem',
-                        backgroundColor: tokens.colors.background.secondary,
-                        borderRadius: '0.5rem',
-                        border: `1px solid ${tokens.colors.border.default}`
+                      <div className={styles.aiToolCard}
                       }}>
                         <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
                           🚀 Midjourney
@@ -1890,11 +1878,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         </a>
                       </div>
                       
-                      <div style={{
-                        padding: '1rem',
-                        backgroundColor: tokens.colors.background.secondary,
-                        borderRadius: '0.5rem',
-                        border: `1px solid ${tokens.colors.border.default}`
+                      <div className={styles.aiToolCard}
                       }}>
                         <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
                           🖼️ Stable Diffusion (Free)
@@ -1912,11 +1896,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         </a>
                       </div>
                       
-                      <div style={{
-                        padding: '1rem',
-                        backgroundColor: tokens.colors.background.secondary,
-                        borderRadius: '0.5rem',
-                        border: `1px solid ${tokens.colors.border.default}`
+                      <div className={styles.aiToolCard}
                       }}>
                         <h6 style={{ color: tokens.colors.text.primary, marginBottom: '0.5rem' }}>
                           🎯 Microsoft Designer

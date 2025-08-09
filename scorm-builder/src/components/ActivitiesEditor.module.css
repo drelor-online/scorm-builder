@@ -94,6 +94,35 @@
   color: var(--color-success);
 }
 
+/* Add Button Container */
+.addButtonContainer {
+  margin-top: var(--space-lg);
+}
+
+/* Assessment Question Styles */
+.assessmentQuestionHeader {
+  margin-bottom: var(--space-md);
+}
+
+.assessmentQuestionText {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--font-size-base);
+}
+
+.answerDisplay {
+  color: var(--text-tertiary);
+  margin: var(--space-sm) 0 0 0;
+}
+
+/* Activities Section */
+.addActivityContainer {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-xl);
+}
+
 /* Fill in the Blank */
 .fillInBlankPreview {
   color: var(--text-tertiary);

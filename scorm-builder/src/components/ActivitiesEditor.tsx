@@ -453,9 +453,9 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                                   />
                                 </div>
                                 <div>
-                                  <span style={{ color: '#71717a' }}>Incorrect Feedback: </span>
+                                  <span className={styles.feedbackLabel}>Incorrect Feedback: </span>
                                   <span 
-                                    style={{ color: '#a1a1aa' }}
+                                    className={styles.feedbackText}
                                     dangerouslySetInnerHTML={{
                                       __html: DOMPurify.sanitize(question.feedback.incorrect || 'No feedback provided', {
                                         ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -476,7 +476,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       </div>
                     )}
                     
-                    <div style={{ marginTop: '1rem' }}>
+                    <div className={styles.addButtonContainer}>
                       <Button
                         onClick={() => setIsAddingKnowledgeCheck(topic.id)}
                         variant="success"
@@ -574,8 +574,8 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     className="enhanced-padding" 
                     data-testid={`assessment-question-${question.id}`}
                   >
-                    <Flex justify="space-between" align="start" style={{ marginBottom: '0.75rem' }}>
-                      <div style={{ flex: 1 }}>
+                    <Flex justify="space-between" align="start" className={styles.assessmentQuestionHeader}>
+                      <div className={styles.questionContent}>
                         <p style={{
                           color: COLORS.text,
                           fontWeight: 500,
@@ -631,7 +631,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         color: '#a1a1aa'
                       }}>
                         {question.options.map((opt, idx) => (
-                          <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                          <li key={idx} className={styles.optionItem}>
                             <span dangerouslySetInnerHTML={{
                               __html: DOMPurify.sanitize(opt, {
                                 ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -654,11 +654,11 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     
                     {/* Feedback */}
                     {question.feedback && (
-                      <div style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
-                        <div style={{ marginBottom: '0.5rem' }}>
-                          <span style={{ color: '#71717a' }}>Correct Feedback: </span>
+                      <div className={styles.feedbackSection}>
+                        <div className={styles.feedbackItem}>
+                          <span className={styles.feedbackLabel}>Correct Feedback: </span>
                           <span 
-                            style={{ color: '#a1a1aa' }}
+                            className={styles.feedbackText}
                             dangerouslySetInnerHTML={{
                               __html: DOMPurify.sanitize(question.feedback.correct || 'No feedback provided', {
                                 ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -669,9 +669,9 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                           />
                         </div>
                         <div>
-                          <span style={{ color: '#71717a' }}>Incorrect Feedback: </span>
+                          <span className={styles.feedbackLabel}>Incorrect Feedback: </span>
                           <span 
-                            style={{ color: '#a1a1aa' }}
+                            className={styles.feedbackText}
                             dangerouslySetInnerHTML={{
                               __html: DOMPurify.sanitize(question.feedback.incorrect || 'No feedback provided', {
                                 ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -822,11 +822,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
         <>
           <Section>
             <Card title="Activities" padding="large">
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                marginBottom: '1.5rem'
-              }}>
+              <div className={styles.addActivityContainer}>
                 <Button 
                   onClick={addActivity}
                   variant="success"
@@ -929,7 +925,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         color: '#a1a1aa'
                       }}>
                         {question.options.map((opt, idx) => (
-                          <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                          <li key={idx} className={styles.optionItem}>
                             {opt} {opt === question.correctAnswer && (
                               <span className={styles.correctMark}>✓</span>
                             )}

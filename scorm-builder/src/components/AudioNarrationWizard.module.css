@@ -1,0 +1,395 @@
+/* AudioNarrationWizard Component Styles */
+
+/* Main Layout */
+.mainContainer {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-xl);
+  height: calc(100vh - 200px);
+}
+
+.sidebar {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  overflow-y: auto;
+}
+
+.sidebarTitle {
+  margin-bottom: var(--space-lg);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.contentArea {
+  overflow-y: auto;
+}
+
+/* Page Info Card */
+.pageInfoCard {
+  margin-bottom: var(--space-xl);
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.pageContent {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--space-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+/* Audio Player Styles */
+.audioPlayerContainer {
+  padding: var(--space-xl);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.audioControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.playButton {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  border: none;
+  font-size: var(--font-size-2xl);
+}
+
+.playButton:hover {
+  background-color: var(--color-primary-600);
+  transform: scale(1.05);
+}
+
+.playButton:active {
+  transform: scale(0.95);
+}
+
+.playButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.progressBar {
+  flex: 1;
+  height: 8px;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--color-primary);
+  transition: width var(--transition-fast);
+}
+
+.timeDisplay {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  min-width: 100px;
+  text-align: right;
+}
+
+/* Recording Controls */
+.recordingSection {
+  margin-top: var(--space-xl);
+  padding: var(--space-xl);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+}
+
+.recordingControls {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+}
+
+.recordButton {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-color: var(--color-danger);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  border: 3px solid var(--color-danger-700);
+}
+
+.recordButton:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px var(--color-danger-alpha-30);
+}
+
+.recordButton.recording {
+  animation: pulse 1.5s infinite;
+  background-color: var(--color-danger-600);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-danger-alpha-50);
+  }
+  70% {
+    box-shadow: 0 0 0 20px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.recordingTime {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-danger);
+  text-align: center;
+  margin-top: var(--space-lg);
+}
+
+/* Waveform Display */
+.waveformContainer {
+  margin: var(--space-xl) 0;
+  padding: var(--space-lg);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+}
+
+.waveform {
+  height: 128px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 2px;
+}
+
+.waveformBar {
+  width: 3px;
+  background-color: var(--color-primary);
+  border-radius: var(--radius-sm);
+  transition: height var(--transition-fast);
+}
+
+/* Upload Section */
+.uploadSection {
+  margin-top: var(--space-xl);
+  padding: var(--space-xl);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+}
+
+.uploadDropzone {
+  border: 2px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3xl);
+  text-align: center;
+  transition: all var(--transition-normal);
+  cursor: pointer;
+  position: relative;
+}
+
+.uploadDropzone:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-alpha-5);
+}
+
+.uploadDropzone.active {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-alpha-10);
+}
+
+.uploadIcon {
+  font-size: var(--font-size-4xl);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-lg);
+}
+
+.uploadTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.uploadDescription {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+.uploadInput {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Status Messages */
+.statusMessage {
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.statusMessage.info {
+  background-color: var(--color-primary-alpha-10);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary-alpha-20);
+}
+
+.statusMessage.success {
+  background-color: var(--color-success-alpha-10);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-alpha-20);
+}
+
+.statusMessage.warning {
+  background-color: var(--color-warning-alpha-10);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-alpha-20);
+}
+
+.statusMessage.error {
+  background-color: var(--color-danger-alpha-10);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-alpha-20);
+}
+
+/* Audio List */
+.audioList {
+  display: grid;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+.audioItem {
+  padding: var(--space-lg);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-normal);
+}
+
+.audioItem:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.audioItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.audioItemTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.audioItemActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.audioItemMeta {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: var(--space-3xl);
+  color: var(--text-tertiary);
+}
+
+.emptyStateIcon {
+  font-size: var(--font-size-4xl);
+  margin-bottom: var(--space-lg);
+  opacity: 0.5;
+}
+
+.emptyStateTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.emptyStateDescription {
+  font-size: var(--font-size-base);
+  color: var(--text-tertiary);
+}
+
+/* Utility Classes */
+.textCenter {
+  text-align: center;
+}
+
+.mt-lg {
+  margin-top: var(--space-lg);
+}
+
+.mb-lg {
+  margin-bottom: var(--space-lg);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .mainContainer {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    display: none;
+  }
+  
+  .audioControls {
+    flex-direction: column;
+  }
+  
+  .timeDisplay {
+    text-align: center;
+  }
+}

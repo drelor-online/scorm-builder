@@ -150,6 +150,70 @@
   color: var(--text-primary);
 }
 
+/* Card Styles */
+.noMediaCard {
+  margin-bottom: var(--space-2xl);
+}
+
+.cardTitle {
+  margin-bottom: var(--space-lg);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.noMediaMessage {
+  padding: var(--space-2xl);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.noMediaHint {
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+  color: var(--text-tertiary);
+}
+
+/* Button Styles */
+.copyButton {
+  margin-bottom: var(--space-lg);
+}
+
+.buttonIcon {
+  margin-right: var(--space-sm);
+}
+
+/* AI Tools Section */
+.aiToolsSection {
+  margin-bottom: var(--space-xl);
+}
+
+.sectionSubtitle {
+  margin-bottom: var(--space-lg);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.aiToolsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.aiToolCard {
+  padding: var(--space-lg);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-normal);
+}
+
+.aiToolCard:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
 /* Alert Component */
 .alert {
   border-radius: var(--radius-md);
