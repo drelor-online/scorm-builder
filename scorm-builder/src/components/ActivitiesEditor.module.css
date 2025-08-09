@@ -85,6 +85,15 @@
   margin-left: var(--space-sm);
 }
 
+.correctMark {
+  color: var(--color-success);
+  margin-left: var(--space-sm);
+}
+
+.correctAnswerText {
+  color: var(--color-success);
+}
+
 /* Fill in the Blank */
 .fillInBlankPreview {
   color: var(--text-tertiary);
@@ -136,6 +145,24 @@
   margin-bottom: var(--space-lg);
 }
 
+.passMarkContainer {
+  margin-bottom: var(--space-lg);
+}
+
+.passMarkEditor {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.passMarkInput {
+  width: 100px;
+}
+
+.passMarkEditButton {
+  margin-left: var(--space-lg);
+}
+
 /* Activity Card */
 .activityCard {
   padding: var(--space-lg);
@@ -160,6 +187,16 @@
 .activityInstructions {
   color: var(--text-tertiary);
   margin: 0 0 var(--space-md) 0;
+}
+
+.activityTypeBadge {
+  font-size: var(--font-size-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 
 .activityFooter {

@@ -495,7 +495,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
           {/* Assessment Questions */}
           <Section>
             <Card title="Assessment Questions" padding="large">
-              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className={styles.assessmentHeader}>
                 <Button
                   onClick={() => setIsAddingAssessment(true)}
                   variant="success"
@@ -505,16 +505,16 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                   Add Question
                 </Button>
               </div>
-              <div style={{ marginBottom: '1rem' }}>
+              <div className={styles.passMarkContainer}>
                 {isEditingPassMark ? (
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div className={styles.passMarkEditor}>
                     <Input
                       type="number"
                       value={tempPassMark}
                       onChange={(e) => setTempPassMark(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                       min="0"
                       max="100"
-                      style={{ width: '100px' }}
+                      className={styles.passMarkInput}
                       data-testid="pass-mark-input"
                     />
                     <span>%</span>
@@ -559,7 +559,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       }}
                       variant="secondary"
                       size="small"
-                      style={{ marginLeft: '1rem' }}
+                      className={styles.passMarkEditButton}
                       data-testid="pass-mark-edit"
                     >
                       Edit
@@ -640,7 +640,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               })
                             }} />
                             {opt === question.correctAnswer && (
-                              <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓</span>
+                              <span className={styles.correctMark}>✓</span>
                             )}
                           </li>
                         ))}
@@ -648,7 +648,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     )}
                     {question.type === 'true-false' && (
                       <p style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}>
-                        Correct Answer: <span style={{ color: '#16a34a' }}>{question.correctAnswer}</span>
+                        Correct Answer: <span className={styles.correctAnswerText}>{question.correctAnswer}</span>
                       </p>
                     )}
                     
@@ -880,28 +880,14 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       </>
                     ) : (
                       <>
-                        <h4 style={{
-                          fontSize: '1.125rem',
-                          fontWeight: 600,
-                          color: COLORS.text,
-                          margin: '0 0 0.5rem 0'
-                        }}>
+                        <h4 className={styles.activityTitle}>
                           {activity.title}
                         </h4>
-                        <p style={{
-                          color: '#a1a1aa',
-                          margin: '0 0 0.75rem 0'
-                        }}>
+                        <p className={styles.activityInstructions}>
                           {activity.instructions || 'No instructions provided'}
                         </p>
                         <Flex justify="space-between" align="center">
-                          <span style={{
-                            fontSize: '0.75rem',
-                            padding: '0.25rem 0.5rem',
-                            backgroundColor: '#3b82f6',
-                            color: 'white',
-                            borderRadius: '0.25rem'
-                          }}>
+                          <span className={styles.activityTypeBadge}>
                             {activity.type}
                           </span>
                           <Button
@@ -945,7 +931,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         {question.options.map((opt, idx) => (
                           <li key={idx} style={{ marginBottom: '0.25rem' }}>
                             {opt} {opt === question.correctAnswer && (
-                              <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓</span>
+                              <span className={styles.correctMark}>✓</span>
                             )}
                           </li>
                         ))}

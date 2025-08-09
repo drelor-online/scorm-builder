@@ -1459,8 +1459,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           objectFit: 'cover' 
                         }}
                         onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
-                        onError={(e) => console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)}
                         onError={(e) => {
+                          console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)
                           const target = e.target as HTMLImageElement
                           target.style.display = 'none'
                           const parent = target.parentElement
@@ -1476,26 +1476,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         }}
                       />
                     ) : (
-                      <div style={{
-                        width: '100%',
-                        height: '150px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: tokens.colors.background.secondary,
-                        color: tokens.colors.text.tertiary
-                      }}>
+                      <div className={styles.noPreview}>
                         <span>No preview</span>
                       </div>
                     )}
-                    <div style={{ padding: '0.5rem' }}>
-                      <p style={{ 
-                        fontSize: '0.875rem',
-                        margin: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
+                    <div className={styles.mediaInfo}>
+                      <p className={styles.mediaInfoTitle}>
                         {media.title || 'Untitled'}
                       </p>
                     </div>
