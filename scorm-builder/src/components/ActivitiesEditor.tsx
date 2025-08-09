@@ -21,6 +21,7 @@ import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { generateActivityId } from '../utils/idGenerator'
 import DOMPurify from 'dompurify'
+import styles from './ActivitiesEditor.module.css'
 
 interface ActivitiesEditorProps {
   courseContent: CourseContentUnion
@@ -306,11 +307,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       {isLoading ? (
         <Section>
           <Card title="Loading" padding="large">
-            <div style={{ 
-              textAlign: 'center', 
-              color: '#a1a1aa',
-              padding: '2rem'
-            }}>
+            <div className={styles.loadingContainer}>
               Loading activities data...
             </div>
           </Card>
@@ -344,31 +341,21 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     key={topic.id}
                     className="enhanced-padding"
                   >
-                    <h4 style={{
-                      fontSize: '1.125rem',
-                      fontWeight: 600,
-                      color: COLORS.text,
-                      margin: '0 0 1rem 0'
-                    }}>
+                    <h4 className={styles.topicTitle}>
                       {topic.title}
                     </h4>
                     
                     {topic.knowledgeCheck && topic.knowledgeCheck.questions && topic.knowledgeCheck.questions.length > 0 ? (
-                      <div style={{ display: 'grid', gap: '1rem' }}>
+                      <div className={styles.questionGrid}>
                         {topic.knowledgeCheck.questions.map((question, qIndex) => (
                           <Card 
                             key={question.id} 
                             className="enhanced-padding" 
                             data-testid={`question-card-${question.id}`}
                           >
-                            <Flex justify="space-between" align="start" style={{ marginBottom: '0.75rem' }}>
-                              <div style={{ flex: 1 }}>
-                                <p style={{
-                                  color: COLORS.text,
-                                  fontWeight: 500,
-                                  margin: '0 0 0.5rem 0',
-                                  fontSize: '1rem'
-                                }}
+                            <Flex justify="space-between" align="start" className={styles.questionHeader}>
+                              <div className={styles.questionContent}>
+                                <p className={styles.questionText}
                                   dangerouslySetInnerHTML={{
                                     __html: DOMPurify.sanitize(
                                       question.type === 'fill-in-the-blank' && question.blank
@@ -413,13 +400,9 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                             
                             {/* Show question details */}
                             {question.type === 'multiple-choice' && question.options && (
-                              <ul style={{
-                                margin: '0.5rem 0 0 0',
-                                paddingLeft: '1.5rem',
-                                color: '#a1a1aa'
-                              }}>
+                              <ul className={styles.optionsList}>
                                 {question.options.map((opt, idx) => (
-                                  <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                                  <li key={idx} className={styles.optionItem}>
                                     <span dangerouslySetInnerHTML={{
                                       __html: DOMPurify.sanitize(opt, {
                                         ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -428,15 +411,14 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                                       })
                                     }} />
                                     {opt === question.correctAnswer && (
-                                      <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓</span>
+                                      <span className={styles.correctAnswer}>✓</span>
                                     )}
                                   </li>
                                 ))}
                               </ul>
                             )}
                             {question.type === 'fill-in-the-blank' && question.blank && (
-                              <p 
-                                style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}
+                              <p className={styles.fillInBlankPreview}
                                 dangerouslySetInnerHTML={{
                                   __html: DOMPurify.sanitize(
                                     question.blank.replace(/_____/g, `[${question.correctAnswer}]`),
@@ -450,18 +432,17 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               />
                             )}
                             {question.type === 'true-false' && (
-                              <p style={{ color: '#a1a1aa', margin: '0.5rem 0 0 0' }}>
-                                Correct Answer: <span style={{ color: '#16a34a' }}>{question.correctAnswer}</span>
+                              <p className={styles.fillInBlankPreview}>
+                                Correct Answer: <span className={styles.correctAnswer}>{question.correctAnswer}</span>
                               </p>
                             )}
                             
                             {/* Feedback */}
                             {question.feedback && (
-                              <div style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
-                                <div style={{ marginBottom: '0.5rem' }}>
-                                  <span style={{ color: '#71717a' }}>Correct Feedback: </span>
-                                  <span 
-                                    style={{ color: '#a1a1aa' }}
+                              <div className={styles.feedbackSection}>
+                                <div className={styles.feedbackItem}>
+                                  <span className={styles.feedbackLabel}>Correct Feedback: </span>
+                                  <span className={styles.feedbackText}
                                     dangerouslySetInnerHTML={{
                                       __html: DOMPurify.sanitize(question.feedback.correct || 'No feedback provided', {
                                         ALLOWED_TAGS: ['strong', 'em', 'u', 'br', 'span'],
@@ -490,11 +471,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         ))}
                       </div>
                     ) : (
-                      <div style={{
-                        color: '#a1a1aa',
-                        fontStyle: 'italic',
-                        marginBottom: '1rem'
-                      }}>
+                      <div className={styles.emptyState}>
                         No knowledge check questions
                       </div>
                     )}

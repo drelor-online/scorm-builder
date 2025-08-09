@@ -1,0 +1,231 @@
+/* ActivitiesEditor Component Styles */
+
+/* Loading State */
+.loadingContainer {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: var(--space-2xl);
+}
+
+/* Statistics Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+/* Topic Card */
+.topicCard {
+  margin-bottom: var(--space-xl);
+}
+
+.topicTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-lg) 0;
+}
+
+/* Question Cards */
+.questionGrid {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.questionCard {
+  padding: var(--space-lg);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+}
+
+.questionCard:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-hover);
+}
+
+.questionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-md);
+}
+
+.questionContent {
+  flex: 1;
+}
+
+.questionText {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--font-size-base);
+}
+
+.questionActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Options List */
+.optionsList {
+  margin: var(--space-sm) 0 0 0;
+  padding-left: var(--space-xl);
+  color: var(--text-tertiary);
+}
+
+.optionItem {
+  margin-bottom: var(--space-xs);
+}
+
+.correctAnswer {
+  color: var(--color-success);
+  margin-left: var(--space-sm);
+}
+
+/* Fill in the Blank */
+.fillInBlankPreview {
+  color: var(--text-tertiary);
+  margin: var(--space-sm) 0 0 0;
+}
+
+/* Feedback Section */
+.feedbackSection {
+  margin-top: var(--space-lg);
+  font-size: var(--font-size-sm);
+}
+
+.feedbackItem {
+  margin-bottom: var(--space-sm);
+}
+
+.feedbackLabel {
+  color: var(--text-secondary);
+}
+
+.feedbackText {
+  color: var(--text-tertiary);
+}
+
+/* Empty State */
+.emptyState {
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin-bottom: var(--space-lg);
+}
+
+/* Pass Mark Editor */
+.passMark {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.passMarkInput {
+  width: 100px;
+}
+
+/* Assessment Section */
+.assessmentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+/* Activity Card */
+.activityCard {
+  padding: var(--space-lg);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+}
+
+.activityCard:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-hover);
+}
+
+.activityTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.activityInstructions {
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.activityFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.activityType {
+  font-size: var(--font-size-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+/* Edit Mode */
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.editInput {
+  width: 100%;
+  margin-bottom: var(--space-md);
+}
+
+.editTextarea {
+  width: 100%;
+  min-height: 200px;
+  margin-bottom: var(--space-md);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Utilities */
+.flexEnd {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-xl);
+}
+
+.grid1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+  
+  .questionActions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .questionActions button {
+    width: 100%;
+  }
+}

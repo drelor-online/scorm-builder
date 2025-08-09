@@ -1342,15 +1342,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       onStepClick={onStepClick}
       autoSaveIndicator={onSave && <AutoSaveIndicatorConnected />}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '1.5rem', height: 'calc(100vh - 200px)' }}>
+      <div className={styles.mainLayout}>
         {/* Left Sidebar - Page Navigation */}
-        <div style={{ 
-          backgroundColor: tokens.colors.background.secondary, 
-          borderRadius: '0.5rem',
-          padding: '1rem',
-          overflowY: 'auto'
-        }}>
-          <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Page Navigation</h3>
+        <div className={styles.leftSidebar}>
+          <h3 className={styles.sidebarTitle}>Page Navigation</h3>
           <PageThumbnailGrid
             courseContent={courseContent as CourseContent}
             currentPageId={getCurrentPage()?.id || ''}
@@ -1359,13 +1354,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         </div>
         
         {/* Right Content Area */}
-        <div style={{ overflowY: 'auto' }}>
+        <div className={styles.rightContent}>
           <Section>
             {/* Current Page Info */}
-            <Card style={{ marginBottom: '1.5rem' }} data-testid="current-page-info-card">
+            <Card className={styles.currentPageCard} data-testid="current-page-info-card">
               {/* Header row with title and Edit button */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h2 style={{ margin: 0 }}>{getCurrentPageTitle()}</h2>
+              <div className={styles.pageHeader}>
+                <h2 className={styles.pageTitle}>{getCurrentPageTitle()}</h2>
                 <Button
                   variant="secondary"
                   size="small"
@@ -1381,29 +1376,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               {/* Content preview below the header */}
               <div 
                 data-testid="page-content-preview"
-                style={{ 
-                  color: tokens.colors.text.secondary,
-                  fontSize: '0.875rem',
-                  lineHeight: 1.5,
-                  maxHeight: '20rem',  // More generous max height for flexibility
-                  overflowY: 'auto',
-                  padding: '0.5rem',
-                  backgroundColor: tokens.colors.background.secondary,
-                  borderRadius: '0.375rem'
-                }}
+                className={styles.contentPreview}
                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getCurrentPage()?.content || '') }}
               />
             </Card>
             
             {/* Existing Media */}
             {existingPageMedia.length > 0 && (
-            <Card style={{ marginBottom: '2rem' }}>
-              <h3 style={{ marginBottom: '1rem' }}>Current Media</h3>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '1rem'
-              }}>
+            <Card className={styles.mediaCard}>
+              <h3 className={styles.mediaTitle}>Current Media</h3>
+              <div className={styles.mediaGrid}>
                 {existingPageMedia.map((media) => (
                   <div 
                     key={media.id} 
@@ -1449,28 +1431,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                               }}
                             />
                             {/* Video play overlay */}
-                            <div style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                              borderRadius: '50%',
-                              width: '48px',
-                              height: '48px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              pointerEvents: 'none'
-                            }}>
-                              <div style={{
-                                width: '0',
-                                height: '0',
-                                borderLeft: '16px solid white',
-                                borderTop: '10px solid transparent',
-                                borderBottom: '10px solid transparent',
-                                marginLeft: '4px'
-                              }} />
+                            <div className={styles.videoPlayButton}>
+                              <div className={styles.playIcon} />
                             </div>
                           </div>
                         ) : (
