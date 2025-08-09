@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
-import { getButtonStyle } from '../styles/buttonStyles'
 import { Toast } from './Toast'
 import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
-import { tokens } from './DesignSystem/designTokens'
 import { Check, Copy } from 'lucide-react'
-import { Card } from './DesignSystem'
+import { Card, Button } from './DesignSystem'
+import styles from './AIPromptGenerator.module.css'
 
 interface AIPromptGeneratorProps {
   courseSeedData: CourseSeedData
@@ -288,34 +287,24 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
       >
       {/* Status announcements for screen readers */}
       {copied && (
-        <div role="status" aria-live="polite" style={{
-          position: 'absolute',
-          width: '1px',
-          height: '1px',
-          padding: 0,
-          margin: '-1px',
-          overflow: 'hidden',
-          clip: 'rect(0, 0, 0, 0)',
-          whiteSpace: 'nowrap',
-          borderWidth: 0
-        }}>
+        <div role="status" aria-live="polite" className={styles.srOnly}>
           Prompt copied to clipboard
         </div>
-      )}
+      )
 
       {/* Course Information */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: tokens.colors.text.primary, marginBottom: '1rem' }}>Course Information</h2>
+      <div className={styles.sectionWrapper}>
+        <h2 className={styles.sectionTitle}>Course Information</h2>
         <Card>
-          <div style={{ display: 'grid', gap: '0.5rem' }}>
-            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
-              <strong style={{ color: tokens.colors.text.primary }}>Title:</strong> {courseSeedData.courseTitle}
+          <div className={styles.courseInfoGrid}>
+            <p className={styles.courseInfoItem}>
+              <strong className={styles.courseInfoLabel}>Title:</strong> {courseSeedData.courseTitle}
             </p>
-            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
-              <strong style={{ color: tokens.colors.text.primary }}>Difficulty:</strong> {courseSeedData.difficulty}/5
+            <p className={styles.courseInfoItem}>
+              <strong className={styles.courseInfoLabel}>Difficulty:</strong> {courseSeedData.difficulty}/5
             </p>
-            <p style={{ margin: 0, color: tokens.colors.text.secondary }}>
-              <strong style={{ color: tokens.colors.text.primary }}>Template:</strong> {courseSeedData.template}
+            <p className={styles.courseInfoItem}>
+              <strong className={styles.courseInfoLabel}>Template:</strong> {courseSeedData.template}
             </p>
           </div>
         </Card>
@@ -324,8 +313,8 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
       {/* Prompt History removed per UX requirements */}
 
       {/* AI Prompt */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: tokens.colors.text.primary, marginBottom: '1rem' }}>AI Prompt</h2>
+      <div className={styles.sectionWrapper}>
+        <h2 className={styles.sectionTitle}>AI Prompt</h2>
         <Card>
           <textarea
             id="ai-prompt"
@@ -334,49 +323,34 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
             onChange={(e) => setCustomPrompt(e.target.value)}
             rows={20}
             aria-label="AI prompt for course generation"
-            style={{
-              width: '100%',
-              padding: '1rem',
-              backgroundColor: tokens.colors.background.primary,
-              border: 'none',
-              borderRadius: '0.5rem',
-              color: tokens.colors.text.primary,
-              fontSize: '0.875rem',
-              fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-              outline: 'none',
-              resize: 'vertical',
-              boxSizing: 'border-box'
-            }}
+            className={styles.promptTextarea}
           />
           
-          <button
+          <Button
             onClick={handleCopy}
             aria-label="Copy prompt to clipboard"
             data-testid="copy-prompt-button"
-            style={getButtonStyle(copied ? 'success' : 'tertiary', 'medium', { marginTop: '1rem' })}
+            variant={copied ? 'success' : 'secondary'}
+            size="medium"
+            className={styles.copyButton}
           >
             {copied ? (
               <>
-                <Check size={16} style={{ marginRight: '0.5rem' }} /> Copied!
+                <Check size={16} className={styles.copyButtonIcon} /> Copied!
               </>
             ) : (
               <>
-                <Copy size={16} style={{ marginRight: '0.5rem' }} /> Copy Prompt
+                <Copy size={16} className={styles.copyButtonIcon} /> Copy Prompt
               </>
             )}
-          </button>
+          </Button>
         </Card>
       </div>
 
       {/* Instructions */}
-      <div style={{ marginBottom: '1.5rem' }}>
+      <div className={styles.sectionWrapper}>
         <Card title="Instructions">
-          <ol style={{
-            margin: 0,
-            paddingLeft: '1.25rem',
-            color: tokens.colors.text.primary,
-            lineHeight: 1.6
-          }}>
+          <ol className={styles.instructionsList}>
             <li>Copy this prompt using the button above</li>
             <li>Paste it into your preferred AI chatbot (ChatGPT, Claude, etc.)</li>
             <li>Copy the JSON response from the AI</li>

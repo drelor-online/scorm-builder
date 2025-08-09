@@ -8,7 +8,8 @@ import {
   ButtonGroup,
   Section,
   Flex,
-  Icon
+  Icon,
+  Alert
 } from './DesignSystem'
 import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -29,48 +30,7 @@ interface JSONImportValidatorProps {
   onStepClick?: (stepIndex: number) => void
 }
 
-// Alert component for validation results
-const Alert: React.FC<{ 
-  type: 'error' | 'success'
-  title: string
-  children: React.ReactNode 
-}> = ({ type, title, children }) => (
-  <div className={`alert alert-${type}`} style={{
-    backgroundColor: type === 'success' ? '#16a34a' : '#dc2626',
-    borderRadius: '0.75rem',
-    padding: '1.5rem',
-    color: '#ffffff', // Pure white for maximum contrast
-    marginBottom: '1.5rem', // Add proper spacing from buttons below
-    marginTop: '1rem'
-  }}>
-    <h3 style={{
-      fontSize: '1.125rem',
-      fontWeight: 600,
-      margin: '0 0 0.5rem 0',
-      color: '#ffffff' // Ensure heading is also white
-    }}>
-      {title}
-    </h3>
-    <div style={{ margin: 0, color: '#ffffff' }}>
-      {typeof children === 'string' && children.includes('\n') ? (
-        <pre style={{ 
-          margin: 0, 
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          color: '#ffffff' // Ensure pre text is white
-        }}>
-          {children}
-        </pre>
-      ) : (
-        <p style={{ margin: 0, color: '#ffffff' }}>
-          {children}
-        </p>
-      )}
-    </div>
-  </div>
-)
+// Custom Alert component removed - using DesignSystem Alert
 
 export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({ 
   onNext, 
@@ -807,11 +767,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           {/* Validation Result */}
           {validationResult && (
             validationResult.isValid ? (
-              <Alert type="success" title="Valid JSON Structure">
+              <Alert variant="success">
+                <strong>Valid JSON Structure</strong><br />
                 {validationResult.summary}
               </Alert>
             ) : (
-              <Alert type="error" title="Validation Error">
+              <Alert variant="error">
+                <strong>Validation Error</strong><br />
                 {validationResult.error}
               </Alert>
             )

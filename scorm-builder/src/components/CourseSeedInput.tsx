@@ -12,7 +12,8 @@ import {
   Section,
   Grid,
   Flex,
-  Modal
+  Modal,
+  Alert
 } from './DesignSystem';
 import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
@@ -30,12 +31,7 @@ interface CourseSeedInputProps {
   initialData?: CourseSeedData;
 }
 
-// Alert component for error messages
-const Alert: React.FC<{ type: 'error' | 'info'; children: React.ReactNode }> = ({ type, children }) => (
-  <div className={`${styles.alert} ${type === 'error' ? styles.alertError : styles.alertInfo}`}>
-    {children}
-  </div>
-)
+// Alert component removed - using DesignSystem Alert
 
 // Select component wrapper
 const Select: React.FC<{
@@ -510,7 +506,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         
         {/* Draft loaded notification */}
         {showDraftLoaded && (
-          <Alert type="info">Draft loaded from your previous session</Alert>
+          <Alert variant="info">Draft loaded from your previous session</Alert>
         )}
         
         {/* Required field legend */}
@@ -677,7 +673,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         </Section>
         
         {/* Note about automatic pages */}
-        <Alert type="info">
+        <Alert variant="info">
           <strong>Note:</strong> Welcome and Learning Objectives pages will be automatically generated based on your course configuration.
         </Alert>
         

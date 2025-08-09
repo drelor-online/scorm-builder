@@ -1,0 +1,73 @@
+/* Screen reader only - for accessibility */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Section wrapper */
+.sectionWrapper {
+  margin-bottom: 1.5rem;
+}
+
+/* Section title */
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+/* Course info grid */
+.courseInfoGrid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.courseInfoItem {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.courseInfoLabel {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Prompt textarea */
+.promptTextarea {
+  width: 100%;
+  padding: 1rem;
+  background-color: var(--background-primary);
+  border: none;
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* Copy button */
+.copyButton {
+  margin-top: 1rem;
+}
+
+.copyButtonIcon {
+  margin-right: 0.5rem;
+}
+
+/* Instructions list */
+.instructionsList {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}

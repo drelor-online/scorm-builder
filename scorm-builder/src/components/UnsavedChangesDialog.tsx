@@ -1,6 +1,6 @@
-import React from 'react'
-import { commonButtons, getButtonStyle } from '../styles/buttonStyles'
-import { tokens } from './DesignSystem/designTokens'
+import React, { useEffect, useRef } from 'react'
+import { Button } from './DesignSystem/Button'
+import styles from './UnsavedChangesDialog.module.css'
 
 interface UnsavedChangesDialogProps {
   isOpen: boolean
@@ -17,91 +17,85 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
   onDiscard,
   onCancel
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const firstFocusableRef = useRef<HTMLButtonElement>(null)
+
+  // Focus management
+  useEffect(() => {
+    if (isOpen && firstFocusableRef.current) {
+      firstFocusableRef.current.focus()
+    }
+  }, [isOpen])
+
+  // Escape key handler
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onCancel()
+      }
+    }
+    
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, onCancel])
+
   if (!isOpen) return null
 
   return (
-    <div className="dialog-overlay" style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1001
-    }}>
-      <div className="dialog-content" style={{
-        backgroundColor: '#18181b',
-        borderRadius: '0.75rem',
-        border: `1px solid ${tokens.colors.border.default}`,
-        width: '90%',
-        maxWidth: '500px',
-        color: '#f4f4f5'
-      }}>
+    <div 
+      className={styles.dialogOverlay}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onCancel()
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="unsaved-dialog-title"
+    >
+      <div className={styles.dialogContent} ref={dialogRef}>
         {/* Header */}
-        <div style={{
-          padding: '1.5rem',
-          borderBottom: '1px solid #3f3f46'
-        }}>
-          <h2 style={{
-            fontSize: '1.25rem',
-            fontWeight: 600,
-            margin: 0,
-            color: '#fbbf24'
-          }}>Unsaved Changes</h2>
+        <div className={styles.dialogHeader}>
+          <h2 id="unsaved-dialog-title" className={styles.dialogTitle}>
+            Unsaved Changes
+          </h2>
         </div>
 
         {/* Content */}
-        <div style={{
-          padding: '2rem 1.5rem'
-        }}>
-          <p style={{
-            fontSize: '1rem',
-            lineHeight: 1.6,
-            margin: '0 0 1rem 0'
-          }}>
-            You have unsaved changes in "{currentProjectName}".
+        <div className={styles.dialogBody}>
+          <p className={styles.dialogMessage}>
+            You have unsaved changes in <span className={styles.projectName}>{currentProjectName}</span>.
           </p>
-          <p style={{
-            fontSize: '0.875rem',
-            color: '#a1a1aa',
-            margin: 0
-          }}>
+          <p className={styles.dialogMessage}>
             Would you like to save before opening a new project?
           </p>
         </div>
 
         {/* Actions */}
-        <div style={{
-          padding: '1rem 1.5rem',
-          borderTop: '1px solid #3f3f46',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '0.75rem'
-        }}>
-          <button
-            onClick={onCancel}
-            style={commonButtons.cancel}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onDiscard}
-            style={getButtonStyle('danger', 'medium', {
-              backgroundColor: 'transparent',
-              border: '1px solid #ef4444'
-            })}
-          >
-            Discard Changes
-          </button>
-          <button
-            onClick={onSave}
-            style={commonButtons.submit}
-          >
-            Save & Continue
-          </button>
+        <div className={styles.dialogFooter}>
+          <div className={styles.buttonGroup}>
+            <Button
+              ref={firstFocusableRef}
+              onClick={onCancel}
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={onDiscard}
+              variant="danger"
+            >
+              Discard Changes
+            </Button>
+            <Button
+              onClick={onSave}
+              variant="primary"
+            >
+              Save Project
+            </Button>
+          </div>
         </div>
       </div>
     </div>

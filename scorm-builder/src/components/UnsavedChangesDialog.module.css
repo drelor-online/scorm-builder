@@ -1,0 +1,116 @@
+.dialogOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  animation: fadeIn 0.2s ease;
+}
+
+.dialogContent {
+  background-color: var(--background-elevated);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  width: 90%;
+  max-width: 500px;
+  color: var(--text-primary);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: slideUp 0.3s ease;
+}
+
+.dialogHeader {
+  padding: var(--spacing-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dialogTitle {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.dialogBody {
+  padding: var(--spacing-6);
+}
+
+.dialogMessage {
+  margin-bottom: var(--spacing-4);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.projectName {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--background-subtle);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.dialogFooter {
+  padding: var(--spacing-6);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+}
+
+.buttonGroup {
+  display: flex;
+  gap: var(--spacing-3);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Focus styles */
+.dialogContent:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .dialogContent {
+    width: 95%;
+    margin: var(--spacing-4);
+  }
+  
+  .dialogFooter {
+    flex-direction: column-reverse;
+  }
+  
+  .buttonGroup {
+    width: 100%;
+    flex-direction: column-reverse;
+  }
+  
+  .buttonGroup button {
+    width: 100%;
+  }
+}

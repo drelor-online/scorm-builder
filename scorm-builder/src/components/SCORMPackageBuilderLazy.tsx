@@ -17,7 +17,8 @@ import {
   Flex,
   Grid,
   LoadingSpinner,
-  Modal
+  Modal,
+  Alert
 } from './DesignSystem'
 import './DesignSystem/designSystem.css'
 
@@ -43,32 +44,7 @@ interface SCORMPackageBuilderProps {
   onStepClick?: (stepIndex: number) => void
 }
 
-// Alert component
-const Alert: React.FC<{ 
-  type: 'info' | 'warning' | 'success'
-  children: React.ReactNode 
-  style?: React.CSSProperties
-}> = ({ type, children, style }) => {
-  const colors = {
-    info: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgba(59, 130, 246, 0.2)', text: '#93c5fd' },
-    warning: { bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.2)', text: '#fdba74' },
-    success: { bg: 'rgba(34, 197, 94, 0.1)', border: 'rgba(34, 197, 94, 0.2)', text: '#86efac' }
-  }
-  
-  return (
-    <div className={`alert alert-${type}`} style={{
-      backgroundColor: colors[type].bg,
-      border: `1px solid ${colors[type].border}`,
-      borderRadius: '0.5rem',
-      padding: '1rem',
-      color: colors[type].text,
-      fontSize: '0.875rem',
-      ...style
-    }}>
-      {children}
-    </div>
-  )
-}
+// Custom Alert component removed - using DesignSystem Alert
 
 export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({ 
   courseContent, 
@@ -323,7 +299,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
             </p>
           </div>
           
-          <Alert type="info">
+          <Alert variant="info">
             Your course content is ready for packaging. The generated SCORM package will be compatible with most Learning Management Systems (LMS).
           </Alert>
         </Card>
@@ -387,7 +363,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
       <Section title="Generation Status">
         <Card>
           {!packageGenerated && !isGenerating && (
-            <Alert type="warning">
+            <Alert variant="warning">
               No package has been generated yet. Click "Generate SCORM Package" to create your course package.
             </Alert>
           )}
@@ -421,7 +397,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
           )}
           
           {packageGenerated && !isGenerating && (
-            <Alert type="success">
+            <Alert variant="success">
               <div>✓ SCORM package saved successfully!</div>
               {savedFilePath && (
                 <div style={{ marginTop: '0.5rem', fontSize: '0.85em', opacity: 0.9 }}>
