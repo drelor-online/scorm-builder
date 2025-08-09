@@ -806,6 +806,12 @@ export function AudioNarrationWizard({
             const mediaData = await getMedia(captionId)
             
             if (mediaData) {
+              // Track blob URLs for cleanup (captions might also use blob URLs)
+              if (mediaData.url && mediaData.url.startsWith('blob:')) {
+                blobUrlsRef.current.push(mediaData.url)
+                logger.debug('[AudioNarrationWizard] Tracking caption blob URL for cleanup:', mediaData.url)
+              }
+              
               // Handle case where data might be undefined or content might be in metadata
               let content = ''
               if (mediaData.data) {
@@ -1401,7 +1407,7 @@ export function AudioNarrationWizard({
     // Set new timer to batch saves
     saveTimerRef.current = setTimeout(() => {
       if (pendingSaveRef.current && autoSaveToCourseContentRef.current) {
-        logger.log('[AudioNarrationWizard] Executing batched save')
+        logger.debug('[AudioNarrationWizard] Executing batched save')
         autoSaveToCourseContentRef.current()
         pendingSaveRef.current = false
       }
