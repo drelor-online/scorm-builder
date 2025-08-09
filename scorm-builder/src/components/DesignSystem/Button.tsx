@@ -11,7 +11,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean
 }
 
-const ButtonComponent: React.FC<ButtonProps> = ({
+const ButtonComponent = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'primary',
   size = 'medium',
   fullWidth = false,
@@ -21,7 +21,7 @@ const ButtonComponent: React.FC<ButtonProps> = ({
   disabled,
   loading,
   ...props
-}) => {
+}, ref) => {
   const classes = [
     'btn',
     `btn-${variant}`,
@@ -37,6 +37,7 @@ const ButtonComponent: React.FC<ButtonProps> = ({
 
   return (
     <button
+      ref={ref}
       className={classes}
       disabled={disabled || loading}
       {...props}
@@ -58,6 +59,8 @@ const ButtonComponent: React.FC<ButtonProps> = ({
       )}
     </button>
   )
-}
+})
+
+ButtonComponent.displayName = 'Button'
 
 export const Button = React.memo(ButtonComponent)

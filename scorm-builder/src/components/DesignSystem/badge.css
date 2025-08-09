@@ -1,0 +1,180 @@
+/* Badge Component Styles */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  border-radius: var(--radius-full);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+/* Size Variants */
+.badge-small {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+}
+
+.badge-medium {
+  padding: calc(var(--space-xs) * 1.5) var(--space-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.2;
+}
+
+.badge-large {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--font-size-base);
+  line-height: 1.2;
+}
+
+/* Color Variants */
+.badge-default {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.badge-primary {
+  background-color: var(--color-primary-500);
+  color: white;
+  border: 1px solid var(--color-primary-600);
+}
+
+.badge-success {
+  background-color: var(--color-success-500);
+  color: white;
+  border: 1px solid var(--color-success-600);
+}
+
+.badge-warning {
+  background-color: var(--color-warning-500);
+  color: white;
+  border: 1px solid var(--color-warning-600);
+}
+
+.badge-danger {
+  background-color: var(--color-danger-500);
+  color: white;
+  border: 1px solid var(--color-danger-600);
+}
+
+.badge-info {
+  background-color: var(--color-primary-500);
+  color: white;
+  border: 1px solid var(--color-primary-600);
+}
+
+/* Activity Type Variants */
+.badge-activity {
+  color: white;
+  border: none;
+}
+
+.badge-activity-multiple-choice {
+  background-color: #3b82f6;
+}
+
+.badge-activity-true-false {
+  background-color: #8b5cf6;
+}
+
+.badge-activity-fill-in-blank {
+  background-color: #10b981;
+}
+
+.badge-activity-drag-and-drop {
+  background-color: #f59e0b;
+}
+
+.badge-activity-scenario {
+  background-color: #ec4899;
+}
+
+/* Icon Support */
+.badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+}
+
+.badge-text {
+  display: inline-block;
+}
+
+/* Hover Effects */
+.badge:not(.badge-static):hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Focus Styles */
+.badge:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Animated Variants */
+.badge-pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  70% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Count Badge Specific */
+.badge-count {
+  min-width: 1.5em;
+  text-align: center;
+  padding-left: var(--space-sm);
+  padding-right: var(--space-sm);
+}
+
+/* Inline Badge Group */
+.badge-group {
+  display: inline-flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .badge-large {
+    padding: var(--space-xs) var(--space-md);
+    font-size: var(--font-size-sm);
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .badge {
+    border-width: 2px;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .badge {
+    transition: none;
+  }
+  
+  .badge-pulse {
+    animation: none;
+  }
+}

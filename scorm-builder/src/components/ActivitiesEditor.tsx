@@ -13,7 +13,9 @@ import {
   ButtonGroup,
   Section,
   Flex,
-  Grid
+  Grid,
+  Alert,
+  QuestionTypeBadge
 } from './DesignSystem'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
@@ -57,60 +59,8 @@ interface EditingAssessment {
   question: AssessmentQuestion
 }
 
-// Badge component for question types
-const QuestionTypeBadge: React.FC<{ type: string }> = ({ type }) => {
-  const colors = {
-    'multiple-choice': COLORS.activityColors['multiple-choice'],
-    'true-false': COLORS.activityColors['true-false'],
-    'fill-in-the-blank': COLORS.activityColors['fill-in-the-blank'],
-    'fill-in-blank': COLORS.activityColors['fill-in-the-blank']
-  }
-  
-  const labels = {
-    'multiple-choice': 'Multiple Choice',
-    'true-false': 'True/False',
-    'fill-in-the-blank': 'Fill in the Blank',
-    'fill-in-blank': 'Fill in the Blank'
-  }
-  
-  return (
-    <span style={{
-      fontSize: '0.75rem',
-      padding: '0.25rem 0.5rem',
-      backgroundColor: colors[type as keyof typeof colors] || '#6b7280',
-      color: 'white',
-      borderRadius: '0.25rem',
-      display: 'inline-block'
-    }}>
-      {labels[type as keyof typeof labels] || type}
-    </span>
-  )
-}
-
-// Alert component
-const Alert: React.FC<{ 
-  type: 'info' | 'warning' | 'success'
-  children: React.ReactNode 
-}> = ({ type, children }) => {
-  const colors = {
-    info: COLORS.alertColors.info,
-    warning: COLORS.alertColors.warning,
-    success: COLORS.alertColors.success
-  }
-  
-  return (
-    <div className={`alert alert-${type}`} style={{
-      backgroundColor: colors[type].background,
-      border: `1px solid ${colors[type].border}`,
-      borderRadius: '0.5rem',
-      padding: '1rem',
-      color: colors[type].text,
-      fontSize: '0.875rem'
-    }}>
-      {children}
-    </div>
-  )
-}
+// Import QuestionTypeBadge from design system
+import { QuestionTypeBadge } from './DesignSystem/Badge'
 
 // Modal component removed - using QuestionEditorModal instead
 

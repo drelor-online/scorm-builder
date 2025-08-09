@@ -78,3 +78,6 @@ export type { LoadingStateProps } from './LoadingState'
 export { ErrorState, NetworkError, NotFoundError, PermissionError } from './ErrorState'
 export type { ErrorStateProps } from './ErrorState'
 
+export { Badge, QuestionTypeBadge, StatusBadge, CountBadge } from './Badge'
+export type { BadgeProps } from './Badge'
+

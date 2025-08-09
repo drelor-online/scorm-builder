@@ -18,7 +18,8 @@ import {
   ProgressBar,
   Modal,
   Tabs,
-  Tab
+  Tab,
+  Alert
 } from './DesignSystem'
 import { Upload, Image as ImageIcon, Edit, Video, Copy } from 'lucide-react'
 import './DesignSystem/designSystem.css'
@@ -28,7 +29,7 @@ import { RichTextEditor } from './RichTextEditor'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import DOMPurify from 'dompurify'
 import { logger } from '../utils/logger'
-
+import styles from './MediaEnhancementWizard.module.css'
 
 interface SearchResult {
   id: string
@@ -44,35 +45,6 @@ interface SearchResult {
   channel?: string
   duration?: string
   isYouTube?: boolean
-}
-
-// Alert component with robust type handling
-const Alert: React.FC<{ 
-  type?: 'info' | 'warning' | 'success'
-  children: React.ReactNode 
-}> = ({ type = 'info', children }) => {
-  const colors = {
-    info: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgba(59, 130, 246, 0.2)', text: '#93c5fd' },
-    warning: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.2)', text: '#fcd34d' },
-    success: { bg: 'rgba(34, 197, 94, 0.1)', border: 'rgba(34, 197, 94, 0.2)', text: '#86efac' }
-  }
-  
-  // Use fallback for invalid types
-  const style = colors[type] || colors.info
-  
-  return (
-    <div style={{
-      backgroundColor: style.bg,
-      border: `1px solid ${style.border}`,
-      borderRadius: '0.375rem',
-      padding: '0.75rem 1rem',
-      color: style.text,
-      fontSize: '0.875rem',
-      marginBottom: '1rem'
-    }}>
-      {children}
-    </div>
-  )
 }
 
 interface MediaEnhancementWizardRefactoredProps {
