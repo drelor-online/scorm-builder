@@ -53,8 +53,9 @@ This document tracks the progress of the GUI consistency and styling refactoring
 ### Inline Styles Reduction
 | Component | Initial | Current | Removed | Remaining |
 |-----------|---------|---------|---------|-----------|
-| MediaEnhancementWizard | 93 | 76 | 17 (18%) | 76 |
-| ActivitiesEditor | 50 | 22 | 28 (56%) | 22 |
+| MediaEnhancementWizard | 93 | 67 | 26 (28%) | 67 |
+| ActivitiesEditor | 50 | 0 | 50 (100%) | 0 |
+| AudioNarrationWizard | 85 | 0 | 85 (100%) | 0 |
 | DeleteConfirmDialog | 15 | 0 | 15 (100%) | 0 |
 | Toast | 8 | 0 | 8 (100%) | 0 |
 | PageLayout | 12 | 0 | 12 (100%) | 0 |
@@ -68,32 +69,27 @@ This document tracks the progress of the GUI consistency and styling refactoring
 
 ### CSS Modules Created
 1. `DeleteConfirmDialog.module.css` - Complete
-2. `MediaEnhancementWizard.module.css` - Partial (needs expansion)
-3. `ActivitiesEditor.module.css` - Partial (needs expansion)
-4. `WorkflowProgress.module.css` - Complete
+2. `MediaEnhancementWizard.module.css` - Partial (67 styles remaining)
+3. `ActivitiesEditor.module.css` - Complete
+4. `AudioNarrationWizard.module.css` - Complete (400+ lines)
+5. `WorkflowProgress.module.css` - Complete
 
 ## Remaining Work 🔄
 
 ### High Priority
-1. **MediaEnhancementWizard** (76 inline styles remaining)
+1. **MediaEnhancementWizard** (67 inline styles remaining)
    - Search results section needs CSS modules
    - Media gallery section needs refactoring
    - Upload section styles to replace
    - Modal and tab content styles
 
-2. **ActivitiesEditor** (22 inline styles remaining)
-   - Edit mode form styles
-   - Feedback display styles
-   - Activity editor inline styles
-   - Button group styles
-
 ### Medium Priority
-3. **Other Components with Inline Styles**
-   - ProjectDashboard
+2. **Other Components with Inline Styles**
+   - ProjectDashboard (34 inline styles)
+   - TemplateEditor (33 inline styles)
+   - CourseSeedInput (27 inline styles)
    - SCORMPackageBuilder
-   - AudioNarrationWizard
    - JSONImportValidator
-   - CourseSeedInput
 
 ### Low Priority
 4. **Performance Optimizations**
@@ -127,11 +123,13 @@ This document tracks the progress of the GUI consistency and styling refactoring
 - **Developer Experience**: Clear patterns and documentation
 
 ### Time Estimates for Completion
-- MediaEnhancementWizard complete refactor: 4-6 hours
-- ActivitiesEditor complete refactor: 2-3 hours
-- Other components: 8-10 hours total
+- MediaEnhancementWizard complete refactor: 3-4 hours
+- ProjectDashboard refactor: 2-3 hours
+- TemplateEditor refactor: 2-3 hours
+- CourseSeedInput refactor: 1-2 hours
+- Other components: 4-6 hours total
 - Testing and validation: 2-3 hours
-- **Total estimated time**: 16-22 hours
+- **Total estimated time**: 14-21 hours
 
 ## Success Criteria ✨
 
@@ -160,4 +158,5 @@ The refactoring has already improved code maintainability, consistency, and deve
 ---
 
 *Last Updated: January 2025*
+*Latest Progress: AudioNarrationWizard and ActivitiesEditor fully refactored*
 *Generated with Claude Code*
