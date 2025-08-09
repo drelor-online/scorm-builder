@@ -6,6 +6,9 @@ import { Section, Grid } from './DesignSystem/Layout'
 import { Alert } from './DesignSystem/Alert'
 import { Toast } from './Toast'
 import { apiKeyStorage, ApiKeys } from '../services/ApiKeyStorage'
+import { logger, disableCategory, enableCategory, getDisabledCategories, clearDisabledCategories } from '../utils/logger'
+import { Tabs, Tab } from './DesignSystem/Tabs'
+import { Badge } from './DesignSystem/Badge'
 
 interface SettingsProps {
   onSave?: (apiKeys: ApiKeys) => void
@@ -19,6 +22,8 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
   })
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [disabledLogCategories, setDisabledLogCategories] = useState<string[]>([])
+  const [newCategory, setNewCategory] = useState('')
   
   // Load API keys from encrypted file on mount
   useEffect(() => {
@@ -36,6 +41,10 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
       }
     }
     loadKeys()
+    
+    // Load disabled log categories
+    const categories = getDisabledCategories()
+    setDisabledLogCategories(categories)
     
     return () => {
       mounted = false
@@ -99,6 +108,28 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
   }
 
   const inputType = showPasswords ? 'text' : 'password'
+  
+  // Logger category handlers
+  const handleAddCategory = () => {
+    if (newCategory && !disabledLogCategories.includes(newCategory)) {
+      disableCategory(newCategory)
+      setDisabledLogCategories([...disabledLogCategories, newCategory])
+      setNewCategory('')
+      logger.info(`[Settings] Disabled logging for category: ${newCategory}`)
+    }
+  }
+  
+  const handleRemoveCategory = (category: string) => {
+    enableCategory(category)
+    setDisabledLogCategories(disabledLogCategories.filter(c => c !== category))
+    logger.info(`[Settings] Enabled logging for category: ${category}`)
+  }
+  
+  const handleClearAllCategories = () => {
+    clearDisabledCategories()
+    setDisabledLogCategories([])
+    logger.info('[Settings] Cleared all disabled log categories')
+  }
 
   return (
     <Card>
@@ -107,21 +138,25 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
           Settings
         </h1>
         <p className="text-gray-400">
-          Configure your API keys for enhanced functionality
+          Configure your application settings
         </p>
-        {/* Show if keys are already saved */}
-        {(formData.googleImageApiKey || formData.googleCseId || formData.youtubeApiKey) ? (
-          <p className="text-green-400 text-sm mt-2">
-            ✓ API keys are loaded from saved settings
-          </p>
-        ) : (
-          <p className="text-yellow-400 text-sm mt-2">
-            ⚠️ No API keys found. Please enter your API keys below to enable media features.
-          </p>
-        )}
       </Section>
 
-      <form role="form" onSubmit={handleSubmit}>
+      <Tabs>
+        <Tab tabKey="api-keys" label="API Keys">
+          <form role="form" onSubmit={handleSubmit}>
+            <Section>
+              {/* Show if keys are already saved */}
+              {(formData.googleImageApiKey || formData.googleCseId || formData.youtubeApiKey) ? (
+                <p className="text-green-400 text-sm mt-2">
+                  ✓ API keys are loaded from saved settings
+                </p>
+              ) : (
+                <p className="text-yellow-400 text-sm mt-2">
+                  ⚠️ No API keys found. Please enter your API keys below to enable media features.
+                </p>
+              )}
+            </Section>
         <Section>
           <Card variant="dark" className="p-6">
             <h2 className="text-xl font-medium text-gray-200 mb-6">
@@ -194,7 +229,90 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
             </ul>
           </Alert>
         </Section>
-      </form>
+          </form>
+        </Tab>
+        
+        <Tab tabKey="logger" label="Logger Settings">
+          <Section>
+            <Card variant="dark" className="p-6">
+              <h2 className="text-xl font-medium text-gray-200 mb-6">
+                Logger Category Filtering
+              </h2>
+              <p className="text-gray-400 mb-4">
+                Disable logging for specific categories to reduce console noise. Use wildcards (*) to match multiple categories.
+              </p>
+              
+              <div className="mb-6">
+                <div className="flex gap-2 mb-4">
+                  <Input
+                    placeholder="Enter category name (e.g., MediaService, PageThumbnail*, etc.)"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
+                  />
+                  <Button
+                    variant="primary"
+                    onClick={handleAddCategory}
+                    disabled={!newCategory}
+                  >
+                    Add Category
+                  </Button>
+                </div>
+                
+                {disabledLogCategories.length > 0 ? (
+                  <>
+                    <div className="mb-4">
+                      <h3 className="text-sm font-medium text-gray-300 mb-2">Disabled Categories:</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {disabledLogCategories.map(category => (
+                          <Badge
+                            key={category}
+                            variant="warning"
+                            className="inline-flex items-center gap-1"
+                          >
+                            {category}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCategory(category)}
+                              className="ml-1 text-xs hover:text-red-400"
+                              aria-label={`Remove ${category}`}
+                            >
+                              ✕
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={handleClearAllCategories}
+                    >
+                      Clear All Categories
+                    </Button>
+                  </>
+                ) : (
+                  <Alert variant="info">
+                    No categories are currently disabled. All log messages will be shown in the console.
+                  </Alert>
+                )}
+              </div>
+              
+              <Alert variant="info">
+                <h3 className="font-medium mb-2">📘 Common Logger Categories</h3>
+                <ul className="text-sm space-y-1 list-disc list-inside">
+                  <li><strong>MediaService:</strong> Media storage and retrieval operations</li>
+                  <li><strong>FileStorage:</strong> File system operations</li>
+                  <li><strong>PageThumbnailGrid:</strong> Page thumbnail rendering</li>
+                  <li><strong>UnifiedMediaContext:</strong> Media context operations</li>
+                  <li><strong>MediaEnhancement:</strong> Media enhancement wizard operations</li>
+                  <li><strong>Use wildcards:</strong> PageThumbnail* to match all PageThumbnail categories</li>
+                </ul>
+              </Alert>
+            </Card>
+          </Section>
+        </Tab>
+      </Tabs>
       
       {showToast && (
         <Toast
