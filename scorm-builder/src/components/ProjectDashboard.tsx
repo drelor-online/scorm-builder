@@ -15,6 +15,7 @@ import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap } fro
 import './DesignSystem/transitions.css'
 import { envConfig } from '../config/environment'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
+import styles from './ProjectDashboard.module.css'
 
 interface Project {
   id: string
@@ -599,12 +600,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      style={{
-        minHeight: '100vh',
-        border: isDragging ? '2px dashed #3b82f6' : 'none',
-        backgroundColor: isDragging ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
-        transition: 'all 0.2s'
-      }}
+      className={`${styles.dashboardContainer} ${isDragging ? styles.dropZoneActive : ''}`}
     >
       <div className="dashboard-header">
         <h1>SCORM Builder Projects</h1>
@@ -649,12 +645,12 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               >
                 {isRecording ? (
                   <>
-                    <span style={{ color: '#ef4444', marginRight: '0.5rem' }}>●</span>
+                    <span className={styles.recordingIndicator}>●</span>
                     Stop Recording
                   </>
                 ) : (
                   <>
-                    <span style={{ marginRight: '0.5rem' }}>🎬</span>
+                    <span className={styles.recordingIcon}>🎬</span>
                     Record Session
                   </>
                 )}
@@ -686,7 +682,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                   showError('Failed to clear cache')
                 }
               }}
-              style={{ padding: '0.5rem', minWidth: 'auto' }}
+              className={styles.sessionButton}
             >
               <Icon icon={RefreshCw} size="sm" className={loading ? 'animate-spin' : ''} />
             </Button>
@@ -694,26 +690,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         </div>
       </div>
       
-      <div className="default-folder-section" style={{ 
-        marginTop: '2rem',
-        marginBottom: '2rem',
-        padding: '1rem',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontWeight: 500 }}>Default Folder:</span>
-          <span style={{ 
-            color: defaultFolder ? '#333' : '#999',
-            fontStyle: defaultFolder ? 'normal' : 'italic'
-          }}>
+      <div className={styles.defaultFolderSection}>
+        <div className={styles.folderInfo}>
+          <span className={styles.folderLabel}>Default Folder:</span>
+          <span className={defaultFolder ? styles.folderPath : styles.folderPathEmpty}>
             {defaultFolder || 'Not set'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className={styles.folderActions}>
           <Button
             variant="secondary"
             size="small"
@@ -734,13 +718,9 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       </div>
       
       {recentProjects.length > 0 && (
-        <div className="recent-section" style={{ marginBottom: '3rem' }}>
-          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>Recent Projects</h2>
-          <div className="projects-grid recent-grid stagger-children" style={{ 
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: '1.5rem'
-          }}>
+        <div className={styles.recentSection}>
+          <h2 className={styles.sectionTitle}>Recent Projects</h2>
+          <div className={styles.projectGrid}>
             {recentProjects.map((project, index) => (
               <Card 
                 key={`recent-${project.id}`}
