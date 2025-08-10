@@ -1923,6 +1923,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         className={`${styles.resultCard} ${selectedResults[result.id] ? styles.resultCardSelected : ''} ${isRestricted ? styles.resultCardRestricted : ''} ${isSearching ? styles.resultCardSearching : ''}`}
                         onClick={() => !isRestricted && !isSearching && handleToggleSelection(result.id)}
                       >
+                        {/* Selection checkmark indicator */}
+                        {selectedResults[result.id] && (
+                          <div className={styles.selectionIndicator} aria-label="Selected">
+                            ✓
+                          </div>
+                        )}
                         {isVideo ? (
                           <div className={styles.videoThumbnailContainer}>
                             {videoThumbnails[result.id] ? (
