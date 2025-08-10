@@ -20,6 +20,34 @@ export function clearMediaCache(): void {
 }
 
 /**
+ * Pre-load media into the cache from a Map of blobs
+ * This allows SCORMPackageBuilder to pass already-loaded media
+ */
+export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<void> {
+  console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache`)
+  
+  for (const [filename, blob] of mediaMap) {
+    try {
+      // Extract the media ID from the filename (e.g., 'image-0.jpg' -> 'image-0')
+      const mediaId = filename.replace(/\.(jpg|jpeg|png|gif|mp3|mp4|vtt|bin)$/i, '')
+      
+      // Convert blob to Uint8Array
+      const arrayBuffer = await blob.arrayBuffer()
+      const data = new Uint8Array(arrayBuffer)
+      const mimeType = blob.type || 'application/octet-stream'
+      
+      // Store in cache
+      mediaCache.set(mediaId, { data, mimeType })
+      console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
+    } catch (error) {
+      console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
+    }
+  }
+  
+  console.log(`[Rust SCORM] Pre-loading complete. Cache size: ${mediaCache.size}`)
+}
+
+/**
  * Get file extension from MIME type
  */
 function getExtensionFromMimeType(mimeType: string): string {
@@ -245,9 +273,17 @@ async function resolveImageUrl(
     }
     
     try {
+      console.log(`[Rust SCORM] Attempting to load media from MediaService:`, imageUrl)
       const { createMediaService } = await import('./MediaService')
       const mediaService = createMediaService(projectId)
       const fileData = await mediaService.getMedia(imageUrl)
+      
+      console.log(`[Rust SCORM] MediaService returned:`, {
+        hasFileData: !!fileData,
+        hasData: !!(fileData?.data),
+        dataLength: fileData?.data ? fileData.data.length : 0,
+        metadata: fileData?.metadata
+      })
       
       if (fileData && fileData.data) {
         const mimeType = fileData.metadata?.mimeType || fileData.metadata?.mime_type || ''
@@ -293,9 +329,17 @@ async function resolveImageUrl(
         })
         
         return `media/${filename}`
+      } else {
+        console.error(`[Rust SCORM] MediaService returned no data for:`, imageUrl)
       }
     } catch (error) {
-      console.error(`[Rust SCORM] Failed to load media from FileStorage:`, error)
+      console.error(`[Rust SCORM] Failed to load media from MediaService:`, error)
+      console.error(`[Rust SCORM] Error details:`, {
+        imageUrl,
+        projectId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      })
     }
     return undefined
   }
@@ -1256,8 +1300,14 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
 export async function generateRustSCORM(
   courseContent: CourseContent | EnhancedCourseContent,
   projectId: string,
-  onProgress?: (message: string, progress: number) => void
+  onProgress?: (message: string, progress: number) => void,
+  preloadedMedia?: Map<string, Blob>
 ): Promise<Uint8Array> {
+  // Pre-load media cache if provided
+  if (preloadedMedia && preloadedMedia.size > 0) {
+    await preloadMediaCache(preloadedMedia)
+  }
+  
   // Lock all blob URLs during SCORM generation to prevent cleanup
   const { blobUrlManager } = await import('../utils/blobUrlManager')
   blobUrlManager.lockAll()

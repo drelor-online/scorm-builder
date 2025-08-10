@@ -592,7 +592,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                 setLoadingMessage(message)
                 // Could also update a progress bar here if we had one
                 console.log('[SCORMPackageBuilder] Progress:', progress, message)
-              }
+              },
+              mediaFilesRef.current // Pass the pre-loaded media files
             )
           } catch (rustError: any) {
             console.error('[SCORMPackageBuilder] Rust generation failed:', rustError)
