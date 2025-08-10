@@ -75,6 +75,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     filesLoaded: 0,
     totalFiles: 0
   })
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
+  const [elapsedTime, setElapsedTime] = useState(0)
   const storage = useStorage()
   const { 
     getMedia,
@@ -187,7 +189,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const loadMediaFromRegistry = async (enhancedContent: any) => {
     console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
     
-    // Track failed media loads
+    // Track loaded media to prevent duplicates
+    const loadedMediaIds = new Set<string>()
     const failedMedia: string[] = []
     let loadedCount = 0
     let totalMediaToLoad = 0
@@ -240,7 +243,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
       const welcomeMedia = enhancedContent.welcome.media || []
       
-      if (welcomeAudioId) {
+      if (welcomeAudioId && !loadedMediaIds.has(welcomeAudioId)) {
+        loadedMediaIds.add(welcomeAudioId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading welcome audio (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeAudioId}`)
         const audioBlob = await getMediaBlobFromRegistry(welcomeAudioId)
@@ -254,7 +258,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       }
       
-      if (welcomeCaptionId) {
+      if (welcomeCaptionId && !loadedMediaIds.has(welcomeCaptionId)) {
+        loadedMediaIds.add(welcomeCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading welcome caption (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeCaptionId}`)
         const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId)
@@ -269,7 +274,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       for (const mediaItem of welcomeMedia) {
-        if (mediaItem.id) {
+        if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
+          loadedMediaIds.add(mediaItem.id)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id}`)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
@@ -282,6 +288,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             failedMedia.push(`welcome ${mediaItem.type || 'media'}: ${mediaItem.id}`)
             console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome media: ${mediaItem.id}`)
           }
+        } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
+          console.log(`[SCORMPackageBuilder] Skipping duplicate welcome media: ${mediaItem.id}`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
           const newId = await handleRemoteMedia(mediaItem.url, 'image', 'welcome')
@@ -304,7 +312,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const objectivesCaptionId = enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionFile
       const objectivesMedia = enhancedContent.objectivesPage.media || []
       
-      if (objectivesAudioId) {
+      if (objectivesAudioId && !loadedMediaIds.has(objectivesAudioId)) {
+        loadedMediaIds.add(objectivesAudioId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading objectives audio (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesAudioId}`)
         const audioBlob = await getMediaBlobFromRegistry(objectivesAudioId)
@@ -318,7 +327,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       }
       
-      if (objectivesCaptionId) {
+      if (objectivesCaptionId && !loadedMediaIds.has(objectivesCaptionId)) {
+        loadedMediaIds.add(objectivesCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading objectives caption (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesCaptionId}`)
         const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId)
@@ -333,13 +343,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       for (const mediaItem of objectivesMedia) {
-        if (mediaItem.id) {
+        if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
+          loadedMediaIds.add(mediaItem.id)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
           if (mediaBlob) {
             const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
             mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
             console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaItem.id)
           }
+        } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
+          console.log(`[SCORMPackageBuilder] Skipping duplicate objectives media: ${mediaItem.id}`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
           const newId = await handleRemoteMedia(mediaItem.url, 'image', 'objectives')
@@ -363,7 +376,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         const topicCaptionId = topic.captionId || topic.captionFile
         const topicMedia = topic.media || []
         
-        if (topicAudioId) {
+        if (topicAudioId && !loadedMediaIds.has(topicAudioId)) {
+          loadedMediaIds.add(topicAudioId)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} audio (${loadedCount + 1}/${totalMediaToLoad}): ${topicAudioId}`)
           const audioBlob = await getMediaBlobFromRegistry(topicAudioId)
@@ -377,7 +391,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           }
         }
         
-        if (topicCaptionId) {
+        if (topicCaptionId && !loadedMediaIds.has(topicCaptionId)) {
+          loadedMediaIds.add(topicCaptionId)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} caption (${loadedCount + 1}/${totalMediaToLoad}): ${topicCaptionId}`)
           const captionBlob = await getMediaBlobFromRegistry(topicCaptionId)
@@ -392,13 +407,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
         
         for (const mediaItem of topicMedia) {
-          if (mediaItem.id) {
+          if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
+            loadedMediaIds.add(mediaItem.id)
             const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
             if (mediaBlob) {
               const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
               mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded topic media:', mediaItem.id)
             }
+          } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
+            console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id}`)
           } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
             // Handle remote media
             const newId = await handleRemoteMedia(mediaItem.url, 'image', `topic-${topicIndex}`)
@@ -432,6 +450,15 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     setIsGenerating(true)
     setIsLoadingMedia(true)
     setLoadingMessage('Preparing course content...')
+    setGenerationStartTime(Date.now())
+    
+    // Start elapsed time counter
+    const intervalId = setInterval(() => {
+      setElapsedTime(prev => prev + 0.1)
+    }, 100)
+    
+    // Store interval ID to clear later
+    const clearElapsedTimer = () => clearInterval(intervalId)
     
     try {
       const startTime = Date.now()
@@ -594,10 +621,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       setMessages(prev => [...prev, {
         id: `success-${Date.now()}`,
         type: 'success',
-        text: 'SCORM package generated successfully!'
+        text: `✅ SCORM package generated successfully! Size: ${(result.buffer.byteLength / 1024 / 1024).toFixed(2)} MB, Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`
       }])
       
       setLoadingMessage('')
+      
+      // Clear the elapsed time interval
+      clearElapsedTimer()
       
       // FIX: Don't auto-download. Let user choose when to download
       console.log('[SCORMPackageBuilder] Package generated successfully, ready for download')
@@ -612,8 +642,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     } finally {
       setIsGenerating(false)
       setIsLoadingMedia(false)
-      // Clear media files to free memory
-      mediaFilesRef.current.clear()
+      setGenerationStartTime(null)
+      setElapsedTime(0)
+      // Clear interval if it exists
+      if (typeof clearElapsedTimer !== 'undefined') {
+        clearElapsedTimer()
+      }
+      // Don't clear media files immediately - keep for display
+      // mediaFilesRef.current.clear()
     }
   }
 
@@ -855,6 +891,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               <div className="flex flex-col items-center justify-center">
                 <LoadingSpinner size="large" className="mb-4" />
                 <p className="text-lg font-medium mb-2">{loadingMessage}</p>
+                {generationStartTime && (
+                  <p className="text-sm text-gray-500 mb-2">
+                    Elapsed: {elapsedTime.toFixed(1)} seconds
+                  </p>
+                )}
                 {isLoadingMedia && (
                   <div className="mt-4 w-full max-w-md">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
@@ -881,20 +922,38 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
 
         {/* Success State */}
         {generatedPackage && !isGenerating && (
-          <Card className="mb-6">
-            <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icon icon={CheckCircle} className="w-8 h-8 text-green-600" />
+          <Card className="mb-6 border-2 border-green-500 shadow-lg animate-fadeIn">
+            <div className="p-8 text-center bg-gradient-to-b from-green-50 to-white rounded-lg">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                <Icon icon={CheckCircle} className="w-10 h-10 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Package Ready!</h3>
-              <p className="text-gray-600 mb-4">
-                Your SCORM package has been generated successfully.
+              <h3 className="text-2xl font-bold mb-2 text-green-800">🎉 Package Generated Successfully!</h3>
+              <p className="text-lg text-gray-700 mb-4">
+                Your SCORM package is ready for download.
               </p>
-              <div className="text-sm text-gray-500 mb-6">
-                <p>Package size: {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB</p>
-                {performanceData && (
-                  <p>Generation time: {(performanceData.totalDuration / 1000).toFixed(2)} seconds</p>
-                )}
+              <div className="bg-white rounded-lg p-4 mb-6 shadow-inner">
+                <div className="text-sm space-y-1">
+                  <p className="text-gray-600">
+                    <span className="font-semibold">Package size:</span> 
+                    <span className="text-lg font-bold text-blue-600 ml-2">
+                      {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                  </p>
+                  {performanceData && (
+                    <p className="text-gray-600">
+                      <span className="font-semibold">Generation time:</span>
+                      <span className="text-lg font-bold text-blue-600 ml-2">
+                        {(performanceData.totalDuration / 1000).toFixed(1)} seconds
+                      </span>
+                    </p>
+                  )}
+                  <p className="text-gray-600">
+                    <span className="font-semibold">Media files included:</span>
+                    <span className="text-lg font-bold text-blue-600 ml-2">
+                      {mediaFilesRef.current.size}
+                    </span>
+                  </p>
+                </div>
               </div>
               <Button
                 onClick={() => downloadPackage()}
