@@ -68,11 +68,11 @@ function convertNewFormat(
       }
       if (courseContent.welcomePage.audioFile) {
         // If file already uses simple format, keep it
-        if (courseContent.welcomePage.audioFile.match(/^audio-\d+\.(mp3|bin)$/)) {
-          return courseContent.welcomePage.audioFile
+        if (courseContent.welcomePage.audioFile.match(/^audio-\d+(\.mp3|\.bin)?$/)) {
+          return courseContent.welcomePage.audioFile.replace(/\.(mp3|bin)$/, '')
         }
       }
-      return courseContent.welcomePage.narration ? `audio-0.bin` : undefined
+      return courseContent.welcomePage.narration ? `audio-0` : undefined
     }
     
     const getWelcomeCaptionFile = () => {
@@ -82,11 +82,11 @@ function convertNewFormat(
       }
       if (courseContent.welcomePage.captionFile) {
         // If file already uses simple format, keep it
-        if (courseContent.welcomePage.captionFile.match(/^caption-\d+\.(vtt|bin)$/)) {
-          return courseContent.welcomePage.captionFile
+        if (courseContent.welcomePage.captionFile.match(/^caption-\d+(\.vtt|\.bin)?$/)) {
+          return courseContent.welcomePage.captionFile.replace(/\.(vtt|bin)$/, '')
         }
       }
-      return courseContent.welcomePage.narration ? `caption-0.bin` : undefined
+      return courseContent.welcomePage.narration ? `caption-0` : undefined
     }
     
     const welcome = {
@@ -122,13 +122,17 @@ function convertNewFormat(
     const objectivesImageMedia = objectivesMedia.find(m => m.type === 'image')
     const objectivesVideoMedia = objectivesMedia.find(m => m.type === 'video')
     
+    // Check for audio/caption in media array first
+    const objectivesAudioMedia = objectivesMedia.find(m => m.type === 'audio')
+    const objectivesCaptionMedia = objectivesMedia.find((m: any) => m.type === 'caption')
+    
     const objectivesPage = {
       imageUrl: resolveMediaUrl(objectivesImageMedia, projectId),
-      audioFile: (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `audio-1.bin` : undefined),
-      audioId: (courseContent.learningObjectivesPage as any).audioId,
+      audioFile: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `audio-1` : undefined),
+      audioId: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId,
       audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
-      captionFile: (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile || (courseContent.learningObjectivesPage.narration ? `caption-1.bin` : undefined),
-      captionId: (courseContent.learningObjectivesPage as any).captionId,
+      captionFile: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile || (courseContent.learningObjectivesPage.narration ? `caption-1` : undefined),
+      captionId: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId,
       captionBlob: (courseContent.learningObjectivesPage as any).captionBlob,
       embedUrl: objectivesVideoMedia?.embedUrl,
       media: objectivesMedia.map(m => ({
@@ -159,8 +163,13 @@ function convertNewFormat(
       // Generate file names using simple numbering (no topic names)
       // Welcome is audio-0, objectives is audio-1, so topics start at audio-2
       const topicAudioIndex = index + 2
-      const audioFile = (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}.bin` : undefined)
-      const captionFile = (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}.bin` : undefined)
+      
+      // Check for audio/caption in media array first
+      const topicAudioMedia = topic.media?.find(m => m.type === 'audio')
+      const topicCaptionMedia = topic.media?.find((m: any) => m.type === 'caption')
+      
+      const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}` : undefined)
+      const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}` : undefined)
       const imageUrl = resolveMediaUrl(imageMedia, projectId) || 
         (topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
           ? `image-${index}.jpg`
@@ -298,10 +307,10 @@ function convertOldFormat(
     const topicAudioIndex = index + 2
     const oldTopic = topic as LegacyTopic
     const audioFile = oldTopic.narration && oldTopic.narration.length > 0 
-      ? `audio-${topicAudioIndex}.bin`
+      ? `audio-${topicAudioIndex}`
       : undefined
     const captionFile = oldTopic.narration && oldTopic.narration.length > 0
-      ? `caption-${topicAudioIndex}.bin`
+      ? `caption-${topicAudioIndex}`
       : undefined
     const imageUrl = imageMedia 
       ? imageMedia.url // Use actual media URL

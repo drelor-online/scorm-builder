@@ -99,8 +99,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         hasData: !!mediaData?.data,
         hasUrl: !!mediaData?.url,
         dataType: mediaData?.data ? typeof mediaData.data : 'undefined',
-        dataSize: mediaData?.data instanceof Uint8Array ? mediaData.data.length : 
-                  mediaData?.data instanceof ArrayBuffer ? mediaData.data.byteLength : 0,
+        dataSize: (() => {
+          if (!mediaData?.data) return 0
+          const data = mediaData.data as any
+          if (data instanceof Uint8Array) return data.length
+          if (data instanceof ArrayBuffer) return data.byteLength
+          return 0
+        })(),
         metadata: mediaData?.metadata
       })
       
@@ -109,11 +114,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (mediaData.data) {
           console.log('[SCORMPackageBuilder] Using binary data for:', mediaId)
           // Handle both Uint8Array and ArrayBuffer
-          const dataArray = mediaData.data instanceof ArrayBuffer ? 
-            new Uint8Array(mediaData.data) : 
-            new Uint8Array(mediaData.data as any)
-          return new Blob([dataArray], { 
-            type: mediaData.metadata?.mimeType || mediaData.metadata?.mime_type || 'application/octet-stream' 
+          let dataArray: Uint8Array
+          if (mediaData.data instanceof ArrayBuffer) {
+            dataArray = new Uint8Array(mediaData.data)
+          } else if (mediaData.data instanceof Uint8Array) {
+            dataArray = mediaData.data
+          } else {
+            // For other array-like types
+            dataArray = new Uint8Array(mediaData.data as any)
+          }
+          return new Blob([dataArray as BlobPart], { 
+            type: mediaData.metadata?.mimeType || (mediaData.metadata as any)?.mime_type || 'application/octet-stream' 
           })
         }
         
@@ -177,12 +188,12 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         const response = await fetch(url)
         const blob = await response.blob()
         
-        // Store the remote media locally
-        const mediaItem = await storage.storeMedia(blob, pageId, mediaType, {
-          originalName: url.split('/').pop() || 'remote-media',
-          source: 'remote',
-          originalUrl: url
-        })
+        // Store the remote media locally - NOT IMPLEMENTED YET
+        // Need to use storeMedia from useUnifiedMedia but it's a hook
+        // For now, just return null
+        console.log('[SCORMPackageBuilder] Remote media storage not implemented yet')
+        const mediaItem = { id: null } // Temporary placeholder
+        return null
         
         console.log('[SCORMPackageBuilder] Stored remote media with ID:', mediaItem.id)
         return mediaItem.id
@@ -193,44 +204,45 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     }
     
     // Load media for each page
-    // FIX: Use correct property name 'welcome' instead of 'welcomePage'
+    // Use correct property name 'welcome' instead of 'welcomePage'
     if (enhancedContent.welcome) {
-      // Welcome page media
-      const welcomeAudio = enhancedContent.welcome.audio
-      const welcomeCaption = enhancedContent.welcome.caption
-      const welcomeMedia = enhancedContent.welcome.mediaReferences || []
+      // Welcome page media - look for audioFile/captionFile which contain the media IDs
+      const welcomeAudioId = enhancedContent.welcome.audioId || enhancedContent.welcome.audioFile
+      const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
+      const welcomeMedia = enhancedContent.welcome.media || []
       
-      if (welcomeAudio?.id) {
-        const audioBlob = await getMediaBlobFromRegistry(welcomeAudio.id)
+      if (welcomeAudioId) {
+        const audioBlob = await getMediaBlobFromRegistry(welcomeAudioId)
         if (audioBlob) {
-          mediaFilesRef.current.set(welcomeAudio.fileName || 'welcome.mp3', audioBlob)
-          console.log('[SCORMPackageBuilder] Loaded welcome audio:', welcomeAudio.id)
+          mediaFilesRef.current.set(`${welcomeAudioId}.mp3`, audioBlob)
+          console.log('[SCORMPackageBuilder] Loaded welcome audio:', welcomeAudioId)
         }
       }
       
-      if (welcomeCaption?.id) {
-        const captionBlob = await getMediaBlobFromRegistry(welcomeCaption.id)
+      if (welcomeCaptionId) {
+        const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId)
         if (captionBlob) {
-          mediaFilesRef.current.set(welcomeCaption.fileName || 'welcome.vtt', captionBlob)
-          console.log('[SCORMPackageBuilder] Loaded welcome caption:', welcomeCaption.id)
+          mediaFilesRef.current.set(`${welcomeCaptionId}.vtt`, captionBlob)
+          console.log('[SCORMPackageBuilder] Loaded welcome caption:', welcomeCaptionId)
         }
       }
       
-      for (const mediaRef of welcomeMedia) {
-        if (mediaRef.id) {
-          const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
+      for (const mediaItem of welcomeMedia) {
+        if (mediaItem.id) {
+          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
           if (mediaBlob) {
-            mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
-            console.log('[SCORMPackageBuilder] Loaded welcome media:', mediaRef.id)
+            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
+            mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
+            console.log('[SCORMPackageBuilder] Loaded welcome media:', mediaItem.id)
           }
-        } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+        } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
-          const newId = await handleRemoteMedia(mediaRef.url, 'image', 'welcome')
+          const newId = await handleRemoteMedia(mediaItem.url, 'image', 'welcome')
           if (newId) {
-            mediaRef.id = newId // Update the media reference with the new ID
+            mediaItem.id = newId // Update the media reference with the new ID
             const mediaBlob = await getMediaBlobFromRegistry(newId)
             if (mediaBlob) {
-              mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+              mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded remote media with new ID:', newId)
             }
           }
@@ -238,44 +250,45 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
     }
     
-    // FIX: Use correct property name 'objectivesPage'
+    // Use correct property name 'objectivesPage'
     if (enhancedContent.objectivesPage) {
-      // Objectives page media
-      const objectivesAudio = enhancedContent.objectivesPage.audio
-      const objectivesCaption = enhancedContent.objectivesPage.caption
-      const objectivesMedia = enhancedContent.objectivesPage.mediaReferences || []
+      // Objectives page media - look for audioFile/captionFile which contain the media IDs
+      const objectivesAudioId = enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioFile
+      const objectivesCaptionId = enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionFile
+      const objectivesMedia = enhancedContent.objectivesPage.media || []
       
-      if (objectivesAudio?.id) {
-        const audioBlob = await getMediaBlobFromRegistry(objectivesAudio.id)
+      if (objectivesAudioId) {
+        const audioBlob = await getMediaBlobFromRegistry(objectivesAudioId)
         if (audioBlob) {
-          mediaFilesRef.current.set(objectivesAudio.fileName || 'objectives.mp3', audioBlob)
-          console.log('[SCORMPackageBuilder] Loaded objectives audio:', objectivesAudio.id)
+          mediaFilesRef.current.set(`${objectivesAudioId}.mp3`, audioBlob)
+          console.log('[SCORMPackageBuilder] Loaded objectives audio:', objectivesAudioId)
         }
       }
       
-      if (objectivesCaption?.id) {
-        const captionBlob = await getMediaBlobFromRegistry(objectivesCaption.id)
+      if (objectivesCaptionId) {
+        const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId)
         if (captionBlob) {
-          mediaFilesRef.current.set(objectivesCaption.fileName || 'objectives.vtt', captionBlob)
-          console.log('[SCORMPackageBuilder] Loaded objectives caption:', objectivesCaption.id)
+          mediaFilesRef.current.set(`${objectivesCaptionId}.vtt`, captionBlob)
+          console.log('[SCORMPackageBuilder] Loaded objectives caption:', objectivesCaptionId)
         }
       }
       
-      for (const mediaRef of objectivesMedia) {
-        if (mediaRef.id) {
-          const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
+      for (const mediaItem of objectivesMedia) {
+        if (mediaItem.id) {
+          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
           if (mediaBlob) {
-            mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
-            console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaRef.id)
+            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
+            mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
+            console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaItem.id)
           }
-        } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+        } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
-          const newId = await handleRemoteMedia(mediaRef.url, 'image', 'objectives')
+          const newId = await handleRemoteMedia(mediaItem.url, 'image', 'objectives')
           if (newId) {
-            mediaRef.id = newId
+            mediaItem.id = newId
             const mediaBlob = await getMediaBlobFromRegistry(newId)
             if (mediaBlob) {
-              mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+              mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded remote objectives media with new ID:', newId)
             }
           }
@@ -287,41 +300,42 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     if (enhancedContent.topics) {
       for (let topicIndex = 0; topicIndex < enhancedContent.topics.length; topicIndex++) {
         const topic = enhancedContent.topics[topicIndex]
-        const topicAudio = topic.audio
-        const topicCaption = topic.caption
-        const topicMedia = topic.mediaReferences || []
+        const topicAudioId = topic.audioId || topic.audioFile
+        const topicCaptionId = topic.captionId || topic.captionFile
+        const topicMedia = topic.media || []
         
-        if (topicAudio?.id) {
-          const audioBlob = await getMediaBlobFromRegistry(topicAudio.id)
+        if (topicAudioId) {
+          const audioBlob = await getMediaBlobFromRegistry(topicAudioId)
           if (audioBlob) {
-            mediaFilesRef.current.set(topicAudio.fileName || `topic${topicIndex}.mp3`, audioBlob)
-            console.log('[SCORMPackageBuilder] Loaded topic audio:', topicAudio.id)
+            mediaFilesRef.current.set(`${topicAudioId}.mp3`, audioBlob)
+            console.log('[SCORMPackageBuilder] Loaded topic audio:', topicAudioId)
           }
         }
         
-        if (topicCaption?.id) {
-          const captionBlob = await getMediaBlobFromRegistry(topicCaption.id)
+        if (topicCaptionId) {
+          const captionBlob = await getMediaBlobFromRegistry(topicCaptionId)
           if (captionBlob) {
-            mediaFilesRef.current.set(topicCaption.fileName || `topic${topicIndex}.vtt`, captionBlob)
-            console.log('[SCORMPackageBuilder] Loaded topic caption:', topicCaption.id)
+            mediaFilesRef.current.set(`${topicCaptionId}.vtt`, captionBlob)
+            console.log('[SCORMPackageBuilder] Loaded topic caption:', topicCaptionId)
           }
         }
         
-        for (const mediaRef of topicMedia) {
-          if (mediaRef.id) {
-            const mediaBlob = await getMediaBlobFromRegistry(mediaRef.id)
+        for (const mediaItem of topicMedia) {
+          if (mediaItem.id) {
+            const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
             if (mediaBlob) {
-              mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
-              console.log('[SCORMPackageBuilder] Loaded topic media:', mediaRef.id)
+              const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
+              mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
+              console.log('[SCORMPackageBuilder] Loaded topic media:', mediaItem.id)
             }
-          } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+          } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
             // Handle remote media
-            const newId = await handleRemoteMedia(mediaRef.url, 'image', `topic-${topicIndex}`)
+            const newId = await handleRemoteMedia(mediaItem.url, 'image', `topic-${topicIndex}`)
             if (newId) {
-              mediaRef.id = newId
+              mediaItem.id = newId
               const mediaBlob = await getMediaBlobFromRegistry(newId)
               if (mediaBlob) {
-                mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+                mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
                 console.log('[SCORMPackageBuilder] Loaded remote topic media with new ID:', newId)
               }
             }
@@ -371,50 +385,45 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         // Add blob references to enhanced content for Rust generator
         // The Rust generator needs these blobs to include media in the package
         if (enhancedContent.welcome) {
-          if (enhancedContent.welcome.audio?.id) {
-            (enhancedContent.welcome as any).audioBlob = mediaFilesRef.current.get(
-              enhancedContent.welcome.audio.fileName || 'welcome.mp3'
-            )
+          const welcomeAudioId = enhancedContent.welcome.audioId || enhancedContent.welcome.audioFile
+          const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
+          if (welcomeAudioId) {
+            (enhancedContent.welcome as any).audioBlob = mediaFilesRef.current.get(`${welcomeAudioId}.mp3`)
           }
-          if (enhancedContent.welcome.caption?.id) {
-            (enhancedContent.welcome as any).captionBlob = mediaFilesRef.current.get(
-              enhancedContent.welcome.caption.fileName || 'welcome.vtt'
-            )
+          if (welcomeCaptionId) {
+            (enhancedContent.welcome as any).captionBlob = mediaFilesRef.current.get(`${welcomeCaptionId}.vtt`)
           }
         }
         
         if (enhancedContent.objectivesPage) {
-          if (enhancedContent.objectivesPage.audio?.id) {
-            (enhancedContent.objectivesPage as any).audioBlob = mediaFilesRef.current.get(
-              enhancedContent.objectivesPage.audio.fileName || 'objectives.mp3'
-            )
+          const objectivesAudioId = enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioFile
+          const objectivesCaptionId = enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionFile
+          if (objectivesAudioId) {
+            (enhancedContent.objectivesPage as any).audioBlob = mediaFilesRef.current.get(`${objectivesAudioId}.mp3`)
           }
-          if (enhancedContent.objectivesPage.caption?.id) {
-            (enhancedContent.objectivesPage as any).captionBlob = mediaFilesRef.current.get(
-              enhancedContent.objectivesPage.caption.fileName || 'objectives.vtt'
-            )
+          if (objectivesCaptionId) {
+            (enhancedContent.objectivesPage as any).captionBlob = mediaFilesRef.current.get(`${objectivesCaptionId}.vtt`)
           }
         }
         
         if (enhancedContent.topics) {
           enhancedContent.topics.forEach((topic, index) => {
-            if (topic.audio?.id) {
-              (topic as any).audioBlob = mediaFilesRef.current.get(
-                topic.audio.fileName || `topic${index}.mp3`
-              )
+            const topicAudioId = topic.audioId || topic.audioFile
+            const topicCaptionId = topic.captionId || topic.captionFile
+            if (topicAudioId) {
+              (topic as any).audioBlob = mediaFilesRef.current.get(`${topicAudioId}.mp3`)
             }
-            if (topic.caption?.id) {
-              (topic as any).captionBlob = mediaFilesRef.current.get(
-                topic.caption.fileName || `topic${index}.vtt`
-              )
+            if (topicCaptionId) {
+              (topic as any).captionBlob = mediaFilesRef.current.get(`${topicCaptionId}.vtt`)
             }
             // Handle other media in topics
-            if (topic.mediaReferences) {
-              topic.mediaReferences.forEach(mediaRef => {
-                if (mediaRef.id && mediaRef.fileName) {
-                  const blob = mediaFilesRef.current.get(mediaRef.fileName)
+            if (topic.media) {
+              topic.media.forEach(mediaItem => {
+                if (mediaItem.id) {
+                  const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
+                  const blob = mediaFilesRef.current.get(`${mediaItem.id}${extension}`)
                   if (blob) {
-                    (mediaRef as any).blob = blob
+                    (mediaItem as any).blob = blob
                   }
                 }
               })

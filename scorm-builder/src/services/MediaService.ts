@@ -9,6 +9,7 @@ import { FileStorage } from './FileStorage'
 import { generateMediaId, type MediaType } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
+import { blobUrlManager } from '../utils/blobUrlManager'
 
 export interface MediaMetadata {
   size?: number
@@ -754,8 +755,7 @@ export class MediaService {
         // Remove from cache only if deletion succeeded
         this.mediaCache.delete(mediaId)
         // Revoke blob URL if it exists
-        const blobManager = blobUrlManager
-        blobManager.revokeUrl(mediaId)
+        blobUrlManager.revokeUrl(mediaId)
         
         debugLogger.info('MediaService.deleteMedia', 'Media deleted successfully', { mediaId })
         logger.info('[MediaService] Deleted media:', mediaId)
@@ -827,8 +827,7 @@ export class MediaService {
       
       // Clear cache and revoke all blob URLs
       this.mediaCache.clear()
-      const blobManager = blobUrlManager
-      blobManager.clearAll()
+      blobUrlManager.clearAll()
       
       debugLogger.info('MediaService.deleteAllMedia', 'Deleted all media', { 
         projectId, 
