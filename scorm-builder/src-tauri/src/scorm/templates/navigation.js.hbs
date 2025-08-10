@@ -265,37 +265,33 @@
         return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)}.${pad(centiseconds, 2)}`;
     }
     
-    // Set initial lesson location
-    SafeSCORM.setValue('cmi.core.lesson_location', 'course-start');
-    SafeSCORM.commit();
+    // Don't set initial location yet - will be set after checking for saved progress
     
     // Set up beforeunload handler to properly close SCORM session
     window.addEventListener('beforeunload', function(e) {
-        console.log('[SCORM] Page unloading - saving data');
+        console.log('[SCORM] Page unloading - saving all progress');
         
         // Set session time
         const sessionTime = window.getSessionTime();
         SafeSCORM.setValue('cmi.core.session_time', sessionTime);
         console.log('[SCORM] Session time:', sessionTime);
         
-        // Save current location
-        if (window.currentPage) {
-            SafeSCORM.setValue('cmi.core.lesson_location', window.currentPage);
-        }
+        // Save all progress
+        saveProgress();
         
-        // Commit and finish
-        SafeSCORM.commit();
+        // Finish SCORM session
         SafeSCORM.finish();
     });
     
-    // Initialize navigation state
-    window.currentPage = window.currentPage || 'welcome';
-    window.completedPages = window.completedPages || new Set();
-    window.courseStructure = window.courseStructure || [];
-    window.knowledgeCheckAttempts = window.knowledgeCheckAttempts || {};
-    window.answeredQuestions = window.answeredQuestions || {};
-    window.assessmentAttempts = window.assessmentAttempts || 0;
-    window.assessmentData = window.assessmentData || { attempts: 0, scores: [], lastAnswers: {} };
+    // Initialize navigation state with defaults
+    window.currentPage = 'welcome'; // Will be overridden if saved progress exists
+    window.completedPages = new Set();
+    window.courseStructure = [];
+    window.knowledgeCheckAttempts = {};
+    window.answeredQuestions = {};
+    window.assessmentAttempts = 0;
+    window.assessmentData = { attempts: 0, scores: [], lastAnswers: {} };
+    window.hasRestoredProgress = false;
     
     // Course structure from Rust
     const COURSE_PAGES = [
@@ -472,9 +468,13 @@
                 contentContainer.innerHTML = html;
                 window.currentPage = pageId;
                 
+                // Mark page as visited/completed
+                window.completedPages.add(pageId);
+                
                 // Initialize page-specific features
                 initializePageAudio(pageId);
                 initializeKnowledgeChecks();
+                restoreAnsweredQuestions(pageId);
                 
                 // Update navigation state after content loads
                 // This is CRITICAL - must happen after content is in DOM
@@ -485,6 +485,10 @@
                 
                 // Update sidebar active state
                 updateSidebarActiveState();
+                updateSidebarCompletionState();
+                
+                // Save progress after navigation
+                saveProgress();
                 
                 // Scroll to top
                 contentContainer.scrollTop = 0;
@@ -889,6 +893,9 @@
         
         // Update navigation state
         updateNavigationState();
+        
+        // Save progress after submitting all answers
+        saveProgress();
     };
     
     // Initialize knowledge checks on page
@@ -1197,34 +1204,252 @@
         });
     }
     
+    // Update sidebar completion state
+    function updateSidebarCompletionState() {
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            const pageId = item.dataset.page;
+            if (window.completedPages.has(pageId)) {
+                item.classList.add('completed');
+                // Add checkmark if not already present
+                if (!item.querySelector('.completion-check')) {
+                    const checkmark = document.createElement('span');
+                    checkmark.className = 'completion-check';
+                    checkmark.innerHTML = '✓';
+                    item.appendChild(checkmark);
+                }
+            }
+        });
+    }
     
-    // Load assessment data from SCORM
-    function loadAssessmentData() {
-        window.assessmentData = {
-            attempts: 0,
-            scores: [],
-            lastAnswers: {}
-        };
+    // Restore answered questions on page load
+    function restoreAnsweredQuestions(pageId) {
+        console.log('[SCORM Progress] Restoring answers for page:', pageId);
         
+        // Check for multiple choice questions
+        const mcQuestions = document.querySelectorAll('.kc-question-wrapper');
+        mcQuestions.forEach((wrapper, index) => {
+            const questionKey = `${pageId}_q${index}`;
+            if (window.answeredQuestions[questionKey]) {
+                console.log('[SCORM Progress] Question already answered:', questionKey);
+                
+                // Mark question as answered visually
+                const submitButton = wrapper.querySelector('.kc-submit');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Answer Submitted';
+                }
+                
+                // Add visual indicator
+                wrapper.classList.add('question-answered');
+            }
+        });
+        
+        // Check for fill-in-blank questions
+        const fillBlanks = document.querySelectorAll('.kc-fill-blank');
+        fillBlanks.forEach((input, index) => {
+            const questionKey = `${pageId}_fill-blank-${index}`;
+            if (window.answeredQuestions[questionKey]) {
+                console.log('[SCORM Progress] Fill-in-blank already answered:', questionKey);
+                
+                // Mark as answered
+                const wrapper = input.closest('.kc-question-wrapper');
+                if (wrapper) {
+                    wrapper.classList.add('question-answered');
+                    const submitButton = wrapper.querySelector('.kc-submit');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.textContent = 'Answer Submitted';
+                    }
+                }
+            }
+        });
+    }
+    
+    
+    // Load all saved progress from SCORM
+    function loadSavedProgress() {
+        console.log('[SCORM Progress] Loading saved progress from SCORM');
+        
+        let progressLoaded = false;
+        let savedLocation = null;
+        
+        // Load lesson location
         try {
-            const suspendData = SafeSCORM.getValue('cmi.suspend_data');
-            if (suspendData) {
-                const data = JSON.parse(suspendData);
-                window.assessmentData.attempts = data.assessmentAttempts || 0;
-                window.assessmentData.scores = data.attemptHistory || [];
-                window.assessmentData.lastAnswers = data.lastAnswers || {};
+            savedLocation = SafeSCORM.getValue('cmi.core.lesson_location');
+            if (savedLocation && savedLocation !== '' && savedLocation !== 'course-start') {
+                console.log('[SCORM Progress] Found saved location:', savedLocation);
+                window.currentPage = savedLocation;
+                progressLoaded = true;
             }
         } catch (e) {
-            console.log('[SCORM Navigation] No previous assessment data found');
+            console.log('[SCORM Progress] Could not load lesson location:', e);
         }
+        
+        // Load suspend data (completed pages, answered questions, assessment data)
+        try {
+            const suspendData = SafeSCORM.getValue('cmi.suspend_data');
+            if (suspendData && suspendData !== '') {
+                console.log('[SCORM Progress] Found suspend data, parsing...');
+                const data = JSON.parse(suspendData);
+                
+                // Restore completed pages
+                if (data.completedPages && Array.isArray(data.completedPages)) {
+                    window.completedPages = new Set(data.completedPages);
+                    console.log('[SCORM Progress] Restored completed pages:', data.completedPages);
+                }
+                
+                // Restore answered questions
+                if (data.answeredQuestions && typeof data.answeredQuestions === 'object') {
+                    window.answeredQuestions = data.answeredQuestions;
+                    console.log('[SCORM Progress] Restored answered questions:', Object.keys(data.answeredQuestions).length, 'questions');
+                }
+                
+                // Restore assessment data
+                if (data.assessmentAttempts !== undefined) {
+                    window.assessmentData.attempts = data.assessmentAttempts;
+                    window.assessmentData.scores = data.attemptHistory || [];
+                    window.assessmentData.lastAnswers = data.lastAnswers || {};
+                    console.log('[SCORM Progress] Restored assessment data:', {
+                        attempts: window.assessmentData.attempts,
+                        scores: window.assessmentData.scores
+                    });
+                }
+                
+                progressLoaded = true;
+            }
+        } catch (e) {
+            console.log('[SCORM Progress] Could not parse suspend data:', e);
+            // Reset to defaults on error
+            window.completedPages = new Set();
+            window.answeredQuestions = {};
+            window.assessmentData = { attempts: 0, scores: [], lastAnswers: {} };
+        }
+        
+        // Check completion status
+        try {
+            const status = SafeSCORM.getValue('cmi.core.lesson_status');
+            console.log('[SCORM Progress] Course status:', status);
+            
+            if (status === 'completed' || status === 'passed') {
+                // Mark assessment as completed if course is complete
+                window.completedPages.add('assessment');
+            }
+        } catch (e) {
+            console.log('[SCORM Progress] Could not load lesson status:', e);
+        }
+        
+        window.hasRestoredProgress = progressLoaded;
+        
+        // Show resume notification if progress was loaded
+        if (progressLoaded && savedLocation && savedLocation !== 'welcome') {
+            showResumeNotification(savedLocation);
+        }
+        
+        return progressLoaded;
+    }
+    
+    // Save all progress to SCORM
+    function saveProgress() {
+        console.log('[SCORM Progress] Saving progress to SCORM');
+        
+        // Save current page location
+        if (window.currentPage) {
+            SafeSCORM.setValue('cmi.core.lesson_location', window.currentPage);
+        }
+        
+        // Prepare suspend data with all progress
+        const progressData = {
+            completedPages: Array.from(window.completedPages),
+            answeredQuestions: window.answeredQuestions,
+            assessmentAttempts: window.assessmentData.attempts,
+            attemptHistory: window.assessmentData.scores,
+            lastAnswers: window.assessmentData.lastAnswers,
+            timestamp: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        // Save suspend data
+        try {
+            const suspendDataStr = JSON.stringify(progressData);
+            SafeSCORM.setValue('cmi.suspend_data', suspendDataStr);
+            console.log('[SCORM Progress] Saved progress data:', {
+                completedPages: progressData.completedPages.length,
+                answeredQuestions: Object.keys(progressData.answeredQuestions).length
+            });
+        } catch (e) {
+            console.error('[SCORM Progress] Failed to save suspend data:', e);
+        }
+        
+        // Commit changes
+        SafeSCORM.commit();
+    }
+    
+    // Show notification when resuming progress
+    function showResumeNotification(savedLocation) {
+        const pageTitle = getPageTitle(savedLocation);
+        const completedCount = window.completedPages.size;
+        const totalPages = COURSE_PAGES.length;
+        const percentage = Math.round((completedCount / totalPages) * 100);
+        
+        const message = `Welcome back! Resuming from: ${pageTitle} (${percentage}% complete)`;
+        
+        // Create resume notification
+        setTimeout(() => {
+            const alertContainer = document.getElementById('scorm-alert-container');
+            if (alertContainer) {
+                const alert = document.createElement('div');
+                alert.className = 'scorm-alert scorm-alert-info scorm-alert-resume';
+                alert.innerHTML = `
+                    <div class="resume-content">
+                        <span class="resume-icon">↻</span>
+                        <div>
+                            <strong>Course Progress Restored</strong><br>
+                            ${message}
+                        </div>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="alert-close">×</button>
+                `;
+                alertContainer.appendChild(alert);
+                
+                // Auto-remove after 8 seconds
+                setTimeout(() => {
+                    if (alert.parentElement) {
+                        alert.remove();
+                    }
+                }, 8000);
+            }
+        }, 1000); // Delay to ensure page is loaded
+    }
+    
+    // Get human-readable page title
+    function getPageTitle(pageId) {
+        const titles = {
+            'welcome': 'Welcome',
+            'objectives': 'Learning Objectives',
+            'assessment': 'Assessment'
+        };
+        
+        // For topics, capitalize and format
+        if (pageId.startsWith('topic-')) {
+            return pageId.replace('topic-', 'Topic ').replace(/-/g, ' ');
+        }
+        
+        return titles[pageId] || pageId;
     }
     
     // Initialize navigation
     function initializeNavigation() {
         console.log('[SCORM Navigation] Initializing navigation system');
         
-        // Load any saved assessment data from SCORM
-        loadAssessmentData();
+        // Load saved progress from SCORM
+        const hasProgress = loadSavedProgress();
+        
+        // If no saved progress, set initial location
+        if (!hasProgress) {
+            SafeSCORM.setValue('cmi.core.lesson_location', 'course-start');
+            SafeSCORM.commit();
+        }
         
         // Setup navigation buttons
         const nextButton = document.getElementById('next-button');
@@ -1393,16 +1618,9 @@
             console.log('[SCORM] Could not store score locally');
         }
         
-        // Save assessment data to SCORM
+        // Save assessment data along with all progress
         window.assessmentData.scores.push(percentage);
-        const suspendData = JSON.stringify({
-            assessmentAttempts: window.assessmentData.attempts,
-            attemptHistory: window.assessmentData.scores,
-            lastAnswers: currentAnswers,
-            timestamp: new Date().toISOString()
-        });
-        SafeSCORM.setValue('cmi.suspend_data', suspendData);
-        SafeSCORM.commit();
+        saveProgress();
         
         // Don't hide submit button - allow resubmission
         const submitButton = document.querySelector('.submit-assessment');
@@ -1460,6 +1678,7 @@
                 
                 // Mark as completed
                 window.completedPages.add('assessment');
+                saveProgress();
                 
                 // Update SCORM status to completed and passed
                 SafeSCORM.setValue('cmi.core.lesson_status', 'passed');
