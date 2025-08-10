@@ -764,7 +764,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   }
 
   const getMessageStyle = (type: Message['type']) => {
-    const baseStyle = "mb-3 p-4 rounded-lg border flex items-start justify-between animate-fadeIn"
+    const baseStyle = "mb-2 p-3 rounded-md border flex items-start justify-between"
     switch (type) {
       case 'error':
         return `${baseStyle} bg-red-50 border-red-200 text-red-800`
@@ -813,29 +813,31 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       onStepClick={onStepClick}
     >
       <div className="max-w-4xl mx-auto">
-        <Card className="mb-6">
-          <div className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Package Information</h3>
-            <div className="space-y-3">
-              <div>
-                <span className="text-sm text-gray-500">Course Title:</span>
-                <p className="font-medium">{courseSeedData?.courseTitle || 'Untitled Course'}</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-500">SCORM Version:</span>
-                <p className="font-medium">SCORM 1.2</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-500">Content Summary:</span>
-                <p className="text-sm text-gray-600">
-                  {courseContent.topics?.length || 0} topics, 
-                  {' '}{courseContent.topics?.length || 0} knowledge checks,
-                  {' '}{courseContent.assessment?.questions?.length || 0} assessment questions
-                </p>
-              </div>
+        {/* Compact Package Information */}
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Course Title</p>
+              <p className="font-semibold text-gray-900">{courseSeedData?.courseTitle || 'Untitled Course'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">SCORM Version</p>
+              <p className="font-semibold text-gray-900">SCORM 1.2</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Content Summary</p>
+              <p className="font-semibold text-gray-900">
+                {courseContent.topics?.length || 0} topics, {courseContent.assessment?.questions?.length || 0} assessment questions
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Knowledge Checks</p>
+              <p className="font-semibold text-gray-900">
+                {courseContent.topics?.length || 0} questions
+              </p>
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Audio Settings */}
         <Card className="mb-6">
@@ -888,20 +890,23 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         {/* Loading State */}
         {isGenerating && (
           <Card className="mb-6">
-            <div className="p-8">
-              <div className="flex flex-col items-center justify-center">
-                <LoadingSpinner size="large" className="mb-4" />
-                <p className="text-lg font-medium mb-2">{loadingMessage}</p>
-                {generationStartTime && (
-                  <p className="text-sm text-gray-500 mb-2">
-                    Elapsed: {elapsedTime.toFixed(1)} seconds
-                  </p>
-                )}
+            <div className="p-6">
+              <div className="flex items-center gap-4">
+                <LoadingSpinner size="medium" />
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">{loadingMessage}</p>
+                  {generationStartTime && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Elapsed time: {elapsedTime.toFixed(1)} seconds
+                    </p>
+                  )}
+                </div>
+              </div>
                 {isLoadingMedia && (
-                  <div className="mt-4 w-full max-w-md">
+                  <div className="mt-4 w-full">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>Loading media files...</span>
-                      <span>{loadingDetails.filesLoaded} / {loadingDetails.totalFiles}</span>
+                      <span className="font-medium">{loadingDetails.filesLoaded} / {loadingDetails.totalFiles}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div 
@@ -911,70 +916,76 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                     </div>
                     {loadingDetails.currentFile && (
                       <p className="text-xs text-gray-500 mt-2 truncate">
-                        {loadingDetails.currentFile}
+                        Current: {loadingDetails.currentFile}
                       </p>
                     )}
                   </div>
                 )}
-              </div>
             </div>
           </Card>
         )}
 
         {/* Success State */}
         {generatedPackage && !isGenerating && (
-          <Card className="mb-6 border-2 border-green-500 shadow-lg animate-fadeIn">
-            <div className="p-8 text-center bg-gradient-to-b from-green-50 to-white rounded-lg">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                <Icon icon={CheckCircle} className="w-10 h-10 text-green-600" />
-              </div>
-              <h3 className="text-2xl font-bold mb-2 text-green-800">🎉 Package Generated Successfully!</h3>
-              <p className="text-lg text-gray-700 mb-4">
-                Your SCORM package is ready for download.
-              </p>
-              <div className="bg-white rounded-lg p-4 mb-6 shadow-inner">
-                <div className="text-sm space-y-1">
-                  <p className="text-gray-600">
-                    <span className="font-semibold">Package size:</span> 
-                    <span className="text-lg font-bold text-blue-600 ml-2">
-                      {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB
-                    </span>
+          <Card className="mb-6 border border-green-200 bg-green-50">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <Icon icon={CheckCircle} className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-green-900 mb-2">
+                    Package Generated Successfully
+                  </h3>
+                  <p className="text-sm text-green-700 mb-4">
+                    Your SCORM package is ready for download.
                   </p>
-                  {performanceData && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold">Generation time:</span>
-                      <span className="text-lg font-bold text-blue-600 ml-2">
-                        {(performanceData.totalDuration / 1000).toFixed(1)} seconds
-                      </span>
-                    </p>
-                  )}
-                  <p className="text-gray-600">
-                    <span className="font-semibold">Media files included:</span>
-                    <span className="text-lg font-bold text-blue-600 ml-2">
-                      {mediaFilesRef.current.size}
-                    </span>
-                  </p>
+                  
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="bg-white rounded p-3 border border-green-200">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Package Size</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    {performanceData && (
+                      <div className="bg-white rounded p-3 border border-green-200">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Generation Time</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {(performanceData.totalDuration / 1000).toFixed(1)}s
+                        </p>
+                      </div>
+                    )}
+                    <div className="bg-white rounded p-3 border border-green-200">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Media Files</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {mediaFilesRef.current.size}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <Button
+                    onClick={() => downloadPackage()}
+                    disabled={isDownloading}
+                    variant="primary"
+                    size="medium"
+                  >
+                    {isDownloading ? (
+                      <>
+                        <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Icon icon={Download} />
+                        Download Package
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
-              <Button
-                onClick={() => downloadPackage()}
-                disabled={isDownloading}
-                variant="primary"
-                size="large"
-                className="min-w-[200px]"
-              >
-                {isDownloading ? (
-                  <>
-                    <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Icon icon={Download} />
-                    Download Package
-                  </>
-                )}
-              </Button>
             </div>
           </Card>
         )}

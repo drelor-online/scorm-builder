@@ -15,7 +15,7 @@ import {
   Icon,
   ProgressBar
 } from './DesignSystem'
-import { FileAudio, FileText, Eye, Mic, Circle, Save } from 'lucide-react'
+import { FileAudio, FileText, Eye, Mic, Circle, Save, Upload, Play, Square, CheckCircle, ChevronDown, ChevronUp, Volume2, Pause } from 'lucide-react'
 import { TauriAudioPlayer } from './TauriAudioPlayer'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
@@ -230,6 +230,8 @@ export function AudioNarrationWizard({
   const [showPreview, setShowPreview] = useState(false)
   const [previewBlockId, setPreviewBlockId] = useState<string | null>(null)
   const [blockToReplaceAudio, setBlockToReplaceAudio] = useState<UnifiedNarrationBlock | null>(null)
+  const [showBulkUpload, setShowBulkUpload] = useState(false) // Collapsible bulk upload section
+  const [showInstructions, setShowInstructions] = useState(false) // Collapsible instructions
   // Version tracking no longer needed with arrays
   
   // Consolidated recording state for better performance
@@ -403,7 +405,7 @@ export function AudioNarrationWizard({
                   onClick={onPlayAudio}
                   className={styles.buttonWithIcon}
                 >
-                  {isPlaying ? '⏹️ Stop' : '▶️ Play'}
+                  {isPlaying ? (<><Square size={16} /> Stop</>) : (<><Play size={16} /> Play</>)}
                 </Button>
                 <Button
                   size="small"
@@ -431,7 +433,7 @@ export function AudioNarrationWizard({
                   variant="secondary"
                   className={styles.uploadButtonDisabled}
                 >
-                  📁 Upload Audio
+                  <Upload size={16} /> Upload Audio
                 </Button>
               </span>
             </label>
@@ -443,7 +445,7 @@ export function AudioNarrationWizard({
               onClick={onToggleRecording}
               className={styles.buttonWithIcon}
             >
-              {isRecording && recordingId === block.id ? '⏹️ Stop Recording' : '🎙️ Record Audio'}
+              {isRecording && recordingId === block.id ? (<><Square size={16} /> Stop Recording</>) : (<><Mic size={16} /> Record Audio</>)}
             </Button>
             {/* Caption Upload - Always Available */}
             <div className={styles.captionUploadContainer}>
@@ -461,14 +463,14 @@ export function AudioNarrationWizard({
                     variant="secondary"
                     className={styles.uploadButtonDisabled}
                   >
-                    📝 Upload Caption
+                    <FileText size={16} /> Upload Caption
                   </Button>
                 </span>
               </label>
               {hasCaption && (
                 <>
                   <span className={styles.successCheck}>
-                    ✓
+                    <CheckCircle size={16} color="var(--color-success)" />
                   </span>
                   <Button
                     size="small"
@@ -476,7 +478,7 @@ export function AudioNarrationWizard({
                     onClick={onPreviewCaption}
                     className={styles.buttonWithIcon}
                   >
-                    👁️ Preview
+                    <Eye size={16} /> Preview
                   </Button>
                 </>
               )}
@@ -501,23 +503,24 @@ export function AudioNarrationWizard({
   })
   NarrationBlockItem.displayName = 'NarrationBlockItem'
   
-  // Cleanup blob URLs on unmount
+  // Cleanup only temporary recording preview URLs on unmount
+  // Do NOT cleanup media blob URLs as they're needed by other components
   useEffect(() => {
     return () => {
-      // Revoke all blob URLs when component unmounts
-      if (blobUrlsRef.current && blobUrlsRef.current.length > 0) {
-        logger.log('[AudioNarrationWizard] Cleaning up blob URLs on unmount')
-        blobUrlsRef.current.forEach(url => {
-          try {
-            URL.revokeObjectURL(url)
-          } catch (e) {
-            logger.warn('[AudioNarrationWizard] Failed to revoke blob URL:', e)
-          }
-        })
-        blobUrlsRef.current = []
+      // Only cleanup the temporary recording preview URL if it exists
+      // Media blob URLs are managed by MediaService/BlobURLManager
+      if (recordingPreviewUrl && recordingPreviewUrl.startsWith('blob:')) {
+        logger.log('[AudioNarrationWizard] Cleaning up temporary recording preview URL')
+        try {
+          URL.revokeObjectURL(recordingPreviewUrl)
+        } catch (e) {
+          logger.warn('[AudioNarrationWizard] Failed to revoke recording preview URL:', e)
+        }
       }
+      // Clear the refs but don't revoke the URLs - they're still needed
+      blobUrlsRef.current = []
     }
-  }, [])
+  }, [recordingPreviewUrl])
   
   // Helper to track operations
   const startOperation = (operationId: string) => {
@@ -2531,20 +2534,7 @@ export function AudioNarrationWizard({
         </div>
       )}
       
-      <div className={styles.bulkUploadContainer}>
-        {/* Summary */}
-        <Card variant="default" padding="medium">
-          <h3 className={styles.bulkUploadTitle}>Narration Blocks</h3>
-          <Grid cols={2} gap="medium">
-            <Alert variant={audioUploaded ? 'success' : 'info'}>
-              <strong>Audio Files:</strong> {audioUploaded ? `${audioFiles.length} files uploaded` : 'Not uploaded'}
-            </Alert>
-            <Alert variant={captionsUploaded ? 'success' : 'info'}>
-              <strong>Caption Files:</strong> {captionsUploaded ? `${captionFiles.length} files uploaded` : 'Not uploaded'}
-            </Alert>
-          </Grid>
-        </Card>
-
+      <div className={styles.mainContent}>
         {/* Show error if any */}
         {error && (
           <Alert variant="error">
@@ -2552,10 +2542,88 @@ export function AudioNarrationWizard({
           </Alert>
         )}
 
-        {/* Bulk Upload Section */}
-        <Card variant="default" padding="medium">
-          <h3 className={styles.bulkUploadTitle}>Bulk Audio Upload</h3>
+        {/* Narration Blocks Section - Primary focus */}
+        <div className={styles.narrationSection}>
+          <div className={styles.narrationHeader}>
+            <h3 className={styles.sectionTitle}>Narration Blocks</h3>
+            {(audioUploaded || captionsUploaded) && (
+              <div className={styles.uploadStatusBadges}>
+                {audioUploaded && (
+                  <span className={styles.successBadge}>
+                    <CheckCircle size={14} /> {audioFiles.length} audio files
+                  </span>
+                )}
+                {captionsUploaded && (
+                  <span className={styles.successBadge}>
+                    <FileText size={14} /> {captionFiles.length} captions
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Individual narration blocks */}
+          <div className={styles.narrationBlocksList}>
+            {narrationBlocks.map((block) => {
+              const hasAudio = audioFiles.some(f => f.blockNumber === block.blockNumber)
+              const hasCaption = captionFiles.some(f => f.blockNumber === block.blockNumber)
+              const isEditing = editingBlockId === block.id
+              
+              const audioFile = audioFiles.find(f => f.blockNumber === block.blockNumber)
+              const isCurrentlyPlaying = playingAudioUrl === audioFile?.url
+              
+              return (
+                <NarrationBlockItem
+                  key={block.id}
+                  block={block}
+                  hasAudio={hasAudio}
+                  hasCaption={hasCaption}
+                  isEditing={isEditing}
+                  onEdit={() => {
+                    setEditingBlockId(block.id)
+                    setEditingText(block.text)
+                  }}
+                  onUpdate={(text) => {
+                    setNarrationBlocks(prev => prev.map(b =>
+                      b.id === block.id ? { ...b, text } : b
+                    ))
+                    setEditingBlockId(null)
+                  }}
+                  onCancel={() => setEditingBlockId(null)}
+                  onPlayAudio={() => playAudio(block.blockNumber)}
+                  onUploadAudio={(e) => handleAudioFileChange(e, block)}
+                  onRemoveAudio={() => removeAudio(block.blockNumber)}
+                  onGenerateCaption={() => generateCaption(block.blockNumber)}
+                  onPreviewCaption={() => {
+                    setPreviewBlockId(block.id)
+                    setShowPreview(true)
+                  }}
+                  onToggleRecording={() => handleRecordClick(block)}
+                  isRecording={recordingBlockId === block.id}
+                  recordingId={recordingBlockId}
+                  isPlaying={isCurrentlyPlaying}
+                />
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Bulk Upload Section - Collapsible */}
+        <Card variant="default" padding="medium" className={styles.bulkUploadCard}>
+          <div 
+            className={styles.bulkUploadHeader}
+            onClick={() => setShowBulkUpload(!showBulkUpload)}
+            style={{ cursor: 'pointer' }}
+          >
+            <h3 className={styles.bulkUploadTitle}>
+              {showBulkUpload ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              Bulk Audio Upload (Murf.ai)
+            </h3>
+            <p className={styles.bulkUploadSubtitle}>Upload multiple audio files at once using ZIP archives</p>
+          </div>
           
+          {showBulkUpload && (
+          <div>
           {/* Workflow Instructions */}
           <div className={styles.workflowSection}>
             <h4 className={styles.workflowTitle}>Workflow</h4>
@@ -2592,7 +2660,7 @@ export function AudioNarrationWizard({
 
           {/* Warning */}
           <Alert variant="warning">
-            ⚠️ Bulk upload will replace all existing audio and caption files. Make sure you have all required files in your ZIP archive.
+            Bulk upload will replace all existing audio and caption files. Make sure you have all required files in your ZIP archive.
           </Alert>
 
           {/* Upload Grid */}
@@ -2634,7 +2702,8 @@ export function AudioNarrationWizard({
                 )}
                 {audioUploaded && (
                   <Alert variant="success">
-                    ✓ {audioFiles.length} audio files uploaded
+                    <CheckCircle size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                    {audioFiles.length} audio files uploaded
                   </Alert>
                 )}
               </div>
@@ -2664,149 +2733,48 @@ export function AudioNarrationWizard({
                 />
                 {captionsUploaded && (
                   <Alert variant="success">
-                    ✓ {captionFiles.length} caption files uploaded
+                    <CheckCircle size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                    {captionFiles.length} caption files uploaded
                   </Alert>
                 )}
               </div>
             </div>
           </Grid>
 
-          {/* Detailed Instructions */}
+          {/* Simplified Instructions - Collapsible */}
           <div className={styles.instructionsSection}>
-            <h4 className={styles.instructionsTitle}>
-              How to use Murf.ai for professional voiceovers:
-            </h4>
+            <div 
+              className={styles.instructionsHeader}
+              onClick={() => setShowInstructions(!showInstructions)}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {showInstructions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <span className={styles.instructionsToggle}>Murf.ai Instructions</span>
+            </div>
             
-            <Grid cols={2} gap="large">
-              {/* Steps */}
-              <div className={styles.instructionColumn}>
-                <h5 className={styles.instructionSubtitle}>
-                  Step-by-step guide:
-                </h5>
-                <ol className={styles.instructionList}>
-                  <li className={styles.instructionListItem}>
-                    Download narration text using the button above
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    Go to murf.ai and create a new project
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    Upload the narration script, select "Split by paragraphs"
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    Select an appropriate voice and preview
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    <strong>For Audio:</strong>
-                    <ul className={styles.instructionSubList}>
-                      <li>Select Export → Voice only</li>
-                      <li>Download as: Split by blocks</li>
-                      <li>Format: .MP3</li>
-                      <li>Quality: High</li>
-                      <li>Channel: Stereo</li>
-                    </ul>
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    <strong>For Captions:</strong>
-                    <ul className={styles.instructionSubList}>
-                      <li>Select Export → Script</li>
-                      <li>Download as: Split by blocks</li>
-                      <li>Format: .VTT</li>
-                    </ul>
-                  </li>
-                  <li className={styles.instructionListItem}>
-                    Upload the ZIP files here
-                  </li>
-                </ol>
-
-                <h5 className={styles.instructionSubtitle}>
-                  File naming convention:
-                </h5>
-                <div className={styles.fileNamingBox}>
-                  0001-Block.mp3
-                  0002-Block.mp3
-                  0003-Block.mp3
-                  ...
+            {showInstructions && (
+              <div className={styles.instructionsContent}>
+                <div className={styles.quickSteps}>
+                  <p><strong>Quick Steps:</strong></p>
+                  <ol className={styles.compactList}>
+                    <li>Download narration text above</li>
+                    <li>Upload to murf.ai (Split by paragraphs)</li>
+                    <li>Export audio as MP3 (Split by blocks)</li>
+                    <li>Export captions as VTT (Split by blocks)</li>
+                    <li>Name files: 0001-Block.mp3, 0002-Block.mp3, etc.</li>
+                    <li>Upload ZIP files here</li>
+                  </ol>
                 </div>
-                <p className={styles.fileNamingNote}>
-                  Name your audio files exactly as shown above to match block numbers
-                </p>
               </div>
-
-              {/* Features and Tips */}
-              <div className={styles.instructionColumn}>
-                <h5 className={styles.instructionSubtitle}>
-                  Murf.ai features:
-                </h5>
-                <ul className={styles.featureList}>
-                  <li className={styles.featureListItem}>120+ AI voices in different accents</li>
-                  <li className={styles.featureListItem}>20+ languages supported</li>
-                  <li className={styles.featureListItem}>Adjustable speed and pitch</li>
-                  <li className={styles.featureListItem}>Add pauses and emphasis</li>
-                  <li className={styles.featureListItem}>Background music options</li>
-                </ul>
-
-                <h5 className={styles.instructionSubtitle}>
-                  Tips for best results:
-                </h5>
-                <ul className={styles.tipsList}>
-                  <li className={styles.tipsListItem}>Preview different voices before committing</li>
-                  <li className={styles.tipsListItem}>Add pauses between sentences for natural flow</li>
-                  <li className={styles.tipsListItem}>Use the same voice for consistent narration throughout</li>
-                  <li className={styles.tipsListItem}>Export at high quality (minimum 128kbps)</li>
-                </ul>
-              </div>
-            </Grid>
+            )}
           </div>
+          </div>
+          )}
         </Card>
+      </div>
 
-        {/* Individual narration blocks */}
-        <div className={styles.narrationBlocksList}>
-          {narrationBlocks.map((block) => {
-            const hasAudio = audioFiles.some(f => f.blockNumber === block.blockNumber)
-            const hasCaption = captionFiles.some(f => f.blockNumber === block.blockNumber)
-            const isEditing = editingBlockId === block.id
-            
-            const audioFile = audioFiles.find(f => f.blockNumber === block.blockNumber)
-            const isCurrentlyPlaying = playingAudioUrl === audioFile?.url
-            
-            return (
-              <NarrationBlockItem
-                key={block.id}
-                block={block}
-                hasAudio={hasAudio}
-                hasCaption={hasCaption}
-                isEditing={isEditing}
-                onEdit={() => {
-                  setEditingBlockId(block.id)
-                  setEditingText(block.text)
-                }}
-                onUpdate={(text) => {
-                  setNarrationBlocks(prev => prev.map(b =>
-                    b.id === block.id ? { ...b, text } : b
-                  ))
-                  setEditingBlockId(null)
-                }}
-                onCancel={() => setEditingBlockId(null)}
-                onPlayAudio={() => playAudio(block.blockNumber)}
-                onUploadAudio={(e) => handleAudioFileChange(e, block)}
-                onRemoveAudio={() => removeAudio(block.blockNumber)}
-                onGenerateCaption={() => generateCaption(block.blockNumber)}
-                onPreviewCaption={() => {
-                  setPreviewBlockId(block.id)
-                  setShowPreview(true)
-                }}
-                onToggleRecording={() => handleRecordClick(block)}
-                isRecording={recordingBlockId === block.id}
-                recordingId={recordingBlockId}
-                isPlaying={isCurrentlyPlaying}
-              />
-            )
-          })}
-        </div>
-
-        {/* Recording Modal */}
-        {showRecordingModal && (
+      {/* Recording Modal */}
+      {showRecordingModal && (
           <Modal
             isOpen={showRecordingModal}
             onClose={cancelRecording}
@@ -2906,8 +2874,8 @@ export function AudioNarrationWizard({
           </Modal>
         )}
 
-        {/* Caption Preview Modal */}
-        {showPreview && previewBlockId && (
+      {/* Caption Preview Modal */}
+      {showPreview && previewBlockId && (
           <Modal
             isOpen={showPreview}
             onClose={() => setShowPreview(false)}
@@ -2938,8 +2906,8 @@ export function AudioNarrationWizard({
           </Modal>
         )}
 
-        {/* Replace Audio Confirmation */}
-        {blockToReplaceAudio && (
+      {/* Replace Audio Confirmation */}
+      {blockToReplaceAudio && (
           <ConfirmDialog
             isOpen={!!blockToReplaceAudio}
             onConfirm={() => {
@@ -2956,9 +2924,9 @@ export function AudioNarrationWizard({
             cancelText="Cancel"
           />
         )}
-        
-        {/* Hidden TauriAudioPlayer for asset:// URL playback */}
-        {playingAudioUrl && (
+      
+      {/* Hidden TauriAudioPlayer for asset:// URL playback */}
+      {playingAudioUrl && (
           <div className={styles.hiddenAudioPlayer}>
             <TauriAudioPlayer
               src={playingAudioUrl}
@@ -2976,7 +2944,6 @@ export function AudioNarrationWizard({
             />
           </div>
         )}
-      </div>
     </PageLayout>
   )
 }
