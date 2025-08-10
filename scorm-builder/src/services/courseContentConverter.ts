@@ -170,10 +170,13 @@ function convertNewFormat(
       
       const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}` : undefined)
       const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}` : undefined)
+      
+      // For images, only use actual stored media - don't generate placeholder paths
+      // Check if there's a real stored image ID for this topic
+      const storedImageId = `image-${topicAudioIndex}` // Topics start at image-2 since welcome is image-0, objectives is image-1
       const imageUrl = resolveMediaUrl(imageMedia, projectId) || 
-        (topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
-          ? `image-${index}.jpg`
-          : undefined)
+        ((topic as any).imageId ? (topic as any).imageId : undefined) // Only use actual stored image IDs
+      
       const embedUrl = videoMedia?.embedUrl
       
       return {
@@ -312,11 +315,10 @@ function convertOldFormat(
     const captionFile = oldTopic.narration && oldTopic.narration.length > 0
       ? `caption-${topicAudioIndex}`
       : undefined
+    // For images, only use actual stored media - don't generate placeholder paths
     const imageUrl = imageMedia 
       ? imageMedia.url // Use actual media URL
-      : topic.imagePrompts.length > 0 || topic.imageKeywords.length > 0
-      ? `image-${index}.jpg`
-      : undefined
+      : undefined // Don't generate placeholder .jpg paths
     const embedUrl = videoMedia?.embedUrl
     
     return {
