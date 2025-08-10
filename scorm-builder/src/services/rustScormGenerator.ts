@@ -206,7 +206,7 @@ async function resolveImageUrl(
       console.log(`[Rust SCORM] Using cached media:`, imageUrl)
       
       // Check if this is a video metadata JSON file
-      if (imageUrl.startsWith('video-') && cached.mimeType === 'application/json') {
+      if (imageUrl.startsWith('video-') && (cached.mimeType === 'application/json' || cached.mimeType === 'text/plain')) {
         try {
           const jsonText = new TextDecoder().decode(cached.data)
           const metadata = JSON.parse(jsonText)
@@ -214,16 +214,27 @@ async function resolveImageUrl(
             console.log(`[Rust SCORM] Found YouTube URL in cached metadata:`, metadata.url)
             return metadata.url
           }
+          if (metadata.embed_url && (metadata.embed_url.includes('youtube.com') || metadata.embed_url.includes('youtu.be'))) {
+            console.log(`[Rust SCORM] Found YouTube embed URL in cached metadata:`, metadata.embed_url)
+            return metadata.embed_url
+          }
         } catch (error) {
           console.error(`[Rust SCORM] Failed to parse cached video metadata:`, error)
         }
       }
       
-      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(imageUrl)
-      const filename = `${imageUrl}.${ext}`
+      // Use .bin extension for consistency
+      const filename = `${imageUrl}.bin`
       
       // Add to mediaFiles if not already there
       if (!mediaFiles.find(f => f.filename === filename)) {
+        console.log(`[Rust SCORM] Adding cached image to mediaFiles:`, {
+          imageUrl,
+          filename,
+          mimeType: cached.mimeType,
+          dataSize: cached.data.length
+        })
+        
         mediaFiles.push({
           filename,
           content: cached.data,
@@ -239,14 +250,14 @@ async function resolveImageUrl(
       const fileData = await mediaService.getMedia(imageUrl)
       
       if (fileData && fileData.data) {
-        const mimeType = fileData.metadata?.mimeType || ''
+        const mimeType = fileData.metadata?.mimeType || fileData.metadata?.mime_type || ''
         const uint8Data = new Uint8Array(fileData.data)
         
         // Cache the data
         mediaCache.set(imageUrl, { data: uint8Data, mimeType })
         
         // Check if this is a video metadata JSON file
-        if (imageUrl.startsWith('video-') && mimeType === 'application/json') {
+        if (imageUrl.startsWith('video-') && (mimeType === 'application/json' || mimeType === 'text/plain')) {
           try {
             // Parse the JSON to get the YouTube URL
             const jsonText = new TextDecoder().decode(fileData.data)
@@ -255,6 +266,10 @@ async function resolveImageUrl(
               console.log(`[Rust SCORM] Found YouTube URL in metadata:`, metadata.url)
               return metadata.url // Return the YouTube URL directly
             }
+            if (metadata.embed_url && (metadata.embed_url.includes('youtube.com') || metadata.embed_url.includes('youtu.be'))) {
+              console.log(`[Rust SCORM] Found YouTube embed URL in metadata:`, metadata.embed_url)
+              return metadata.embed_url // Return the YouTube embed URL directly
+            }
           } catch (error) {
             console.error(`[Rust SCORM] Failed to parse video metadata:`, error)
           }
@@ -262,8 +277,15 @@ async function resolveImageUrl(
         
         const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(imageUrl)
         
-        // Preserve original ID as filename
-        const filename = `${imageUrl}.${ext}`
+        // Use .bin extension for consistency with storage
+        const filename = `${imageUrl}.bin`
+        
+        console.log(`[Rust SCORM] Adding image to mediaFiles:`, {
+          imageUrl,
+          filename,
+          mimeType,
+          dataSize: uint8Data.length
+        })
         
         mediaFiles.push({
           filename,
