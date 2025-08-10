@@ -94,16 +94,58 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     try {
       const mediaData = await getMedia(mediaId)
-      if (mediaData && mediaData.data) {
-        console.log('[SCORMPackageBuilder] Found media:', mediaId)
-        // Handle both Uint8Array and ArrayBuffer
-        const dataArray = mediaData.data instanceof ArrayBuffer ? new Uint8Array(mediaData.data) : new Uint8Array(mediaData.data as any)
-        return new Blob([dataArray], { type: mediaData.metadata?.mimeType || 'application/octet-stream' })
+      console.log('[SCORMPackageBuilder] Media data retrieved:', {
+        mediaId,
+        hasData: !!mediaData?.data,
+        hasUrl: !!mediaData?.url,
+        dataType: mediaData?.data ? typeof mediaData.data : 'undefined',
+        dataSize: mediaData?.data instanceof Uint8Array ? mediaData.data.length : 
+                  mediaData?.data instanceof ArrayBuffer ? mediaData.data.byteLength : 0,
+        metadata: mediaData?.metadata
+      })
+      
+      if (mediaData) {
+        // Check if we have binary data
+        if (mediaData.data) {
+          console.log('[SCORMPackageBuilder] Using binary data for:', mediaId)
+          // Handle both Uint8Array and ArrayBuffer
+          const dataArray = mediaData.data instanceof ArrayBuffer ? 
+            new Uint8Array(mediaData.data) : 
+            new Uint8Array(mediaData.data as any)
+          return new Blob([dataArray], { 
+            type: mediaData.metadata?.mimeType || mediaData.metadata?.mime_type || 'application/octet-stream' 
+          })
+        }
+        
+        // If we have a blob URL but no data, we need to fetch the data
+        // This can happen if the media was loaded but not with binary data
+        if (mediaData.url && mediaData.url.startsWith('blob:')) {
+          console.log('[SCORMPackageBuilder] Fetching from blob URL for:', mediaId)
+          try {
+            const response = await fetch(mediaData.url)
+            const blob = await response.blob()
+            console.log('[SCORMPackageBuilder] Successfully fetched blob:', {
+              mediaId,
+              size: blob.size,
+              type: blob.type
+            })
+            return blob
+          } catch (fetchError) {
+            console.error('[SCORMPackageBuilder] Failed to fetch blob URL:', fetchError)
+          }
+        }
+        
+        // For external URLs (YouTube, etc.), we don't need binary data
+        if (mediaData.metadata?.isYouTube || mediaData.metadata?.source === 'youtube') {
+          console.log('[SCORMPackageBuilder] Skipping YouTube video:', mediaId)
+          return null // YouTube videos don't need binary data
+        }
       }
     } catch (error) {
       console.error('[SCORMPackageBuilder] Error getting media:', error)
     }
     
+    console.log('[SCORMPackageBuilder] No binary data available for:', mediaId)
     return null
   }
 
@@ -113,6 +155,42 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     // Get all media items
     const allMediaItems = getAllMedia()
     console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items')
+    
+    // Helper function to handle remote media - only downloads if not already stored
+    const handleRemoteMedia = async (url: string, mediaType: 'image' | 'video', pageId: string): Promise<string | null> => {
+      if (!url || !url.startsWith('http')) return null
+      
+      // Check if this remote URL has already been stored
+      const existingMedia = allMediaItems.find(item => 
+        item.metadata?.originalUrl === url || 
+        item.metadata?.source === 'remote' && item.metadata?.originalName === url.split('/').pop()
+      )
+      
+      if (existingMedia) {
+        console.log('[SCORMPackageBuilder] Remote media already stored:', existingMedia.id)
+        return existingMedia.id
+      }
+      
+      // Only download if not already stored
+      try {
+        console.log('[SCORMPackageBuilder] Downloading new remote media:', url)
+        const response = await fetch(url)
+        const blob = await response.blob()
+        
+        // Store the remote media locally
+        const mediaItem = await storage.storeMedia(blob, pageId, mediaType, {
+          originalName: url.split('/').pop() || 'remote-media',
+          source: 'remote',
+          originalUrl: url
+        })
+        
+        console.log('[SCORMPackageBuilder] Stored remote media with ID:', mediaItem.id)
+        return mediaItem.id
+      } catch (error) {
+        console.error('[SCORMPackageBuilder] Failed to download remote media:', error)
+        return null
+      }
+    }
     
     // Load media for each page
     // FIX: Use correct property name 'welcome' instead of 'welcomePage'
@@ -144,6 +222,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           if (mediaBlob) {
             mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
             console.log('[SCORMPackageBuilder] Loaded welcome media:', mediaRef.id)
+          }
+        } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+          // Handle remote media
+          const newId = await handleRemoteMedia(mediaRef.url, 'image', 'welcome')
+          if (newId) {
+            mediaRef.id = newId // Update the media reference with the new ID
+            const mediaBlob = await getMediaBlobFromRegistry(newId)
+            if (mediaBlob) {
+              mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+              console.log('[SCORMPackageBuilder] Loaded remote media with new ID:', newId)
+            }
           }
         }
       }
@@ -179,6 +268,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
             console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaRef.id)
           }
+        } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+          // Handle remote media
+          const newId = await handleRemoteMedia(mediaRef.url, 'image', 'objectives')
+          if (newId) {
+            mediaRef.id = newId
+            const mediaBlob = await getMediaBlobFromRegistry(newId)
+            if (mediaBlob) {
+              mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+              console.log('[SCORMPackageBuilder] Loaded remote objectives media with new ID:', newId)
+            }
+          }
         }
       }
     }
@@ -213,6 +313,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             if (mediaBlob) {
               mediaFilesRef.current.set(mediaRef.fileName, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded topic media:', mediaRef.id)
+            }
+          } else if (mediaRef.url && mediaRef.url.startsWith('http')) {
+            // Handle remote media
+            const newId = await handleRemoteMedia(mediaRef.url, 'image', `topic-${topicIndex}`)
+            if (newId) {
+              mediaRef.id = newId
+              const mediaBlob = await getMediaBlobFromRegistry(newId)
+              if (mediaBlob) {
+                mediaFilesRef.current.set(mediaRef.fileName || `remote-${Date.now()}.jpg`, mediaBlob)
+                console.log('[SCORMPackageBuilder] Loaded remote topic media with new ID:', newId)
+              }
             }
           }
         }
@@ -251,10 +362,65 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       setLoadingMessage('Loading media files...')
       
-      // Load media from MediaRegistry only
+      // Load media from MediaRegistry and collect blobs for SCORM generation
       performanceMetrics.mediaLoadStart = Date.now()
       try {
         await loadMediaFromRegistry(enhancedContent)
+        console.log('[SCORMPackageBuilder] Media files loaded:', mediaFilesRef.current.size)
+        
+        // Add blob references to enhanced content for Rust generator
+        // The Rust generator needs these blobs to include media in the package
+        if (enhancedContent.welcome) {
+          if (enhancedContent.welcome.audio?.id) {
+            (enhancedContent.welcome as any).audioBlob = mediaFilesRef.current.get(
+              enhancedContent.welcome.audio.fileName || 'welcome.mp3'
+            )
+          }
+          if (enhancedContent.welcome.caption?.id) {
+            (enhancedContent.welcome as any).captionBlob = mediaFilesRef.current.get(
+              enhancedContent.welcome.caption.fileName || 'welcome.vtt'
+            )
+          }
+        }
+        
+        if (enhancedContent.objectivesPage) {
+          if (enhancedContent.objectivesPage.audio?.id) {
+            (enhancedContent.objectivesPage as any).audioBlob = mediaFilesRef.current.get(
+              enhancedContent.objectivesPage.audio.fileName || 'objectives.mp3'
+            )
+          }
+          if (enhancedContent.objectivesPage.caption?.id) {
+            (enhancedContent.objectivesPage as any).captionBlob = mediaFilesRef.current.get(
+              enhancedContent.objectivesPage.caption.fileName || 'objectives.vtt'
+            )
+          }
+        }
+        
+        if (enhancedContent.topics) {
+          enhancedContent.topics.forEach((topic, index) => {
+            if (topic.audio?.id) {
+              (topic as any).audioBlob = mediaFilesRef.current.get(
+                topic.audio.fileName || `topic${index}.mp3`
+              )
+            }
+            if (topic.caption?.id) {
+              (topic as any).captionBlob = mediaFilesRef.current.get(
+                topic.caption.fileName || `topic${index}.vtt`
+              )
+            }
+            // Handle other media in topics
+            if (topic.mediaReferences) {
+              topic.mediaReferences.forEach(mediaRef => {
+                if (mediaRef.id && mediaRef.fileName) {
+                  const blob = mediaFilesRef.current.get(mediaRef.fileName)
+                  if (blob) {
+                    (mediaRef as any).blob = blob
+                  }
+                }
+              })
+            }
+          })
+        }
       } catch (mediaError) {
         console.error('[SCORMPackageBuilder] Error loading media:', mediaError)
         setMessages(prev => [...prev, {

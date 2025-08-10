@@ -551,11 +551,12 @@ export class MediaService {
         })
       }
       
-      // Convert ArrayBuffer to Uint8Array if data exists (for backward compatibility)
+      // Always provide binary data for non-YouTube media (needed for SCORM packaging)
       let data: Uint8Array | undefined
-      if (mediaInfo.data && !metadata.source) {
+      if (mediaInfo.data && !(metadata.source === 'youtube' || metadata.isYouTube)) {
         data = new Uint8Array(mediaInfo.data)
-        console.log('[MediaService] Converted ArrayBuffer to Uint8Array:', {
+        console.log('[MediaService] Providing binary data for SCORM packaging:', {
+          mediaId,
           originalSize: mediaInfo.data.byteLength,
           convertedSize: data.length,
           firstBytes: data.length > 0 ? Array.from(data.slice(0, 10)) : []
