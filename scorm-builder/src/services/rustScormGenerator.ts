@@ -732,24 +732,14 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       start_button_text: cc.welcome?.startButtonText || cc.welcomePage?.startButtonText || 'Start Course',
       audio_file: await resolveAudioCaptionFile(cc.welcome?.audioId || cc.welcome?.audioFile || cc.welcomePage?.audioId || cc.welcomePage?.audioFile, projectId, mediaFiles),
       caption_file: await resolveAudioCaptionFile(cc.welcome?.captionId || cc.welcome?.captionFile || cc.welcomePage?.captionId || cc.welcomePage?.captionFile, projectId, mediaFiles),
-      // First check media array for image, then fall back to imageUrl
-      image_url: await resolveImageUrl(
-        cc.welcomePage?.media?.find((m: any) => m.type === 'image')?.storageId || 
-        cc.welcomePage?.media?.find((m: any) => m.type === 'image')?.id || 
-        cc.welcome?.media?.find((m: any) => m.type === 'image')?.storageId || 
-        cc.welcome?.media?.find((m: any) => m.type === 'image')?.id || 
-        cc.welcome?.imageUrl || 
-        cc.welcomePage?.imageUrl, 
-        projectId, 
-        mediaFiles, 
-        mediaCounter
-      ),
+      image_url: await resolveImageUrl(cc.welcome?.imageUrl || cc.welcomePage?.imageUrl, projectId, mediaFiles, mediaCounter),
+      // Filter out images since they're handled by image_url
       media: await resolveMedia(
-        Array.isArray(cc.welcome?.media) ? cc.welcome.media :
-        Array.isArray(cc.welcomePage?.media) ? cc.welcomePage.media :
-        cc.welcome?.media ? [cc.welcome.media] :
-        cc.welcomePage?.media ? [cc.welcomePage.media] :
-        cc.welcomeMedia ? [cc.welcomeMedia] : undefined, 
+        Array.isArray(cc.welcome?.media) ? cc.welcome.media.filter((m: any) => m.type !== 'image') :
+        Array.isArray(cc.welcomePage?.media) ? cc.welcomePage.media.filter((m: any) => m.type !== 'image') :
+        cc.welcome?.media && cc.welcome.media.type !== 'image' ? [cc.welcome.media] :
+        cc.welcomePage?.media && cc.welcomePage.media.type !== 'image' ? [cc.welcomePage.media] :
+        cc.welcomeMedia && cc.welcomeMedia.type !== 'image' ? [cc.welcomeMedia] : undefined, 
         projectId, 
         mediaFiles, 
         mediaCounter
@@ -824,22 +814,15 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       } : undefined,
         audio_file: await resolveAudioCaptionFile((topic as any).audioFile || (topic as any).audioId, projectId, mediaFiles),
         caption_file: await resolveAudioCaptionFile((topic as any).captionFile || (topic as any).captionId, projectId, mediaFiles),
-        // First check media array for image, then fall back to imageUrl
-        image_url: await resolveImageUrl(
-          (topic as any).media?.find((m: any) => m.type === 'image')?.storageId || 
-          (topic as any).media?.find((m: any) => m.type === 'image')?.id || 
-          (topic as any).imageUrl, 
-          projectId, 
-          mediaFiles, 
-          mediaCounter
-        ),
+        image_url: await resolveImageUrl((topic as any).imageUrl, projectId, mediaFiles, mediaCounter),
+        // Filter out images since they're handled by image_url
         media: await resolveMedia(
-          Array.isArray((topic as any).media) ? (topic as any).media.map((m: any) => ({
+          Array.isArray((topic as any).media) ? (topic as any).media.filter((m: any) => m.type !== 'image').map((m: any) => ({
             id: m.id,
             type: m.type,
             url: m.url || '',
             title: m.title || '',
-          })) : (topic as any).media ? [{
+          })) : (topic as any).media && (topic as any).media.type !== 'image' ? [{
             id: (topic as any).media.id,
             type: (topic as any).media.type,
             url: (topic as any).media.url || '',
@@ -971,15 +954,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         mediaFiles, 
         (courseContent.welcome as any).captionBlob
       ),
-      // First check media array for image, then fall back to imageUrl
-      image_url: await resolveImageUrl(
-        (courseContent.welcome.media?.find((m: any) => m.type === 'image') as any)?.storageId || 
-        courseContent.welcome.media?.find((m: any) => m.type === 'image')?.id || 
-        courseContent.welcome.imageUrl, 
-        projectId, 
-        mediaFiles, 
-        mediaCounter
-      ),
+      image_url: await resolveImageUrl(courseContent.welcome.imageUrl, projectId, mediaFiles, mediaCounter),
       // Filter out audio/caption from media array since they're handled separately
       media: await resolveMedia(courseContent.welcome.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
     } : undefined,
@@ -1002,15 +977,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         mediaFiles, 
         (courseContent.objectivesPage as any)?.captionBlob
       ),
-      // First check media array for image, then fall back to imageUrl
-      image_url: await resolveImageUrl(
-        (courseContent.objectivesPage?.media?.find((m: any) => m.type === 'image') as any)?.storageId || 
-        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'image')?.id || 
-        courseContent.objectivesPage?.imageUrl, 
-        projectId, 
-        mediaFiles, 
-        mediaCounter
-      ),
+      image_url: await resolveImageUrl(courseContent.objectivesPage?.imageUrl, projectId, mediaFiles, mediaCounter),
       // Filter out audio/caption from media array since they're handled separately
       media: await resolveMedia(courseContent.objectivesPage?.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
     } : undefined,
@@ -1039,15 +1006,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
           mediaFiles, 
           (topic as any).captionBlob
         ),
-        // First check media array for image, then fall back to imageUrl
-        image_url: await resolveImageUrl(
-          (topic.media?.find((m: any) => m.type === 'image') as any)?.storageId || 
-          topic.media?.find((m: any) => m.type === 'image')?.id || 
-          topic.imageUrl, 
-          projectId, 
-          mediaFiles, 
-          mediaCounter
-        ),
+        image_url: await resolveImageUrl(topic.imageUrl, projectId, mediaFiles, mediaCounter),
         // Filter out audio/caption from media array since they're handled separately
         media: await resolveMedia(topic.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption').map(m => ({
           id: m.id,

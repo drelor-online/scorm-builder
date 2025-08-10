@@ -93,7 +93,8 @@ function convertNewFormat(
       title: courseContent.welcomePage.title,
       content: courseContent.welcomePage.content,
       startButtonText: 'Start Course',
-      imageUrl: resolveMediaUrl(welcomeImageMedia, projectId),
+      // Use storageId or id from image media for imageUrl
+      imageUrl: welcomeImageMedia ? (welcomeImageMedia as any).storageId || welcomeImageMedia.id : undefined,
       audioFile: getWelcomeAudioFile(),
       audioId: (courseContent.welcomePage as any).audioId,
       audioBlob: (courseContent.welcomePage as any).audioBlob,
@@ -127,7 +128,8 @@ function convertNewFormat(
     const objectivesCaptionMedia = objectivesMedia.find((m: any) => m.type === 'caption')
     
     const objectivesPage = {
-      imageUrl: resolveMediaUrl(objectivesImageMedia, projectId),
+      // Use storageId or id from image media for imageUrl
+      imageUrl: objectivesImageMedia ? (objectivesImageMedia as any).storageId || objectivesImageMedia.id : undefined,
       audioFile: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `audio-1` : undefined),
       audioId: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId,
       audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
@@ -171,11 +173,8 @@ function convertNewFormat(
       const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}` : undefined)
       const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}` : undefined)
       
-      // For images, only use actual stored media - don't generate placeholder paths
-      // Check if there's a real stored image ID for this topic
-      const storedImageId = `image-${topicAudioIndex}` // Topics start at image-2 since welcome is image-0, objectives is image-1
-      const imageUrl = resolveMediaUrl(imageMedia, projectId) || 
-        ((topic as any).imageId ? (topic as any).imageId : undefined) // Only use actual stored image IDs
+      // Use storageId or id from image media for imageUrl
+      const imageUrl = imageMedia ? (imageMedia as any).storageId || imageMedia.id : undefined
       
       const embedUrl = videoMedia?.embedUrl
       
