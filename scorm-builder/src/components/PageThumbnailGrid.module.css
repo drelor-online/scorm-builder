@@ -55,6 +55,7 @@
 }
 
 .thumbnailCardSelected {
+  position: relative; /* Important: Keep media indicator contained */
   border: 2px solid var(--color-primary) !important;
   box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
 }
