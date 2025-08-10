@@ -50,7 +50,7 @@ export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<vo
 /**
  * Get file extension from MIME type
  */
-function getExtensionFromMimeType(mimeType: string): string {
+export function getExtensionFromMimeType(mimeType: string): string {
   const mimeToExt: Record<string, string> = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -251,8 +251,9 @@ async function resolveImageUrl(
         }
       }
       
-      // Use .bin extension for consistency
-      const filename = `${imageUrl}.bin`
+      // Use proper extension based on MIME type
+      const ext = getExtensionFromMimeType(cached.mimeType) || 'bin'
+      const filename = `${imageUrl}.${ext}`
       
       // Add to mediaFiles if not already there
       if (!mediaFiles.find(f => f.filename === filename)) {
@@ -313,8 +314,8 @@ async function resolveImageUrl(
         
         const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(imageUrl)
         
-        // Use .bin extension for consistency with storage
-        const filename = `${imageUrl}.bin`
+        // Use proper extension based on MIME type (especially important for SVG)
+        const filename = `${imageUrl}.${ext}`
         
         console.log(`[Rust SCORM] Adding image to mediaFiles:`, {
           imageUrl,

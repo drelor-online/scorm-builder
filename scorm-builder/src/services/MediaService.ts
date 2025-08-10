@@ -40,6 +40,19 @@ export interface MediaServiceConfig {
   fileStorage?: FileStorage  // Optional shared FileStorage instance
 }
 
+/**
+ * Detect if data contains SVG content
+ */
+function detectSvgContent(data: ArrayBuffer | Uint8Array): boolean {
+  try {
+    const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(0, 200))
+    return text.includes('<svg') || text.includes('<?xml')
+  } catch {
+    return false
+  }
+}
+
 export interface ProgressInfo {
   loaded: number
   total: number
@@ -288,14 +301,22 @@ export class MediaService {
       // Convert Uint8Array to Blob for FileStorage
       // Handle both Uint8Array and ArrayBuffer
       const dataArray = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data as any)
-      const blob = new Blob([dataArray])
+      
+      // Detect SVG content if it's an image
+      let finalMimeType = metadata?.mimeType
+      if (type === 'image' && detectSvgContent(dataArray)) {
+        finalMimeType = 'image/svg+xml'
+        debugLogger.debug('MediaService.storeMediaInternal', 'Detected SVG content', { mediaId: id })
+      }
+      
+      const blob = new Blob([dataArray], { type: finalMimeType || 'application/octet-stream' })
       
       // Store using FileStorage - this goes to the file system via Tauri
       await this.fileStorage.storeMedia(id, blob, type, {
         page_id: pageId,
         type,
-        original_name: fileName || `${id}.${this.getExtension(type)}`,
-        mime_type: metadata?.mimeType,
+        original_name: fileName || `${id}.${this.getExtension(type, finalMimeType)}`,
+        mime_type: finalMimeType || metadata?.mimeType,
         ...metadata
       }, onProgress)
       
@@ -518,9 +539,20 @@ export class MediaService {
         // Determine MIME type
         let mimeType = metadata.mimeType || metadata.mime_type || 'application/octet-stream'
         
+        // Check for SVG content in images
+        if (metadata.type === 'image' && detectSvgContent(mediaInfo.data)) {
+          mimeType = 'image/svg+xml'
+          debugLogger.debug('MediaService.createBlobUrl', 'Detected SVG content', { mediaId })
+        }
+        
         // Fix common MIME type issues
         if (metadata.type === 'image' && !mimeType.startsWith('image/')) {
-          mimeType = 'image/jpeg' // Default for images
+          // Check if it's SVG first
+          if (detectSvgContent(mediaInfo.data)) {
+            mimeType = 'image/svg+xml'
+          } else {
+            mimeType = 'image/jpeg' // Default for images
+          }
         } else if (metadata.type === 'audio' && !mimeType.startsWith('audio/')) {
           mimeType = 'audio/mpeg' // Default for audio
         } else if (metadata.type === 'caption' && !mimeType.startsWith('text/')) {
@@ -1179,7 +1211,27 @@ export class MediaService {
     }
   }
   
-  private getExtension(type: MediaType): string {
+  private getExtension(type: MediaType, mimeType?: string): string {
+    // Check MIME type first for more accurate extension
+    if (mimeType) {
+      const mimeToExt: Record<string, string> = {
+        'image/svg+xml': 'svg',
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'audio/mpeg': 'mp3',
+        'audio/wav': 'wav',
+        'video/mp4': 'mp4',
+        'video/webm': 'webm',
+        'text/vtt': 'vtt'
+      }
+      const ext = mimeToExt[mimeType]
+      if (ext) return ext
+    }
+    
+    // Fallback to type-based extension
     switch (type) {
       case 'image': return 'jpg'
       case 'video': return 'mp4'

@@ -305,9 +305,29 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         // Determine MIME type
         let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
         
+        // Check if this is an SVG file by examining the content
+        if (media.data && media.data.length > 0) {
+          const firstBytes = media.data.slice(0, 100)
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(firstBytes)
+          if (text.includes('<svg') || text.includes('<?xml')) {
+            mimeType = 'image/svg+xml'
+            console.log('[UnifiedMediaContext] Detected SVG content for:', mediaId)
+          }
+        }
+        
         // Fix common MIME type issues
         if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
-          mimeType = 'image/jpeg' // Default for images
+          // Check for SVG first by looking at the data
+          if (media.data && media.data.length > 0) {
+            const firstBytes = media.data.slice(0, 4)
+            if (firstBytes[0] === 60) { // '<' character, likely XML/SVG
+              mimeType = 'image/svg+xml'
+            } else {
+              mimeType = 'image/jpeg' // Default for images
+            }
+          } else {
+            mimeType = 'image/jpeg' // Default for images
+          }
         } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
           mimeType = 'audio/mpeg' // Default for audio (mp3)
         } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
