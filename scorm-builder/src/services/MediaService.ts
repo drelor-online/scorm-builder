@@ -1109,89 +1109,184 @@ export class MediaService {
     debugLogger.info('MediaService.loadMediaFromCourseContent', 'Loading media from course content', {
       hasWelcome: !!courseContent.welcomePage,
       hasObjectives: !!courseContent.learningObjectivesPage,
-      topicsCount: courseContent.topics?.length || 0
+      hasObjectivesAlt: !!courseContent.objectivesPage,
+      topicsCount: courseContent.topics?.length || 0,
+      welcomePageKeys: courseContent.welcomePage ? Object.keys(courseContent.welcomePage) : [],
+      welcomePageId: courseContent.welcomePage?.id,
+      welcomePageHasMedia: !!(courseContent.welcomePage?.media),
+      welcomePageMediaLength: courseContent.welcomePage?.media?.length || 0
     })
+    
+    // Log the actual structure of the first page to understand what we're dealing with
+    if (courseContent.welcomePage) {
+      console.log('[MediaService] Welcome page structure:', {
+        id: courseContent.welcomePage.id,
+        hasMedia: 'media' in courseContent.welcomePage,
+        hasMediaReferences: 'mediaReferences' in courseContent.welcomePage,
+        mediaLength: courseContent.welcomePage.media?.length,
+        mediaReferencesLength: courseContent.welcomePage.mediaReferences?.length,
+        mediaContent: courseContent.welcomePage.media?.slice(0, 2), // Log first 2 items if they exist
+        allKeys: Object.keys(courseContent.welcomePage)
+      })
+    }
     
     try {
       let mediaCount = 0
       
-      // Process welcome page media
-      if (courseContent.welcomePage?.media && Array.isArray(courseContent.welcomePage.media)) {
-        for (const mediaRef of courseContent.welcomePage.media) {
-          if (mediaRef && typeof mediaRef === 'object') {
+      // Process welcome page media - check both media and mediaReferences properties
+      const welcomeMedia = courseContent.welcomePage?.media || courseContent.welcomePage?.mediaReferences || []
+      if (welcomeMedia && Array.isArray(welcomeMedia) && welcomeMedia.length > 0) {
+        console.log(`[MediaService] Processing ${welcomeMedia.length} media items from welcome page`)
+        for (const mediaRef of welcomeMedia) {
+          if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
+            // Extract the media type - could be in different places
+            const mediaType = mediaRef.type || mediaRef.metadata?.type || 'image'
+            const pageId = mediaRef.pageId || courseContent.welcomePage.id || 'welcome'
+            
             const mediaItem: MediaItem = {
               id: mediaRef.id,
-              type: mediaRef.type || 'image',
-              pageId: mediaRef.pageId || courseContent.welcomePage.id || 'welcome',
-              fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+              type: mediaType as MediaType,
+              pageId: pageId,
+              fileName: mediaRef.fileName || mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaType as MediaType)}`,
               metadata: {
-                ...mediaRef.metadata,
-                type: mediaRef.type || 'image',
-                pageId: mediaRef.pageId || courseContent.welcomePage.id || 'welcome',
-                uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+                ...(mediaRef.metadata || {}),
+                type: mediaType,
+                pageId: pageId,
+                uploadedAt: mediaRef.metadata?.uploadedAt || mediaRef.uploadedAt || new Date().toISOString(),
+                // Preserve YouTube-specific fields
+                isYouTube: mediaRef.isYouTube || mediaRef.metadata?.isYouTube || false,
+                youtubeUrl: mediaRef.url || mediaRef.youtubeUrl || mediaRef.metadata?.youtubeUrl,
+                embedUrl: mediaRef.embedUrl || mediaRef.metadata?.embedUrl,
+                title: mediaRef.title || mediaRef.metadata?.title
               }
             }
+            
+            // Also store the URL if it exists (for YouTube videos)
+            if (mediaRef.url || mediaRef.embedUrl) {
+              (mediaItem as any).url = mediaRef.url || mediaRef.embedUrl
+            }
+            
             this.mediaCache.set(mediaRef.id, mediaItem)
             mediaCount++
-            debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded welcome page media', {
+            console.log('[MediaService] Loaded welcome page media:', {
               id: mediaRef.id,
-              type: mediaRef.type
+              type: mediaType,
+              pageId: pageId,
+              isYouTube: mediaItem.metadata.isYouTube
             })
+          } else {
+            console.warn('[MediaService] Skipping invalid media ref:', mediaRef)
           }
         }
       }
       
-      // Process objectives page media
-      if (courseContent.learningObjectivesPage?.media && Array.isArray(courseContent.learningObjectivesPage.media)) {
-        for (const mediaRef of courseContent.learningObjectivesPage.media) {
-          if (mediaRef && typeof mediaRef === 'object') {
+      // Process objectives page media - check both possible property names
+      const objectivesPage = courseContent.learningObjectivesPage || courseContent.objectivesPage
+      if (objectivesPage) {
+        console.log('[MediaService] Objectives page structure:', {
+          id: objectivesPage.id,
+          hasMedia: 'media' in objectivesPage,
+          mediaLength: objectivesPage.media?.length,
+          mediaContent: objectivesPage.media?.slice(0, 2)
+        })
+      }
+      
+      const objectivesMedia = objectivesPage?.media || objectivesPage?.mediaReferences || []
+      if (objectivesMedia && Array.isArray(objectivesMedia) && objectivesMedia.length > 0) {
+        console.log(`[MediaService] Processing ${objectivesMedia.length} media items from objectives page`)
+        for (const mediaRef of objectivesMedia) {
+          if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
+            const mediaType = mediaRef.type || mediaRef.metadata?.type || 'image'
+            const pageId = mediaRef.pageId || objectivesPage.id || 'objectives'
+            
             const mediaItem: MediaItem = {
               id: mediaRef.id,
-              type: mediaRef.type || 'image',
-              pageId: mediaRef.pageId || courseContent.learningObjectivesPage.id || 'objectives',
-              fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+              type: mediaType as MediaType,
+              pageId: pageId,
+              fileName: mediaRef.fileName || mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaType as MediaType)}`,
               metadata: {
-                ...mediaRef.metadata,
-                type: mediaRef.type || 'image',
-                pageId: mediaRef.pageId || courseContent.learningObjectivesPage.id || 'objectives',
-                uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+                ...(mediaRef.metadata || {}),
+                type: mediaType,
+                pageId: pageId,
+                uploadedAt: mediaRef.metadata?.uploadedAt || mediaRef.uploadedAt || new Date().toISOString(),
+                isYouTube: mediaRef.isYouTube || mediaRef.metadata?.isYouTube || false,
+                youtubeUrl: mediaRef.url || mediaRef.youtubeUrl || mediaRef.metadata?.youtubeUrl,
+                embedUrl: mediaRef.embedUrl || mediaRef.metadata?.embedUrl,
+                title: mediaRef.title || mediaRef.metadata?.title
               }
             }
+            
+            if (mediaRef.url || mediaRef.embedUrl) {
+              (mediaItem as any).url = mediaRef.url || mediaRef.embedUrl
+            }
+            
             this.mediaCache.set(mediaRef.id, mediaItem)
             mediaCount++
-            debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded objectives page media', {
+            console.log('[MediaService] Loaded objectives page media:', {
               id: mediaRef.id,
-              type: mediaRef.type
+              type: mediaType,
+              pageId: pageId,
+              isYouTube: mediaItem.metadata.isYouTube
             })
+          } else {
+            console.warn('[MediaService] Skipping invalid objectives media ref:', mediaRef)
           }
         }
       }
       
       // Process topics media
       if (courseContent.topics && Array.isArray(courseContent.topics)) {
+        // Log first topic structure for debugging
+        if (courseContent.topics[0]) {
+          console.log('[MediaService] First topic structure:', {
+            id: courseContent.topics[0].id,
+            hasMedia: 'media' in courseContent.topics[0],
+            mediaLength: courseContent.topics[0].media?.length,
+            mediaContent: courseContent.topics[0].media?.slice(0, 2)
+          })
+        }
+        
         for (const topic of courseContent.topics) {
-          if (topic?.media && Array.isArray(topic.media)) {
-            for (const mediaRef of topic.media) {
-              if (mediaRef && typeof mediaRef === 'object') {
+          const topicMedia = topic?.media || topic?.mediaReferences || []
+          if (topicMedia && Array.isArray(topicMedia) && topicMedia.length > 0) {
+            console.log(`[MediaService] Processing ${topicMedia.length} media items from topic ${topic.id}`)
+            for (const mediaRef of topicMedia) {
+              if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
+                const mediaType = mediaRef.type || mediaRef.metadata?.type || 'image'
+                const pageId = mediaRef.pageId || topic.id
+                
                 const mediaItem: MediaItem = {
                   id: mediaRef.id,
-                  type: mediaRef.type || 'image',
-                  pageId: mediaRef.pageId || topic.id,
-                  fileName: mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaRef.type || 'image')}`,
+                  type: mediaType as MediaType,
+                  pageId: pageId,
+                  fileName: mediaRef.fileName || mediaRef.metadata?.fileName || `${mediaRef.id}.${this.getExtension(mediaType as MediaType)}`,
                   metadata: {
-                    ...mediaRef.metadata,
-                    type: mediaRef.type || 'image',
-                    pageId: mediaRef.pageId || topic.id,
-                    uploadedAt: mediaRef.metadata?.uploadedAt || new Date().toISOString()
+                    ...(mediaRef.metadata || {}),
+                    type: mediaType,
+                    pageId: pageId,
+                    uploadedAt: mediaRef.metadata?.uploadedAt || mediaRef.uploadedAt || new Date().toISOString(),
+                    isYouTube: mediaRef.isYouTube || mediaRef.metadata?.isYouTube || false,
+                    youtubeUrl: mediaRef.url || mediaRef.youtubeUrl || mediaRef.metadata?.youtubeUrl,
+                    embedUrl: mediaRef.embedUrl || mediaRef.metadata?.embedUrl,
+                    title: mediaRef.title || mediaRef.metadata?.title
                   }
                 }
+                
+                if (mediaRef.url || mediaRef.embedUrl) {
+                  (mediaItem as any).url = mediaRef.url || mediaRef.embedUrl
+                }
+                
                 this.mediaCache.set(mediaRef.id, mediaItem)
                 mediaCount++
-                debugLogger.debug('MediaService.loadMediaFromCourseContent', 'Loaded topic media', {
+                console.log('[MediaService] Loaded topic media:', {
                   id: mediaRef.id,
-                  type: mediaRef.type,
-                  topicId: topic.id
+                  type: mediaType,
+                  pageId: pageId,
+                  topicId: topic.id,
+                  isYouTube: mediaItem.metadata.isYouTube
                 })
+              } else {
+                console.warn('[MediaService] Skipping invalid topic media ref:', mediaRef)
               }
             }
           }

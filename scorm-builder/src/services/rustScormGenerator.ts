@@ -91,6 +91,21 @@ async function resolveAudioCaptionFile(
   console.log(`[Rust SCORM] resolveAudioCaptionFile called with fileId: ${fileId}`)
   if (!fileId && !blob) return undefined
   
+  // Defensive check: Don't try to fetch media with invalid high indices
+  // We have 11 topics (0-10), so valid audio/caption IDs are 0-12 (welcome=0, objectives=1, topics=2-12)
+  // But if topic-10 has no audio, we shouldn't have audio-12 or caption-12
+  if (fileId && fileId.match(/^(audio|caption)-(\d+)$/)) {
+    const match = fileId.match(/^(audio|caption)-(\d+)$/)
+    if (match) {
+      const index = parseInt(match[2])
+      // If index is suspiciously high (> 20), it's likely an error
+      if (index > 20) {
+        console.warn(`[Rust SCORM] Skipping suspicious media ID with high index: ${fileId}`)
+        return undefined
+      }
+    }
+  }
+  
   // If we have a blob, use it directly
   if (blob && fileId) {
     try {
@@ -169,9 +184,12 @@ async function resolveAudioCaptionFile(
         })
         
         return `media/${filename}`
+      } else {
+        console.warn(`[Rust SCORM] Media not found: ${cleanFileId}, skipping`)
+        return undefined
       }
     } catch (error) {
-      console.error(`[Rust SCORM] Failed to load audio/caption file:`, error)
+      console.warn(`[Rust SCORM] Failed to load audio/caption file ${cleanFileId}, skipping:`, error)
     }
   }
   
@@ -331,18 +349,13 @@ async function resolveImageUrl(
         
         return `media/${filename}`
       } else {
-        console.error(`[Rust SCORM] MediaService returned no data for:`, imageUrl)
+        console.warn(`[Rust SCORM] MediaService returned no data for: ${imageUrl}, skipping`)
+        return undefined
       }
     } catch (error) {
-      console.error(`[Rust SCORM] Failed to load media from MediaService:`, error)
-      console.error(`[Rust SCORM] Error details:`, {
-        imageUrl,
-        projectId,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined
-      })
+      console.warn(`[Rust SCORM] Failed to load media from MediaService for ${imageUrl}, skipping:`, error)
+      return undefined
     }
-    return undefined
   }
   
   // Otherwise, assume it's already a package-relative path
@@ -420,9 +433,15 @@ async function resolveMedia(
             })
             console.log(`[Rust SCORM] Successfully loaded media from MediaService: ${media.id}`)
             continue
+          } else {
+            console.warn(`[Rust SCORM] Media not found: ${media.id}, skipping`)
+            // Don't add to resolvedMedia - skip this item
+            continue
           }
         } catch (error) {
-          console.error(`[Rust SCORM] Failed to load media ${media.id}:`, error)
+          console.warn(`[Rust SCORM] Failed to load media ${media.id}, skipping:`, error)
+          // Don't add to resolvedMedia - skip this item
+          continue
         }
       }
       
@@ -609,10 +628,14 @@ async function resolveMedia(
               })
               
               resolvedUrl = `media/${filename}`
+            } else {
+              console.warn(`[Rust SCORM] MediaService returned no data for: ${media.url}, skipping`)
+              resolvedUrl = undefined
             }
           }
         } catch (error) {
-          console.error(`[Rust SCORM] Error loading media from MediaService:`, error)
+          console.warn(`[Rust SCORM] Error loading media from MediaService for ${media.url}, skipping:`, error)
+          resolvedUrl = undefined
         }
       }
     }
@@ -658,9 +681,13 @@ async function resolveMedia(
             })
             
             resolvedUrl = `media/${filename}`
+          } else {
+            console.warn(`[Rust SCORM] MediaService returned no data for storageId: ${storageId}, skipping`)
+            resolvedUrl = undefined
           }
         } catch (error) {
-          console.error(`[Rust SCORM] Error loading media with storageId:`, error)
+          console.warn(`[Rust SCORM] Error loading media with storageId ${storageId}, skipping:`, error)
+          resolvedUrl = undefined
         }
       }
     }
@@ -710,9 +737,12 @@ async function resolveMedia(
               
               resolvedUrl = `media/${filename}`
               console.log(`[Rust SCORM] Successfully recovered media from MediaService: ${media.id}`)
+            } else {
+              console.warn(`[Rust SCORM] MediaService returned no data for blob URL fallback: ${media.id}, skipping`)
+              resolvedUrl = undefined
             }
           } catch (msError) {
-            console.error(`[Rust SCORM] MediaService fallback also failed for ${media.id}:`, msError)
+            console.warn(`[Rust SCORM] MediaService fallback also failed for ${media.id}, skipping:`, msError)
             // Skip this media item rather than using broken blob URL
             resolvedUrl = undefined
           }
@@ -817,9 +847,21 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       objectives: cc.learningObjectivesPage.objectives || [],
       audio_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.audioFile, projectId, mediaFiles),
       caption_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.captionFile, projectId, mediaFiles),
+      // Extract image from media array to set as image_url (same as topics)
+      image_url: await resolveImageUrl(
+        cc.learningObjectivesPage.media?.find((m: any) => m.type === 'image')?.url || 
+        cc.learningObjectivesPage.media?.find((m: any) => m.type === 'image')?.id,
+        projectId, 
+        mediaFiles, 
+        mediaCounter
+      ),
+      // Filter out images from media array since they're handled by image_url
       media: await resolveMedia(
-        Array.isArray(cc.learningObjectivesPage.media) ? cc.learningObjectivesPage.media :
-        cc.learningObjectivesPage.media ? [cc.learningObjectivesPage.media] : undefined,
+        Array.isArray(cc.learningObjectivesPage.media) ? 
+          cc.learningObjectivesPage.media.filter((m: any) => m.type !== 'image') :
+          cc.learningObjectivesPage.media && cc.learningObjectivesPage.media.type !== 'image' ? 
+            [cc.learningObjectivesPage.media] : 
+            undefined,
         projectId, 
         mediaFiles, 
         mediaCounter
@@ -881,7 +923,15 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       } : undefined,
         audio_file: await resolveAudioCaptionFile((topic as any).audioFile || (topic as any).audioId, projectId, mediaFiles),
         caption_file: await resolveAudioCaptionFile((topic as any).captionFile || (topic as any).captionId, projectId, mediaFiles),
-        image_url: await resolveImageUrl((topic as any).imageUrl, projectId, mediaFiles, mediaCounter),
+        // Extract image from media array or use imageUrl field
+        image_url: await resolveImageUrl(
+          (topic as any).imageUrl || 
+          (topic as any).media?.find((m: any) => m.type === 'image')?.url ||
+          (topic as any).media?.find((m: any) => m.type === 'image')?.id,
+          projectId, 
+          mediaFiles, 
+          mediaCounter
+        ),
         // Filter out images since they're handled by image_url
         media: await resolveMedia(
           Array.isArray((topic as any).media) ? (topic as any).media.filter((m: any) => m.type !== 'image').map((m: any) => ({

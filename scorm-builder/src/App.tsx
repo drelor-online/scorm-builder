@@ -346,10 +346,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 if (!loadedCourseContent.welcomePage.media) {
                   loadedCourseContent.welcomePage.media = []
                 }
-                // Add audio references
-                if (audioNarrationData?.welcome) {
+                // Add audio references - only if there's a valid ID
+                if (audioNarrationData?.welcome && audioNarrationData.welcome.id) {
                   const audioItem = { 
-                    id: audioNarrationData.welcome.id || 'audio-0',
+                    id: audioNarrationData.welcome.id,
                     type: 'audio' as const,
                     url: '',
                     title: 'Audio Narration',
@@ -377,10 +377,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 if (!loadedCourseContent.learningObjectivesPage.media) {
                   loadedCourseContent.learningObjectivesPage.media = []
                 }
-                // Add audio references
-                if (audioNarrationData?.objectives) {
+                // Add audio references - only if there's a valid ID
+                if (audioNarrationData?.objectives && audioNarrationData.objectives.id) {
                   const audioItem = {
-                    id: audioNarrationData.objectives.id || 'audio-1',
+                    id: audioNarrationData.objectives.id,
                     type: 'audio' as const,
                     url: '',
                     title: 'Audio Narration',
@@ -411,10 +411,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }
                   const topicKey = `topic-${index}`
                   
-                  // Add audio references
-                  if (audioNarrationData?.[topicKey]) {
+                  // Add audio references - only if there's a valid ID
+                  if (audioNarrationData?.[topicKey] && audioNarrationData[topicKey].id) {
                     const audioItem = {
-                      id: audioNarrationData[topicKey].id || `audio-${index + 2}`,
+                      id: audioNarrationData[topicKey].id,
                       type: 'audio' as const,
                       url: '',
                       title: 'Audio Narration',
@@ -1552,6 +1552,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           >
             {currentStep === 'seed' && (
               <CourseSeedInput 
+                onBack={() => setCurrentStep('dashboard')}
                 onSettingsClick={() => showDialog('settings')}
                 onHelp={() => showDialog('help')}
                 onSave={(content?: any) => {

@@ -186,9 +186,9 @@ impl OutputValidator {
                         );
                     }
 
-                    // Verify submit button
+                    // Verify submit button - checks for submitAllKnowledgeChecks which handles all question types
                     if content.contains("fill-blank-")
-                        && !content.contains("onclick=\"window.checkFillInBlank")
+                        && !content.contains("onclick=\"window.submitAllKnowledgeChecks")
                     {
                         report.add_error(
                             name,

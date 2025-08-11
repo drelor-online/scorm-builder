@@ -58,9 +58,9 @@ export function generateMediaId(type: MediaType, pageId: string): MediaId {
   } else if (normalizedPageId === 'objectives') {
     pageIndex = 1
   } else if (normalizedPageId.startsWith('topic-')) {
-    // Extract topic number and add 1 (since topics are 1-based in IDs)
+    // Extract topic number and add 2 (welcome=0, objectives=1, topics start at 2)
     const topicNum = parseInt(normalizedPageId.replace('topic-', ''))
-    pageIndex = 1 + topicNum
+    pageIndex = 2 + topicNum
   } else {
     // Unknown page, use topic index map
     if (!topicIndexMap.has(normalizedPageId)) {

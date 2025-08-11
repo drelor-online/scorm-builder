@@ -1,222 +1,231 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { PageContainer, Section, Flex } from './DesignSystem/Layout'
 import { Card } from './DesignSystem/Card'
 import { Button } from './DesignSystem/Button'
 import { Alert } from './DesignSystem/Alert'
+import { Input } from './DesignSystem/Input'
+import { Icon } from './DesignSystem/Icons'
+import { 
+  Search, 
+  ChevronDown, 
+  ChevronUp, 
+  ChevronRight,
+  Book,
+  HelpCircle,
+  AlertCircle,
+  Lightbulb,
+  ArrowLeft,
+  Hash
+} from 'lucide-react'
 import { tokens } from './DesignSystem/designTokens'
-
-interface HelpSection {
-  title: string
-  content: React.ReactNode
-}
-
-const helpSections: HelpSection[] = [
-  {
-    title: 'Step 1: Course Configuration',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Set up your course fundamentals to generate targeted learning content.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li><strong>Course Title:</strong> Enter a descriptive title for your course</li>
-          <li><strong>Difficulty Level:</strong> Select from Basic, Easy, Medium, Hard, or Expert</li>
-          <li><strong>Learning Topics:</strong> Add specific topics for your course (10-20 recommended)</li>
-          <li><strong>Course Template:</strong> Optionally select a pre-made template to get started quickly</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 2: AI Prompt Generator',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Generate a comprehensive AI prompt based on your course configuration.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li>Review the auto-generated prompt for your course</li>
-          <li>Copy prompt to clipboard with one click</li>
-          <li>Paste into your preferred AI chatbot (Claude, ChatGPT, etc.)</li>
-          <li>The prompt requests structured JSON output with content, narration, and media suggestions</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 3: JSON Import & Validation',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Paste the JSON response from your AI chatbot and validate its structure.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li>Paste JSON from your AI chatbot response</li>
-          <li>Upload a JSON file if you have one saved</li>
-          <li>Validate JSON structure automatically</li>
-          <li>See summary of pages, knowledge checks, and assessment questions</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 4: Media Enhancement',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Search for images and videos to enhance your course content.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li>Navigate through all course pages (Welcome, Objectives, Topics)</li>
-          <li>Search for images using Google Image Search integration</li>
-          <li>Search for videos using YouTube API</li>
-          <li>Preview and select media for each page</li>
-          <li>Remove unwanted media with confirmation</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 5: Audio Narration Wizard',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Add voiceover narration to your course content.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li><strong>Bulk audio upload</strong> with Murf.ai integration instructions</li>
-          <li>Download narration text file for AI voice generation</li>
-          <li>Upload audio ZIP files (replaces all existing audio)</li>
-          <li>Upload caption ZIP files (VTT format)</li>
-          <li>Edit narration text for individual blocks</li>
-          <li>Preview audio with playback controls</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 6: Questions & Assessment Editor',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Review and edit all questions in your course.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li>View summary statistics of all questions</li>
-          <li><strong>Knowledge check questions</strong> organized by topic</li>
-          <li><strong>Assessment questions</strong> for final evaluation</li>
-          <li>Edit question types: Multiple Choice, True/False, Fill in the Blank</li>
-          <li>Manage correct/incorrect feedback for each question</li>
-          <li>Remove questions from knowledge checks (assessment questions are fixed)</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Step 7: SCORM Package Builder',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Generate a SCORM-compliant learning package ready for your LMS.</p>
-        <ul style={{ 
-          listStyle: 'disc', 
-          paddingLeft: '1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li>Review course information and version</li>
-          <li>SCORM 1.2 format for maximum compatibility</li>
-          <li>Click "Generate SCORM Package" to create the ZIP file</li>
-          <li>Download the package when generation is complete</li>
-          <li>Upload directly to your Learning Management System</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    title: 'Keyboard Shortcuts',
-    content: (
-      <div>
-        <p style={{ marginBottom: '1rem' }}>Quick keyboard shortcuts to enhance your workflow:</p>
-        <ul style={{ 
-          listStyle: 'none', 
-          paddingLeft: '0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem'
-        }}>
-          <li><strong>Ctrl+Shift+P:</strong> Toggle Performance Dashboard - Monitor real-time performance metrics</li>
-          <li><strong>Ctrl+Shift+T:</strong> Toggle Test Checklist - View testing recommendations</li>
-          <li><strong>Ctrl+Shift+D:</strong> Toggle Debug Panel - View debug information (development mode)</li>
-          <li><strong>F12:</strong> Open Developer Tools (if enabled)</li>
-        </ul>
-        <Alert variant="info">
-          <p>The Performance Dashboard helps you identify slow operations and monitor memory usage in real-time.</p>
-        </Alert>
-      </div>
-    )
-  }
-]
+import { 
+  helpTopics, 
+  searchTopics, 
+  getTopicById, 
+  getRelatedTopics, 
+  stepToHelpTopic,
+  type HelpTopic 
+} from '../data/helpTopics'
+import './DesignSystem/designSystem.css'
+import './HelpPage.css'
 
 interface HelpPageProps {
   onBack?: () => void
+  initialTopicId?: string
+  currentStep?: number
 }
 
-export const HelpPage: React.FC<HelpPageProps> = ({ onBack }) => {
-  const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set())
+export const HelpPage: React.FC<HelpPageProps> = ({ 
+  onBack, 
+  initialTopicId,
+  currentStep 
+}) => {
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [filteredTopics, setFilteredTopics] = useState<HelpTopic[]>(helpTopics)
+  const [scrollToTopicId, setScrollToTopicId] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const topicRefs = useRef<Record<string, HTMLElement | null>>({})
 
-  const toggleSection = (index: number) => {
-    const newExpanded = new Set(expandedSections)
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index)
-    } else {
-      newExpanded.add(index)
+  // Categories for filtering
+  const categories = [
+    { id: 'all', label: 'All Topics', icon: Book },
+    { id: 'workflow', label: 'Workflow Steps', icon: ChevronRight },
+    { id: 'troubleshooting', label: 'Troubleshooting', icon: AlertCircle },
+    { id: 'features', label: 'Features', icon: Lightbulb },
+    { id: 'faq', label: 'FAQs', icon: HelpCircle }
+  ]
+
+  // Initialize with context-sensitive topic
+  useEffect(() => {
+    let topicToOpen = initialTopicId
+    
+    // If no explicit topic but we have a current step, use the mapping
+    if (!topicToOpen && currentStep !== undefined && currentStep in stepToHelpTopic) {
+      topicToOpen = stepToHelpTopic[currentStep]
     }
-    setExpandedSections(newExpanded)
+    
+    if (topicToOpen) {
+      setExpandedTopics(new Set([topicToOpen]))
+      setScrollToTopicId(topicToOpen)
+    }
+    
+    // Focus search on mount
+    searchInputRef.current?.focus()
+  }, [initialTopicId, currentStep])
+
+  // Handle scrolling when a topic needs to be scrolled to and is expanded
+  useEffect(() => {
+    if (scrollToTopicId && expandedTopics.has(scrollToTopicId)) {
+      console.log('[HelpPage] Attempting to scroll to:', scrollToTopicId)
+      console.log('[HelpPage] Current refs:', Object.keys(topicRefs.current))
+      
+      // Use requestAnimationFrame to ensure DOM has been painted
+      requestAnimationFrame(() => {
+        const element = topicRefs.current[scrollToTopicId]
+        console.log('[HelpPage] Element found:', !!element)
+        
+        if (element) {
+          // Check if the content div actually exists now
+          const contentDiv = element.querySelector('.help-topic-content')
+          console.log('[HelpPage] Content div found:', !!contentDiv)
+          
+          if (contentDiv) {
+            // Scroll to the element
+            console.log('[HelpPage] Scrolling to element')
+            element.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            })
+            // Clear the scroll target
+            setScrollToTopicId(null)
+          } else {
+            // If content still not rendered, try again on next frame
+            console.log('[HelpPage] Content not found, retrying...')
+            requestAnimationFrame(() => {
+              element.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+              })
+              setScrollToTopicId(null)
+            })
+          }
+        } else {
+          console.log('[HelpPage] Element not found in refs!')
+        }
+      })
+    }
+  }, [expandedTopics, scrollToTopicId])
+
+  // Filter topics based on search and category
+  useEffect(() => {
+    let topics = helpTopics
+    
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      topics = topics.filter(topic => {
+        switch (selectedCategory) {
+          case 'workflow':
+            return topic.id.includes('config') || 
+                   topic.id.includes('generator') || 
+                   topic.id.includes('import') ||
+                   topic.id.includes('enhancement') ||
+                   topic.id.includes('narration') ||
+                   topic.id.includes('editor') ||
+                   topic.id.includes('package')
+          case 'troubleshooting':
+            return topic.id.includes('error') || 
+                   topic.id.includes('issue') ||
+                   topic.id.includes('troubleshooting')
+          case 'features':
+            return topic.id.includes('keyboard') || 
+                   topic.id.includes('performance') ||
+                   topic.id.includes('template') ||
+                   topic.id.includes('murf') ||
+                   topic.id.includes('project')
+          case 'faq':
+            return topic.id.includes('faq') || 
+                   topic.id.includes('best-practice') ||
+                   topic.id.includes('lms')
+          default:
+            return true
+        }
+      })
+    }
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      topics = searchTopics(searchQuery)
+    }
+    
+    setFilteredTopics(topics)
+  }, [searchQuery, selectedCategory])
+
+  const toggleTopic = (topicId: string) => {
+    const newExpanded = new Set(expandedTopics)
+    if (newExpanded.has(topicId)) {
+      newExpanded.delete(topicId)
+    } else {
+      newExpanded.add(topicId)
+    }
+    setExpandedTopics(newExpanded)
+  }
+
+  const expandAll = () => {
+    setExpandedTopics(new Set(filteredTopics.map(t => t.id)))
+  }
+
+  const collapseAll = () => {
+    setExpandedTopics(new Set())
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent, topicId: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      toggleTopic(topicId)
+    }
+  }
+
+  const getIconForTopic = (topicId: string) => {
+    if (topicId.includes('error') || topicId.includes('issue')) return AlertCircle
+    if (topicId.includes('faq')) return HelpCircle
+    if (topicId.includes('keyboard') || topicId.includes('performance')) return Lightbulb
+    return Book
   }
 
   return (
-    <PageContainer className="page-container">
+    <PageContainer className="help-page">
+      {/* Header */}
       <Section>
-        <Flex justify="space-between" align="center" style={{ marginBottom: '2rem' }}>
-          <h1 style={{
-            fontSize: '1.875rem',
-            fontWeight: 'bold',
-            color: tokens.colors.text.primary,
-            margin: 0
-          }}>
+        <Flex justify="space-between" align="center" className="help-header">
+          <h1 className="help-title">
+            <Icon icon={Book} className="help-title-icon" />
             SCORM Course Builder Help
           </h1>
           <Flex gap="medium">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={expandAll}
+              disabled={filteredTopics.length === 0}
+            >
+              Expand All
+            </Button>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={collapseAll}
+              disabled={expandedTopics.size === 0}
+            >
+              Collapse All
+            </Button>
             {onBack && (
               <Button
-                variant="tertiary"
+                variant="primary"
                 onClick={onBack}
               >
+                <Icon icon={ArrowLeft} />
                 Back to Course Builder
               </Button>
             )}
@@ -224,88 +233,194 @@ export const HelpPage: React.FC<HelpPageProps> = ({ onBack }) => {
         </Flex>
       </Section>
 
-      <Section>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {helpSections.map((section, index) => (
-            <Card 
-              key={index} 
-              className="overflow-hidden"
-              data-testid="help-section-card"
-            >
-              <button
-                data-testid="section-button"
-                onClick={() => toggleSection(index)}
-                className="help-section-button"
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
+      {/* Search and Filter Bar */}
+      <Section className="help-controls">
+        <Flex gap="medium" align="center">
+          <div className="help-search-container">
+            <Icon icon={Search} className="help-search-icon" />
+            <Input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search help topics..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="help-search-input"
+              aria-label="Search help topics"
+            />
+          </div>
+          <Flex gap="small" className="help-category-filters">
+            {categories.map(category => (
+              <Button
+                key={category.id}
+                variant={selectedCategory === category.id ? 'primary' : 'tertiary'}
+                size="small"
+                onClick={() => setSelectedCategory(category.id)}
+                className="help-category-button"
               >
-                <h2 
-                  data-testid="section-title"
-                  style={{
-                    fontSize: '1.125rem',
-                    fontWeight: 600,
-                    color: tokens.colors.text.secondary,
-                    margin: 0
+                <Icon icon={category.icon} size="sm" />
+                {category.label}
+              </Button>
+            ))}
+          </Flex>
+        </Flex>
+      </Section>
+
+      {/* Table of Contents (Quick Jump) */}
+      {filteredTopics.length > 5 && (
+        <Section className="help-toc">
+          <Card className="help-toc-card">
+            <h2 className="help-toc-title">
+              <Icon icon={Hash} size="sm" />
+              Quick Jump
+            </h2>
+            <div className="help-toc-links">
+              {filteredTopics.map(topic => (
+                <button
+                  key={topic.id}
+                  className="help-toc-link"
+                  onClick={() => {
+                    // Expand the topic and set it as the scroll target
+                    setExpandedTopics(new Set([topic.id]))
+                    setScrollToTopicId(topic.id)
                   }}
                 >
-                  {section.title}
-                </h2>
-                <span style={{
-                  color: tokens.colors.text.tertiary,
-                  fontSize: '1.5rem',
-                  fontWeight: 'bold'
-                }}>
-                  {expandedSections.has(index) ? '−' : '+'}
-                </span>
-              </button>
+                  {topic.title}
+                </button>
+              ))}
+            </div>
+          </Card>
+        </Section>
+      )}
+
+      {/* Main Content */}
+      <Section className="help-content">
+        {filteredTopics.length === 0 ? (
+          <Alert variant="info">
+            <p>No help topics found matching your search. Try different keywords or browse all topics.</p>
+          </Alert>
+        ) : (
+          <div className="help-topics">
+            {filteredTopics.map((topic) => {
+              const isExpanded = expandedTopics.has(topic.id)
+              const relatedTopics = getRelatedTopics(topic.id)
+              const TopicIcon = getIconForTopic(topic.id)
               
-              {expandedSections.has(index) && (
-                <div style={{
-                  padding: '1.5rem',
-                  paddingTop: '1rem',
-                  color: tokens.colors.text.tertiary,
-                  borderTop: `1px solid ${tokens.colors.border.default}`
-                }}>
-                  {section.content}
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
+              return (
+                <Card 
+                  key={topic.id}
+                  className="help-topic-card"
+                  ref={(el) => { 
+                    if (el) {
+                      console.log('[HelpPage] Setting ref for topic:', topic.id)
+                      topicRefs.current[topic.id] = el
+                    }
+                  }}
+                  id={`help-topic-${topic.id}`}
+                >
+                  <button
+                    className="help-topic-header"
+                    onClick={() => toggleTopic(topic.id)}
+                    onKeyDown={(e) => handleKeyDown(e, topic.id)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`help-content-${topic.id}`}
+                  >
+                    <Flex align="center" justify="space-between">
+                      <Flex align="center" gap="medium">
+                        <Icon icon={TopicIcon} className="help-topic-icon" />
+                        <div className="help-topic-title-group">
+                          <h3 className="help-topic-title">{topic.title}</h3>
+                          <p className="help-topic-summary">{topic.summary}</p>
+                        </div>
+                      </Flex>
+                      <Icon 
+                        icon={isExpanded ? ChevronUp : ChevronDown} 
+                        className="help-topic-chevron"
+                      />
+                    </Flex>
+                  </button>
+                  
+                  {isExpanded && (
+                    <div 
+                      className="help-topic-content"
+                      id={`help-content-${topic.id}`}
+                      role="region"
+                      aria-labelledby={`help-topic-${topic.id}`}
+                    >
+                      {/* Main Details */}
+                      <div className="help-topic-details">
+                        <ul className="help-detail-list">
+                          {topic.details.map((detail, index) => (
+                            <li key={index} className="help-detail-item">
+                              {detail}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      {/* Tips */}
+                      {topic.tips && topic.tips.length > 0 && (
+                        <Alert variant="info" className="help-tips">
+                          <h4 className="help-tips-title">
+                            <Icon icon={Lightbulb} size="sm" />
+                            Tips
+                          </h4>
+                          <ul className="help-tips-list">
+                            {topic.tips.map((tip, index) => (
+                              <li key={index}>{tip}</li>
+                            ))}
+                          </ul>
+                        </Alert>
+                      )}
+                      
+                      {/* Warnings */}
+                      {topic.warnings && topic.warnings.length > 0 && (
+                        <Alert variant="warning" className="help-warnings">
+                          <h4 className="help-warnings-title">
+                            <Icon icon={AlertCircle} size="sm" />
+                            Important Notes
+                          </h4>
+                          <ul className="help-warnings-list">
+                            {topic.warnings.map((warning, index) => (
+                              <li key={index}>{warning}</li>
+                            ))}
+                          </ul>
+                        </Alert>
+                      )}
+                      
+                      {/* Related Topics */}
+                      {relatedTopics.length > 0 && (
+                        <div className="help-related">
+                          <h4 className="help-related-title">See Also:</h4>
+                          <Flex gap="small" wrap>
+                            {relatedTopics.map(related => (
+                              <Button
+                                key={related.id}
+                                variant="tertiary"
+                                size="small"
+                                onClick={() => {
+                                  // Expand the topic and set it as the scroll target
+                                  setExpandedTopics(new Set([related.id]))
+                                  setScrollToTopicId(related.id)
+                                }}
+                                className="help-related-link"
+                              >
+                                {related.title}
+                              </Button>
+                            ))}
+                          </Flex>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )
+            })}
+          </div>
+        )}
       </Section>
-
-      <Section>
-        <Alert variant="info">
-          <h2 style={{
-            fontSize: '1.25rem',
-            fontWeight: 600,
-            color: '#c4b5fd',
-            marginBottom: '0.75rem'
-          }}>
-            Tips for Success
-          </h2>
-          <ul style={{
-            listStyle: 'disc',
-            paddingLeft: '1.5rem',
-            color: '#e9d5ff',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem'
-          }}>
-            <li>Start with a clear course objective and target audience</li>
-            <li>Keep topics focused and specific (10-20 topics recommended)</li>
-            <li>Use high-quality media that supports your content</li>
-            <li>Always include captions for accessibility</li>
-            <li>Test your SCORM package in your LMS before deployment</li>
-          </ul>
-        </Alert>
-      </Section>
-
     </PageContainer>
   )
 }
 
-export default HelpPage;
+// Default export for lazy loading compatibility
+export default HelpPage

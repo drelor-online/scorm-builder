@@ -65,9 +65,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     metadata: any // SCORMMetadata type not defined
   } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState('Preparing SCORM package...')
-  const [audioAutoplay, setAudioAutoplay] = useState(() => 
-    localStorage.getItem('audioAutoplay') === 'true'
-  )
+  // Autoplay is always enabled
+  const audioAutoplay = true
   const [isLoadingMedia, setIsLoadingMedia] = useState(false)
   const [mediaLoadProgress, setMediaLoadProgress] = useState(0)
   const [loadingDetails, setLoadingDetails] = useState({
@@ -96,8 +95,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     try {
       // Add timeout to prevent hanging
+      let timeoutId: NodeJS.Timeout | null = null
       const timeoutPromise = new Promise<null>((resolve) => {
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           console.warn(`[SCORMPackageBuilder] Timeout loading media: ${mediaId}`)
           resolve(null)
         }, 5000) // 5 second timeout per media file
@@ -105,6 +105,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       const mediaDataPromise = getMedia(mediaId)
       const mediaData = await Promise.race([mediaDataPromise, timeoutPromise])
+      
+      // Clear the timeout if we got data successfully
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       
       if (!mediaData) {
         console.warn(`[SCORMPackageBuilder] Media not found or timed out: ${mediaId}`)
@@ -151,10 +156,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           try {
             // Add timeout to blob fetch
             const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
+            const fetchTimeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
             
             const response = await fetch(mediaData.url, { signal: controller.signal })
-            clearTimeout(timeoutId)
+            clearTimeout(fetchTimeoutId)
             
             const blob = await response.blob()
             console.log('[SCORMPackageBuilder] Successfully fetched blob:', {
@@ -613,17 +618,18 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       console.log('[SCORMPackageBuilder] Performance metrics:', performanceMetrics)
       
       const newPackage = {
-        data: result.buffer instanceof ArrayBuffer ? result.buffer : (result.buffer as any).buffer || result.buffer,
+        data: result instanceof Uint8Array ? result.buffer as ArrayBuffer : result,
         metadata: metadata
       }
       
       setGeneratedPackage(newPackage)
       
-      setMessages(prev => [...prev, {
-        id: `success-${Date.now()}`,
-        type: 'success',
-        text: `✅ SCORM package generated successfully! Size: ${(result.buffer.byteLength / 1024 / 1024).toFixed(2)} MB, Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`
-      }])
+      // Don't add success message - the UI card handles this
+      // setMessages(prev => [...prev, {
+      //   id: `success-${Date.now()}`,
+      //   type: 'success',
+      //   text: `✅ SCORM package generated successfully! Size: ${(result.buffer.byteLength / 1024 / 1024).toFixed(2)} MB, Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`
+      // }])
       
       setLoadingMessage('')
       
@@ -718,11 +724,12 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         await writeFile(filePath, data)
         
         console.log('[SCORMPackageBuilder] File written successfully')
-        setMessages(prev => [...prev, {
-          id: `download-success-${Date.now()}`,
-          type: 'success',
-          text: `SCORM package saved to: ${filePath}`
-        }])
+        // Don't add success message - let the user see the file save location from their OS
+        // setMessages(prev => [...prev, {
+        //   id: `download-success-${Date.now()}`,
+        //   type: 'success',
+        //   text: `SCORM package saved to: ${filePath}`
+        // }])
       } else {
         console.log('[SCORMPackageBuilder] User cancelled save dialog or no path returned')
       }
@@ -781,30 +788,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     <PageLayout
       currentStep={6}
       title="Generate SCORM Package"
-      description="Create a SCORM-compliant package for your course"
+      description="Export your course as a SCORM-compliant package"
       onBack={onBack}
-      actions={
-        generatedPackage ? (
-          <Button 
-            onClick={() => downloadPackage()}
-            disabled={isDownloading}
-            variant="primary"
-            className="min-w-[200px]"
-          >
-            {isDownloading ? (
-              <>
-                <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Icon icon={Download} />
-                Download Package
-              </>
-            )}
-          </Button>
-        ) : undefined
-      }
       onSettingsClick={onSettingsClick}
       onSave={onSave}
       onSaveAs={onSaveAs}
@@ -812,65 +797,60 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       onHelp={onHelp}
       onStepClick={onStepClick}
     >
-      <div className="max-w-4xl mx-auto">
-        {/* Compact Package Information */}
-        <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Course Title</p>
-              <p className="font-semibold text-gray-900">{courseSeedData?.courseTitle || 'Untitled Course'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">SCORM Version</p>
-              <p className="font-semibold text-gray-900">SCORM 1.2</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Content Summary</p>
-              <p className="font-semibold text-gray-900">
-                {courseContent.topics?.length || 0} topics, {courseContent.assessment?.questions?.length || 0} assessment questions
+      <div className="max-w-3xl mx-auto">
+        {/* Main Action Area */}
+        {!isGenerating && !generatedPackage && (
+          <Card className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-md">
+                <Icon icon={Package} className="w-8 h-8 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                {courseSeedData?.courseTitle || 'Untitled Course'}
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Ready to generate your SCORM 1.2 compliant package
               </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Knowledge Checks</p>
-              <p className="font-semibold text-gray-900">
-                {courseContent.topics?.length || 0} questions
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Audio Settings */}
-        <Card className="mb-6">
-          <div className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Audio Settings</h3>
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={audioAutoplay}
-                  onChange={(e) => {
-                    const newValue = e.target.checked
-                    setAudioAutoplay(newValue)
-                    localStorage.setItem('audioAutoplay', newValue.toString())
-                  }}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  aria-label="Enable audio autoplay"
-                />
-                <div>
-                  <span className="font-medium">Autoplay audio when pages load</span>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Note: Some browsers may require user interaction before audio can play automatically.
-                  </p>
+              
+              {/* Course Stats */}
+              <div className="grid grid-cols-3 gap-4 mb-8 max-w-md mx-auto">
+                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">{courseContent.topics?.length || 0}</div>
+                    <div className="text-xs text-gray-600">Course Topics</div>
+                  </div>
                 </div>
-              </label>
+                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">{courseContent.assessment?.questions?.length || 0}</div>
+                    <div className="text-xs text-gray-600">Assessment Questions</div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-4 border border-blue-100">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">{courseContent.topics?.length || 0}</div>
+                    <div className="text-xs text-gray-600">Knowledge Checks</div>
+                  </div>
+                </div>
+              </div>
+              
+              <Button
+                onClick={generatePackage}
+                variant="primary"
+                size="large"
+                className="min-w-[250px]"
+              >
+                <Icon icon={Package} />
+                Generate SCORM Package
+              </Button>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
-        {/* Messages */}
-        {messages.length > 0 && (
+        {/* Messages - Only show for errors when not in success state */}
+        {messages.length > 0 && !generatedPackage && (
           <div className="mb-6">
-            {messages.map(message => (
+            {messages.filter(msg => msg.type === 'error' || msg.type === 'warning').map(message => (
               <div key={message.id} className={getMessageStyle(message.type)}>
                 <div className="flex items-start gap-3 flex-1">
                   {getMessageIcon(message.type)}
@@ -889,119 +869,122 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
 
         {/* Loading State */}
         {isGenerating && (
-          <Card className="mb-6">
-            <div className="p-6">
-              <div className="flex items-center gap-4">
-                <LoadingSpinner size="medium" />
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{loadingMessage}</p>
-                  {generationStartTime && (
-                    <p className="text-sm text-gray-500 mt-1">
-                      Elapsed time: {elapsedTime.toFixed(1)} seconds
-                    </p>
-                  )}
+          <Card className="mb-6 border-blue-200">
+            <div className="p-8">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                  <LoadingSpinner size="medium" />
                 </div>
-              </div>
-                {isLoadingMedia && (
-                  <div className="mt-4 w-full">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Generating SCORM Package
+                </h3>
+                <p className="text-gray-600 mb-4">{loadingMessage}</p>
+                
+                {generationStartTime && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-sm text-blue-700">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    {elapsedTime.toFixed(1)}s elapsed
+                  </div>
+                )}
+                
+                {isLoadingMedia && loadingDetails.totalFiles > 0 && (
+                  <div className="mt-6 max-w-md mx-auto">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
-                      <span>Loading media files...</span>
-                      <span className="font-medium">{loadingDetails.filesLoaded} / {loadingDetails.totalFiles}</span>
+                      <span>Loading media files</span>
+                      <span className="font-medium">{loadingDetails.filesLoaded}/{loadingDetails.totalFiles}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${mediaLoadProgress}%` }}
                       />
                     </div>
                     {loadingDetails.currentFile && (
                       <p className="text-xs text-gray-500 mt-2 truncate">
-                        Current: {loadingDetails.currentFile}
+                        {loadingDetails.currentFile}
                       </p>
                     )}
                   </div>
                 )}
+              </div>
             </div>
           </Card>
         )}
 
         {/* Success State */}
         {generatedPackage && !isGenerating && (
-          <Card className="mb-6 border border-green-200 bg-green-50">
-            <div className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                    <Icon icon={CheckCircle} className="w-6 h-6 text-green-600" />
-                  </div>
+          <Card className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+            <div className="p-8">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <Icon icon={CheckCircle} className="w-8 h-8 text-green-600" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-green-900 mb-2">
-                    Package Generated Successfully
-                  </h3>
-                  <p className="text-sm text-green-700 mb-4">
-                    Your SCORM package is ready for download.
-                  </p>
-                  
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="bg-white rounded p-3 border border-green-200">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Package Size</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  Package Ready!
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Your SCORM package has been generated successfully
+                </p>
+                
+                {/* Compact Stats */}
+                <div className="inline-flex items-center gap-8 px-8 py-4 bg-white rounded-lg border border-green-100 mb-6">
+                  <div className="flex flex-col items-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {(generatedPackage.data.byteLength / 1024 / 1024).toFixed(1)}
                     </div>
-                    {performanceData && (
-                      <div className="bg-white rounded p-3 border border-green-200">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Generation Time</p>
-                        <p className="text-lg font-semibold text-gray-900">
-                          {(performanceData.totalDuration / 1000).toFixed(1)}s
-                        </p>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">MB</div>
+                  </div>
+                  <div className="w-px h-12 bg-gray-200" />
+                  {performanceData && (
+                    <>
+                      <div className="flex flex-col items-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {(performanceData.totalDuration / 1000).toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider">Seconds</div>
                       </div>
-                    )}
-                    <div className="bg-white rounded p-3 border border-green-200">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Media Files</p>
-                      <p className="text-lg font-semibold text-gray-900">
-                        {mediaFilesRef.current.size}
-                      </p>
+                      <div className="w-px h-12 bg-gray-200" />
+                    </>
+                  )}
+                  <div className="flex flex-col items-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {mediaFilesRef.current.size}
+                    </div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">
+                      {mediaFilesRef.current.size === 1 ? 'Media File' : 'Media Files'}
                     </div>
                   </div>
-                  
-                  <Button
-                    onClick={() => downloadPackage()}
-                    disabled={isDownloading}
-                    variant="primary"
-                    size="medium"
-                  >
-                    {isDownloading ? (
-                      <>
-                        <Icon icon={Loader2} className="w-4 h-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Icon icon={Download} />
-                        Download Package
-                      </>
-                    )}
-                  </Button>
                 </div>
+                
+                <Button
+                  onClick={() => downloadPackage()}
+                  disabled={isDownloading}
+                  variant="primary"
+                  size="large"
+                  className="min-w-[250px]"
+                >
+                  {isDownloading ? (
+                    <>
+                      <Icon icon={Loader2} className="w-5 h-5 animate-spin" />
+                      Saving Package...
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon={Download} className="w-5 h-5" />
+                      Download SCORM Package
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </Card>
         )}
 
-        {/* Generate Button */}
+        {/* Additional Info */}
         {!isGenerating && !generatedPackage && (
-          <div className="text-center">
-            <Button
-              onClick={generatePackage}
-              variant="primary"
-              size="large"
-              className="min-w-[300px]"
-            >
-              <Icon icon={Package} />
-              Generate SCORM Package
-            </Button>
+          <div className="text-center text-sm text-gray-500">
+            <p>The package will include all course content, media files, and assessments</p>
+            <p>Compatible with any SCORM 1.2 compliant Learning Management System</p>
           </div>
         )}
       </div>

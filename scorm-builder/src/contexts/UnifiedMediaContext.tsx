@@ -97,6 +97,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const mediaService = mediaServiceRef.current
   const [mediaCache, setMediaCache] = useState<Map<string, MediaItem>>(new Map())
+  const [blobUrlCache, setBlobUrlCache] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   
@@ -212,7 +213,17 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           return updated
         })
         
-        // No need to release asset URLs - they are persistent
+        // Clear blob URL cache for this media
+        setBlobUrlCache(prev => {
+          const updated = new Map(prev)
+          const existingUrl = updated.get(mediaId)
+          if (existingUrl && existingUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(existingUrl)
+            console.log('[UnifiedMediaContext] Revoked blob URL for deleted media:', mediaId, existingUrl)
+          }
+          updated.delete(mediaId)
+          return updated
+        })
       }
       
       return success
@@ -263,6 +274,13 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     try {
       console.log('[UnifiedMediaContext v2.0.7] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
+      // Check if we have a cached blob URL first
+      const cachedUrl = blobUrlCache.get(mediaId)
+      if (cachedUrl) {
+        console.log('[UnifiedMediaContext v2.0.7] Using cached blob URL:', cachedUrl)
+        return cachedUrl
+      }
+      
       // Get media with data from MediaService
       const media = await mediaService.getMedia(mediaId)
       console.log('[UnifiedMediaContext v2.0.7] Media data retrieved:', {
@@ -287,11 +305,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         return media.url
       }
       
-      // Check if we already have a blob URL
-      if (media.url && media.url.startsWith('blob:')) {
-        console.log('[UnifiedMediaContext v2.0.7] Using existing blob URL:', media.url)
-        return media.url
-      }
+      // Skip checking for existing blob URL in media object - we manage URLs separately
+      // This prevents reusing stale blob URLs after media is deleted and re-added
       
       // CRITICAL FIX: Create real blob URL from data instead of using asset://
       // Since asset:// protocol is not registered, we need to use blob URLs
@@ -347,8 +362,12 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           mimeType: blob.type
         })
         
-        // Track this blob URL for cleanup
-        // Store in a map or manager if needed
+        // Cache the blob URL
+        setBlobUrlCache(prev => {
+          const updated = new Map(prev)
+          updated.set(mediaId, blobUrl)
+          return updated
+        })
         
         return blobUrl
       }
@@ -374,7 +393,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       setError(err as Error)
       return null
     }
-  }, [mediaService, actualProjectId])
+  }, [mediaService, actualProjectId, blobUrlCache])
   
   const revokeBlobUrl = useCallback((url: string) => {
     // Asset URLs don't need to be revoked - they are persistent

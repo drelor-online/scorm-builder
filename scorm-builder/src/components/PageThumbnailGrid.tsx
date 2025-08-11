@@ -17,7 +17,7 @@ interface PageThumbnailGridProps {
 
 // Media Preview Component
 const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
-  const { getMediaForPage, createBlobUrl, revokeBlobUrl } = useUnifiedMedia()
+  const { getMediaForPage, createBlobUrl } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const mediaIdRef = React.useRef<string | null>(null)
   
@@ -28,9 +28,9 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
       // Clear previous media URL to avoid showing stale content
       setMediaUrl(null)
       
-      // First check if page has media in its own media array
-      // This is where the media references are stored
-      const pageMediaRefs = page.media || []
+      // Get media from context instead of expecting it on the page object
+      // This ensures it works for both new pages and pages loaded from storage
+      const pageMediaRefs = getMediaForPage(page.id) || []
       console.log(`[PageThumbnailGrid] Page ${page.id} has ${pageMediaRefs.length} media items:`, pageMediaRefs)
       
       // Log detailed info about each media item
@@ -38,12 +38,9 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
         console.log(`[PageThumbnailGrid] Media item ${index} for page ${page.id}:`, {
           id: media.id,
           type: media.type,
-          isYouTube: media.isYouTube,
-          url: media.url,
-          embedUrl: media.embedUrl,
-          title: media.title,
-          thumbnail: media.thumbnail,
-          storageId: media.storageId,
+          isYouTube: media.metadata?.isYouTube,
+          url: media.metadata?.youtubeUrl || media.metadata?.embedUrl,
+          metadata: media.metadata,
           hasAllProperties: !!(media.id && media.type)
         })
       })
@@ -54,34 +51,38 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
         console.log('[PageThumbnailGrid] Selected first media ref:', {
           id: firstMediaRef.id,
           type: firstMediaRef.type,
-          isYouTube: firstMediaRef.isYouTube,
-          url: firstMediaRef.url
+          isYouTube: firstMediaRef.metadata?.isYouTube,
+          youtubeUrl: firstMediaRef.metadata?.youtubeUrl,
+          embedUrl: firstMediaRef.metadata?.embedUrl
         })
         
         // Handle YouTube videos specially
-        if ('isYouTube' in firstMediaRef && firstMediaRef.isYouTube && 'url' in firstMediaRef && firstMediaRef.url) {
-          console.log('[PageThumbnailGrid] Processing YouTube video:', firstMediaRef.url)
-          // Extract YouTube video ID and use thumbnail URL
-          const videoIdMatch = firstMediaRef.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
-          if (videoIdMatch) {
-            const videoId = videoIdMatch[1]
-            const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-            console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
-            setMediaUrl(thumbnailUrl)
-          } else {
-            console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', firstMediaRef.url)
+        if (firstMediaRef.metadata?.isYouTube) {
+          const ytUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
+          console.log('[PageThumbnailGrid] Processing YouTube video:', ytUrl)
+          if (ytUrl) {
+            // Extract YouTube video ID and use thumbnail URL
+            const videoIdMatch = ytUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
+            if (videoIdMatch) {
+              const videoId = videoIdMatch[1]
+              const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+              console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
+              setMediaUrl(thumbnailUrl)
+            } else {
+              console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', ytUrl)
+            }
           }
-        } else if (firstMediaRef.url && firstMediaRef.url.startsWith('data:image/svg+xml')) {
+        } else if (firstMediaRef.metadata?.url && firstMediaRef.metadata.url.startsWith('data:image/svg+xml')) {
           // SVG data URLs work directly, no conversion needed
           console.log('[PageThumbnailGrid] Using SVG data URL directly')
-          setMediaUrl(firstMediaRef.url)
-        } else if (firstMediaRef.url) {
+          setMediaUrl(firstMediaRef.metadata.url)
+        } else if (firstMediaRef.metadata?.url) {
           // Normalize the URL first to fix double-encoding issues
-          const normalizedUrl = normalizeAssetUrl(firstMediaRef.url)
+          const normalizedUrl = normalizeAssetUrl(firstMediaRef.metadata.url)
           console.log('[PageThumbnailGrid] URL normalized:', {
-            original: firstMediaRef.url,
+            original: firstMediaRef.metadata.url,
             normalized: normalizedUrl,
-            hasChanged: normalizedUrl !== firstMediaRef.url
+            hasChanged: normalizedUrl !== firstMediaRef.metadata.url
           })
           
           // For asset:// URLs or blob URLs that need regeneration
@@ -97,7 +98,7 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
               const url = await createBlobUrl(mediaId)
               console.log('[PageThumbnailGrid] Blob URL result:', {
                 mediaId,
-                originalUrl: firstMediaRef.url,
+                originalUrl: firstMediaRef.metadata.url,
                 normalizedUrl,
                 newUrl: url,
                 isValidBlobUrl: url ? url.startsWith('blob:') : false
@@ -158,18 +159,18 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
     
     loadMedia()
     
-    // Cleanup function - asset URLs don't need cleanup
+    // Cleanup function - no cleanup needed for blob URLs
     return () => {
-      // Asset URLs are persistent and don't need to be revoked
-      // Only revoke if we somehow still have a blob URL (legacy)
-      if (mediaUrl && mediaUrl.startsWith('blob:')) {
-        console.log('[PageThumbnailGrid] Revoking legacy blob URL:', mediaUrl)
-        revokeBlobUrl(mediaUrl)
-      }
+      // DO NOT revoke blob URLs here!
+      // Blob URLs are cached and shared across multiple components
+      // Revoking them here causes images to fail loading when components re-render
+      // The UnifiedMediaContext manages the blob URL cache globally
     }
-  }, [page.id, page.media, getMediaForPage, createBlobUrl, revokeBlobUrl])
+  }, [page.id, getMediaForPage, createBlobUrl])
   
-  const hasVideo = page.media?.some((m: any) => m.type === 'video')
+  // Check for video in media from context
+  const mediaItems = getMediaForPage(page.id) || []
+  const hasVideo = mediaItems.some(m => m.type === 'video')
   
   if (!mediaUrl) {
     return (
@@ -227,10 +228,15 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
     return text.substring(0, maxLength) + '...'
   }
 
+  // Get context to access media
+  const { getMediaForPage } = useUnifiedMedia()
+  
   // Helper to get media count (only image/video, not audio/captions)
   const getMediaCount = (page: Page | Topic): number => {
+    // Get media from context instead of page object
+    const mediaItems = getMediaForPage(page.id) || []
     // Only count image and video media types for enhancement purposes
-    return page.media?.filter(m => m.type === 'image' || m.type === 'video').length || 0
+    return mediaItems.filter(m => m.type === 'image' || m.type === 'video').length
   }
 
   // Helper to check if page has media
@@ -252,15 +258,16 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
     >
       {allPages.map((page, index) => {
         // Debug logging to verify page structure
+        const mediaFromContext = getMediaForPage(page.id) || []
         console.log(`[PageThumbnailGrid] Rendering page ${page.id}:`, {
-          hasMedia: !!page.media,
-          mediaCount: page.media?.length || 0,
-          mediaArray: page.media,
+          hasMediaInContext: mediaFromContext.length > 0,
+          mediaCountFromContext: mediaFromContext.length,
+          mediaFromContext: mediaFromContext,
           pageKeys: Object.keys(page)
         })
         
-        const isWelcome = page.id === 'welcome'
-        const isObjectives = page.id === 'objectives' || page.id === 'learning-objectives'
+        const isWelcome = page.id === 'welcome' || page.id === 'content-0'
+        const isObjectives = page.id === 'objectives' || page.id === 'learning-objectives' || page.id === 'content-1'
         const isCurrent = page.id === currentPageId
         const mediaCount = getMediaCount(page)
         

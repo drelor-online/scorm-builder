@@ -18,6 +18,9 @@ import { Clipboard, FileText, Trash2, CheckCircle } from 'lucide-react'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
+import { SimpleJSONEditor } from './SimpleJSONEditor'
+import { courseContentSchema } from '../schemas/courseContentSchema'
 
 interface JSONImportValidatorProps {
   onNext: (data: CourseContent) => void
@@ -225,6 +228,29 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         })
         setIsLocked(true)
         return
+      }
+      
+      // Apply our advanced auto-fix for unescaped quotes in string values
+      console.log("Applying smart auto-fix for unescaped quotes...")
+      fixedJson = smartAutoFixJSON(fixedJson)
+      
+      // Try to parse after smart fix
+      try {
+        const parsedData = JSON.parse(fixedJson) as CourseContent
+        console.log("Smart auto-fix successful!")
+        setValidationResult({
+          isValid: true,
+          data: parsedData,
+          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+        })
+        setToast({ 
+          message: 'JSON automatically fixed unescaped quotes and validated successfully!', 
+          type: 'success' 
+        })
+        setIsLocked(true)
+        return
+      } catch (e) {
+        console.log("Smart auto-fix didn't fully resolve issues, continuing with other fixes...")
       }
       
       // Fix smart quotes automatically - be very aggressive
@@ -551,6 +577,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       
       // Lock the input after successful validation
       setIsLocked(true)
+      
+      // Show success message
+      setToast({ 
+        message: '✅ JSON validated successfully! Content is now locked. Click "Next" to proceed or "Clear JSON" to start over.', 
+        type: 'success' 
+      })
     } catch (error) {
       let errorMessage = 'Invalid JSON syntax'
       if (error instanceof Error) {
@@ -687,20 +719,50 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         <Card>
           {/* JSON Input */}
           <div style={{ marginBottom: '2rem' }}>
-            <Input
-              label="JSON Input"
-              data-testid="json-input-textarea"
-              multiline
-              rows={15}
+            <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
+              JSON Input
+            </h3>
+            <SimpleJSONEditor
               value={jsonInput}
-              onChange={(e) => !isLocked && setJsonInput(e.target.value as string)}
-              placeholder="Paste your JSON data here..."
-              fullWidth
-              className="textarea"
-              disabled={isLocked}
-              style={{
-                fontFamily: 'ui-monospace, SFMono-Regular, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+              onChange={(value) => {
+                if (!isLocked) {
+                  setJsonInput(value)
+                  // If auto-fix made the JSON valid, auto-validate it
+                  if (value && value !== jsonInput) {
+                    try {
+                      const parsed = JSON.parse(value)
+                      // Only auto-validate if it's from auto-fix (has all required fields)
+                      if (parsed.welcomePage && parsed.learningObjectivesPage && parsed.topics && parsed.assessment) {
+                        // Trigger validation automatically
+                        setTimeout(() => validateJSON(), 100)
+                      }
+                    } catch {
+                      // Not valid yet, user still editing
+                    }
+                  }
+                }
               }}
+              onValidate={(isValid, errors) => {
+                // Don't update validation state if already locked (successfully validated)
+                if (isLocked) {
+                  return
+                }
+                
+                // Only show syntax feedback for unlocked state
+                if (!isLocked && errors && errors.length > 0) {
+                  // Show syntax errors but don't overwrite valid data
+                  if (!validationResult?.isValid || !validationResult?.data) {
+                    setValidationResult({
+                      isValid: false,
+                      error: `${errors.length} syntax error${errors.length > 1 ? 's' : ''} found`
+                    })
+                  }
+                }
+              }}
+              height="400px"
+              readOnly={isLocked}
+              schema={courseContentSchema}
+              theme="light"
             />
           </div>
 
@@ -764,19 +826,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             </div>
           )}
 
-          {/* Validation Result */}
-          {validationResult && (
-            validationResult.isValid ? (
-              <Alert variant="success">
-                <strong>Valid JSON Structure</strong><br />
-                {validationResult.summary}
-              </Alert>
-            ) : (
-              <Alert variant="error">
-                <strong>Validation Error</strong><br />
-                {validationResult.error}
-              </Alert>
-            )
+          {/* Validation Result - Only show when successful and ready to import */}
+          {validationResult && validationResult.isValid && isLocked && (
+            <Alert variant="success">
+              <strong>Ready to Import</strong><br />
+              {validationResult.summary}
+            </Alert>
           )}
         </Card>
       </Section>

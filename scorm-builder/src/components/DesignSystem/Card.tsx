@@ -14,6 +14,7 @@ export interface CardProps {
   className?: string
   variant?: 'default' | 'dark' | 'glass'
   'data-testid'?: string
+  id?: string
   style?: React.CSSProperties
   onMouseEnter?: () => void
   onMouseLeave?: () => void
@@ -24,7 +25,7 @@ export interface CardProps {
   onClick?: (e: React.MouseEvent) => void
 }
 
-const CardComponent: React.FC<CardProps> = ({
+const CardComponent = React.forwardRef<HTMLDivElement, CardProps>(({
   children,
   title,
   subtitle,
@@ -34,6 +35,7 @@ const CardComponent: React.FC<CardProps> = ({
   className = '',
   variant = 'default',
   'data-testid': dataTestId,
+  id,
   style,
   onMouseEnter,
   onMouseLeave,
@@ -42,7 +44,7 @@ const CardComponent: React.FC<CardProps> = ({
   actions,
   interactive = false,
   onClick
-}) => {
+}, ref) => {
   const isClickable = interactive || !!onClick
   
   const classes = [
@@ -73,6 +75,8 @@ const CardComponent: React.FC<CardProps> = ({
 
   return (
     <div 
+      ref={ref}
+      id={id}
       className={classes} 
       data-testid={dataTestId} 
       style={style}
@@ -103,6 +107,9 @@ const CardComponent: React.FC<CardProps> = ({
       {children}
     </div>
   )
-}
+})
+
+// Add display name for debugging
+CardComponent.displayName = 'Card'
 
 export const Card = React.memo(CardComponent)

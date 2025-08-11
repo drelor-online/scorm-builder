@@ -185,8 +185,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     getMedia, 
     deleteMedia,
     getMediaForPage,
-    createBlobUrl,
-    revokeBlobUrl 
+    createBlobUrl
   } = useUnifiedMedia()
   
   const storage = useStorage()
@@ -201,27 +200,23 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Clear on mount to ensure fresh blob URLs for new session
     setBlobUrls(new Map())
     
-    // Cleanup blob URLs on unmount
+    // Cleanup on unmount - but DO NOT revoke blob URLs
     return () => {
-      blobUrls.forEach((url, key) => {
-        revokeBlobUrl(url)
-      })
+      // DO NOT revoke blob URLs here!
+      // Blob URLs are cached and shared across multiple components
+      // The UnifiedMediaContext manages the blob URL cache globally
       setBlobUrls(new Map())
     }
-  }, [revokeBlobUrl])
+  }, [])
   
   // FIX: Properly track and manage blob URLs to prevent memory leaks
   const createTrackedBlobUrl = (blob: Blob, key: string): string => {
-    // Revoke existing URL if any to prevent memory leaks
+    // Check for existing URL
     const existingUrl = blobUrls.get(key)
     if (existingUrl) {
-      // Use revokeBlobUrl from UnifiedMediaContext for consistent cleanup
-      try {
-        revokeBlobUrl(existingUrl)
-      } catch (error) {
-        // Fallback to direct revoke if context method fails
-        URL.revokeObjectURL(existingUrl)
-      }
+      // DO NOT revoke the existing URL - it may still be in use
+      // Just return the existing URL instead of creating a new one
+      return existingUrl
     }
     
     // Create new URL for temporary blob
@@ -560,6 +555,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
       // Create media items from MediaService items with real blob URLs
       let loadedCount = 0
+      const newBlobUrls = new Map<string, string>() // Collect blob URLs to batch update
+      
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
         let url = item.metadata.youtubeUrl || item.metadata.embedUrl
         
@@ -570,13 +567,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           const blobUrl = await createBlobUrl(item.id)
           url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
           
-          // Track blob URLs for cleanup
+          // Collect blob URLs for batch update (don't update state here)
           if (blobUrl) {
-            setBlobUrls(prev => {
-              const newMap = new Map(prev)
-              newMap.set(item.id, blobUrl)
-              return newMap
-            })
+            newBlobUrls.set(item.id, blobUrl)
           }
         }
         
@@ -601,6 +594,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
       const mediaItems = await Promise.all(mediaItemsPromises)
       console.log('[MediaEnhancement] Created media items with blob URLs:', mediaItems)
+      
+      // Batch update blob URLs to avoid multiple re-renders
+      if (newBlobUrls.size > 0) {
+        setBlobUrls(prev => {
+          const merged = new Map(prev)
+          newBlobUrls.forEach((url, id) => {
+            merged.set(id, url)
+          })
+          return merged
+        })
+      }
+      
       setExistingPageMedia(mediaItems)
     } else {
       console.log('[MediaEnhancement] No media found for page')
@@ -615,15 +620,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   useEffect(() => {
     loadExistingMedia()
     
-    // Cleanup blob URLs on unmount or page change
+    // Cleanup when page changes or component unmounts
     return () => {
-      blobUrls.forEach((url, id) => {
-        console.log('[MediaEnhancement] Revoking blob URL for:', id)
-        revokeBlobUrl(url)
-      })
+      // DO NOT revoke blob URLs here!
+      // They are cached and may be needed when returning to this page
+      // The UnifiedMediaContext manages the blob URL cache globally
       setBlobUrls(new Map())
     }
-  }, [loadExistingMedia, revokeBlobUrl])
+  }, [loadExistingMedia])
   
   // Auto-trigger search when suggestion is clicked
   useEffect(() => {
@@ -1108,17 +1112,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       // Delete from storage
       await deleteMedia(mediaToRemove.storageId)
       
-      // Clean up blob URL if exists
+      // Clean up blob URL tracking (but don't revoke the URL)
       if (mediaToRemove.storageId) {
-        const blobUrl = blobUrls.get(mediaToRemove.storageId)
-        if (blobUrl) {
-          revokeBlobUrl(blobUrl)
-          setBlobUrls(prev => {
-            const newMap = new Map(prev)
-            newMap.delete(mediaToRemove.storageId!)
-            return newMap
-          })
-        }
+        setBlobUrls(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(mediaToRemove.storageId!)
+          return newMap
+        })
       }
     }
     
@@ -1137,11 +1137,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const handlePageSelect = (pageId: string) => {
     let newIndex = -1
     
-    // Find the page index
-    if (pageId === 'welcome') {
+    // Find the page index - support both old and new ID formats
+    if (pageId === 'welcome' || pageId === 'content-0') {
+      // Handle both 'welcome' and old 'content-0' format
       newIndex = 0
-    } else if (pageId === 'objectives' || pageId === 'learning-objectives') {
-      // Handle both 'objectives' and 'learning-objectives' IDs
+    } else if (pageId === 'objectives' || pageId === 'learning-objectives' || pageId === 'content-1') {
+      // Handle 'objectives', 'learning-objectives', and old 'content-1' format
       newIndex = 1
     } else {
       // Find topic index
@@ -1525,17 +1526,37 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         {media.title || 'Untitled'}
                       </p>
                     </div>
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleRemoveMedia(media.id)
-                      }}
-                      className={styles.removeButton}
-                    >
-                      Remove
-                    </Button>
+                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem' }}>
+                      {media.type === 'video' && media.isYouTube && media.url && (
+                        <Button
+                          variant="primary"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Open YouTube video in new tab for preview
+                            const videoUrl = media.url?.includes('embed') 
+                              ? media.url.replace('/embed/', '/watch?v=')
+                              : media.url
+                            window.open(videoUrl, '_blank')
+                          }}
+                          style={{ flex: 1 }}
+                        >
+                          Preview
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveMedia(media.id)
+                        }}
+                        className={styles.removeButton}
+                        style={{ flex: 1 }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1550,6 +1571,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 <p>No media added yet</p>
                 <p className={styles.noMediaHint}>
                   Use the options below to add images or videos to this page
+                </p>
+                <p style={{ marginTop: '1rem', fontSize: '1.2rem' }}>
+                  ↓ Add Media Below ↓
                 </p>
               </div>
             </Card>

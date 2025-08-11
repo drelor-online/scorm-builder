@@ -57,48 +57,22 @@ function convertNewFormat(
 ): EnhancedCourseContent {
     // Process welcome page media
     const welcomeMedia = courseContent.welcomePage.media || []
+    const welcomeAudioMedia = welcomeMedia.find(m => m.type === 'audio')
+    const welcomeCaptionMedia = welcomeMedia.find((m: any) => m.type === 'caption')
     const welcomeImageMedia = welcomeMedia.find(m => m.type === 'image')
     const welcomeVideoMedia = welcomeMedia.find(m => m.type === 'video')
-    
-    // Use simple file naming without topic/page names
-    const getWelcomeAudioFile = () => {
-      // Prefer audioId over audioFile
-      if ((courseContent.welcomePage as any).audioId) {
-        return (courseContent.welcomePage as any).audioId
-      }
-      if (courseContent.welcomePage.audioFile) {
-        // If file already uses simple format, keep it
-        if (courseContent.welcomePage.audioFile.match(/^audio-\d+(\.mp3|\.bin)?$/)) {
-          return courseContent.welcomePage.audioFile.replace(/\.(mp3|bin)$/, '')
-        }
-      }
-      return courseContent.welcomePage.narration ? `audio-0` : undefined
-    }
-    
-    const getWelcomeCaptionFile = () => {
-      // Prefer captionId over captionFile
-      if ((courseContent.welcomePage as any).captionId) {
-        return (courseContent.welcomePage as any).captionId
-      }
-      if (courseContent.welcomePage.captionFile) {
-        // If file already uses simple format, keep it
-        if (courseContent.welcomePage.captionFile.match(/^caption-\d+(\.vtt|\.bin)?$/)) {
-          return courseContent.welcomePage.captionFile.replace(/\.(vtt|bin)$/, '')
-        }
-      }
-      return courseContent.welcomePage.narration ? `caption-0` : undefined
-    }
     
     const welcome = {
       title: courseContent.welcomePage.title,
       content: courseContent.welcomePage.content,
+      narration: courseContent.welcomePage.narration,
       startButtonText: 'Start Course',
       // Use storageId or id from image media for imageUrl
       imageUrl: welcomeImageMedia ? (welcomeImageMedia as any).storageId || welcomeImageMedia.id : undefined,
-      audioFile: getWelcomeAudioFile(),
+      audioFile: welcomeAudioMedia?.id || (courseContent.welcomePage as any).audioId || courseContent.welcomePage.audioFile,
       audioId: (courseContent.welcomePage as any).audioId,
       audioBlob: (courseContent.welcomePage as any).audioBlob,
-      captionFile: getWelcomeCaptionFile(),
+      captionFile: welcomeCaptionMedia?.id || (courseContent.welcomePage as any).captionId || courseContent.welcomePage.captionFile,
       captionId: (courseContent.welcomePage as any).captionId,
       captionBlob: (courseContent.welcomePage as any).captionBlob,
       embedUrl: welcomeVideoMedia?.embedUrl,
@@ -128,12 +102,13 @@ function convertNewFormat(
     const objectivesCaptionMedia = objectivesMedia.find((m: any) => m.type === 'caption')
     
     const objectivesPage = {
+      narration: courseContent.learningObjectivesPage.narration,
       // Use storageId or id from image media for imageUrl
       imageUrl: objectivesImageMedia ? (objectivesImageMedia as any).storageId || objectivesImageMedia.id : undefined,
-      audioFile: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile || (courseContent.learningObjectivesPage.narration ? `audio-1` : undefined),
+      audioFile: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile,
       audioId: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId,
       audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
-      captionFile: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile || (courseContent.learningObjectivesPage.narration ? `caption-1` : undefined),
+      captionFile: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile,
       captionId: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId,
       captionBlob: (courseContent.learningObjectivesPage as any).captionBlob,
       embedUrl: objectivesVideoMedia?.embedUrl,
@@ -170,8 +145,8 @@ function convertNewFormat(
       const topicAudioMedia = topic.media?.find(m => m.type === 'audio')
       const topicCaptionMedia = topic.media?.find((m: any) => m.type === 'caption')
       
-      const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile || (topic.narration ? `audio-${topicAudioIndex}` : undefined)
-      const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile || (topic.narration ? `caption-${topicAudioIndex}` : undefined)
+      const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile
+      const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile
       
       // Use storageId or id from image media for imageUrl
       const imageUrl = imageMedia ? (imageMedia as any).storageId || imageMedia.id : undefined
@@ -182,6 +157,7 @@ function convertNewFormat(
         id: topic.id,
         title: topic.title,
         content: topic.content,
+        narration: topic.narration,
         imageUrl,
         audioFile,
         audioId: (topic as any).audioId,

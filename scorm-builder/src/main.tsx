@@ -1,7 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { AppWithDashboard } from './App.dashboard'
-import './index.css'
+// Import CSS in correct order - variables first, then global styles
+import './components/DesignSystem/designSystem.css' // CSS variables and design tokens
+import './styles/theme.css' // Theme overrides  
+import './index.css' // Global application styles
 import './errorMonitor'
 import './utils/ultraSimpleLogger' // Load ultra-simple debug logger synchronously
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'

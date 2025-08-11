@@ -6,6 +6,13 @@ interface DownloadImageResponse {
 }
 
 /**
+ * Sleep helper for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
  * Downloads an external image through Tauri to avoid CORS issues
  * @param url The URL of the image to download
  * @returns A blob containing the downloaded image
@@ -30,7 +37,7 @@ export async function downloadExternalImage(url: string): Promise<Blob> {
       console.log('[ExternalImageDownloader] Successfully downloaded image via Tauri, size:', blob.size)
       return blob
     } catch (tauriError) {
-      console.warn('[ExternalImageDownloader] Tauri command not available, trying alternative method')
+      console.warn('[ExternalImageDownloader] Tauri command not available, trying alternative methods')
       
       // Fallback: Try to fetch directly (might work for some CORS-enabled sites)
       try {
@@ -42,16 +49,72 @@ export async function downloadExternalImage(url: string): Promise<Blob> {
         console.log('[ExternalImageDownloader] Successfully downloaded image via direct fetch, size:', blob.size)
         return blob
       } catch (fetchError) {
-        // If direct fetch fails, try using a public CORS proxy as last resort
-        console.warn('[ExternalImageDownloader] Direct fetch failed, trying CORS proxy')
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`
-        const proxyResponse = await fetch(proxyUrl)
-        if (!proxyResponse.ok) {
-          throw new Error(`Proxy fetch failed! status: ${proxyResponse.status}`)
+        // If direct fetch fails, try using CORS proxies with retry logic
+        console.warn('[ExternalImageDownloader] Direct fetch failed, trying CORS proxies')
+        
+        // List of proxy services to try (in order of preference)
+        const proxyServices = [
+          (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url: string) => `https://proxy.cors.sh/${url}`
+        ]
+        
+        let lastError: Error | null = null
+        
+        for (let i = 0; i < proxyServices.length; i++) {
+          const proxyUrl = proxyServices[i](url)
+          console.log(`[ExternalImageDownloader] Trying proxy service ${i + 1}/${proxyServices.length}`)
+          
+          // Retry logic with exponential backoff for rate limiting (429 errors)
+          let retries = 3
+          let delay = 1000 // Start with 1 second delay
+          
+          while (retries > 0) {
+            try {
+              const proxyResponse = await fetch(proxyUrl, {
+                signal: AbortSignal.timeout(15000) // 15 second timeout
+              })
+              
+              if (proxyResponse.status === 429) {
+                // Rate limited - wait and retry with exponential backoff
+                console.warn(`[ExternalImageDownloader] Rate limited (429), retrying in ${delay}ms...`)
+                await sleep(delay)
+                delay *= 2 // Exponential backoff
+                retries--
+                continue
+              }
+              
+              if (!proxyResponse.ok) {
+                throw new Error(`Proxy fetch failed! status: ${proxyResponse.status}`)
+              }
+              
+              const blob = await proxyResponse.blob()
+              
+              // Validate that we actually got an image
+              if (blob.size === 0 || !blob.type.startsWith('image/')) {
+                throw new Error(`Invalid image data received: size=${blob.size}, type=${blob.type}`)
+              }
+              
+              console.log(`[ExternalImageDownloader] Successfully downloaded image via proxy ${i + 1}, size:`, blob.size)
+              return blob
+            } catch (error) {
+              lastError = error as Error
+              retries--
+              
+              if (retries > 0 && (error as any).name !== 'AbortError') {
+                console.warn(`[ExternalImageDownloader] Proxy attempt failed, ${retries} retries left:`, error)
+                await sleep(delay)
+                delay *= 2
+              } else {
+                // Move to next proxy service
+                break
+              }
+            }
+          }
         }
-        const blob = await proxyResponse.blob()
-        console.log('[ExternalImageDownloader] Successfully downloaded image via CORS proxy, size:', blob.size)
-        return blob
+        
+        // All proxy attempts failed
+        throw new Error(`All download methods failed. Last error: ${lastError?.message || 'Unknown error'}`)
       }
     }
   } catch (error) {
@@ -76,7 +139,15 @@ export function isKnownCorsRestrictedDomain(url: string): boolean {
     'gettyimages.com',
     'shutterstock.com',
     'istockphoto.com',
-    'alamy.com'
+    'alamy.com',
+    'adobe.com',
+    'stock.adobe.com',
+    '123rf.com',
+    'dreamstime.com',
+    'depositphotos.com',
+    'vectorstock.com',
+    'pond5.com',
+    'bigstockphoto.com'
   ]
   
   try {

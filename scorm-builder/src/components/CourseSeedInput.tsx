@@ -24,6 +24,7 @@ import { debugLogger } from '../utils/ultraSimpleLogger';
 interface CourseSeedInputProps {
   // Make onSubmit return a Promise so we can await it
   onSubmit: (data: CourseSeedData) => Promise<void>;
+  onBack?: () => void;
   onSettingsClick?: () => void;
   onSave?: (data?: CourseSeedData) => void;
   onHelp?: () => void;
@@ -66,6 +67,7 @@ const Select: React.FC<{
 
 export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   onSubmit,
+  onBack,
   onSettingsClick,
   onSave,
   onHelp,
@@ -93,6 +95,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [customTemplates, setCustomTemplates] = useState<Record<string, any>>({})
   const [isTitleLocked, setIsTitleLocked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isTopicsEditable, setIsTopicsEditable] = useState(true)
   
   // Sync state when initialData changes (for when component receives data after mounting)
   useEffect(() => {
@@ -363,7 +366,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     
     // Get topics from customTopics or template
     let topicsArray = customTopics
-      .split(/[\n,]/)
+      .split(/\n/)
       .map(topic => topic.trim())
       .filter(topic => topic.length > 0);
     
@@ -439,7 +442,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     
     // Check if we have topics from customTopics or template
     let topicsArray = customTopics
-      .split(/[\n,]/)
+      .split(/\n/)
       .map(topic => topic.trim())
       .filter(topic => topic.length > 0)
     
@@ -458,6 +461,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       title="Course Configuration"
       description="Set up your course fundamentals to generate targeted learning content"
       autoSaveIndicator={autoSaveIndicator}
+      onBack={onBack}
       onSettingsClick={onSettingsClick}
       onNext={() => {
         // VERSION MARKER: v2.0.4 - Enhanced debug logging for Next button
@@ -638,31 +642,57 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         <Section>
           <Card title="Learning Topics">
             <div className="input-wrapper">
-              <label htmlFor="topics-textarea" className="input-label">
-                Topics <span className={styles.requiredStar}>*</span>
-              </label>
+              <Flex justify="space-between" align="center" style={{ marginBottom: '0.5rem' }}>
+                <label htmlFor="topics-textarea" className="input-label" style={{ marginBottom: 0 }}>
+                  Topics <span className={styles.requiredStar}>*</span>
+                </label>
+                <ButtonGroup gap="small">
+                  {customTopics.trim() && (
+                    <>
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => setIsTopicsEditable(!isTopicsEditable)}
+                        type="button"
+                      >
+                        {isTopicsEditable ? '🔒 Lock Topics' : '✏️ Edit Topics'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => {
+                          if (window.confirm('Clear all topics? This cannot be undone.')) {
+                            setCustomTopics('')
+                            setIsTopicsEditable(true)
+                          }
+                        }}
+                        type="button"
+                      >
+                        🗑️ Clear Topics
+                      </Button>
+                    </>
+                  )}
+                </ButtonGroup>
+              </Flex>
               <textarea
                 id="topics-textarea"
                 placeholder={`List your course topics (one per line):\n\n• Introduction to workplace safety\n• Hazard identification techniques\n• Personal protective equipment\n• Emergency response procedures\n• Incident reporting protocols`}
                 value={customTopics}
                 onChange={(e) => {
-                  const value = e.target.value
-                  // Only normalize if value contains commas or user just typed a comma
-                  if (value.includes(',')) {
-                    // Split by both commas and newlines, clean up, and rejoin with newlines
-                    const topics = value
-                      .split(/[,\n]/)
-                      .map(t => t.trim())
-                      .filter(t => t)
-                    setCustomTopics(topics.join('\n'))
-                  } else {
-                    // Otherwise, just set the value as-is to allow normal typing
+                  if (isTopicsEditable) {
+                    const value = e.target.value
+                    // Just set the value as-is - topics are only separated by newlines
                     setCustomTopics(value)
                   }
                 }}
                 data-testid="topics-textarea"
                 required
                 className={styles.textareaField}
+                readOnly={!isTopicsEditable}
+                style={{ 
+                  backgroundColor: isTopicsEditable ? 'white' : '#f5f5f5',
+                  cursor: isTopicsEditable ? 'text' : 'not-allowed'
+                }}
               />
             </div>
             <Flex gap="large" className={styles.tipText}>

@@ -1,0 +1,310 @@
+/* Help Page Styles */
+
+.help-page {
+  background: var(--bg-primary);
+  min-height: 100vh;
+  color: var(--text-primary);
+}
+
+.help-header {
+  margin-bottom: 1.5rem;
+}
+
+.help-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.875rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.help-title-icon {
+  color: var(--color-primary);
+}
+
+/* Search and Filter Controls */
+.help-controls {
+  margin-bottom: 1.5rem;
+}
+
+.help-search-container {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.help-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+  width: 20px;
+  height: 20px;
+}
+
+.help-search-input {
+  padding-left: 40px !important;
+  width: 100%;
+}
+
+.help-category-filters {
+  flex-wrap: wrap;
+}
+
+.help-category-button {
+  white-space: nowrap;
+}
+
+/* Table of Contents */
+.help-toc {
+  margin-bottom: 1.5rem;
+}
+
+.help-toc-card {
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.help-toc-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+}
+
+.help-toc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.help-toc-link {
+  padding: 0.25rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.help-toc-link:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Help Topics */
+.help-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.help-topic-card {
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.help-topic-card:target {
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.help-topic-header {
+  width: 100%;
+  padding: 1.25rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease;
+}
+
+.help-topic-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.help-topic-header:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.help-topic-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.help-topic-title-group {
+  flex: 1;
+}
+
+.help-topic-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem 0;
+}
+
+.help-topic-summary {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.help-topic-chevron {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+/* Topic Content */
+.help-topic-content {
+  padding: 0 1.25rem 1.25rem 1.25rem;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.help-topic-details {
+  margin-bottom: 1rem;
+}
+
+.help-detail-list {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
+.help-detail-item {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.help-detail-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Tips and Warnings */
+.help-tips,
+.help-warnings {
+  margin-top: 1rem;
+}
+
+.help-tips-title,
+.help-warnings-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.help-tips-list,
+.help-warnings-list {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
+.help-tips-list li,
+.help-warnings-list li {
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Related Topics */
+.help-related {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.help-related-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem 0;
+}
+
+.help-related-link {
+  font-size: 0.875rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .help-search-container {
+    max-width: none;
+  }
+  
+  .help-category-filters {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  
+  .help-category-button {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .help-toc-links {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  
+  .help-topic-header {
+    padding: 1rem;
+  }
+  
+  .help-topic-content {
+    padding: 0 1rem 1rem 1rem;
+  }
+}
+
+/* Remove dark mode media query since we're using dark theme by default */
+/* The variables from designSystem.css already provide the dark theme colors */
+
+/* Print Styles */
+@media print {
+  .help-controls,
+  .help-toc,
+  .help-related {
+    display: none;
+  }
+  
+  .help-topic-card {
+    page-break-inside: avoid;
+  }
+  
+  .help-topic-content {
+    display: block !important;
+  }
+  
+  .help-topic-chevron {
+    display: none;
+  }
+}

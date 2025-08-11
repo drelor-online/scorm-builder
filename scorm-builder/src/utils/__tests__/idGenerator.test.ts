@@ -60,37 +60,44 @@ describe('idGenerator', () => {
     })
 
     it('should generate audio ID with correct page index for topics', () => {
+      // topic-0 would be audio-2 (first topic)
+      const id0 = idGenerator.generateMediaId('audio', 'topic-0')
       const id1 = idGenerator.generateMediaId('audio', 'topic-1')
       const id2 = idGenerator.generateMediaId('audio', 'topic-2')
       const id3 = idGenerator.generateMediaId('audio', 'topic-3')
       
-      expect(id1).toBe('audio-2')
-      expect(id2).toBe('audio-3')
-      expect(id3).toBe('audio-4')
+      expect(id0).toBe('audio-2')
+      expect(id1).toBe('audio-3')
+      expect(id2).toBe('audio-4')
+      expect(id3).toBe('audio-5')
     })
 
     it('should handle caption IDs the same as audio', () => {
       expect(idGenerator.generateMediaId('caption', 'welcome')).toBe('caption-0')
       expect(idGenerator.generateMediaId('caption', 'objectives')).toBe('caption-1')
-      expect(idGenerator.generateMediaId('caption', 'topic-1')).toBe('caption-2')
+      expect(idGenerator.generateMediaId('caption', 'topic-0')).toBe('caption-2')
     })
 
     it('should generate page-based image IDs', () => {
       const id1 = idGenerator.generateMediaId('image', 'welcome')
       const id2 = idGenerator.generateMediaId('image', 'objectives')
-      const id3 = idGenerator.generateMediaId('image', 'topic-1')
+      const id3 = idGenerator.generateMediaId('image', 'topic-0')
+      const id4 = idGenerator.generateMediaId('image', 'topic-1')
       
       expect(id1).toBe('image-0')
       expect(id2).toBe('image-1')
       expect(id3).toBe('image-2')
+      expect(id4).toBe('image-3')
     })
 
     it('should generate page-based video IDs', () => {
       const id1 = idGenerator.generateMediaId('video', 'welcome')
-      const id2 = idGenerator.generateMediaId('video', 'topic-1')
+      const id2 = idGenerator.generateMediaId('video', 'topic-0')
+      const id3 = idGenerator.generateMediaId('video', 'topic-1')
       
       expect(id1).toBe('video-0')
       expect(id2).toBe('video-2')
+      expect(id3).toBe('video-3')
     })
 
     it('should handle legacy page IDs', () => {
@@ -287,7 +294,7 @@ describe('idGenerator', () => {
 
     it('should migrate file-based IDs', () => {
       const oldId = 'file-1705317000000'
-      const newId = idGenerator.migrateOldMediaId(oldId, 'audio', 'topic-1')
+      const newId = idGenerator.migrateOldMediaId(oldId, 'audio', 'topic-0')
       expect(newId).toBe('audio-2')
     })
 
@@ -307,8 +314,8 @@ describe('idGenerator', () => {
       const img1 = genId('image', 'welcome')
       const aud1 = genId('audio', 'welcome')
       const img2 = genId('image', 'objectives')
-      const vid1 = genId('video', 'topic-1')
-      const img3 = genId('image', 'topic-1')
+      const vid1 = genId('video', 'topic-0')
+      const img3 = genId('image', 'topic-0')
       
       expect(img1).toBe('image-0')
       expect(aud1).toBe('audio-0')

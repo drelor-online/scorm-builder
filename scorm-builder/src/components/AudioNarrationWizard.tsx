@@ -402,7 +402,11 @@ export function AudioNarrationWizard({
                 <Button
                   size="small"
                   variant={isPlaying ? "primary" : "secondary"}
-                  onClick={onPlayAudio}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onPlayAudio()
+                  }}
                   className={styles.buttonWithIcon}
                 >
                   {isPlaying ? (<><Square size={16} /> Stop</>) : (<><Play size={16} /> Play</>)}
@@ -425,6 +429,8 @@ export function AudioNarrationWizard({
               className={styles.hiddenInput}
               id={`audio-upload-${block.blockNumber}`}
               onChange={onUploadAudio}
+              tabIndex={-1}
+              aria-hidden="true"
             />
             <label htmlFor={`audio-upload-${block.blockNumber}`} className={styles.uploadLabel}>
               <span className={styles.uploadLabelSpan}>
@@ -432,6 +438,8 @@ export function AudioNarrationWizard({
                   size="small"
                   variant="secondary"
                   className={styles.uploadButtonDisabled}
+                  style={{ pointerEvents: 'none' }}
+                  tabIndex={-1}
                 >
                   <Upload size={16} /> Upload Audio
                 </Button>
@@ -1658,6 +1666,10 @@ export function AudioNarrationWizard({
   // Play audio for a specific block
   // FIX: Use TauriAudioPlayer instead of new Audio() for asset:// URL compatibility
   const playAudio = async (blockNumber: string) => {
+    // Save current scroll position before any state changes
+    const scrollY = window.scrollY
+    const scrollX = window.scrollX
+    
     const audioFile = audioFiles.find(f => f.blockNumber === blockNumber)
     if (!audioFile) {
       logger.warn('[AudioNarrationWizard] No audio file found for block:', blockNumber)
@@ -1707,6 +1719,11 @@ export function AudioNarrationWizard({
       // Store the currently playing audio URL for TauriAudioPlayer to handle
       logger.log('[AudioNarrationWizard] Playing audio with TauriAudioPlayer:', url)
       setPlayingAudioUrl(url)
+      
+      // Restore scroll position after state change
+      requestAnimationFrame(() => {
+        window.scrollTo(scrollX, scrollY)
+      })
     } else {
       logger.error('[AudioNarrationWizard] Could not get audio URL for block:', blockNumber)
       // Show user feedback
@@ -2925,25 +2942,27 @@ export function AudioNarrationWizard({
           />
         )}
       
-      {/* Hidden TauriAudioPlayer for asset:// URL playback */}
-      {playingAudioUrl && (
-          <div className={styles.hiddenAudioPlayer}>
-            <TauriAudioPlayer
-              src={playingAudioUrl}
-              controls={false}
-              data-testid="hidden-audio-player"
-              autoPlay={true}
-              onError={(error) => {
-                logger.error('[AudioNarrationWizard] TauriAudioPlayer error:', error)
-                setError('Failed to play audio')
-                setPlayingAudioUrl(null)
-              }}
-              onEnded={() => {
-                setPlayingAudioUrl(null)
-              }}
-            />
-          </div>
-        )}
+      {/* Hidden TauriAudioPlayer for asset:// URL playback - Always rendered to prevent layout shifts */}
+      <div className={styles.hiddenAudioPlayer}>
+        <TauriAudioPlayer
+          src={playingAudioUrl || undefined}
+          controls={false}
+          data-testid="hidden-audio-player"
+          autoPlay={true}
+          onError={(error) => {
+            if (playingAudioUrl) {
+              logger.error('[AudioNarrationWizard] TauriAudioPlayer error:', error)
+              setError('Failed to play audio')
+              setPlayingAudioUrl(null)
+            }
+          }}
+          onEnded={() => {
+            if (playingAudioUrl) {
+              setPlayingAudioUrl(null)
+            }
+          }}
+        />
+      </div>
     </PageLayout>
   )
 }

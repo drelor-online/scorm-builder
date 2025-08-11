@@ -44,8 +44,8 @@
 .promptTextarea {
   width: 100%;
   padding: 1rem;
-  background-color: var(--background-primary);
-  border: none;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-default);
   border-radius: 0.5rem;
   color: var(--text-primary);
   font-size: 0.875rem;
@@ -53,6 +53,10 @@
   outline: none;
   resize: vertical;
   box-sizing: border-box;
+}
+
+.promptTextarea:focus {
+  border-color: var(--border-focus);
 }
 
 /* Copy button */

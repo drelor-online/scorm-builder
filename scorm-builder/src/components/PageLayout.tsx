@@ -182,8 +182,22 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
               </Tooltip>
             </div>
             
-            {/* Right group: Back, Next/Generate */}
+            {/* Right group: Exit, Back, Next/Generate */}
             <div data-testid="top-bar-right" className={styles.headerButtonGroup}>
+              {onBack && currentStep === 0 && (
+                <Tooltip content="Exit to dashboard" position="bottom">
+                  <div>
+                    <Button 
+                      onClick={onBack}
+                      variant="secondary"
+                      size="medium"
+                      data-testid="exit-button"
+                    >
+                      Exit to Dashboard
+                    </Button>
+                  </div>
+                </Tooltip>
+              )}
               {onBack && currentStep > 0 && (
                 <Tooltip content="Go to previous step" position="bottom">
                   <div>

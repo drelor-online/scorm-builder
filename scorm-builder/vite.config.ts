@@ -7,6 +7,17 @@ import { compression } from 'vite-plugin-compression2'
 export default defineConfig({
   // Disable caching to ensure fresh builds
   cacheDir: '.vite-temp',
+  css: {
+    modules: {
+      localsConvention: 'camelCase',
+      generateScopedName: '[name]__[local]__[hash:base64:5]'
+    },
+    preprocessorOptions: {
+      css: {
+        charset: false
+      }
+    }
+  },
   plugins: [
     react(),
     visualizer({
@@ -80,9 +91,9 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
+        // drop_console: true, // Temporarily disabled for debugging
         drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        // pure_funcs: ['console.log', 'console.info', 'console.debug'], // Temporarily disabled
         passes: 2
       },
       mangle: {
@@ -95,7 +106,7 @@ export default defineConfig({
     },
     // Optimize CSS
     cssMinify: true,
-    cssCodeSplit: true,
+    cssCodeSplit: false, // Disable to ensure CSS variables are always available
     // Generate source maps for debugging
     sourcemap: 'hidden',
     // Increase chunk size warnings threshold

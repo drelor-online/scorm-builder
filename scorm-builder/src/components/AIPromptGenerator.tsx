@@ -6,6 +6,7 @@ import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import { Check, Copy } from 'lucide-react'
 import { Card, Button } from './DesignSystem'
+import './DesignSystem/designSystem.css'
 import styles from './AIPromptGenerator.module.css'
 
 interface AIPromptGeneratorProps {
@@ -82,7 +83,7 @@ ${topicsText}
 Generate a JSON response with the following structure:
 {
   "welcomePage": {
-    "id": "content-0",
+    "id": "welcome",
     "title": "Welcome to [Course Title]",
     "content": "HTML fragment for welcome content",
     "narration": "Narration text for welcome page (2-3 minutes, approximately 300-500 words)",
@@ -93,7 +94,7 @@ Generate a JSON response with the following structure:
     // NO knowledge check for Welcome page
   },
   "learningObjectivesPage": {
-    "id": "content-1",
+    "id": "learning-objectives",
     "title": "Learning Objectives",
     "content": "HTML fragment listing learning objectives",
     "narration": "Narration text for learning objectives (2-3 minutes, approximately 300-500 words)",
@@ -152,8 +153,8 @@ Generate a JSON response with the following structure:
 
 Please ensure:
 1. Always include Welcome and Learning Objectives pages (these are automatically added to every course)
-   - Welcome page ID must be "content-0"
-   - Learning Objectives page ID must be "content-1"
+   - Welcome page ID must be "welcome" (as shown in the JSON structure above)
+   - Learning Objectives page ID must be "learning-objectives" (as shown in the JSON structure above)
    - Topic IDs must be "topic-0", "topic-1", "topic-2", etc. (numeric sequence)
 2. Welcome page should introduce the course with engaging welcome content
 3. Learning Objectives page should list clear learning objectives for the course
