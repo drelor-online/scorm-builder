@@ -7,6 +7,10 @@ import { compression } from 'vite-plugin-compression2'
 export default defineConfig({
   // Disable caching to ensure fresh builds
   cacheDir: '.vite-temp',
+  server: {
+    port: 1420,
+    strictPort: false
+  },
   css: {
     modules: {
       localsConvention: 'camelCase',
@@ -140,13 +144,6 @@ export default defineConfig({
     }
   },
   clearScreen: false,
-  server: {
-    port: 1420,
-    strictPort: true,
-    watch: {
-      ignored: ["**/src-tauri/**"],
-    },
-  },
   // Enable experimental features for better performance
   experimental: {
     renderBuiltUrl(filename: string) {

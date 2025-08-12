@@ -154,6 +154,7 @@
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   transition: all var(--transition-normal);
+  box-sizing: border-box;
 }
 
 .inputField:focus {
@@ -169,7 +170,8 @@
 }
 
 .inputFieldLocked {
-  width: calc(100% - var(--space-md) * 2);
+  width: 100%;
+  max-width: 100%;
   padding: var(--space-md);
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
@@ -179,10 +181,12 @@
   font-size: var(--font-size-base);
   cursor: not-allowed;
   opacity: 0.7;
+  box-sizing: border-box;
 }
 
 .inputFieldNormal {
-  width: calc(100% - var(--space-md) * 2);
+  width: 100%;
+  max-width: 100%;
   padding: var(--space-md);
   background-color: var(--bg-secondary);
   color: var(--text-primary);
@@ -192,6 +196,7 @@
   font-size: var(--font-size-base);
   cursor: text;
   opacity: 1;
+  box-sizing: border-box;
 }
 
 .characterCount {
@@ -220,10 +225,15 @@
   line-height: var(--line-height-relaxed);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
+  background-color: var(--bg-secondary, #18181b);
+  color: var(--text-primary, #f4f4f5);
   resize: vertical;
   transition: all var(--transition-normal);
+  box-sizing: border-box;
+  
+  /* Ensure text is always readable */
+  color: #e5e7eb !important; /* Light gray text for dark background */
+  background-color: #18181b !important; /* Dark background */
 }
 
 .textareaField:focus {

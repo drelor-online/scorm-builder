@@ -4,6 +4,8 @@ import { useDebounce } from '../../hooks/useDebounce'
 import { Input } from './Input'
 import { COLORS, SPACING } from '../../constants'
 import './designSystem.css'
+import { Icon } from './Icons'
+import { Search, X } from 'lucide-react'
 
 export interface SearchInputProps {
   onSearch: (value: string) => void
@@ -159,7 +161,7 @@ const SearchInputComponent: React.FC<SearchInputProps> = ({
             pointerEvents: 'none'
           }}
         >
-          🔍
+          <Icon icon={Search} size="sm" />
         </div>
         
         {/* Clear button */}
@@ -193,7 +195,7 @@ const SearchInputComponent: React.FC<SearchInputProps> = ({
               e.currentTarget.style.backgroundColor = 'transparent'
             }}
           >
-            ×
+            <Icon icon={X} size="md" />
           </button>
         )}
       </div>

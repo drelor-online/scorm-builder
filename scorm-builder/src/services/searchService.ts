@@ -112,9 +112,11 @@ export const searchGoogleImages = async (
   if (apiKey && cseId) {
     try {
       const start = (page - 1) * 10 + 1
-      const response = await fetch(
-        `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${query}&searchType=image&start=${start}`
-      )
+      
+      const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${query}&searchType=image&start=${start}`
+      console.log('[SearchService] Google Images API URL:', apiUrl.replace(apiKey, 'API_KEY_HIDDEN'))
+      
+      const response = await fetch(apiUrl)
       
       if (!response.ok) {
         if (response.status === 429) {
@@ -128,7 +130,7 @@ export const searchGoogleImages = async (
       
       const data = await response.json() as GoogleSearchResponse
       if (data.items) {
-        return data.items.map((item, index) => ({
+        let results = data.items.map((item, index) => ({
           id: item.cacheId || `img-${start + index}`,
           url: item.link,
           thumbnail: item.image?.thumbnailLink || item.link,
@@ -137,6 +139,8 @@ export const searchGoogleImages = async (
           dimensions: item.image ? `${item.image.width}x${item.image.height}` : undefined,
           photographer: undefined
         }))
+        
+        return results
       }
     } catch (error) {
       // Log the error but fall back to mock data

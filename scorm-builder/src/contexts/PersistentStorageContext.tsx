@@ -11,7 +11,6 @@ interface PersistentStorageContextValue {
   openProjectFromFile: () => Promise<void>
   openProjectFromPath: (filePath: string, options?: { skipUnsavedCheck?: boolean; onProgress?: (progress: { phase: string; percent: number; message: string; itemsLoaded?: number; totalItems?: number }) => void }) => Promise<void>
   saveProject: () => Promise<void>
-  saveProjectAs: () => Promise<void>
   listProjects: () => Promise<any[]>
   getRecentProjects: () => Promise<any[]>
   checkForRecovery: () => Promise<{ hasBackup: boolean; backupPath?: string; projectName?: string }>
@@ -31,6 +30,7 @@ interface PersistentStorageContextValue {
   saveScormConfig: (config: any) => Promise<void>
   getScormConfig: () => Promise<any>;
   deleteProject: (projectId: string) => Promise<void>;
+  renameProject: (projectId: string, newName: string) => Promise<any>;
   exportProject: () => Promise<Blob>;
   importProjectFromZip: (zipBlob: Blob) => Promise<void>;
   getCurrentProjectId: () => string | null;

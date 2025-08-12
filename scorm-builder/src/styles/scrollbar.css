@@ -1,0 +1,204 @@
+/* Global Scrollbar Styles - Modern Dark Theme */
+
+/* 
+ * Custom scrollbar styles for Webkit browsers 
+ * (Chrome, Safari, Edge, and other Chromium-based browsers)
+ */
+
+/* Global scrollbar styling for all scrollable elements */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* Track (background of the scrollbar) */
+*::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.3); /* Semi-transparent dark background */
+  border-radius: 5px;
+  margin: 2px; /* Small margin for visual breathing room */
+}
+
+/* Handle (the draggable part) */
+*::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.5); /* Medium gray, semi-transparent */
+  border-radius: 5px;
+  border: 2px solid transparent; /* Invisible border for spacing */
+  background-clip: content-box; /* Ensures border creates visual padding */
+  transition: background-color 0.2s ease;
+}
+
+/* Handle on hover */
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.7); /* Lighter gray on hover */
+}
+
+/* Handle when active (being dragged) */
+*::-webkit-scrollbar-thumb:active {
+  background: rgba(161, 161, 170, 0.9); /* Even lighter when dragging */
+}
+
+/* Corner where horizontal and vertical scrollbars meet */
+*::-webkit-scrollbar-corner {
+  background: rgba(39, 39, 42, 0.3);
+  border-radius: 5px;
+}
+
+/* 
+ * Firefox scrollbar styling 
+ * Note: Firefox has limited customization options
+ */
+* {
+  scrollbar-width: thin; /* Options: auto, thin, none */
+  scrollbar-color: rgba(113, 113, 122, 0.5) rgba(39, 39, 42, 0.3); /* thumb track */
+}
+
+/* 
+ * Special styling for specific components that need different scrollbars
+ */
+
+/* Textarea elements - slightly thinner scrollbars */
+textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Code editors and JSON viewers - more subtle scrollbars */
+.code-editor::-webkit-scrollbar,
+.json-editor::-webkit-scrollbar,
+pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.code-editor::-webkit-scrollbar-thumb,
+.json-editor::-webkit-scrollbar-thumb,
+pre::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.3); /* More subtle for code areas */
+}
+
+.code-editor::-webkit-scrollbar-thumb:hover,
+.json-editor::-webkit-scrollbar-thumb:hover,
+pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.5);
+}
+
+/* Modal and dialog scrollbars - ensure they're visible */
+.modal-body::-webkit-scrollbar,
+.dialog-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb,
+.dialog-content::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.6); /* Slightly more opaque for modals */
+}
+
+/* 
+ * Horizontal scrollbars - make them slightly shorter 
+ */
+*::-webkit-scrollbar:horizontal {
+  height: 10px;
+}
+
+/* 
+ * Hide scrollbars for specific elements that shouldn't show them
+ */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* 
+ * Auto-hide scrollbars (show only on hover) for certain containers
+ */
+.auto-hide-scrollbar {
+  overflow: auto;
+}
+
+.auto-hide-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.auto-hide-scrollbar:hover::-webkit-scrollbar {
+  opacity: 1;
+}
+
+/* 
+ * Thin scrollbar variant for compact areas
+ */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.2);
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.4);
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+/* 
+ * Primary color scrollbar variant (for selected or active areas)
+ */
+.primary-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.3); /* Primary blue color */
+}
+
+.primary-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+.primary-scrollbar::-webkit-scrollbar-thumb:active {
+  background: rgba(59, 130, 246, 0.7);
+}
+
+/* 
+ * Ensure scrollbars are visible in high contrast mode
+ */
+@media (prefers-contrast: high) {
+  *::-webkit-scrollbar-track {
+    background: rgba(39, 39, 42, 0.5);
+  }
+  
+  *::-webkit-scrollbar-thumb {
+    background: rgba(161, 161, 170, 0.8);
+    border: 1px solid rgba(244, 244, 245, 0.2);
+  }
+  
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 212, 216, 0.9);
+  }
+}
+
+/* 
+ * Dark mode specific adjustments (if needed for light mode support later)
+ */
+@media (prefers-color-scheme: dark) {
+  /* Current styles are already optimized for dark mode */
+}
+
+/* 
+ * Mobile and touch devices - hide custom scrollbars
+ * Touch devices usually have their own scrollbar implementations
+ */
+@media (pointer: coarse) {
+  * {
+    scrollbar-width: auto;
+  }
+  
+  *::-webkit-scrollbar {
+    width: auto;
+    height: auto;
+  }
+}

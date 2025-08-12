@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { debugLogger } from '../utils/ultraSimpleLogger'
+import { Icon } from './DesignSystem'
+import { Check, Copy, Save, Folder } from 'lucide-react'
 
 export function DebugPanel() {
   const [isVisible, setIsVisible] = useState(false)
@@ -229,7 +231,17 @@ export function DebugPanel() {
                 fontSize: '12px'
               }}
             >
-              {copied ? '✓ Copied!' : '📋 Copy Logs'}
+              {copied ? (
+                <>
+                  <Icon icon={Check} size="xs" color="black" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Icon icon={Copy} size="xs" color="black" />
+                  Copy Logs
+                </>
+              )}
             </button>
             <button
               onClick={handleExportLogs}
@@ -244,7 +256,10 @@ export function DebugPanel() {
                 fontSize: '12px'
               }}
             >
-              💾 Export to File
+              <>
+                <Icon icon={Save} size="xs" color="white" />
+                Export to File
+              </>
             </button>
             <button
               onClick={async () => {
@@ -280,7 +295,10 @@ export function DebugPanel() {
               }}
               title="Open log directory in file explorer"
             >
-              📁 Open Logs Folder
+              <>
+                <Icon icon={Folder} size="xs" color="white" />
+                Open Logs Folder
+              </>
             </button>
             <button
               onClick={handleClearLogs}

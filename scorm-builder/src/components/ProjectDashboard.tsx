@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { Button } from './DesignSystem/Button'
+import { ButtonGroup } from './DesignSystem/ButtonGroup'
 import { Card } from './DesignSystem/Card'
 import { Modal } from './DesignSystem/Modal'
 import { LoadingSpinner } from './DesignSystem/LoadingSpinner'
@@ -11,7 +12,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { showError, showInfo, showSuccess } from './ErrorNotification'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
-import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap } from 'lucide-react'
+import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap, Edit2, Check, X } from 'lucide-react'
 import './DesignSystem/transitions.css'
 import { envConfig } from '../config/environment'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
@@ -85,11 +86,12 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   const [defaultFolder, setDefaultFolder] = useState<string | null>(null)
   const [importingProject, setImportingProject] = useState(false)
   const [exportingProjectId, setExportingProjectId] = useState<string | null>(null)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set())
   const [runningAutomation, setRunningAutomation] = useState(false)
   const [showAutomationMenu, setShowAutomationMenu] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
   
   useEffect(() => {
     if (storage.isInitialized) {
@@ -340,6 +342,62 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
 
+  async function handleStartRename(projectId: string, currentName: string) {
+    setRenamingProjectId(projectId)
+    setRenameValue(currentName)
+    setRenameError(null)
+  }
+
+  async function handleCancelRename() {
+    setRenamingProjectId(null)
+    setRenameValue('')
+    setRenameError(null)
+  }
+
+  async function handleSaveRename(projectPath: string) {
+    const trimmedName = renameValue.trim()
+    
+    if (!trimmedName) {
+      setRenameError('Project name cannot be empty')
+      return
+    }
+    
+    if (trimmedName.length > 100) {
+      setRenameError('Project name is too long (max 100 characters)')
+      return
+    }
+    
+    try {
+      debugLogger.info('ProjectDashboard.handleSaveRename', 'Renaming project', { 
+        projectPath, 
+        newName: trimmedName 
+      })
+      
+      await storage.renameProject(projectPath, trimmedName)
+      await loadProjects()
+      
+      setRenamingProjectId(null)
+      setRenameValue('')
+      setRenameError(null)
+      
+      showSuccess('Project renamed successfully')
+      debugLogger.info('ProjectDashboard.handleSaveRename', 'Project renamed successfully')
+    } catch (error) {
+      debugLogger.error('ProjectDashboard.handleSaveRename', 'Failed to rename project', error)
+      setRenameError(error instanceof Error ? error.message : 'Failed to rename project')
+    }
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent, projectPath: string) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSaveRename(projectPath)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleCancelRename()
+    }
+  }
+
   async function handleImportProject() {
     try {
       setImportingProject(true)
@@ -363,9 +421,11 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         path: selected
       })
       
-      // Load the zip file
-      const response = await fetch(`file://${selected}`)
-      const blob = await response.blob()
+      // Load the zip file using Tauri's file system API
+      const { readFile } = await import('@tauri-apps/plugin-fs')
+      const fileData = await readFile(selected)
+      // Convert Uint8Array to Blob - fileData is already a Uint8Array which is a valid BlobPart
+      const blob = new Blob([new Uint8Array(fileData)], { type: 'application/zip' })
       
       // Import the project
       debugLogger.debug('ProjectDashboard.handleImportProject', 'Importing project from zip')
@@ -391,16 +451,25 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
 
-  async function handleExportProject(projectId: string) {
+  async function handleExportProject(projectId: string, projectPath?: string) {
     try {
       setExportingProjectId(projectId)
-      debugLogger.info('ProjectDashboard.handleExportProject', 'Exporting project', { projectId })
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Exporting project', { projectId, projectPath })
       
-      // Open the project first
-      await storage.openProject(projectId)
+      // Export directly using the project path and ID without opening/navigating
+      // This prevents unwanted navigation away from the dashboard
+      const effectivePath = projectPath || projectId
       
-      // Export the project
-      const zipBlob = await storage.exportProject()
+      // Call the create_project_zip command directly
+      const { invoke } = await import('@tauri-apps/api/core')
+      const zipResult = await invoke<any>('create_project_zip', {
+        projectPath: effectivePath,
+        projectId: projectId,
+        includeMedia: true
+      })
+      
+      // Create blob from the ZIP data
+      const zipBlob = new Blob([new Uint8Array(zipResult.zipData)], { type: 'application/zip' })
       
       // Find project name
       const allProjects = [...projects, ...recentProjects]
@@ -422,7 +491,12 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
       
-      debugLogger.info('ProjectDashboard.handleExportProject', 'Project exported successfully', { projectId })
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Project exported successfully', { 
+        projectId,
+        fileCount: zipResult.fileCount,
+        totalSize: zipResult.totalSize,
+        zipSize: zipBlob.size
+      })
       showSuccess('Project exported successfully')
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleExportProject', 'Failed to export project', { projectId, error })
@@ -432,40 +506,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
 
-  async function handleBulkExport() {
-    if (selectedProjects.size === 0) {
-      showError('Please select at least one project to export')
-      return
-    }
-    
-    debugLogger.info('ProjectDashboard.handleBulkExport', 'Starting bulk export', {
-      projectCount: selectedProjects.size
-    })
-    
-    try {
-      for (const projectId of selectedProjects) {
-        await handleExportProject(projectId)
-      }
-      
-      setSelectionMode(false)
-      setSelectedProjects(new Set())
-      
-      debugLogger.info('ProjectDashboard.handleBulkExport', 'Bulk export completed')
-    } catch (error) {
-      debugLogger.error('ProjectDashboard.handleBulkExport', 'Failed to export projects', error)
-      showError(`Failed to export projects: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
-
-  function toggleProjectSelection(projectId: string) {
-    const newSelection = new Set(selectedProjects)
-    if (newSelection.has(projectId)) {
-      newSelection.delete(projectId)
-    } else {
-      newSelection.add(projectId)
-    }
-    setSelectedProjects(newSelection)
-  }
 
   // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -603,15 +643,34 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     >
       <div className={styles.dashboardHeader}>
         <h1 className={styles.headerTitle}>SCORM Builder Projects</h1>
-        <div className={styles.headerActions}>
-          <Tooltip content="Open a .scormproj file from your computer" position="bottom">
-            <Button 
+        <div className={styles.folderInfo}>
+          <span className={styles.folderLabel}>Default Folder:</span>
+          <span 
+            className={defaultFolder ? styles.folderPath : styles.folderPathEmpty}
+            title={defaultFolder || 'Not set'}
+          >
+            {defaultFolder || 'Not set'}
+          </span>
+          <div className={styles.folderActions}>
+            <Button
               variant="secondary"
-              onClick={handleOpenFromFile}
+              size="small"
+              onClick={handleChangeDefaultFolder}
             >
-              Open Project File
+              Change Folder
             </Button>
-          </Tooltip>
+            {defaultFolder && (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={handleClearDefaultFolder}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className={styles.headerActions}>
           <Tooltip content="Import a project from a ZIP file" position="bottom">
             <Button 
               variant="secondary"
@@ -656,17 +715,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               </Button>
             </Tooltip>
           )}
-          <Tooltip content="Enable bulk export mode" position="bottom">
-            <Button 
-              variant="secondary"
-              onClick={() => {
-                setSelectionMode(!selectionMode)
-                setSelectedProjects(new Set())
-              }}
-            >
-              {selectionMode ? 'Cancel Selection' : 'Bulk Export'}
-            </Button>
-          </Tooltip>
           <Tooltip content="Clear cache to fix stuck or problematic projects" position="bottom">
             <Button 
               variant="secondary"
@@ -689,36 +737,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         </div>
       </div>
       
-      <div className={styles.defaultFolderSection}>
-        <div className={styles.folderInfo}>
-          <span className={styles.folderLabel}>Default Folder:</span>
-          <span 
-            className={defaultFolder ? styles.folderPath : styles.folderPathEmpty}
-            title={defaultFolder || 'Not set'}
-          >
-            {defaultFolder || 'Not set'}
-          </span>
-        </div>
-        <div className={styles.folderActions}>
-          <Button
-            variant="secondary"
-            size="small"
-            onClick={handleChangeDefaultFolder}
-          >
-            Change Folder
-          </Button>
-          {defaultFolder && (
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={handleClearDefaultFolder}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-      </div>
-      
       {recentProjects.length > 0 && (
         <div className={styles.recentSection}>
           <h2 className={styles.sectionTitle}>Recent Projects</h2>
@@ -733,11 +751,48 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                 aria-label={`Project: ${project.name}`}
               >
                 <div className={styles.projectCardInner}>
-                  <div className={styles.recentBadge}>
-                    Recent
-                  </div>
                   <div className={styles.projectInfo}>
-                    <h3 className={styles.projectName}>{project.name}</h3>
+                    <div className={styles.recentBadge}>
+                      Recent
+                    </div>
+                    {renamingProjectId === project.id ? (
+                      <div className={styles.renameInputWrapper}>
+                        <input
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => handleRenameKeyDown(e, (project as any).path || project.id)}
+                          autoFocus
+                          className={styles.renameInput}
+                          data-testid={`rename-input-${project.id}`}
+                        />
+                        <div className={styles.renameButtons}>
+                          <Button
+                            variant="primary"
+                            size="small"
+                            onClick={() => handleSaveRename((project as any).path || project.id)}
+                            aria-label="Save rename"
+                            data-testid={`save-rename-${project.id}`}
+                          >
+                            <Icon icon={Check} size="sm" /> Save
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            onClick={handleCancelRename}
+                            aria-label="Cancel rename"
+                            data-testid={`cancel-rename-${project.id}`}
+                          >
+                            <Icon icon={X} size="sm" /> Cancel
+                          </Button>
+                        </div>
+                        {renameError && (
+                          <p className={styles.renameError}>{renameError}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <h3 className={styles.projectName}>{project.name}</h3>
+                    )}
                     <p className={styles.projectDate}>
                       Last accessed {formatLastAccessed(project)}
                     </p>
@@ -753,13 +808,19 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                     )}
                   </div>
                   <div className={styles.projectButtons}>
-                    {selectionMode && (
-                      <input
-                        type="checkbox"
-                        checked={selectedProjects.has(project.id)}
-                        onChange={() => toggleProjectSelection(project.id)}
-                        aria-label={`Select ${project.name}`}
-                      />
+                    {!renamingProjectId && (
+                      <Tooltip content="Rename this project" position="top">
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => handleStartRename(project.id, project.name)}
+                          aria-label={`Rename project ${project.name}`}
+                          data-testid={`rename-project-${project.id}`}
+                          disabled={renamingProjectId !== null && renamingProjectId !== project.id}
+                        >
+                          <Icon icon={Edit2} size="sm" />
+                        </Button>
+                      </Tooltip>
                     )}
                     <Tooltip content="Open this project" position="top">
                       <Button
@@ -767,6 +828,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                         size="small"
                         onClick={() => handleOpenProject(project.id, project.path)}
                         aria-label={`Open project ${project.name}`}
+                        disabled={renamingProjectId !== null}
                       >
                         Open
                       </Button>
@@ -775,8 +837,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                       <Button
                         variant="secondary"
                         size="small"
-                        onClick={() => handleExportProject(project.id)}
-                        disabled={exportingProjectId === project.id}
+                        onClick={() => handleExportProject(project.id, project.path)}
+                        disabled={exportingProjectId === project.id || renamingProjectId !== null}
                         aria-label={`Export project ${project.name}`}
                       >
                         {exportingProjectId === project.id ? 'Exporting...' : 'Export'}
@@ -788,6 +850,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                         size="small"
                         onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
                         aria-label={`Delete project ${project.name}`}
+                        disabled={renamingProjectId !== null}
                       >
                         Delete
                       </Button>
@@ -867,7 +930,44 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             >
               <div className={styles.projectCardInner}>
                 <div className={styles.projectInfo}>
-                  <h3 className={styles.projectName}>{project.name}</h3>
+                  {renamingProjectId === project.id ? (
+                    <div className={styles.renameInputWrapper}>
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => handleRenameKeyDown(e, (project as any).path || project.id)}
+                        autoFocus
+                        className={styles.renameInput}
+                        data-testid={`rename-input-${project.id}`}
+                      />
+                      <div className={styles.renameButtons}>
+                        <Button
+                          variant="primary"
+                          size="small"
+                          onClick={() => handleSaveRename((project as any).path || project.id)}
+                          aria-label="Save rename"
+                          data-testid={`save-rename-${project.id}`}
+                        >
+                          <Icon icon={Check} size="sm" /> Save
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={handleCancelRename}
+                          aria-label="Cancel rename"
+                          data-testid={`cancel-rename-${project.id}`}
+                        >
+                          <Icon icon={X} size="sm" /> Cancel
+                        </Button>
+                      </div>
+                      {renameError && (
+                        <p className={styles.renameError}>{renameError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <h3 className={styles.projectName}>{project.name}</h3>
+                  )}
                   <p className={styles.projectDate}>
                     Last accessed {formatLastAccessed(project)}
                   </p>
@@ -883,27 +983,34 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                   )}
                 </div>
                 <div className={styles.projectButtons}>
-                  {selectionMode && (
-                    <input
-                      type="checkbox"
-                      checked={selectedProjects.has(project.id)}
-                      onChange={() => toggleProjectSelection(project.id)}
-                      aria-label={`Select ${project.name}`}
-                    />
+                  {!renamingProjectId && (
+                    <Tooltip content="Rename this project" position="top">
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => handleStartRename(project.id, project.name)}
+                        aria-label={`Rename project ${project.name}`}
+                        data-testid={`rename-project-${project.id}`}
+                        disabled={renamingProjectId !== null && renamingProjectId !== project.id}
+                      >
+                        <Icon icon={Edit2} size="sm" />
+                      </Button>
+                    </Tooltip>
                   )}
                   <Button
                     variant="primary"
                     size="small"
-                    onClick={() => handleOpenProject(project.id)}
+                    onClick={() => handleOpenProject(project.id, (project as any).path)}
                     aria-label={`Open project ${project.name}`}
+                    disabled={renamingProjectId !== null}
                   >
                     Open
                   </Button>
                   <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => handleExportProject(project.id)}
-                    disabled={exportingProjectId === project.id}
+                    onClick={() => handleExportProject(project.id, project.path)}
+                    disabled={exportingProjectId === project.id || renamingProjectId !== null}
                     aria-label={`Export project ${project.name}`}
                   >
                     {exportingProjectId === project.id ? 'Exporting...' : 'Export'}
@@ -913,6 +1020,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                     size="small"
                     onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
                     aria-label={`Delete project ${project.name}`}
+                    disabled={renamingProjectId !== null}
                   >
                     Delete
                   </Button>
@@ -923,19 +1031,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               </div>
             </>
           )}
-        </div>
-      )}
-      
-      {selectionMode && selectedProjects.size > 0 && (
-        <div className={styles.bulkExportBar}>
-          <Button
-            variant="primary"
-            size="large"
-            onClick={handleBulkExport}
-            className={styles.bulkExportButton}
-          >
-            Export Selected ({selectedProjects.size})
-          </Button>
         </div>
       )}
       
@@ -991,7 +1086,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       >
         <div className="delete-confirm">
           <p>Are you sure you want to delete this project? This action cannot be undone.</p>
-          <div className="modal-actions">
+          <ButtonGroup gap="medium" justify="end">
             <Button
               variant="secondary"
               onClick={() => setDeleteConfirm(null)}
@@ -1004,7 +1099,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             >
               Delete
             </Button>
-          </div>
+          </ButtonGroup>
         </div>
       </Modal>
     </div>

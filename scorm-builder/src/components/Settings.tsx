@@ -9,6 +9,8 @@ import { apiKeyStorage, ApiKeys } from '../services/ApiKeyStorage'
 import { logger, disableCategory, enableCategory, getDisabledCategories, clearDisabledCategories } from '../utils/logger'
 import { Tabs, Tab } from './DesignSystem/Tabs'
 import { Badge } from './DesignSystem/Badge'
+import { Icon } from './DesignSystem'
+import { Check, AlertTriangle, Eye, EyeOff, BookOpen } from 'lucide-react'
 
 interface SettingsProps {
   onSave?: (apiKeys: ApiKeys) => void
@@ -149,11 +151,17 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
               {/* Show if keys are already saved */}
               {(formData.googleImageApiKey || formData.googleCseId || formData.youtubeApiKey) ? (
                 <p className="text-green-400 text-sm mt-2">
-                  ✓ API keys are loaded from saved settings
+                  <>
+                    <Icon icon={Check} size="sm" color="var(--color-success)" />
+                    API keys are loaded from saved settings
+                  </>
                 </p>
               ) : (
                 <p className="text-yellow-400 text-sm mt-2">
-                  ⚠️ No API keys found. Please enter your API keys below to enable media features.
+                  <>
+                    <Icon icon={AlertTriangle} size="sm" color="var(--color-warning)" />
+                    No API keys found. Please enter your API keys below to enable media features.
+                  </>
                 </p>
               )}
             </Section>
@@ -199,7 +207,7 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
                   type="button"
                   variant="tertiary"
                   onClick={togglePasswordVisibility}
-                  icon={showPasswords ? '🙈' : '👁️'}
+                  icon={showPasswords ? <Icon icon={EyeOff} size="sm" /> : <Icon icon={Eye} size="sm" />}
                 >
                   Toggle API Key Visibility
                 </Button>
@@ -221,7 +229,10 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
         
         <Section>
           <Alert variant="info">
-            <h3 className="font-medium mb-2">📘 Getting Your API Keys</h3>
+            <h3 className="font-medium mb-2">
+              <Icon icon={BookOpen} size="sm" />
+              Getting Your API Keys
+            </h3>
             <ul className="text-sm space-y-1 list-disc list-inside">
               <li><strong>Google APIs:</strong> Visit Google Cloud Console → APIs & Services → Credentials</li>
               <li><strong>YouTube API:</strong> Enable YouTube Data API v3 in Google Cloud Console</li>
@@ -234,82 +245,110 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
         
         <Tab tabKey="logger" label="Logger Settings">
           <Section>
-            <Card variant="dark" className="p-6">
-              <h2 className="text-xl font-medium text-gray-200 mb-6">
-                Logger Category Filtering
-              </h2>
-              <p className="text-gray-400 mb-4">
-                Disable logging for specific categories to reduce console noise. Use wildcards (*) to match multiple categories.
-              </p>
-              
-              <div className="mb-6">
-                <div className="flex gap-2 mb-4">
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 500, color: 'var(--gray-200)', marginBottom: 'var(--space-sm)' }}>
+              Logger Category Filtering
+            </h2>
+            <p style={{ color: 'var(--gray-400)', marginBottom: 'var(--space-lg)' }}>
+              Disable logging for specific categories to reduce console noise. Use wildcards (*) to match multiple categories.
+            </p>
+            
+            {/* Quick Toggle Common Categories */}
+            <Card variant="dark" style={{ padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--gray-300)', marginBottom: 'var(--space-md)' }}>Quick Toggle Common Categories</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-md)' }}>
+                {[
+                  { name: 'MediaService', desc: 'Media operations' },
+                  { name: 'FileStorage', desc: 'File system' },
+                  { name: 'PageThumbnail*', desc: 'All thumbnail logs' },
+                  { name: 'UnifiedMediaContext', desc: 'Media context' },
+                  { name: 'MediaEnhancement*', desc: 'Enhancement wizard' }
+                ].map(cat => (
+                  <Button
+                    key={cat.name}
+                    variant={disabledLogCategories.includes(cat.name) ? 'secondary' : 'tertiary'}
+                    size="small"
+                    onClick={() => {
+                      if (disabledLogCategories.includes(cat.name)) {
+                        handleRemoveCategory(cat.name)
+                      } else {
+                        disableCategory(cat.name)
+                        setDisabledLogCategories([...disabledLogCategories, cat.name])
+                        logger.info(`[Settings] Disabled logging for category: ${cat.name}`)
+                      }
+                    }}
+                    title={cat.desc}
+                  >
+                    <>
+                      {disabledLogCategories.includes(cat.name) && <Icon icon={Check} size="xs" />}
+                      {cat.name}
+                    </>
+                  </Button>
+                ))}
+              </div>
+            </Card>
+            
+            {/* Add Custom Category */}
+            <Card variant="dark" style={{ padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--gray-300)', marginBottom: 'var(--space-md)' }}>Add Custom Category</h3>
+              <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
                   <Input
-                    placeholder="Enter category name (e.g., MediaService, PageThumbnail*, etc.)"
+                    placeholder="Enter category name (e.g., MyComponent, Debug*, etc.)"
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
                   />
+                </div>
+                <Button
+                  variant="primary"
+                  size="medium"
+                  onClick={handleAddCategory}
+                  disabled={!newCategory}
+                  style={{ marginTop: 0 }}
+                >
+                  Add Category
+                </Button>
+              </div>
+            </Card>
+                
+            {/* Currently Disabled Categories */}
+            {disabledLogCategories.length > 0 ? (
+              <Card variant="dark" style={{ padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--gray-300)' }}>Currently Disabled Categories</h3>
                   <Button
-                    variant="primary"
-                    onClick={handleAddCategory}
-                    disabled={!newCategory}
+                    variant="secondary"
+                    size="small"
+                    onClick={handleClearAllCategories}
                   >
-                    Add Category
+                    Enable All
                   </Button>
                 </div>
-                
-                {disabledLogCategories.length > 0 ? (
-                  <>
-                    <div className="mb-4">
-                      <h3 className="text-sm font-medium text-gray-300 mb-2">Disabled Categories:</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {disabledLogCategories.map(category => (
-                          <Badge
-                            key={category}
-                            variant="warning"
-                            className="inline-flex items-center gap-1"
-                          >
-                            {category}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveCategory(category)}
-                              className="ml-1 text-xs hover:text-red-400"
-                              aria-label={`Remove ${category}`}
-                            >
-                              ✕
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={handleClearAllCategories}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                  {disabledLogCategories.map(category => (
+                    <div
+                      key={category}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-sm)', backgroundColor: 'var(--gray-800)', borderRadius: 'var(--radius-sm)' }}
                     >
-                      Clear All Categories
-                    </Button>
-                  </>
-                ) : (
-                  <Alert variant="info">
-                    No categories are currently disabled. All log messages will be shown in the console.
-                  </Alert>
-                )}
-              </div>
-              
+                      <span style={{ color: 'var(--gray-200)', fontFamily: 'monospace', fontSize: '0.875rem' }}>{category}</span>
+                      <Button
+                        variant="tertiary"
+                        size="small"
+                        onClick={() => handleRemoveCategory(category)}
+                        aria-label={`Enable ${category}`}
+                      >
+                        Enable
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : (
               <Alert variant="info">
-                <h3 className="font-medium mb-2">📘 Common Logger Categories</h3>
-                <ul className="text-sm space-y-1 list-disc list-inside">
-                  <li><strong>MediaService:</strong> Media storage and retrieval operations</li>
-                  <li><strong>FileStorage:</strong> File system operations</li>
-                  <li><strong>PageThumbnailGrid:</strong> Page thumbnail rendering</li>
-                  <li><strong>UnifiedMediaContext:</strong> Media context operations</li>
-                  <li><strong>MediaEnhancement:</strong> Media enhancement wizard operations</li>
-                  <li><strong>Use wildcards:</strong> PageThumbnail* to match all PageThumbnail categories</li>
-                </ul>
+                No categories are currently disabled. All log messages will be shown in the console.
               </Alert>
-            </Card>
+            )}
+              
           </Section>
         </Tab>
       </Tabs>

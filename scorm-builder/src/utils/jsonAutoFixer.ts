@@ -16,6 +16,13 @@ export function smartAutoFixJSON(input: string): string {
     .replace(/…/g, '...')
     .replace(/–/g, '-')
     .replace(/—/g, '--')
+    // Remove invisible Unicode characters that can break JSON parsing
+    .replace(/\u200B/g, '')            // Zero-width space
+    .replace(/\u00A0/g, ' ')           // Non-breaking space to regular space
+    .replace(/\u200C/g, '')            // Zero-width non-joiner
+    .replace(/\u200D/g, '')            // Zero-width joiner
+    .replace(/\uFEFF/g, '')            // Zero-width no-break space (BOM)
+    .replace(/\u2060/g, '')            // Word joiner
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove other control characters (except \t, \n)
   
   // Step 1.5: Fix null values for string fields (common in narration fields)

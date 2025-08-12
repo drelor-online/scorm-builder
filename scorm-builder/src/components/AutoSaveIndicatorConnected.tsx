@@ -1,6 +1,56 @@
 import React, { useState, useEffect } from 'react'
 import { useAutoSaveState } from '../contexts/AutoSaveContext'
 
+// Spinner component for saving state
+const Spinner = () => (
+  <svg 
+    width="14" 
+    height="14" 
+    viewBox="0 0 24 24" 
+    style={{ 
+      animation: 'spin 1s linear infinite',
+      display: 'inline-block',
+      marginRight: '6px',
+      verticalAlign: 'middle'
+    }}
+  >
+    <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    <circle 
+      cx="12" 
+      cy="12" 
+      r="10" 
+      stroke="currentColor" 
+      strokeWidth="3" 
+      fill="none" 
+      strokeDasharray="31.4 31.4"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+// Checkmark icon for saved state
+const CheckIcon = () => (
+  <svg 
+    width="14" 
+    height="14" 
+    viewBox="0 0 24 24" 
+    fill="none"
+    style={{ 
+      display: 'inline-block',
+      marginRight: '6px',
+      verticalAlign: 'middle'
+    }}
+  >
+    <path 
+      d="M20 6L9 17L4 12" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 // Simple inline AutoSaveIndicator component
 const AutoSaveIndicator = ({ 
   isSaving, 
@@ -11,13 +61,55 @@ const AutoSaveIndicator = ({
   hasDraft: boolean; 
   timeSinceLastSave: string 
 }) => {
+  const containerStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 12px',
+    borderRadius: '6px',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    transition: 'all 0.2s ease',
+    border: '1px solid transparent'
+  }
+
   if (isSaving) {
-    return <span style={{ color: '#a1a1aa', fontSize: '0.875rem' }}>Saving...</span>
+    return (
+      <span style={{ 
+        ...containerStyle,
+        color: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        border: '1px solid rgba(59, 130, 246, 0.2)'
+      }}>
+        <Spinner />
+        Saving...
+      </span>
+    )
   }
+  
   if (hasDraft) {
-    return <span style={{ color: '#10b981', fontSize: '0.875rem' }}>Saved {timeSinceLastSave}</span>
+    return (
+      <span style={{ 
+        ...containerStyle,
+        color: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        border: '1px solid rgba(16, 185, 129, 0.2)'
+      }}>
+        <CheckIcon />
+        Saved {timeSinceLastSave}
+      </span>
+    )
   }
-  return <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No changes</span>
+  
+  return (
+    <span style={{ 
+      ...containerStyle,
+      color: '#6b7280',
+      backgroundColor: 'rgba(107, 114, 128, 0.05)',
+      border: '1px solid rgba(107, 114, 128, 0.1)'
+    }}>
+      No changes
+    </span>
+  )
 }
 
 /**

@@ -80,9 +80,14 @@ fn get_project_path(project_id_or_path: &str) -> PathBuf {
         }
     }
     
-    // Fallback: just return the ID with extension (won't exist but won't crash)
+    // Fallback: use a default name pattern for new projects
     // This handles the case where the project hasn't been saved yet
-    PathBuf::from(format!("{}.scormproj", project_id_or_path))
+    // Use "Untitled" as the default project name to maintain naming convention
+    if let Ok(projects_dir) = crate::settings::get_projects_directory() {
+        projects_dir.join(format!("Untitled_{}.scormproj", project_id_or_path))
+    } else {
+        PathBuf::from(format!("Untitled_{}.scormproj", project_id_or_path))
+    }
 }
 
 /// Create a backup of the project file
@@ -94,7 +99,10 @@ pub fn create_backup(
     
     // If the project file doesn't exist, nothing to backup
     if !project_path.exists() {
-        println!("[backup] Project file doesn't exist, skipping backup: {:?}", project_path);
+        println!("[backup] Project file doesn't exist, skipping backup: \"{}\"", 
+                 project_path.file_name()
+                     .and_then(|n| n.to_str())
+                     .unwrap_or(&project_path.to_string_lossy()));
         return Ok(());
     }
     

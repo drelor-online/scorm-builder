@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Narration Page - Redesign Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: #18181b;
+            color: #e4e4e7;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Main Layout Container */
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 24px;
+            padding: 20px;
+        }
+
+        /* Left Sidebar Navigation */
+        .sidebar {
+            width: 320px;
+            background-color: #27272a;
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #3f3f46;
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .progress-summary {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            font-size: 14px;
+            color: #a1a1aa;
+        }
+
+        .progress-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .progress-stat .icon {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-list {
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-bottom: 8px;
+            padding: 12px;
+            background-color: #18181b;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .nav-item:hover {
+            background-color: #27272a;
+            border-color: #3f3f46;
+        }
+
+        .nav-item.active {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .nav-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .nav-item-title {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .nav-item-status {
+            display: flex;
+            gap: 6px;
+        }
+
+        .status-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .status-icon.audio {
+            background-color: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .status-icon.caption {
+            background-color: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+        }
+
+        .status-icon.empty {
+            background-color: rgba(113, 113, 122, 0.2);
+            color: #71717a;
+        }
+
+        .nav-item-preview {
+            font-size: 12px;
+            color: #71717a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            background-color: #27272a;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stats-left {
+            display: flex;
+            gap: 32px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .progress-bar-container {
+            flex: 1;
+            max-width: 300px;
+            margin: 0 32px;
+        }
+
+        .progress-label {
+            font-size: 12px;
+            color: #a1a1aa;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background-color: #18181b;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 65%;
+            transition: width 0.3s ease;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-secondary {
+            background-color: #3f3f46;
+            color: #e4e4e7;
+        }
+
+        .btn-secondary:hover {
+            background-color: #52525b;
+        }
+
+        /* Narration Blocks Container */
+        .narration-blocks-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .narration-blocks-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .narration-blocks-container::-webkit-scrollbar-track {
+            background: #27272a;
+            border-radius: 4px;
+        }
+
+        .narration-blocks-container::-webkit-scrollbar-thumb {
+            background: #52525b;
+            border-radius: 4px;
+        }
+
+        /* Page Group */
+        .page-group {
+            margin-bottom: 24px;
+        }
+
+        .page-group-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background-color: #1f1f23;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .page-indicator {
+            width: 4px;
+            height: 20px;
+            background-color: #3b82f6;
+            border-radius: 2px;
+        }
+
+        /* Narration Block Card */
+        .narration-block {
+            background-color: #27272a;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .narration-block:hover {
+            border-color: #3f3f46;
+        }
+
+        .narration-block.complete {
+            border-color: #22c55e;
+        }
+
+        .block-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .block-number {
+            width: 32px;
+            height: 32px;
+            background-color: #3f3f46;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .block-status-badges {
+            display: flex;
+            gap: 8px;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-audio {
+            background-color: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .badge-caption {
+            background-color: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+        }
+
+        .block-content {
+            margin-bottom: 16px;
+        }
+
+        .block-text {
+            color: #a1a1aa;
+            line-height: 1.6;
+            font-size: 14px;
+            padding: 12px;
+            background-color: #18181b;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .block-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        /* Floating Action Button */
+        .fab {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            width: 56px;
+            height: 56px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: all 0.2s;
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+            background-color: #2563eb;
+        }
+
+        .fab-menu {
+            position: fixed;
+            bottom: 100px;
+            right: 32px;
+            background-color: #27272a;
+            border-radius: 12px;
+            padding: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: none;
+        }
+
+        .fab-menu.open {
+            display: block;
+        }
+
+        .fab-menu-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap;
+        }
+
+        .fab-menu-item:hover {
+            background-color: #3f3f46;
+        }
+
+        /* Icons */
+        .icon-audio::before { content: "🎵"; }
+        .icon-caption::before { content: "📝"; }
+        .icon-check::before { content: "✓"; }
+        .icon-upload::before { content: "⬆"; }
+        .icon-download::before { content: "⬇"; }
+        .icon-plus::before { content: "+"; }
+        .icon-play::before { content: "▶"; }
+        .icon-mic::before { content: "🎤"; }
+        .icon-trash::before { content: "🗑"; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">Page Navigation</div>
+                <div class="progress-summary">
+                    <div class="progress-stat">
+                        <span class="icon icon-audio"></span>
+                        <span>7/11 Audio</span>
+                    </div>
+                    <div class="progress-stat">
+                        <span class="icon icon-caption"></span>
+                        <span>5/11 Captions</span>
+                    </div>
+                </div>
+            </div>
+            
+            <ul class="nav-list">
+                <li class="nav-item active">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Welcome Page</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon audio icon-check"></span>
+                            <span class="status-icon caption icon-check"></span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Welcome to this comprehensive course on...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Learning Objectives</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon audio icon-check"></span>
+                            <span class="status-icon empty">○</span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">By the end of this course, you will...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Topic 1: Introduction</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon audio icon-check"></span>
+                            <span class="status-icon caption icon-check"></span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Let's begin with the fundamental concepts...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Topic 2: Core Concepts</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon empty">○</span>
+                            <span class="status-icon empty">○</span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Understanding the core principles is essential...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Topic 3: Advanced Topics</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon audio icon-check"></span>
+                            <span class="status-icon caption icon-check"></span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Now we'll explore more complex scenarios...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Topic 4: Best Practices</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon audio icon-check"></span>
+                            <span class="status-icon empty">○</span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Industry best practices help ensure...</div>
+                </li>
+                
+                <li class="nav-item">
+                    <div class="nav-item-header">
+                        <span class="nav-item-title">Topic 5: Case Studies</span>
+                        <div class="nav-item-status">
+                            <span class="status-icon empty">○</span>
+                            <span class="status-icon empty">○</span>
+                        </div>
+                    </div>
+                    <div class="nav-item-preview">Real-world examples demonstrate...</div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stats-left">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Blocks</span>
+                        <span class="stat-value">11</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Duration</span>
+                        <span class="stat-value">12:45</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar-container">
+                    <div class="progress-label">Overall Completion</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="quick-actions">
+                    <button class="btn btn-secondary btn-small">
+                        <span class="icon-caption"></span>
+                        Generate All Captions
+                    </button>
+                    <button class="btn btn-secondary btn-small">
+                        <span class="icon-download"></span>
+                        Export All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Narration Blocks -->
+            <div class="narration-blocks-container">
+                <!-- Welcome Page Group -->
+                <div class="page-group">
+                    <div class="page-group-header">
+                        <div class="page-indicator"></div>
+                        Welcome Page
+                    </div>
+                    
+                    <div class="narration-block complete">
+                        <div class="block-header">
+                            <div class="block-number">01</div>
+                            <div class="block-status-badges">
+                                <span class="status-badge badge-audio">Audio ✓</span>
+                                <span class="status-badge badge-caption">Caption ✓</span>
+                            </div>
+                        </div>
+                        <div class="block-content">
+                            <div class="block-text">
+                                Welcome to this comprehensive course on modern web development. In this course, we'll explore the latest technologies and best practices that will help you become a proficient web developer.
+                            </div>
+                        </div>
+                        <div class="block-actions">
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-play"></span>
+                                Play Audio
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-mic"></span>
+                                Re-record
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-caption"></span>
+                                View Caption
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-trash"></span>
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Learning Objectives Group -->
+                <div class="page-group">
+                    <div class="page-group-header">
+                        <div class="page-indicator"></div>
+                        Learning Objectives
+                    </div>
+                    
+                    <div class="narration-block">
+                        <div class="block-header">
+                            <div class="block-number">02</div>
+                            <div class="block-status-badges">
+                                <span class="status-badge badge-audio">Audio ✓</span>
+                            </div>
+                        </div>
+                        <div class="block-content">
+                            <div class="block-text">
+                                By the end of this course, you will be able to: Build responsive web applications, implement modern JavaScript features, work with popular frameworks, and deploy applications to production environments.
+                            </div>
+                        </div>
+                        <div class="block-actions">
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-play"></span>
+                                Play Audio
+                            </button>
+                            <button class="btn btn-primary btn-small">
+                                <span class="icon-caption"></span>
+                                Generate Caption
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-mic"></span>
+                                Re-record
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Topic Groups -->
+                <div class="page-group">
+                    <div class="page-group-header">
+                        <div class="page-indicator"></div>
+                        Topic 1: Introduction
+                    </div>
+                    
+                    <div class="narration-block complete">
+                        <div class="block-header">
+                            <div class="block-number">03</div>
+                            <div class="block-status-badges">
+                                <span class="status-badge badge-audio">Audio ✓</span>
+                                <span class="status-badge badge-caption">Caption ✓</span>
+                            </div>
+                        </div>
+                        <div class="block-content">
+                            <div class="block-text">
+                                Let's begin with the fundamental concepts of web development. Understanding these basics will provide a strong foundation for everything else we'll learn in this course.
+                            </div>
+                        </div>
+                        <div class="block-actions">
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-play"></span>
+                                Play Audio
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-caption"></span>
+                                View Caption
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-mic"></span>
+                                Re-record
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="page-group">
+                    <div class="page-group-header">
+                        <div class="page-indicator"></div>
+                        Topic 2: Core Concepts
+                    </div>
+                    
+                    <div class="narration-block">
+                        <div class="block-header">
+                            <div class="block-number">04</div>
+                            <div class="block-status-badges">
+                                <!-- No badges - no audio or caption yet -->
+                            </div>
+                        </div>
+                        <div class="block-content">
+                            <div class="block-text">
+                                Understanding the core principles is essential for building robust applications. We'll cover HTML5, CSS3, and modern JavaScript features that form the backbone of web development.
+                            </div>
+                        </div>
+                        <div class="block-actions">
+                            <button class="btn btn-primary btn-small">
+                                <span class="icon-mic"></span>
+                                Record Audio
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-upload"></span>
+                                Upload Audio
+                            </button>
+                            <button class="btn btn-secondary btn-small">
+                                <span class="icon-caption"></span>
+                                Generate Caption
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Action Button -->
+        <div class="fab" onclick="toggleFabMenu()">
+            <span style="font-size: 24px; color: white;">+</span>
+        </div>
+        
+        <div class="fab-menu" id="fabMenu">
+            <div class="fab-menu-item">
+                <span class="icon-upload"></span>
+                Bulk Upload (Murf.ai)
+            </div>
+            <div class="fab-menu-item">
+                <span class="icon-download"></span>
+                Download All Text
+            </div>
+            <div class="fab-menu-item">
+                <span class="icon-trash"></span>
+                Clear All Audio
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleFabMenu() {
+            const menu = document.getElementById('fabMenu');
+            menu.classList.toggle('open');
+        }
+
+        // Close FAB menu when clicking outside
+        document.addEventListener('click', function(e) {
+            const fab = document.querySelector('.fab');
+            const menu = document.getElementById('fabMenu');
+            if (!fab.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.remove('open');
+            }
+        });
+
+        // Simulate navigation click
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                // In real implementation, this would scroll to the corresponding block
+            });
+        });
+    </script>
+</body>
+</html>

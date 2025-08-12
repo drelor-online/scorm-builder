@@ -150,7 +150,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         await mediaService.loadMediaFromCourseContent(courseContent)
       }
       
-      // Now get all media from the service (which should now include loaded items)
+      // Now get all media from the service (which will also scan file system)
+      // This will include both cached items and file system discovery
       const allMedia = await mediaService.listAllMedia()
       const newCache = new Map<string, MediaItem>()
       allMedia.forEach(item => {
@@ -175,6 +176,18 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   ): Promise<MediaItem> => {
     try {
       const item = await mediaService.storeMedia(file, pageId, type, metadata, progressCallback)
+      
+      // Clear any existing blob URL for this media ID to force regeneration
+      setBlobUrlCache(prev => {
+        const updated = new Map(prev)
+        const existingUrl = updated.get(item.id)
+        if (existingUrl && existingUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(existingUrl)
+          console.log('[UnifiedMediaContext] Revoked old blob URL for replaced media:', item.id, existingUrl)
+        }
+        updated.delete(item.id)
+        return updated
+      })
       
       // Update cache
       setMediaCache(prev => {
@@ -272,18 +285,32 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      console.log('[UnifiedMediaContext v2.0.7] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
+      console.log('[UnifiedMediaContext v2.0.8] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
-      // Check if we have a cached blob URL first
+      // CRITICAL FIX: Don't return cached blob URLs that might be stale
+      // Always check if we need to create a fresh one
       const cachedUrl = blobUrlCache.get(mediaId)
-      if (cachedUrl) {
-        console.log('[UnifiedMediaContext v2.0.7] Using cached blob URL:', cachedUrl)
-        return cachedUrl
+      if (cachedUrl && cachedUrl.startsWith('blob:')) {
+        // Validate the cached blob URL is still accessible
+        // For now, we'll skip the cache for blob URLs to ensure freshness
+        console.log('[UnifiedMediaContext v2.0.8] Found cached blob URL, but will create fresh one for reliability:', cachedUrl)
+        // Remove the stale URL from cache
+        setBlobUrlCache(prev => {
+          const updated = new Map(prev)
+          updated.delete(mediaId)
+          return updated
+        })
+        // Revoke the old URL to free memory
+        try {
+          URL.revokeObjectURL(cachedUrl)
+        } catch (e) {
+          console.warn('[UnifiedMediaContext v2.0.8] Failed to revoke old blob URL:', e)
+        }
       }
       
       // Get media with data from MediaService
       const media = await mediaService.getMedia(mediaId)
-      console.log('[UnifiedMediaContext v2.0.7] Media data retrieved:', {
+      console.log('[UnifiedMediaContext v2.0.8] Media data retrieved:', {
         found: !!media,
         hasUrl: !!(media?.url),
         hasData: !!(media?.data),
@@ -295,13 +322,25 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       })
       
       if (!media) {
-        console.error('[UnifiedMediaContext v2.0.7] No media found for ID:', mediaId)
+        console.error('[UnifiedMediaContext v2.0.8] No media found for ID:', mediaId)
         return null
       }
       
       // Check if it's a YouTube or external URL
       if (media.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
-        console.log('[UnifiedMediaContext v2.0.7] Using external/data URL directly:', media.url)
+        console.log('[UnifiedMediaContext v2.0.8] Using external/data URL directly:', media.url)
+        return media.url
+      }
+      
+      // Check if we already have a valid blob URL from MediaService
+      if (media.url && media.url.startsWith('blob:')) {
+        console.log('[UnifiedMediaContext v2.0.8] Using blob URL from MediaService:', media.url)
+        // Cache it for future use
+        setBlobUrlCache(prev => {
+          const updated = new Map(prev)
+          updated.set(mediaId, media.url!)
+          return updated
+        })
         return media.url
       }
       
@@ -311,7 +350,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       // CRITICAL FIX: Create real blob URL from data instead of using asset://
       // Since asset:// protocol is not registered, we need to use blob URLs
       if (media.data && media.data.length > 0) {
-        console.log('[UnifiedMediaContext v2.0.7] Creating blob URL from data:', {
+        console.log('[UnifiedMediaContext v2.0.8] Creating fresh blob URL from data:', {
           mediaId,
           dataSize: media.data.length,
           mimeType: media.metadata?.mimeType || media.metadata?.mime_type
@@ -355,7 +394,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         const blob = new Blob([media.data.buffer as ArrayBuffer], { type: mimeType })
         const blobUrl = URL.createObjectURL(blob)
         
-        console.log('[UnifiedMediaContext v2.0.7] Created blob URL:', {
+        console.log('[UnifiedMediaContext v2.0.8] Successfully created fresh blob URL:', {
           mediaId,
           blobUrl,
           blobSize: blob.size,
@@ -374,22 +413,22 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       
       // If no data but we have an asset URL, warn about the issue
       if (media.url && media.url.startsWith('asset://')) {
-        console.error('[UnifiedMediaContext v2.0.7] Asset URL without data - asset protocol not working:', media.url)
-        console.log('[UnifiedMediaContext v2.0.7] Attempting to fetch media data directly...')
+        console.error('[UnifiedMediaContext v2.0.8] Asset URL without data - asset protocol not working:', media.url)
+        console.log('[UnifiedMediaContext v2.0.8] Attempting to fetch media data directly...')
         
         // Try to get the data if we don't have it
         const assetUrl = await mediaService.createBlobUrl(mediaId)
         if (assetUrl) {
-          console.log('[UnifiedMediaContext v2.0.7] Got URL from createBlobUrl:', assetUrl)
+          console.log('[UnifiedMediaContext v2.0.8] Got URL from createBlobUrl:', assetUrl)
           return assetUrl
         }
       }
       
       // No URL or data available
-      console.error('[UnifiedMediaContext v2.0.7] FAILED - No URL or data for media:', mediaId)
+      console.error('[UnifiedMediaContext v2.0.8] FAILED - No URL or data for media:', mediaId)
       return null
     } catch (err) {
-      logger.error('[UnifiedMediaContext v2.0.7] Failed to create blob URL:', mediaId, err)
+      logger.error('[UnifiedMediaContext v2.0.8] Failed to create blob URL:', mediaId, err)
       setError(err as Error)
       return null
     }

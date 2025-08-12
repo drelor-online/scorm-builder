@@ -21,7 +21,7 @@ import {
   Tab,
   Alert
 } from './DesignSystem'
-import { Upload, Image as ImageIcon, Edit, Video, Copy } from 'lucide-react'
+import { Upload, Image as ImageIcon, Edit, Video, Copy, Plus } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
@@ -57,7 +57,6 @@ interface MediaEnhancementWizardRefactoredProps {
   onSettingsClick?: () => void
   onHelp?: () => void
   onSave?: (content?: any, silent?: boolean) => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onStepClick?: (step: number) => void
 }
@@ -116,14 +115,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   onSettingsClick,
   onHelp,
   onSave,
-  onSaveAs,
   onOpen,
   onStepClick
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [selectedResults, setSelectedResults] = useState<{ [key: string]: boolean }>({})
   const [isSearching, setIsSearching] = useState(false)
+  const [lightboxMedia, setLightboxMedia] = useState<SearchResult | null>(null)
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [mediaSource, setMediaSource] = useState<'search' | 'upload'>('search')
   const [uploadedMedia, setUploadedMedia] = useState<SearchResult[]>([])
@@ -272,24 +271,69 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return 'image'
   }
 
-  // Handle clicking on search results to add them to the page
-  const handleToggleSelection = async (resultId: string) => {
-    const result = [...searchResults, ...uploadedMedia].find(r => r.id === resultId)
+  // Handle clicking on search results to open lightbox preview
+  const handleMediaPreview = (resultId: string) => {
+    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
+    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
+    const result = [...searchResultsArray, ...uploadedMediaArray].find(r => r.id === resultId)
     if (!result) return
-
+    
+    setLightboxMedia(result)
+    setIsLightboxOpen(true)
+  }
+  
+  // Handle lightbox actions
+  const handleLightboxConfirm = async () => {
+    if (!lightboxMedia) return
+    
     // Check if there's existing media on the page
-    // Use the local state which is updated after deletions
     const hasExistingMedia = existingPageMedia && existingPageMedia.length > 0
     
+    setIsLightboxOpen(false)
+    
     if (hasExistingMedia) {
-      // Show confirmation dialog
-      setReplaceMode({ id: resultId, title: result.title || 'Media' })
-      setIsSearching(false)
-      return
+      // Delete existing media first, then add new (same as handleReplaceConfirm)
+      console.log('[MediaEnhancement] Deleting existing media before replacement:', existingPageMedia)
+      for (const media of existingPageMedia) {
+        try {
+          console.log('[MediaEnhancement] Deleting existing media:', media.id, media.type)
+          
+          // Delete from storage using the same method as handleReplaceConfirm
+          if (media.storageId) {
+            await deleteMedia(media.storageId)
+          } else {
+            // Fallback to media.id if no storageId
+            await deleteMedia(media.id)
+          }
+        } catch (err) {
+          console.warn('[MediaEnhancement] Failed to delete existing media:', err)
+        }
+      }
+      
+      // Clear the existing media array immediately
+      setExistingPageMedia([])
     }
-
-    // No existing media, proceed with adding
-    await addMediaToPage(result)
+    
+    // Add new media
+    await addMediaToPage(lightboxMedia)
+    setLightboxMedia(null)
+    
+    // Clear uploadedMedia if this was from an upload
+    if (uploadedMedia.some(m => m.id === lightboxMedia.id)) {
+      setUploadedMedia([])
+    }
+    
+    // Note: loadExistingMedia() is already called inside addMediaToPage() after the fix
+  }
+  
+  const handleLightboxCancel = () => {
+    setIsLightboxOpen(false)
+    setLightboxMedia(null)
+  }
+  
+  // Keep old function for compatibility but redirect to preview
+  const handleToggleSelection = (resultId: string) => {
+    handleMediaPreview(resultId)
   }
 
   // Separate function to add media to page
@@ -402,7 +446,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           mimeType: 'video/mp4'
         }
       } else {
-        // Regular image - create blob URL
+        // Regular image - Force create a fresh blob URL (don't use cached)
+        // First revoke any existing URL to ensure fresh generation
+        const existingUrl = blobUrls.get(storedItem.id)
+        if (existingUrl) {
+          URL.revokeObjectURL(existingUrl)
+          setBlobUrls(prev => {
+            const newMap = new Map(prev)
+            newMap.delete(storedItem.id)
+            return newMap
+          })
+        }
+        
+        // Now create fresh blob URL
         const blobUrl = await createBlobUrl(storedItem.id)
         
         // Track the blob URL for cleanup
@@ -412,7 +468,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             newMap.set(storedItem.id, blobUrl)
             return newMap
           })
-          console.log('[MediaEnhancement] Created and tracked blob URL for stored image:', storedItem.id)
+          console.log('[MediaEnhancement] Created and tracked fresh blob URL for stored image:', storedItem.id)
         }
         
         newMediaItem = {
@@ -432,8 +488,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       // Update the local state immediately with single media item
       setExistingPageMedia(updatedPageMedia)
       
-      // Clear selections after successfully adding media
-      setSelectedResults({})
+      // Media added successfully
       
       // Update course content with the combined media array
       if (currentPage) {
@@ -444,6 +499,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setSuccessMessage('Media added to page')
       setTimeout(() => setSuccessMessage(null), 3000)
       console.log('[MediaEnhancement] Media added to page successfully')
+      
+      // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
+      // This ensures the component shows the latest data with proper blob URLs
+      await loadExistingMedia()
     } catch (error) {
       // Properly serialize error for logging (Error objects serialize to {})
       const errorInfo = error instanceof Error ? {
@@ -462,7 +521,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const handleReplaceConfirm = async () => {
     if (!replaceMode) return
     
-    const result = [...searchResults, ...uploadedMedia].find(r => r.id === replaceMode.id)
+    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
+    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
+    const result = [...searchResultsArray, ...uploadedMediaArray].find(r => r.id === replaceMode.id)
     if (!result) {
       setReplaceMode(null)
       return
@@ -497,6 +558,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Now add the new media as the ONLY media item
     await addMediaToPage(result)
     setReplaceMode(null)
+    
+    // Note: loadExistingMedia() is already called inside addMediaToPage() after the fix
   }
   
   // Move loadExistingMedia to component scope using useCallback
@@ -640,7 +703,6 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // Clear uploaded media when switching tabs
   useEffect(() => {
     setUploadedMedia([])
-    setSelectedResults({})
   }, [activeTab])
   
   // Load prompt suggestions separated by type
@@ -729,18 +791,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const pageId = getPageId(currentPage!)
     const existingMedia = getMediaForPage(pageId)
     
-    if (existingMedia && existingMedia.length > 0 && results.length > 0) {
-      // If there's existing media, show confirmation for the first uploaded file
+    if (results.length > 0) {
+      // Store uploaded media and open lightbox for preview
       const firstResult = results[0]
-      setReplaceMode({ id: firstResult.id, title: firstResult.title })
-      // Temporarily store in uploadedMedia so handleReplaceConfirm can find it
       setUploadedMedia(results)
-    } else if (results.length > 0) {
-      // No existing media, add the first file directly
-      const firstResult = results[0]
-      await addMediaToPage(firstResult)
-      // Clear uploadedMedia since we've added it
-      setUploadedMedia([])
+      setLightboxMedia(firstResult)
+      setIsLightboxOpen(true)
     }
     
     setRecentlyUploadedIds(prev => new Set([...prev, ...newlyUploaded]))
@@ -815,7 +871,6 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setIsSearching(true)
     setSearchError(null)
     setYoutubeMessage(null)
-    setSelectedResults({}) // Clear previous selections when starting new search
     
     try {
       if (isVideoSearch) {
@@ -850,7 +905,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           cseIdLength: apiKeys?.googleCseId?.length || 0
         });
         
-        const images = await searchGoogleImages(searchQuery, 1, apiKeys?.googleImageApiKey || '', apiKeys?.googleCseId || '')
+        const images = await searchGoogleImages(
+          searchQuery, 
+          1, 
+          apiKeys?.googleImageApiKey || '', 
+          apiKeys?.googleCseId || ''
+        )
         console.log('[MediaEnhancement] Search returned', images.length, 'results');
         
         // The searchGoogleImages function already returns SearchResult objects
@@ -878,7 +938,6 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setSearchQuery('')
       setSearchResults([])
       setUploadedMedia([]) // Clear uploaded media when changing pages
-      setSelectedResults({})
       setHasSearched(false)
       setSearchError(null)
       setYoutubeMessage(null)
@@ -895,8 +954,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (!currentPage) return
     
     const pageId = getPageId(currentPage)
-    const allResults = [...searchResults, ...uploadedMedia]
-    const selectedItems = allResults.filter(r => selectedResults[r.id])
+    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
+    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
+    const allResults = [...searchResultsArray, ...uploadedMediaArray]
+    const selectedItems: any[] = []
     
     if (selectedItems.length === 0) return
     
@@ -1019,8 +1080,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     setExistingPageMedia(updatedPageMedia)
     
-    // Clear selections
-    setSelectedResults({})
+    // Clear recent uploads
     setRecentlyUploadedIds(new Set())
     
     // Update course content
@@ -1370,8 +1430,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return results.slice(startIndex, endIndex)
   }
   
-  const totalResultPages = Math.ceil([...searchResults, ...uploadedMedia].length / resultsPerPage)
+  const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
+  const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
+  const totalResultPages = Math.ceil([...searchResultsArray, ...uploadedMediaArray].length / resultsPerPage)
   
+  // Scroll to Add Media section
+  const scrollToAddMedia = () => {
+    const addMediaCard = document.querySelector('[data-testid="add-media-card"]')
+    if (addMediaCard) {
+      addMediaCard.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   return (
     <PageLayout
       currentStep={3}
@@ -1383,10 +1453,21 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       onSettingsClick={onSettingsClick}
       onHelp={onHelp}
       onSave={onSave}
-      onSaveAs={onSaveAs}
       onOpen={onOpen}
       onStepClick={onStepClick}
       autoSaveIndicator={onSave && <AutoSaveIndicatorConnected />}
+      actions={
+        <Button
+          variant="primary"
+          size="medium"
+          onClick={scrollToAddMedia}
+          aria-label="Add media to current page"
+          data-testid="header-add-media-button"
+        >
+          <Icon icon={Plus} size="sm" />
+          Add Media
+        </Button>
+      }
     >
       <div className={styles.mainLayout}>
         {/* Left Sidebar - Page Navigation */}
@@ -1582,7 +1663,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           {/* Add New Media */}
           <Section>
-          <Card>
+          <Card data-testid="add-media-card">
             <h3 className={styles.cardTitle}>Add New Media</h3>
             
             {/* Tabbed Interface */}
@@ -1629,7 +1710,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     </div>
                   )}
                   
-                  {/* Image Search Input */}
+                  {/* Image Search Input with Size Filter */}
                   <Flex gap="medium" className={styles['mb-lg']}>
                     <Input
                       value={searchQuery}
@@ -1884,7 +1965,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       
                       <div className={styles.aiToolCard}>
                         <h6 className={styles.aiToolTitle}>
-                          🖼️ Stable Diffusion (Free)
+                          <Icon icon={ImageIcon} size="sm" />
+                          Stable Diffusion (Free)
                         </h6>
                         <p className={styles.aiToolDescription}>
                           Open-source, customizable, runs locally or online
@@ -1934,7 +2016,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {(searchResults.length > 0 || uploadedMedia.length > 0) && (
               <>
                 <div className={styles.resultsGrid}>
-                  {paginateResults([...searchResults, ...uploadedMedia]).map((result, index) => {
+                  {paginateResults([...searchResultsArray, ...uploadedMediaArray]).map((result, index) => {
                     const isVideo = result.embedUrl || (result.url && result.url.includes('youtube'))
                     const imageSource = getImageSource(result.thumbnail || result.url, true)
                     const isRestricted = !imageSource && !isVideo
@@ -1943,12 +2025,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       <div 
                         key={`${result.id}-${index}`}
                         data-testid={`search-result-${index}`}
-                        data-selected={selectedResults[result.id] ? "true" : "false"}
-                        className={`${styles.resultCard} ${selectedResults[result.id] ? styles.resultCardSelected : ''} ${isRestricted ? styles.resultCardRestricted : ''} ${isSearching ? styles.resultCardSearching : ''}`}
-                        onClick={() => !isRestricted && !isSearching && handleToggleSelection(result.id)}
+                        className={`${styles.resultCard} ${isRestricted ? styles.resultCardRestricted : ''} ${isSearching ? styles.resultCardSearching : ''}`}
+                        onClick={() => !isRestricted && !isSearching && handleMediaPreview(result.id)}
                       >
-                        {/* Selection checkmark indicator */}
-                        {selectedResults[result.id] && (
+                        {/* Removed selection indicator - using lightbox now */}
+                        {false && (
                           <div className={styles.selectionIndicator} aria-label="Selected">
                             ✓
                           </div>
@@ -1992,11 +2073,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           <p className={styles.searchResultTitle}>
                             {result.title}
                           </p>
-                          {result.source && (
-                            <p className={styles.searchResultMeta}>
-                              {result.source}
-                            </p>
-                          )}
+                          <p className={styles.searchResultMeta}>
+                            {result.dimensions && (
+                              <span className={styles.imageDimensions}>
+                                📐 {result.dimensions}
+                              </span>
+                            )}
+                            {result.dimensions && result.source && ' • '}
+                            {result.source && (
+                              <span>{result.source}</span>
+                            )}
+                          </p>
                         </div>
                       </div>
                     )
@@ -2085,6 +2172,62 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           confirmText="Replace"
           cancelText="Cancel"
         />
+      )}
+      
+      {/* Lightbox Preview Modal */}
+      {isLightboxOpen && lightboxMedia && (
+        <Modal
+          isOpen={isLightboxOpen}
+          onClose={handleLightboxCancel}
+          size="xlarge"
+          showCloseButton={false}
+          data-testid="lightbox-modal"
+        >
+          <div className={styles.lightboxContent}>
+            <div className={styles.lightboxPreview}>
+              {lightboxMedia.isYouTube || lightboxMedia.embedUrl ? (
+                <iframe
+                  src={lightboxMedia.embedUrl || lightboxMedia.url}
+                  title={lightboxMedia.title}
+                  className={styles.lightboxVideo}
+                  allowFullScreen
+                  data-testid="video-preview"
+                />
+              ) : (
+                <img
+                  src={lightboxMedia.url}
+                  alt={lightboxMedia.title}
+                  className={styles.lightboxImage}
+                />
+              )}
+            </div>
+            
+            <div className={styles.lightboxInfo}>
+              <h3>{lightboxMedia.title}</h3>
+              {lightboxMedia.source && <p className={styles.lightboxSource}>Source: {lightboxMedia.source}</p>}
+              {lightboxMedia.dimensions && <p className={styles.lightboxDimensions}>{lightboxMedia.dimensions}</p>}
+              {lightboxMedia.duration && <p className={styles.lightboxDuration}>Duration: {lightboxMedia.duration}</p>}
+              {lightboxMedia.channel && <p className={styles.lightboxChannel}>Channel: {lightboxMedia.channel}</p>}
+            </div>
+            
+            <div className={styles.lightboxActions}>
+              <Button
+                variant="secondary"
+                size="large"
+                onClick={handleLightboxCancel}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="large"
+                onClick={handleLightboxConfirm}
+              >
+                {existingPageMedia && existingPageMedia.length > 0 ? 'Replace Media' : 'Set Media'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </PageLayout>
   )

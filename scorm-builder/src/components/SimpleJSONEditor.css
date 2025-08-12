@@ -128,27 +128,32 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .auto-fix-button {
-  border: 1px solid #fbbf24;
+  border: 2px solid #f59e0b;
+  background-color: #fef3c7;
 }
 
 .format-button {
-  border: 1px solid #10b981;
+  border: 2px solid #10b981;
+  background-color: #d1fae5;
 }
 
 .auto-fix-button:hover {
-  background-color: #fef3c7;
-  border-color: #f59e0b;
+  background-color: #fbbf24;
+  border-color: #d97706;
+  transform: scale(1.02);
 }
 
 .format-button:hover {
-  background-color: #d1fae5;
+  background-color: #86efac;
   border-color: #059669;
+  transform: scale(1.02);
 }
 
 /* Error panel */

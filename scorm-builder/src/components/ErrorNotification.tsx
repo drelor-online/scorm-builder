@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { generateNotificationId } from '../utils/idGenerator'
+import { Icon } from './DesignSystem'
+import { Check, AlertTriangle, Info } from 'lucide-react'
 
 export interface ErrorMessage {
   id: string
@@ -79,42 +81,57 @@ export function ErrorNotification() {
   return (
     <div style={{
       position: 'fixed',
-      top: '1rem',
-      right: '1rem',
-      bottom: '1rem',
-      zIndex: 1070, // Use tooltip z-index to appear above navigation
+      top: '2rem',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
       display: 'flex',
       flexDirection: 'column',
       gap: '0.5rem',
-      maxWidth: '24rem',
-      maxHeight: 'calc(100vh - 2rem)',
-      overflowY: 'auto',
+      minWidth: '300px',
+      maxWidth: '500px',
       pointerEvents: 'none'
     }}>
       {errors.map(error => (
         <div
           key={error.id}
+          onClick={() => setErrors(prev => prev.filter(e => e.id !== error.id))}
           style={{
             backgroundColor: error.type === 'error' ? '#dc2626' : 
                            error.type === 'warning' ? '#f59e0b' : 
                            error.type === 'success' ? '#10b981' : '#3b82f6',
             color: 'white',
-            padding: '0.75rem 1rem',
-            borderRadius: '0.375rem',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            padding: '0.75rem 1.5rem',
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1rem',
-            animation: 'slideIn 0.3s ease-out',
-            pointerEvents: 'auto'
+            gap: '0.75rem',
+            animation: 'slideDown 0.3s ease-out',
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            transition: 'opacity 0.2s ease-out'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
+          {/* Icon */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Icon 
+              icon={error.type === 'success' ? Check : 
+                    error.type === 'error' || error.type === 'warning' ? AlertTriangle : 
+                    Info}
+              size="md"
+              color="white"
+            />
+          </div>
+          
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 500 }}>{error.message}</div>
             {error.action && (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   error.action!.onClick()
                   setErrors(prev => prev.filter(e => e.id !== error.id))
                 }}
@@ -126,37 +143,29 @@ export function ErrorNotification() {
                   borderRadius: '0.25rem',
                   color: 'white',
                   fontSize: '0.875rem',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
               >
                 {error.action.label}
               </button>
             )}
           </div>
-          <button
-            onClick={() => setErrors(prev => prev.filter(e => e.id !== error.id))}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '1.25rem',
-              lineHeight: 1,
-              opacity: 0.8
-            }}
-          >
-            ×
-          </button>
+          
+          {/* Close hint */}
+          <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>Click to dismiss</span>
         </div>
       ))}
       <style>{`
-        @keyframes slideIn {
+        @keyframes slideDown {
           from {
-            transform: translateX(100%);
+            transform: translate(-50%, -100%);
             opacity: 0;
           }
           to {
-            transform: translateX(0);
+            transform: translate(-50%, 0);
             opacity: 1;
           }
         }

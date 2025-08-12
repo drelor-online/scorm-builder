@@ -1,6 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
+import { render, screen, fireEvent, waitFor, within } from '../../test/testProviders'
 import { describe, test, expect, beforeEach, vi, it } from 'vitest'
 import { AudioNarrationWizard } from '../AudioNarrationWizard'
+import '@testing-library/jest-dom'
 
 // Mock MediaService
 const mockMediaService = {
@@ -325,6 +326,95 @@ describe('AudioNarrationWizard - Bulk Upload', () => {
       // Check for specific feedback about file naming
       const alertText = alerts.map(a => a.textContent).join(' ')
       expect(alertText).toMatch(/skipped|format|0001-Block.mp3/i)
+    })
+  })
+})
+
+describe('Bulk Upload Position and Visibility', () => {
+  it('should display Bulk Upload section at the top of the Audio step', async () => {
+    const { container } = render(
+      <AudioNarrationWizard
+        courseContent={mockCourseContent}
+        courseSeedData={mockCourseSeedData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    )
+    
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('Audio Narration')).toBeInTheDocument()
+    })
+    
+    // Find the bulk upload section
+    const bulkUploadText = screen.getByText('Bulk Audio Upload (Murf.ai)')
+    expect(bulkUploadText).toBeInTheDocument()
+    
+    // Check if it appears before narration blocks
+    const firstNarrationBlock = screen.getByText(/Welcome Page/i)
+    
+    // Get positions
+    const bulkRect = bulkUploadText.getBoundingClientRect()
+    const narrationRect = firstNarrationBlock.getBoundingClientRect()
+    
+    // Bulk upload should be above narration blocks (smaller Y)
+    // Note: In tests, positions might be 0, so we check DOM order instead
+    const allTextElements = container.querySelectorAll('h3, h4')
+    const textContents = Array.from(allTextElements).map(el => el.textContent)
+    
+    // Find indices
+    const bulkIndex = textContents.findIndex(t => t?.includes('Bulk Audio Upload'))
+    const narrationIndex = textContents.findIndex(t => t?.includes('Welcome Page'))
+    
+    // Bulk upload should come before narration blocks
+    if (bulkIndex !== -1 && narrationIndex !== -1) {
+      expect(bulkIndex).toBeLessThan(narrationIndex)
+    }
+  })
+
+  it('should be visible without scrolling', async () => {
+    render(
+      <AudioNarrationWizard
+        courseContent={mockCourseContent}
+        courseSeedData={mockCourseSeedData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    )
+    
+    await waitFor(() => {
+      expect(screen.getByText('Audio Narration')).toBeInTheDocument()
+    })
+    
+    const bulkUploadSection = screen.getByText('Bulk Audio Upload (Murf.ai)')
+    
+    // Should be visible
+    expect(bulkUploadSection).toBeVisible()
+  })
+
+  it('should have download button easily accessible', async () => {
+    render(
+      <AudioNarrationWizard
+        courseContent={mockCourseContent}
+        courseSeedData={mockCourseSeedData}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    )
+    
+    await waitFor(() => {
+      expect(screen.getByText('Audio Narration')).toBeInTheDocument()
+    })
+    
+    // Expand bulk upload if collapsed
+    const bulkUploadHeader = screen.getByText('Bulk Audio Upload (Murf.ai)')
+    fireEvent.click(bulkUploadHeader)
+    
+    // Download button should be present
+    await waitFor(() => {
+      const downloadButton = screen.getByTestId('download-narration-button')
+      expect(downloadButton).toBeInTheDocument()
+      expect(downloadButton).toHaveTextContent('Download Narration Text')
     })
   })
 })

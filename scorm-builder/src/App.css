@@ -101,6 +101,17 @@
   }
 }
 
+@keyframes slideDown {
+  from {
+    transform: translate(-50%, -100%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
 /* Focus styles for all interactive elements - using Tailwind focus styles instead */
 
 /* High contrast mode support */

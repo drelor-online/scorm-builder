@@ -90,6 +90,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             variant="secondary"
             size="medium"
             aria-label="Cancel deletion"
+            style={{ marginRight: '1rem' }}
           >
             Cancel
           </Button>

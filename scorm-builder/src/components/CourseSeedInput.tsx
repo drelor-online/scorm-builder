@@ -13,8 +13,10 @@ import {
   Grid,
   Flex,
   Modal,
-  Alert
+  Alert,
+  Icon
 } from './DesignSystem';
+import { Lock, Edit2, FileText, Trash2, Clock } from 'lucide-react';
 import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
 import styles from './CourseSeedInput.module.css';
@@ -27,6 +29,7 @@ interface CourseSeedInputProps {
   onBack?: () => void;
   onSettingsClick?: () => void;
   onSave?: (data?: CourseSeedData) => void;
+  onOpen?: () => void;
   onHelp?: () => void;
   onStepClick?: (stepIndex: number) => void;
   initialData?: CourseSeedData;
@@ -70,6 +73,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   onBack,
   onSettingsClick,
   onSave,
+  onOpen,
   onHelp,
   onStepClick,
   initialData
@@ -500,6 +504,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }}
       nextDisabled={!isFormValid() || isSubmitting}
       onHelp={onHelp}
+      onOpen={onOpen}
       onStepClick={handleStepClick}
     >
       <form ref={formRef} aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
@@ -532,7 +537,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                       title="Title is locked from project creation"
                       className={styles.lockIcon}
                     >
-                      🔒
+                      <Icon icon={Lock} size="sm" />
                     </span>
                   )}
                 </label>
@@ -585,20 +590,6 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   <div className={styles.difficultyHelpText}>
                     Select the complexity level for your learners
                   </div>
-                  <input
-                    id="difficulty-slider"
-                    data-testid="difficulty-slider"
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(Number(e.target.value))}
-                    aria-label="Difficulty Level"
-                    aria-valuemin={1}
-                    aria-valuemax={5}
-                    aria-valuenow={difficulty}
-                    className={styles.difficultySlider}
-                  />
                 </div>
               </div>
 
@@ -643,7 +634,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           <Card title="Learning Topics">
             <div className="input-wrapper">
               <Flex justify="space-between" align="center" style={{ marginBottom: '0.5rem' }}>
-                <label htmlFor="topics-textarea" className="input-label" style={{ marginBottom: 0 }}>
+                <label htmlFor="topics-textarea" className="input-label" style={{ marginBottom: '0.25rem' }}>
                   Topics <span className={styles.requiredStar}>*</span>
                 </label>
                 <ButtonGroup gap="small">
@@ -655,7 +646,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         onClick={() => setIsTopicsEditable(!isTopicsEditable)}
                         type="button"
                       >
-                        {isTopicsEditable ? '🔒 Lock Topics' : '✏️ Edit Topics'}
+                        <>
+                          <Icon icon={isTopicsEditable ? Lock : Edit2} size="sm" />
+                          {isTopicsEditable ? ' Lock Topics' : ' Edit Topics'}
+                        </>
                       </Button>
                       <Button
                         variant="secondary"
@@ -668,7 +662,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         }}
                         type="button"
                       >
-                        🗑️ Clear Topics
+                        <>
+                          <Icon icon={Trash2} size="sm" />
+                          Clear Topics
+                        </>
                       </Button>
                     </>
                   )}
@@ -696,8 +693,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               />
             </div>
             <Flex gap="large" className={styles.tipText}>
-              <span className={styles.tipItem}>📝 Recommended: 10-20 topics</span>
-              <span className={styles.tipItem}>⏱️ Aim for 2-3 minutes per topic</span>
+              <span className={styles.tipItem}>
+                <Icon icon={FileText} size="sm" />
+                Recommended: 10-20 topics
+              </span>
+              <span className={styles.tipItem}>
+                <Icon icon={Clock} size="sm" />
+                Aim for 2-3 minutes per topic
+              </span>
             </Flex>
           </Card>
         </Section>

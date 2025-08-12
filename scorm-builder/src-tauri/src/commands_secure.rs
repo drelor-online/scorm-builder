@@ -384,6 +384,73 @@ pub async fn append_to_log(content: String) -> Result<(), String> {
     Ok(())
 }
 
+// Project Rename Command
+
+#[tauri::command]
+pub async fn rename_project(file_path: String, new_name: String) -> Result<ProjectMetadata, String> {
+    log_debug(&format!("rename_project called with path: {file_path}, new_name: {new_name}"));
+    
+    // Validate the new name
+    if new_name.trim().is_empty() {
+        return Err("Project name cannot be empty".to_string());
+    }
+    
+    if new_name.len() > 100 {
+        return Err("Project name too long (max 100 characters)".to_string());
+    }
+    
+    // Validate the project path
+    let old_path = validate_project_path(&file_path)?;
+    
+    // Load the project to update its metadata
+    let mut project = load_project_file(&old_path)?;
+    let old_name = project.project.name.clone();
+    
+    // Update the project name in metadata
+    project.project.name = new_name.clone();
+    
+    // Also update the course title to match
+    project.course_data.title = new_name.clone();
+    
+    // Also update the courseTitle in course_seed_data if it exists
+    if let Some(seed_data) = &mut project.course_seed_data {
+        if let Some(obj) = seed_data.as_object_mut() {
+            obj.insert("courseTitle".to_string(), serde_json::Value::String(new_name.clone()));
+        }
+    }
+    
+    // Generate new filename
+    let project_id = &project.project.id;
+    let sanitized_name = new_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' { c } else { '_' })
+        .collect::<String>()
+        .replace(' ', "_");
+    
+    let new_filename = format!("{}_{}.scormproj", sanitized_name, project_id);
+    let new_path = old_path.parent()
+        .ok_or("Invalid path: no parent directory")?
+        .join(new_filename);
+    
+    // Save to the new path first
+    save_project_file(&project, &new_path)?;
+    
+    // Delete the old file if the path changed
+    if old_path != new_path {
+        if let Err(e) = std::fs::remove_file(&old_path) {
+            log_debug(&format!("Warning: Could not delete old file: {e}"));
+            // Not critical - continue anyway
+        }
+    }
+    
+    // Update the path in the project metadata
+    project.project.path = Some(new_path.to_string_lossy().to_string());
+    
+    log_debug(&format!("Project renamed from '{}' to '{}'", old_name, new_name));
+    
+    Ok(project.project)
+}
+
 // API Keys Commands
 
 #[tauri::command]

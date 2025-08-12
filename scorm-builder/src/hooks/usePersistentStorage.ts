@@ -110,6 +110,10 @@ export function usePersistentStorage() {
     }
   }, [currentProjectId]);
 
+  const renameProject = useCallback(async (projectId: string, newName: string) => {
+    return await fileStorage.renameProject(projectId, newName);
+  }, []);
+
   const storeMedia = useCallback(
     async (id: string, blob: Blob, mediaType: 'image' | 'video' | 'audio' | 'caption', metadata?: Record<string, any>) => {
       // Ensure required MediaMetadata fields are present
@@ -159,9 +163,6 @@ export function usePersistentStorage() {
     await fileStorage.recoverFromBackup(backupPath);
   }, []);
 
-  const saveProjectAs = useCallback(async () => {
-    await fileStorage.saveProjectAs();
-  }, []);
 
   const exportProject = useCallback(async () => {
     return fileStorage.exportProject();
@@ -236,7 +237,6 @@ export function usePersistentStorage() {
     openProjectFromFile,
     openProjectFromPath,
     saveProject,
-    saveProjectAs,
     listProjects,
     getRecentProjects,
     checkForRecovery,
@@ -256,6 +256,7 @@ export function usePersistentStorage() {
     saveScormConfig,
     getScormConfig,
     deleteProject,
+    renameProject,
     exportProject,
     importProjectFromZip,
     getCurrentProjectId,

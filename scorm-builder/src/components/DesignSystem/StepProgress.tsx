@@ -1,5 +1,7 @@
 import React from 'react'
 import './stepProgress.css'
+import { Icon } from './Icons'
+import { Check, X } from 'lucide-react'
 
 export interface Step {
   label: string
@@ -41,8 +43,8 @@ export const StepProgress: React.FC<StepProgressProps> = ({
             data-status={step.status}
           >
             <div className="step-progress-indicator">
-              {step.status === 'completed' && <span className="step-check">✓</span>}
-              {step.status === 'error' && <span className="step-error">×</span>}
+              {step.status === 'completed' && <Icon icon={Check} size="xs" className="step-check" />}
+              {step.status === 'error' && <Icon icon={X} size="xs" className="step-error" />}
               {(step.status === 'pending' || step.status === 'active') && (
                 <span className="step-number">{index + 1}</span>
               )}

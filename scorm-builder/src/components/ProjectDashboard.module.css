@@ -20,6 +20,9 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-default);
   margin-bottom: var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
 }
 
 .headerContent {
@@ -75,22 +78,15 @@
   min-width: auto;
 }
 
-/* Default Folder Section */
-.defaultFolderSection {
-  margin-bottom: var(--space-3xl);
-  padding: var(--space-xl);
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
+/* Folder Info (now in header) */
 .folderInfo {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
 }
 
 .folderLabel {
@@ -101,7 +97,13 @@
 .folderPath {
   color: var(--text-primary);
   font-style: normal;
-  max-width: 600px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  flex: 1;
+  max-width: 500px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -110,11 +112,15 @@
 .folderPathEmpty {
   color: var(--text-tertiary);
   font-style: italic;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
 }
 
 .folderActions {
   display: flex;
   gap: var(--space-sm);
+  margin-left: auto;
 }
 
 /* Project Card Animation */
@@ -151,18 +157,15 @@
 
 /* Recent Badge */
 .recentBadge {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
+  display: inline-block;
   background-color: var(--color-primary);
   color: white;
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-bottom: var(--space-md);
+  align-self: flex-start;
 }
 
 /* Project Info Section */
@@ -212,19 +215,6 @@
 .projectButtons {
   display: flex;
   gap: var(--space-sm);
-}
-
-/* Bulk Export Bar */
-.bulkExportBar {
-  position: fixed;
-  bottom: var(--space-2xl);
-  right: var(--space-2xl);
-  z-index: 1000;
-}
-
-.bulkExportButton {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: var(--space-lg) var(--space-2xl);
 }
 
 /* New Project Input */
@@ -573,6 +563,47 @@
   margin-bottom: var(--space-lg);
 }
 
+/* Rename UI Styles */
+.renameInputWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  width: 100%;
+  margin-top: var(--space-sm);
+}
+
+.renameInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-md);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.renameButtons {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-start;
+}
+
+.renameInput:focus {
+  border-color: var(--color-primary-600);
+  box-shadow: 0 0 0 3px var(--color-primary-alpha-20);
+}
+
+.renameError {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-xs);
+  margin-bottom: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .projectGrid {
@@ -590,5 +621,14 @@
   
   .templateGrid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  
+  .renameInputWrapper {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .renameInput {
+    width: 100%;
   }
 }

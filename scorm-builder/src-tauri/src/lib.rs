@@ -5,6 +5,7 @@ mod commands_secure;
 mod localstorage_migration;
 mod media_storage;
 mod project_storage;
+mod project_export_import;
 mod scorm;
 mod settings;
 
@@ -16,7 +17,7 @@ use commands::{
 // Import secure versions of project commands and other secure commands
 use commands_secure::{
     append_to_log, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
-    load_api_keys, load_project, save_api_keys, save_project,
+    load_api_keys, load_project, rename_project, save_api_keys, save_project,
 };
 use backup_recovery::{
     check_recovery, cleanup_old_backups, create_backup, recover_from_backup,
@@ -26,6 +27,10 @@ use localstorage_migration::{
 };
 use media_storage::{
     delete_media, get_all_project_media, get_media, store_media, store_media_base64,
+};
+use project_export_import::{
+    create_project_zip, create_project_zip_with_progress, extract_project_zip,
+    save_project_with_media, update_imported_media_paths,
 };
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -48,6 +53,7 @@ pub fn run() {
             load_project,
             list_projects,
             delete_project,
+            rename_project,
             get_projects_dir,
             set_projects_dir,
             get_app_settings,
@@ -69,7 +75,12 @@ pub fn run() {
             recover_from_backup,
             cleanup_old_backups,
             migrate_from_localstorage,
-            clear_recent_files
+            clear_recent_files,
+            create_project_zip,
+            create_project_zip_with_progress,
+            extract_project_zip,
+            save_project_with_media,
+            update_imported_media_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

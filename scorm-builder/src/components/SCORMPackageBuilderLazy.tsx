@@ -269,7 +269,6 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
           <Button 
             variant="secondary" 
             onClick={handlePreview}
-            style={{ marginRight: '0.75rem' }}
           >
             Preview Course
           </Button>

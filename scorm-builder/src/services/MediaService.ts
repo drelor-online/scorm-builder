@@ -66,6 +66,12 @@ export type ProgressCallback = (progress: ProgressInfo) => void
 // Singleton instance cache
 const mediaServiceInstances = new Map<string, MediaService>()
 
+// Export for testing purposes only
+export const __testing = {
+  clearInstances: () => mediaServiceInstances.clear(),
+  getInstances: () => mediaServiceInstances
+}
+
 export class MediaService {
   public readonly projectId: string
   private fileStorage: FileStorage
@@ -213,6 +219,14 @@ export class MediaService {
       // Report completion
       if (progressCallback) {
         progressCallback({ loaded: file.size, total: file.size, percent: 100 })
+      }
+      
+      // Clear any existing blob URL for this media ID to force regeneration
+      const existingBlobUrl = this.blobUrlCache.get(id)
+      if (existingBlobUrl && existingBlobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(existingBlobUrl)
+        this.blobUrlCache.delete(id)
+        logger.info('[MediaService] Cleared old blob URL for replaced media:', id)
       }
       
       // Update cache
@@ -422,20 +436,9 @@ export class MediaService {
   async getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
     debugLogger.debug('MediaService.getMedia', 'Getting media', { mediaId })
     
-    // Check blob URL cache first
-    const cachedBlobUrl = this.blobUrlCache.get(mediaId)
-    if (cachedBlobUrl) {
-      debugLogger.debug('MediaService.getMedia', 'Using cached blob URL', { mediaId, url: cachedBlobUrl })
-      
-      // Still need to get metadata
-      const cachedItem = this.mediaCache.get(mediaId)
-      if (cachedItem) {
-        return {
-          metadata: cachedItem.metadata,
-          url: cachedBlobUrl
-        }
-      }
-    }
+    // Note: We no longer return cached blob URLs here to avoid stale URL issues
+    // Blob URLs will be created fresh in UnifiedMediaContext.createBlobUrl
+    // This ensures that replaced media always gets fresh blob URLs
     
     try {
       console.log('[MediaService] Getting media from file system:', mediaId)
@@ -712,15 +715,60 @@ export class MediaService {
     debugLogger.debug('MediaService.listAllMedia', 'Listing all media')
     
     try {
-      // Return cached items since FileStorage doesn't have getAllMedia
-      // The cache is populated when media is stored or retrieved
-      const items = Array.from(this.mediaCache.values())
+      // Start with cached items
+      const cachedItems = Array.from(this.mediaCache.values())
+      const itemsMap = new Map<string, MediaItem>()
       
-      debugLogger.info('MediaService.listAllMedia', 'Media listed from cache', {
+      // Add cached items to map
+      cachedItems.forEach(item => {
+        itemsMap.set(item.id, item)
+      })
+      
+      // Check if FileStorage has getAllProjectMedia method (for file system discovery)
+      if (this.fileStorage && typeof (this.fileStorage as any).getAllProjectMedia === 'function') {
+        try {
+          debugLogger.debug('MediaService.listAllMedia', 'Fetching media from file system')
+          const fileSystemMedia = await (this.fileStorage as any).getAllProjectMedia()
+          
+          if (Array.isArray(fileSystemMedia)) {
+            // Convert file system media to MediaItem format and merge
+            fileSystemMedia.forEach((fsMedia: any) => {
+              if (!itemsMap.has(fsMedia.id)) {
+                // Convert to MediaItem format
+                const mediaItem: MediaItem = {
+                  id: fsMedia.id,
+                  type: fsMedia.mediaType || fsMedia.metadata?.type || 'image',
+                  pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || '',
+                  fileName: fsMedia.metadata?.fileName || fsMedia.metadata?.original_name || '',
+                  metadata: {
+                    ...fsMedia.metadata,
+                    uploadedAt: fsMedia.metadata?.uploadedAt || new Date().toISOString()
+                  }
+                }
+                itemsMap.set(fsMedia.id, mediaItem)
+              }
+            })
+            
+            debugLogger.info('MediaService.listAllMedia', 'Merged file system media', {
+              cachedCount: cachedItems.length,
+              fileSystemCount: fileSystemMedia.length,
+              totalCount: itemsMap.size
+            })
+          }
+        } catch (error) {
+          // Log error but continue with cached items
+          debugLogger.error('MediaService.listAllMedia', 'Failed to fetch file system media', error)
+          logger.warn('[MediaService] Failed to fetch file system media, using cache only:', error)
+        }
+      }
+      
+      const items = Array.from(itemsMap.values())
+      
+      debugLogger.info('MediaService.listAllMedia', 'Media listed', {
         count: items.length
       })
       
-      logger.info('[MediaService] Listed all media from cache, count:', items.length)
+      logger.info('[MediaService] Listed all media, count:', items.length)
       return items
     } catch (error) {
       debugLogger.error('MediaService.listAllMedia', 'Failed to list media', error)

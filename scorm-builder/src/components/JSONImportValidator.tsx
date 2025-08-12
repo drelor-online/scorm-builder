@@ -13,7 +13,7 @@ import {
 } from './DesignSystem'
 import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
-import { Clipboard, FileText, Trash2, CheckCircle } from 'lucide-react'
+import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Target, FileQuestion, Award, Edit2, Check, X, Wand2 } from 'lucide-react'
 // import { useUndoRedo } from '../hooks/useUndoRedo' // Removed undo/redo functionality
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import './DesignSystem/designSystem.css'
@@ -21,13 +21,13 @@ import { useStorage } from '../contexts/PersistentStorageContext'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
+import styles from './JSONImportValidator.module.css'
 
 interface JSONImportValidatorProps {
   onNext: (data: CourseContent) => void
   onBack: () => void
   onSettingsClick?: () => void
   onSave?: () => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -40,7 +40,6 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   onBack, 
   onSettingsClick, 
   onSave, 
-  onSaveAs,
   onOpen, 
   onHelp,
   onStepClick
@@ -53,6 +52,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [isLocked, setIsLocked] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
   
   // Load persisted JSON import data on mount
   useEffect(() => {
@@ -116,37 +117,24 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
   // JSON input state is tracked but not auto-saved to localStorage anymore
-  
-  const handlePasteFromClipboard = async () => {
-    if (isLocked) {
-      setToast({ message: 'Please clear the current JSON before pasting new content.', type: 'info' })
-      return
-    }
-    
-    try {
-      const text = await navigator.clipboard.readText()
-      setJsonInput(text)
-      setToast({ message: 'Pasted from clipboard!', type: 'success' })
-    } catch (err) {
-      // Show user-friendly error without console.error
-      setToast({ message: 'Failed to read from clipboard. Please paste manually or check browser permissions.', type: 'error' })
-    }
-  }
 
-  const validateJSON = () => {
+  const validateJSON = async () => {
     // Clear previous validation result
     setValidationResult(null)
+    setIsValidating(true)
     
     let processedInput = jsonInput
+    let wasAutoFixed = false
     
     try {
       
       if (!processedInput.trim()) {
-        setValidationResult({ isValid: false, error: 'Please enter JSON data' })
+        // Don't show error for empty input, just silently return
+        setValidationResult(null)
         return
       }
       
-      // IMMEDIATE PRE-PROCESSING - Fix smart quotes before any other processing
+      // IMMEDIATE PRE-PROCESSING - Fix smart quotes and invisible characters before any other processing
       const originalLength = processedInput.length
       processedInput = processedInput
         .replace(/'/g, "'")  // Left smart apostrophe
@@ -162,6 +150,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         .replace(/[\u2026]/g, '...')
         .replace(/[\u2013]/g, '-')
         .replace(/[\u2014]/g, '--')
+        // Remove invisible Unicode characters that can break JSON parsing
+        .replace(/\u200B/g, '')            // Zero-width space
+        .replace(/\u00A0/g, ' ')           // Non-breaking space to regular space
+        .replace(/\u200C/g, '')            // Zero-width non-joiner
+        .replace(/\u200D/g, '')            // Zero-width joiner
+        .replace(/\uFEFF/g, '')            // Zero-width no-break space (BOM)
+        .replace(/\u2060/g, '')            // Word joiner
       
       if (processedInput.length !== originalLength || processedInput !== jsonInput) {
         console.log('Pre-processed input to fix smart quotes')
@@ -636,28 +631,44 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         errorMessage = error
       }
       
+      // Try auto-fix if there's a parse error
+      if (!wasAutoFixed) {
+        const autoFixed = smartAutoFixJSON(processedInput)
+        if (autoFixed !== processedInput) {
+          wasAutoFixed = true
+          setJsonInput(autoFixed)
+          setToast({ message: 'Applied auto-fixes, validating...', type: 'info' })
+          // Try validation again with fixed JSON
+          setTimeout(() => {
+            validateJSON()
+          }, 100)
+          return
+        }
+      }
+      
       setValidationResult({ isValid: false, error: errorMessage })
+    } finally {
+      setIsValidating(false)
     }
   }
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePasteFromClipboard = async () => {
     if (isLocked) {
-      setToast({ message: 'Please clear the current JSON before uploading a new file.', type: 'info' })
-      event.target.value = '' // Reset the file input
+      setToast({ message: 'Please clear the current course structure before pasting new content.', type: 'info' })
       return
     }
     
-    const file = event.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const content = e.target?.result as string
-        setJsonInput(content)
-        setToast({ message: 'File loaded successfully!', type: 'success' })
-      }
-      reader.readAsText(file)
+    try {
+      const text = await navigator.clipboard.readText()
+      setJsonInput(text)
+      setToast({ message: 'Content pasted from clipboard!', type: 'success' })
+      // Automatically validate immediately after pasting
+      setTimeout(() => validateJSON(), 100)
+    } catch (error) {
+      setToast({ message: 'Failed to read clipboard. Please paste manually.', type: 'error' })
     }
   }
+
 
   const handleNext = () => {
     if (validationResult?.isValid && validationResult.data) {
@@ -695,6 +706,349 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
   // Reset functionality moved to inline implementation where needed
 
+  // Toggle tree node expansion
+  const toggleNode = (nodeId: string) => {
+    const newExpanded = new Set(expandedNodes)
+    if (newExpanded.has(nodeId)) {
+      newExpanded.delete(nodeId)
+    } else {
+      newExpanded.add(nodeId)
+    }
+    setExpandedNodes(newExpanded)
+  }
+
+  // Helper function to strip HTML tags and truncate text
+  const stripHtmlAndTruncate = (html: string, maxLength: number = 150) => {
+    const text = html.replace(/<[^>]*>/g, '').trim()
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
+  // Helper function to get question type label
+  const getQuestionTypeLabel = (type: string) => {
+    switch (type) {
+      case 'multiple-choice': return 'Multiple Choice'
+      case 'true-false': return 'True/False'
+      case 'fill-in-the-blank': return 'Fill-in-the-blank'
+      default: return type
+    }
+  }
+
+  // Render tree view for validated content
+  const renderTreeView = (data: CourseContent) => {
+    const isExpanded = (nodeId: string) => expandedNodes.has(nodeId)
+    
+    return (
+      <div className={`${styles.treeView} ${styles.treeViewDark}`}>
+        {/* Welcome Page */}
+        <div className={styles.treeNode}>
+          <div 
+            className={styles.treeNodeHeader}
+            onClick={() => toggleNode('welcome')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Icon 
+              icon={isExpanded('welcome') ? ChevronDown : ChevronRight} 
+              size="sm" 
+              className={styles.treeIcon} 
+            />
+            <Icon icon={BookOpen} size="sm" className={styles.treeIcon} />
+            <span className={styles.treeNodeTitle}>Welcome Page</span>
+            <div className={styles.treeNodeBadges}>
+              {data.welcomePage.narration && (
+                <span className={styles.badge}><Icon icon={Check} size="xs" /> Narration</span>
+              )}
+              <span className={styles.badge}>{data.welcomePage.duration || 2} min</span>
+            </div>
+          </div>
+          {isExpanded('welcome') && (
+            <div className={styles.expandedContent}>
+              <div className={styles.contentSection}>
+                <h4 className={styles.contentLabel}>Content:</h4>
+                <p className={styles.contentPreview}>
+                  {stripHtmlAndTruncate(data.welcomePage.content)}
+                </p>
+              </div>
+              {data.welcomePage.narration && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Narration:</h4>
+                  <p className={styles.narrationText}>
+                    {stripHtmlAndTruncate(data.welcomePage.narration, 200)}
+                  </p>
+                </div>
+              )}
+              {data.welcomePage.imageKeywords && data.welcomePage.imageKeywords.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Image Keywords:</h4>
+                  <div className={styles.tagList}>
+                    {data.welcomePage.imageKeywords.map((keyword, idx) => (
+                      <span key={idx} className={styles.tag}>{keyword}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.welcomePage.imagePrompts && data.welcomePage.imagePrompts.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>AI Image Prompts:</h4>
+                  <div className={styles.tagList}>
+                    {data.welcomePage.imagePrompts.map((prompt, idx) => (
+                      <span key={idx} className={styles.tag}>{prompt}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.welcomePage.videoSearchTerms && data.welcomePage.videoSearchTerms.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Video Search Terms:</h4>
+                  <div className={styles.tagList}>
+                    {data.welcomePage.videoSearchTerms.map((term, idx) => (
+                      <span key={idx} className={styles.tag}>{term}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Learning Objectives */}
+        <div className={styles.treeNode}>
+          <div 
+            className={styles.treeNodeHeader}
+            onClick={() => toggleNode('objectives')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Icon 
+              icon={isExpanded('objectives') ? ChevronDown : ChevronRight} 
+              size="sm" 
+              className={styles.treeIcon} 
+            />
+            <Icon icon={Target} size="sm" className={styles.treeIcon} />
+            <span className={styles.treeNodeTitle}>Learning Objectives</span>
+            <div className={styles.treeNodeBadges}>
+              {data.learningObjectivesPage.narration && (
+                <span className={styles.badge}><Icon icon={Check} size="xs" /> Narration</span>
+              )}
+              <span className={styles.badge}>{data.learningObjectivesPage.duration || 3} min</span>
+            </div>
+          </div>
+          {isExpanded('objectives') && (
+            <div className={styles.expandedContent}>
+              <div className={styles.contentSection}>
+                <h4 className={styles.contentLabel}>Objectives:</h4>
+                <div className={styles.contentPreview} 
+                     dangerouslySetInnerHTML={{ __html: data.learningObjectivesPage.content }} />
+              </div>
+              {data.learningObjectivesPage.narration && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Narration:</h4>
+                  <p className={styles.narrationText}>
+                    {stripHtmlAndTruncate(data.learningObjectivesPage.narration, 200)}
+                  </p>
+                </div>
+              )}
+              {data.learningObjectivesPage.imageKeywords && data.learningObjectivesPage.imageKeywords.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Image Keywords:</h4>
+                  <div className={styles.tagList}>
+                    {data.learningObjectivesPage.imageKeywords.map((keyword, idx) => (
+                      <span key={idx} className={styles.tag}>{keyword}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.learningObjectivesPage.imagePrompts && data.learningObjectivesPage.imagePrompts.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>AI Image Prompts:</h4>
+                  <div className={styles.tagList}>
+                    {data.learningObjectivesPage.imagePrompts.map((prompt, idx) => (
+                      <span key={idx} className={styles.tag}>{prompt}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.learningObjectivesPage.videoSearchTerms && data.learningObjectivesPage.videoSearchTerms.length > 0 && (
+                <div className={styles.contentSection}>
+                  <h4 className={styles.contentLabel}>Video Search Terms:</h4>
+                  <div className={styles.tagList}>
+                    {data.learningObjectivesPage.videoSearchTerms.map((term, idx) => (
+                      <span key={idx} className={styles.tag}>{term}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Topics */}
+        <div className={styles.treeNode}>
+          <div 
+            className={styles.treeNodeHeader} 
+            onClick={() => toggleNode('topics')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Icon 
+              icon={isExpanded('topics') ? ChevronDown : ChevronRight} 
+              size="sm" 
+              className={styles.treeIcon} 
+            />
+            <Icon icon={BookOpen} size="sm" className={styles.treeIcon} />
+            <span className={styles.treeNodeTitle}>Topics ({data.topics.length})</span>
+          </div>
+          {isExpanded('topics') && (
+            <div className={styles.treeNodeChildren}>
+              {data.topics.map((topic, index) => (
+                <div key={topic.id} className={styles.treeNode}>
+                  <div 
+                    className={styles.treeNodeHeader}
+                    onClick={() => toggleNode(`topic-${topic.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <Icon 
+                      icon={isExpanded(`topic-${topic.id}`) ? ChevronDown : ChevronRight} 
+                      size="sm" 
+                      className={styles.treeIcon} 
+                    />
+                    <span className={styles.treeNodeNumber}>{index + 1}.</span>
+                    <span className={styles.treeNodeTitle}>{topic.title}</span>
+                    <div className={styles.treeNodeBadges}>
+                      {topic.narration && (
+                        <span className={styles.badge}><Icon icon={Check} size="xs" /> Narration</span>
+                      )}
+                      {topic.knowledgeCheck && (
+                        <span className={styles.badge}>
+                          <Icon icon={FileQuestion} size="xs" /> {topic.knowledgeCheck.questions.length} questions
+                        </span>
+                      )}
+                      <span className={styles.badge}>{topic.duration || 5} min</span>
+                    </div>
+                  </div>
+                  {isExpanded(`topic-${topic.id}`) && (
+                    <div className={styles.expandedContent}>
+                      <div className={styles.contentSection}>
+                        <h4 className={styles.contentLabel}>Content:</h4>
+                        <p className={styles.contentPreview}>
+                          {stripHtmlAndTruncate(topic.content)}
+                        </p>
+                      </div>
+                      {topic.narration && (
+                        <div className={styles.contentSection}>
+                          <h4 className={styles.contentLabel}>Narration:</h4>
+                          <p className={styles.narrationText}>
+                            {stripHtmlAndTruncate(topic.narration, 200)}
+                          </p>
+                        </div>
+                      )}
+                      {topic.imageKeywords && topic.imageKeywords.length > 0 && (
+                        <div className={styles.contentSection}>
+                          <h4 className={styles.contentLabel}>Image Keywords:</h4>
+                          <div className={styles.tagList}>
+                            {topic.imageKeywords.map((keyword, idx) => (
+                              <span key={idx} className={styles.tag}>{keyword}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {topic.imagePrompts && topic.imagePrompts.length > 0 && (
+                        <div className={styles.contentSection}>
+                          <h4 className={styles.contentLabel}>AI Image Prompts:</h4>
+                          <div className={styles.tagList}>
+                            {topic.imagePrompts.map((prompt, idx) => (
+                              <span key={idx} className={styles.tag}>{prompt}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {topic.videoSearchTerms && topic.videoSearchTerms.length > 0 && (
+                        <div className={styles.contentSection}>
+                          <h4 className={styles.contentLabel}>Video Search Terms:</h4>
+                          <div className={styles.tagList}>
+                            {topic.videoSearchTerms.map((term, idx) => (
+                              <span key={idx} className={styles.tag}>{term}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {topic.knowledgeCheck && topic.knowledgeCheck.questions.length > 0 && (
+                        <div className={styles.contentSection}>
+                          <h4 className={styles.contentLabel}>Knowledge Check Questions:</h4>
+                          <div className={styles.questionList}>
+                            {topic.knowledgeCheck.questions.map((q, qIdx) => (
+                              <div key={q.id} className={styles.questionItem}>
+                                <span className={styles.questionBadge}>
+                                  {getQuestionTypeLabel(q.type)}
+                                </span>
+                                <span className={styles.questionText}>
+                                  {q.question}
+                                </span>
+                                <span className={styles.answerText}>
+                                  Answer: {q.correctAnswer}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Assessment */}
+        <div className={styles.treeNode}>
+          <div 
+            className={styles.treeNodeHeader}
+            onClick={() => toggleNode('assessment')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Icon 
+              icon={isExpanded('assessment') ? ChevronDown : ChevronRight} 
+              size="sm" 
+              className={styles.treeIcon} 
+            />
+            <Icon icon={Award} size="sm" className={styles.treeIcon} />
+            <span className={styles.treeNodeTitle}>Assessment</span>
+            <div className={styles.treeNodeBadges}>
+              <span className={styles.badge}>
+                {data.assessment.questions.length} questions
+              </span>
+              <span className={styles.badge}>
+                Pass: {data.assessment.passMark || 80}%
+              </span>
+            </div>
+          </div>
+          {isExpanded('assessment') && (
+            <div className={styles.expandedContent}>
+              <div className={styles.contentSection}>
+                <h4 className={styles.contentLabel}>Assessment Questions:</h4>
+                <div className={styles.questionList}>
+                  {data.assessment.questions.map((q, idx) => (
+                    <div key={q.id} className={styles.questionItem}>
+                      <span className={styles.questionNumber}>{idx + 1}.</span>
+                      <span className={styles.questionBadge}>
+                        {getQuestionTypeLabel(q.type)}
+                      </span>
+                      <span className={styles.questionText}>
+                        {q.question}
+                      </span>
+                      <span className={styles.answerText}>
+                        Answer: {q.correctAnswer}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const autoSaveIndicator = (
     <AutoSaveIndicatorConnected />
   )
@@ -708,37 +1062,88 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       autoSaveIndicator={autoSaveIndicator}
       onSettingsClick={onSettingsClick}
       onSave={onSave}
-      onSaveAs={onSaveAs}
       onBack={onBack}
       onNext={handleNext}
       onOpen={onOpen}
       onHelp={onHelp}
       onStepClick={onStepClick}
     >
-      <Section>
+      {/* Instructions */}
+      <div className={styles.sectionWrapper}>
+        <h2 className={styles.sectionTitle}>Instructions</h2>
         <Card>
-          {/* JSON Input */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
-              JSON Input
-            </h3>
-            <SimpleJSONEditor
+          <p style={{ lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 0 }}>
+            Paste the AI chatbot's response from Step 2 below. The content will be automatically validated, 
+            any formatting issues will be corrected, and the course structure will be created. 
+            <strong style={{ color: 'var(--text-primary)', display: 'block', marginTop: '0.75rem' }}>
+              Note: You'll be able to edit and refine all content in the following steps, 
+              so the AI response doesn't need to be perfect.
+            </strong>
+          </p>
+        </Card>
+      </div>
+
+      <Section>
+        {/* Show tree view when locked, editor when unlocked */}
+        {isLocked && validationResult?.isValid && validationResult.data ? (
+            <>
+              {/* Course Structure */}
+              <div className={styles.sectionWrapper}>
+                <h2 className={styles.sectionTitle}>Course Structure</h2>
+                <Card>
+                  {renderTreeView(validationResult.data)}
+                </Card>
+              </div>
+              
+              {/* Clear button when locked */}
+              <div style={{ marginTop: '1rem' }}>
+                <Button 
+                  variant="secondary"
+                  onClick={handleClear}
+                  data-testid="clear-json-button"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Icon icon={Trash2} size="sm" />
+                  Clear Course Structure
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Content Input */}
+              <Card>
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
+                    Chatbot Response
+                  </h3>
+                  <SimpleJSONEditor
               value={jsonInput}
               onChange={(value) => {
                 if (!isLocked) {
+                  const prevLength = jsonInput.length
                   setJsonInput(value)
-                  // If auto-fix made the JSON valid, auto-validate it
-                  if (value && value !== jsonInput) {
-                    try {
-                      const parsed = JSON.parse(value)
-                      // Only auto-validate if it's from auto-fix (has all required fields)
-                      if (parsed.welcomePage && parsed.learningObjectivesPage && parsed.topics && parsed.assessment) {
-                        // Trigger validation automatically
-                        setTimeout(() => validateJSON(), 100)
-                      }
-                    } catch {
-                      // Not valid yet, user still editing
+                  
+                  // Clear error if input becomes empty
+                  if (!value.trim()) {
+                    setValidationResult(null)
+                    return
+                  }
+                  
+                  // Check if this is likely a paste operation (large content added at once)
+                  const isProbablyPaste = value.length - prevLength > 50
+                  
+                  // Auto-validate after user stops typing (debounced) or immediately for paste
+                  if (value && value.trim().length > 100) { // Only if there's substantial content
+                    // Clear any existing timeout
+                    if ((window as any).validationTimeout) {
+                      clearTimeout((window as any).validationTimeout)
                     }
+                    
+                    // Set timeout based on whether it's a paste or typing
+                    const delayTime: number = isProbablyPaste ? 100 : 1500;
+                    (window as any).validationTimeout = setTimeout(() => {
+                      validateJSON()
+                    }, delayTime)
                   }
                 }
               }}
@@ -748,8 +1153,18 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   return
                 }
                 
-                // Only show syntax feedback for unlocked state
+                // Only show syntax feedback for unlocked state with actual content
                 if (!isLocked && errors && errors.length > 0) {
+                  // Don't show error for empty input
+                  const isEmptyError = errors.some(e => e.message === 'Empty input')
+                  if (isEmptyError) {
+                    // Clear any existing error for empty state
+                    if (validationResult?.error) {
+                      setValidationResult(null)
+                    }
+                    return
+                  }
+                  
                   // Show syntax errors but don't overwrite valid data
                   if (!validationResult?.isValid || !validationResult?.data) {
                     setValidationResult({
@@ -766,74 +1181,53 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             />
           </div>
 
-          {/* Action Buttons */}
-          <Flex justify="space-between" align="center" wrap gap="medium" style={{ marginBottom: '2rem' }}>
-            <ButtonGroup gap="medium">
-              <Button 
-                variant="secondary"
-                onClick={handlePasteFromClipboard}
-                data-testid="paste-clipboard-button"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-              >
-                <Icon icon={Clipboard} size="sm" />
-                Paste from Clipboard
-              </Button>
-              
-              <Button
-                variant="secondary"
-                onClick={() => document.getElementById('json-file')?.click()}
-                data-testid="choose-file-button"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-              >
-                <Icon icon={FileText} size="sm" />
-                Choose File
-              </Button>
-              <input
-                id="json-file"
-                data-testid="json-file-input"
-                type="file"
-                accept=".json"
-                onChange={handleFileUpload}
-                aria-label="Upload JSON file"
-                style={{ display: 'none' }}
-              />
-            </ButtonGroup>
-            
-            <Button 
-              variant="primary"
-              onClick={validateJSON} 
-              disabled={!jsonInput.trim() || isLocked}
-              data-testid="validate-json-button"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              <Icon icon={CheckCircle} size="sm" />
-              Validate JSON
-            </Button>
-          </Flex>
-          
-          {/* Clear button when JSON is locked */}
-          {isLocked && (
-            <div style={{ marginTop: '1rem' }}>
-              <Button 
-                variant="secondary"
-                onClick={handleClear}
-                data-testid="clear-json-button"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-              >
-                <Icon icon={Trash2} size="sm" />
-                Clear JSON
-              </Button>
-            </div>
+                {/* Action Buttons */}
+                <Flex justify="start" align="center" wrap gap="medium" style={{ marginBottom: '1rem' }}>
+                  <Button 
+                    variant="secondary"
+                    onClick={handlePasteFromClipboard}
+                    data-testid="paste-clipboard-button"
+                    disabled={isValidating}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    <Icon icon={Clipboard} size="sm" />
+                    Paste from Clipboard
+                  </Button>
+                  
+                  {/* Show validation status */}
+                  {isValidating && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                      <Icon icon={Wand2} size="sm" className={styles.animatePulse} />
+                      <span>Validating and fixing content...</span>
+                    </div>
+                  )}
+                </Flex>
+              </Card>
+            </>
           )}
-
-          {/* Validation Result - Only show when successful and ready to import */}
-          {validationResult && validationResult.isValid && isLocked && (
+        
+        {/* Validation Result - Only show when successful and ready to import */}
+        {validationResult && validationResult.isValid && isLocked && (
+          <div style={{ marginTop: '1rem' }}>
             <Alert variant="success">
               <strong>Ready to Import</strong><br />
               {validationResult.summary}
             </Alert>
-          )}
-        </Card>
+          </div>
+        )}
+        
+        {/* Show error if validation failed */}
+        {validationResult && !validationResult.isValid && validationResult.error && (
+          <div style={{ marginTop: '1rem' }}>
+            <Alert variant="error">
+              <strong>Unable to Process Content</strong><br />
+              {validationResult.error}<br />
+              <span style={{ fontSize: '0.9em', marginTop: '0.5rem', display: 'block' }}>
+                Please ensure you've copied the complete response from the AI chatbot.
+              </span>
+            </Alert>
+          </div>
+        )}
       </Section>
 
       {toast && (
@@ -844,11 +1238,11 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         />
       )}
       
-      {/* Clear JSON Confirmation Dialog */}
+      {/* Clear Course Structure Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showClearConfirm}
-        title="Clear JSON Data"
-        message="Warning: Clearing the JSON will delete all data on the following pages. Are you sure you want to continue?"
+        title="Clear Course Structure"
+        message="Warning: This will remove the current course structure and any content that hasn't been saved. Are you sure you want to continue?"
         confirmText="Clear"
         cancelText="Cancel"
         variant="warning"

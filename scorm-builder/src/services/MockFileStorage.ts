@@ -151,10 +151,6 @@ export class MockFileStorage {
     console.log('[MockFileStorage] Project saved')
   }
 
-  async saveProjectAs(): Promise<void> {
-    // Mock save as
-    console.log('[MockFileStorage] Project saved as')
-  }
 
   async deleteProject(projectId: string): Promise<void> {
     delete this.mockData[projectId]

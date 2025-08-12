@@ -430,6 +430,9 @@ export class FileStorage {
         id: p.id,
         name: p.name,
         path: p.path || '',
+        created: p.created || p.createdAt || new Date().toISOString(),
+        last_modified: p.last_modified || p.updatedAt || new Date().toISOString(),
+        // Also include these for backward compatibility
         createdAt: p.created || p.createdAt || new Date().toISOString(),
         updatedAt: p.last_modified || p.updatedAt || new Date().toISOString()
       }));
@@ -459,6 +462,9 @@ export class FileStorage {
           id: p.id,
           name: p.name,
           path: p.path || '',
+          created: p.created || p.createdAt || new Date().toISOString(),
+          last_modified: p.last_modified || p.updatedAt || new Date().toISOString(),
+          // Also include these for backward compatibility
           createdAt: p.created || p.createdAt || new Date().toISOString(),
           updatedAt: p.last_modified || p.updatedAt || new Date().toISOString()
         }))
@@ -814,6 +820,38 @@ export class FileStorage {
     }
   }
   
+  async getAllProjectMedia(): Promise<MediaInfo[]> {
+    if (!this._currentProjectId) {
+      debugLogger.warn('FileStorage.getAllProjectMedia', 'No project open, returning empty array');
+      return [];
+    }
+    
+    try {
+      debugLogger.debug('FileStorage.getAllProjectMedia', 'Fetching all project media', {
+        projectId: this._currentProjectId
+      });
+      
+      // Get all media from the backend (which scans the file system)
+      const allMedia = await invoke<any[]>('get_all_project_media', {
+        projectId: this._currentProjectPath || this._currentProjectId
+      });
+      
+      debugLogger.info('FileStorage.getAllProjectMedia', `Found ${allMedia.length} media items in project`);
+      
+      // Convert to MediaInfo format if needed
+      return allMedia.map(media => ({
+        id: media.id,
+        mediaType: media.media_type || media.mediaType,
+        metadata: media.metadata || {},
+        size: media.size,
+        data: media.data
+      }));
+    } catch (error) {
+      debugLogger.error('FileStorage.getAllProjectMedia', 'Failed to get all project media', error);
+      return [];
+    }
+  }
+  
   async getMediaForTopic(topicId: string): Promise<any[]> {
     if (!this._currentProjectId) return [];
     try {
@@ -970,8 +1008,14 @@ export class FileStorage {
       
       // Create backup before save
       try {
-        await invoke('create_backup', { projectId });
-        debugLogger.debug('FileStorage.saveProject', 'Backup created before save', { projectId });
+        // Use the full project path if available, otherwise use projectId (which might be a path)
+        const backupId = projectId.includes('.scormproj') ? projectId : 
+                        (this._currentProjectPath || projectId);
+        await invoke('create_backup', { projectId: backupId });
+        debugLogger.debug('FileStorage.saveProject', 'Backup created before save', { 
+          projectId: backupId,
+          originalId: projectId 
+        });
       } catch (backupError) {
         // Log but don't fail the save if backup fails
         debugLogger.warn('FileStorage.saveProject', 'Backup creation failed, continuing with save', backupError);
@@ -993,8 +1037,14 @@ export class FileStorage {
       // Create backup before save
       if (this._currentProjectId) {
         try {
-          await invoke('create_backup', { projectId: this._currentProjectId });
-          debugLogger.debug('FileStorage.saveProject', 'Backup created before save', { projectId: this._currentProjectId });
+          // Prefer the full project path over just the ID
+          const backupId = this._currentProjectPath || this._currentProjectId;
+          await invoke('create_backup', { projectId: backupId });
+          debugLogger.debug('FileStorage.saveProject', 'Backup created before save', { 
+            projectId: backupId,
+            currentId: this._currentProjectId,
+            currentPath: this._currentProjectPath
+          });
         } catch (backupError) {
           // Log but don't fail the save if backup fails
           debugLogger.warn('FileStorage.saveProject', 'Backup creation failed, continuing with save', backupError);
@@ -1020,60 +1070,36 @@ export class FileStorage {
     }
   }
 
-  async saveProjectAs(): Promise<void> {
+
+  async renameProject(projectIdOrPath: string, newName: string): Promise<any> {
     try {
-      const filePath = await save({
-        filters: [{
-          name: 'SCORM Project',
-          extensions: ['scormproj']
-        }]
+      // Resolve to path if it's an ID
+      const projectPath = await this.resolveProjectPath(projectIdOrPath);
+      
+      debugLogger.info('FileStorage.renameProject', 'Renaming project', {
+        projectPath,
+        newName
       });
       
-      if (!filePath) throw new Error('No save location selected');
-      
-      // Load current project data
-      const projectFile = await invoke<any>('load_project', { filePath: this._currentProjectPath });
-      
-      // Save to new location
-      await invoke('save_project', {
-        filePath: filePath,
-        projectData: projectFile
+      const renamedProject = await invoke<any>('rename_project', { 
+        filePath: projectPath,
+        newName: newName.trim()
       });
       
-      // Copy media folder to new location
-      if (this._currentProjectId) {
-        try {
-          const copyResult = await invoke<any>('copy_media_folder', {
-            sourceProjectId: this._currentProjectId,
-            targetPath: filePath
-          });
-          
-          debugLogger.info('FileStorage.saveProjectAs', `Media copied: ${copyResult.copiedFiles} files`, copyResult);
-          
-          // Update media paths in the project data if needed
-          if (copyResult.copiedFiles > 0) {
-            try {
-              await invoke('update_media_paths', {
-                projectData: projectFile,
-                oldProjectId: this._currentProjectId,
-                newPath: filePath
-              });
-              debugLogger.debug('FileStorage.saveProjectAs', 'Media paths updated');
-            } catch (pathError) {
-              debugLogger.warn('FileStorage.saveProjectAs', 'Failed to update media paths', pathError);
-            }
-          }
-        } catch (mediaError) {
-          // Log but don't fail the save if media copy fails
-          debugLogger.warn('FileStorage.saveProjectAs', 'Failed to copy media folder', mediaError);
-        }
+      // Update current project path if this is the current project
+      if (this._currentProjectPath === projectPath) {
+        this._currentProjectPath = renamedProject.path;
       }
       
-      this._currentProjectPath = filePath;
+      debugLogger.info('FileStorage.renameProject', 'Project renamed successfully', {
+        oldPath: projectPath,
+        newPath: renamedProject.path,
+        newName: renamedProject.name
+      });
       
-      debugLogger.info('FileStorage.saveProjectAs', `Project saved as: ${filePath}`);
+      return renamedProject;
     } catch (error) {
-      debugLogger.error('FileStorage.saveProjectAs', 'Failed to save project as', error);
+      debugLogger.error('FileStorage.renameProject', 'Failed to rename project', error);
       throw error;
     }
   }
@@ -1327,58 +1353,25 @@ export class FileStorage {
     try {
       // Convert blob to ArrayBuffer for Tauri
       const arrayBuffer = await zipBlob.arrayBuffer();
+      const zipData = Array.from(new Uint8Array(arrayBuffer));
       
-      // Extract project and media from ZIP
-      const extractedData = await invoke<any>('extract_project_zip', {
-        zipData: arrayBuffer
+      // Extract and save project from ZIP (simplified - Rust does all the work)
+      const result = await invoke<any>('extract_project_zip', {
+        zipData: zipData
       });
       
-      // Validate project data
-      if (!extractedData || !extractedData.projectData || !extractedData.projectData.project) {
-        throw new Error('Invalid project data');
-      }
-      
-      // Sanitize project ID to prevent path traversal
-      const originalId = extractedData.projectData.project.id;
-      const sanitizedId = originalId ? originalId.replace(/[^a-zA-Z0-9_-]/g, '') : '';
-      
-      // Generate new project ID for imported project
-      const newProjectId = Date.now().toString();
-      const projectsDir = await invoke<string>('get_projects_dir');
-      const projectPath = `${projectsDir}\\imported_${newProjectId}.scormproj`;
-      
-      // Update project data with new ID
-      extractedData.projectData.project.id = newProjectId;
-      
-      // Save project with media files
-      const saveResult = await invoke<any>('save_project_with_media', {
-        filePath: projectPath,
-        projectData: extractedData.projectData,
-        mediaFiles: extractedData.mediaFiles || [],
-        newProjectId: newProjectId
+      debugLogger.info('FileStorage.importProjectFromZip', 'Project imported successfully', {
+        projectPath: result.projectPath,
+        projectId: result.projectId,
+        projectName: result.projectName
       });
       
-      // Update media paths if needed
-      if (extractedData.mediaFiles && extractedData.mediaFiles.length > 0 && originalId !== newProjectId) {
-        await invoke('update_imported_media_paths', {
-          projectPath: saveResult.projectPath || projectPath,
-          projectData: extractedData.projectData,
-          oldProjectId: originalId,
-          newProjectId: newProjectId
-        });
-      }
-      
-      this._currentProjectId = newProjectId;
-      this._currentProjectPath = saveResult.projectPath || projectPath;
-      
-      debugLogger.info('FileStorage.importProjectFromZip', `Project imported from zip: ${newProjectId}`, {
-        originalId,
-        mediaCount: extractedData.mediaFiles ? extractedData.mediaFiles.length : 0,
-        projectPath: this._currentProjectPath
-      });
+      // The Rust function already extracted and saved everything
+      // We just need to return success so the UI can refresh
     } catch (error) {
       debugLogger.error('FileStorage.importProjectFromZip', 'Failed to import project from zip', error);
-      throw new Error('Failed to import project');
+      // Pass through the actual error message for better debugging
+      throw error instanceof Error ? error : new Error('Failed to import project');
     }
   }
 

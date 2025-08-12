@@ -389,7 +389,6 @@ export const helpTopics: HelpTopic[] = [
     details: [
       'Projects are automatically saved as you work',
       'Use File > Save to manually save your progress',
-      'File > Save As to create a copy with a new name',
       'File > Open to load existing projects',
       'Recent projects appear on the dashboard',
       'Projects include all content, media, and settings'

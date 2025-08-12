@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Alert } from './DesignSystem'
 import { AlertCircle, CheckCircle, Wand2, FileCode } from 'lucide-react'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
+import { ConfirmDialog } from './ConfirmDialog'
 import './SimpleJSONEditor.css'
 
 interface SimpleJSONEditorProps {
@@ -35,6 +36,8 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
   const [showAutoFixButton, setShowAutoFixButton] = useState(false)
   const [autoFixApplied, setAutoFixApplied] = useState(false)
   const [showFormatButton, setShowFormatButton] = useState(false)
+  const [showAutoFixDialog, setShowAutoFixDialog] = useState(false)
+  const [hasShownDialogForSession, setHasShownDialogForSession] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lineNumbersRef = useRef<HTMLDivElement>(null)
 
@@ -42,19 +45,13 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
   const lineCount = value.split('\n').length
   const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1)
 
-  // Validate JSON whenever value changes
-  useEffect(() => {
-    validateJSON()
-  }, [value])
-
   const validateJSON = useCallback(() => {
     if (!value.trim()) {
       setErrors([])
       setShowAutoFixButton(false)
       setShowFormatButton(false)
-      if (onValidate) {
-        onValidate(false, [{ message: 'Empty input' }])
-      }
+      setShowAutoFixDialog(false)
+      // Don't call onValidate for empty input - let the parent handle empty state
       return
     }
 
@@ -66,6 +63,8 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
       setErrors([])
       setShowAutoFixButton(false)
       setShowFormatButton(true)
+      setShowAutoFixDialog(false)
+      setHasShownDialogForSession(false) // Reset for new valid JSON
       
       if (onValidate) {
         onValidate(true, [])
@@ -79,11 +78,24 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
       setShowAutoFixButton(true)
       setShowFormatButton(false)
       
+      // Show auto-fix dialog if we haven't shown it for this session yet
+      if (!hasShownDialogForSession && !readOnly) {
+        setShowAutoFixDialog(true)
+        setHasShownDialogForSession(true)
+      }
+      
       if (onValidate) {
         onValidate(false, [errorInfo])
       }
     }
-  }, [value, onValidate])
+  }, [value, onValidate, hasShownDialogForSession, readOnly])
+
+  // Validate JSON whenever value changes
+  useEffect(() => {
+    if (value) {
+      validateJSON()
+    }
+  }, [value, validateJSON])
 
   // Parse JSON error message to extract line and column
   const parseJSONError = (errorMessage: string, json: string): ValidationError => {
@@ -139,6 +151,13 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
         // Still has errors after auto-fix
       }
     }
+    
+    // Close dialog after fixing
+    setShowAutoFixDialog(false)
+  }
+  
+  const handleCancelAutoFix = () => {
+    setShowAutoFixDialog(false)
   }
 
   const handleFormat = () => {
@@ -208,12 +227,6 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
 
   return (
     <div className={`simple-json-editor ${theme}`}>
-      {/* Instructions for users */}
-      {!readOnly && (
-        <div className="editor-instructions">
-          <p>📋 <strong>Instructions:</strong> Copy the prompt from Step 1 and paste it into your AI tool (ChatGPT, Claude, etc.) to generate the JSON content. Then paste the generated JSON below and click "Validate JSON" to proceed.</p>
-        </div>
-      )}
       <div className="editor-container" style={{ height }}>
         <div className="editor-wrapper">
           {/* Line numbers */}
@@ -242,7 +255,7 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
-            placeholder="Paste your JSON here..."
+            placeholder="Paste the AI chatbot's response here..."
             aria-label="JSON editor"
             data-testid="json-textarea"
           />
@@ -251,19 +264,6 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
         {/* Button overlay */}
         {!readOnly && (
           <div className="editor-buttons">
-            {/* Auto-fix button */}
-            {showAutoFixButton && (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={handleAutoFix}
-                className="auto-fix-button"
-              >
-                <Wand2 size={16} />
-                Auto-fix Issues
-              </Button>
-            )}
-            
             {/* Format button */}
             {showFormatButton && (
               <Button
@@ -324,6 +324,18 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
           </Alert>
         </div>
       )}
+      
+      {/* Auto-fix Dialog */}
+      <ConfirmDialog
+        isOpen={showAutoFixDialog}
+        title="JSON Formatting Issues Detected"
+        message="There were issues found in the JSON content. Would you like to attempt to fix these issues automatically?"
+        confirmText="Fix Automatically"
+        cancelText="Cancel"
+        variant="info"
+        onConfirm={handleAutoFix}
+        onCancel={handleCancelAutoFix}
+      />
     </div>
   )
 }

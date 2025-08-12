@@ -29,7 +29,6 @@ interface SCORMPackageBuilderProps {
   onBack: () => void
   onSettingsClick?: () => void
   onSave?: () => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -50,7 +49,6 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   onBack,
   onSettingsClick,
   onSave,
-  onSaveAs,
   onOpen,
   onHelp,
   onStepClick
@@ -792,7 +790,6 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       onBack={onBack}
       onSettingsClick={onSettingsClick}
       onSave={onSave}
-      onSaveAs={onSaveAs}
       onOpen={onOpen}
       onHelp={onHelp}
       onStepClick={onStepClick}
@@ -1002,7 +999,6 @@ export const SCORMPackageBuilder = React.memo(SCORMPackageBuilderComponent, (pre
     prevProps.onBack === nextProps.onBack &&
     prevProps.onSettingsClick === nextProps.onSettingsClick &&
     prevProps.onSave === nextProps.onSave &&
-    prevProps.onSaveAs === nextProps.onSaveAs &&
     prevProps.onOpen === nextProps.onOpen &&
     prevProps.onHelp === nextProps.onHelp &&
     prevProps.onStepClick === nextProps.onStepClick

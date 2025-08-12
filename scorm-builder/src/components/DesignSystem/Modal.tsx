@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import './designSystem.css'
 import './modal.css'
 import './transitions.css'
+import { Icon } from './Icons'
+import { X } from 'lucide-react'
 
 export interface ModalProps {
   isOpen: boolean
@@ -103,7 +105,7 @@ export const Modal: React.FC<ModalProps> = ({
                 aria-label="Close modal"
                 type="button"
               >
-                ×
+                <Icon icon={X} size="md" />
               </button>
             )}
           </div>

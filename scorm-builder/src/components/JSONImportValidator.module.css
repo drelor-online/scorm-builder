@@ -1,0 +1,347 @@
+/* Section wrapper and title styles (matching AIPromptGenerator) */
+.sectionWrapper {
+  margin-bottom: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.instructionsList {
+  list-style-position: inside;
+  padding-left: 0;
+  margin: 0;
+  line-height: 1.8;
+}
+
+.instructionsList li {
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/* Tree View Styles */
+.treeView {
+  background: var(--color-background);
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: var(--font-family-base);
+}
+
+.treeNode {
+  margin-bottom: 0.75rem;
+}
+
+.treeNodeHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.treeNodeHeader:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.treeIcon {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.treeNodeTitle {
+  flex: 1;
+  font-weight: 500;
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+.treeNodeNumber {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  margin-right: 0.5rem;
+  min-width: 1.5rem;
+}
+
+.treeNodeBadges {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.treeNodeChildren {
+  margin-left: 2rem;
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.treeNodeChildren .treeNode {
+  margin-bottom: 0.5rem;
+}
+
+.treeNodeChildren .treeNodeHeader {
+  background: var(--color-background);
+  font-size: 0.9rem;
+}
+
+/* Animation for expanding/collapsing */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.treeNodeChildren {
+  animation: slideDown 0.2s ease-out;
+}
+
+/* Pulse animation for validating button */
+.animatePulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Dark theme for tree view */
+.treeViewDark {
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.treeViewDark .treeNodeHeader {
+  background: #252526;
+  border-color: #3e3e42;
+  color: #d4d4d4;
+}
+
+.treeViewDark .treeNodeHeader:hover {
+  background: #2d2d30;
+  border-color: #007acc;
+}
+
+.treeViewDark .treeIcon {
+  color: #858585;
+}
+
+.treeViewDark .treeNodeTitle {
+  color: #d4d4d4;
+}
+
+.treeViewDark .treeNodeNumber {
+  color: #858585;
+}
+
+.treeViewDark .badge {
+  background: #264f78;
+  color: #9cdcfe;
+  border: 1px solid #007acc;
+}
+
+.treeViewDark .treeNodeChildren {
+  border-left-color: #3e3e42;
+}
+
+.treeViewDark .treeNodeChildren .treeNodeHeader {
+  background: #1e1e1e;
+  border-color: #3e3e42;
+}
+
+.treeViewDark .treeNodeChildren .treeNodeHeader:hover {
+  background: #252526;
+}
+
+/* Expanded content styles */
+.expandedContent {
+  margin: 0.75rem 0 0.75rem 2rem;
+  padding: 1rem;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  animation: slideDown 0.2s ease-out;
+}
+
+.treeViewDark .expandedContent {
+  background: #1a1a1a;
+  border-color: #3e3e42;
+}
+
+.contentSection {
+  margin-bottom: 1rem;
+}
+
+.contentSection:last-child {
+  margin-bottom: 0;
+}
+
+.contentLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.treeViewDark .contentLabel {
+  color: #858585;
+}
+
+.contentPreview {
+  color: var(--color-text);
+  line-height: 1.6;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.treeViewDark .contentPreview {
+  color: #cccccc;
+}
+
+.narrationText {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  line-height: 1.6;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.treeViewDark .narrationText {
+  color: #969696;
+}
+
+/* Tag list for keywords and search terms */
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.treeViewDark .tag {
+  background: #264f78;
+  color: #9cdcfe;
+  border: 1px solid #007acc;
+}
+
+/* Question list styles */
+.questionList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.questionItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.treeViewDark .questionItem {
+  background: #252526;
+  border-color: #3e3e42;
+}
+
+.questionNumber {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  min-width: 1.5rem;
+}
+
+.treeViewDark .questionNumber {
+  color: #858585;
+}
+
+.questionBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  background: var(--color-info-light);
+  color: var(--color-info-dark);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.treeViewDark .questionBadge {
+  background: #1e4976;
+  color: #75b7ec;
+  border: 1px solid #2e5c8a;
+}
+
+.questionText {
+  flex: 1;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.treeViewDark .questionText {
+  color: #d4d4d4;
+}
+
+.answerText {
+  color: var(--color-success);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.treeViewDark .answerText {
+  color: #4ec9b0;
+}

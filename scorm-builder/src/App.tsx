@@ -59,7 +59,8 @@ const HelpPage = lazy(() =>
 )
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
-import { NetworkStatusIndicator } from '@/components/DesignSystem'
+import { NetworkStatusIndicator, Icon } from '@/components/DesignSystem'
+import { Check, AlertTriangle, Info } from 'lucide-react'
 // LoadingComponent removed - using inline loading
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
@@ -202,6 +203,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Save/Open state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   
@@ -1219,30 +1221,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // Just save current state
       await handleSave()
     }
+    
+    // Update the auto-save state to reflect the manual save
+    await autoSaveState.forceSave()
   }
   
-  // Save As functionality
-  const handleSaveAs = async () => {
-    if (!storage.currentProjectId) {
-      showToast('No project to save', 'error')
-      return
-    }
-    
-    try {
-      await storage.saveProjectAs()
-      showToast('Project saved to new file', 'success')
-    } catch (error: any) {
-      if (error.message !== 'User cancelled') {
-        showToast( `Failed to save as: ${error.message}`, 'error')
-      }
-    }
-  }
   
   // Open functionality
   const handleOpen = async () => {
     // If we have a dashboard callback, use it to go back to dashboard
     if (onBackToDashboard) {
       if (hasUnsavedChanges && courseSeedData?.courseTitle) {
+        // Store the navigation action to execute after handling unsaved changes
+        setPendingNavigationAction(() => () => onBackToDashboard())
         showDialog('unsaved');
       } else {
         // Go back to dashboard - the dashboard will handle project switching
@@ -1286,7 +1277,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (result.success) {
       hideDialog();
       setHasUnsavedChanges(false)
-      if (pendingProjectId) {
+      
+      // Execute pending navigation action if exists (e.g., Exit to Dashboard)
+      if (pendingNavigationAction) {
+        pendingNavigationAction();
+        setPendingNavigationAction(null);
+      } else if (pendingProjectId) {
         // Handle pending project after save
         onPendingProjectHandled?.()
         // Only navigate back to dashboard if we're switching projects
@@ -1294,14 +1290,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           onBackToDashboard()
         }
       }
-      // If no pendingProjectId, just continue with current workflow
+      // If no pendingProjectId or navigation action, just continue with current workflow
     }
   }
   
   const handleDiscardChanges = async () => {
     hideDialog();
     setHasUnsavedChanges(false)
-    if (pendingProjectId) {
+    
+    // Execute pending navigation action if exists (e.g., Exit to Dashboard)
+    if (pendingNavigationAction) {
+      pendingNavigationAction();
+      setPendingNavigationAction(null);
+    } else if (pendingProjectId) {
       // Handle pending project after discard
       onPendingProjectHandled?.()
       // Only navigate back to dashboard if we're switching projects
@@ -1309,7 +1310,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         onBackToDashboard()
       }
     }
-    // If no pendingProjectId, just continue with current workflow
+    // If no pendingProjectId or navigation action, just continue with current workflow
   }
   
   // Export functionality - currently unused
@@ -1552,9 +1553,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           >
             {currentStep === 'seed' && (
               <CourseSeedInput 
-                onBack={() => setCurrentStep('dashboard')}
+                onBack={onBackToDashboard}
                 onSettingsClick={() => showDialog('settings')}
                 onHelp={() => showDialog('help')}
+                onOpen={handleOpen}
                 onSave={(content?: any) => {
                   if (content) {
                     setCourseSeedData(content);
@@ -1587,7 +1589,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     handleManualSave();
                   }
                 }}
-                  onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
@@ -1611,7 +1612,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     handleManualSave();
                   }
                 }}
-                  onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
@@ -1651,8 +1651,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       handleManualSave();
                     }
                   }}
-                    onSaveAs={handleSaveAs}
-                    onOpen={handleOpen}
+                      onOpen={handleOpen}
                     onStepClick={handleStepClick}
                   />
                 ) : (
@@ -1715,7 +1714,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     await handleManualSave();
                   }
                 }}
-                  onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
@@ -1741,7 +1739,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     handleManualSave();
                   }
                 }}
-                  onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
@@ -1782,7 +1779,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     handleManualSave();
                   }
                 }}
-                  onSaveAs={handleSaveAs}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                     />
@@ -1808,7 +1804,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         currentProjectName={courseSeedData?.courseTitle || 'Current Project'}
         onSave={handleSaveAndContinue}
         onDiscard={handleDiscardChanges}
-        onCancel={hideDialog}
+        onCancel={() => {
+          hideDialog();
+          setPendingNavigationAction(null); // Clear pending navigation on cancel
+        }}
       />
       
       
@@ -1816,20 +1815,42 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       {toast && (
         <div
           data-testid="toast-notification"
+          onClick={() => setToast(null)}
           style={{
             position: 'fixed',
-            bottom: '2rem',
-            right: '2rem',
+            top: '2rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
             backgroundColor: toast.type === 'success' ? COLORS.success : toast.type === 'error' ? COLORS.error : COLORS.primary,
             color: 'white',
-            padding: '1rem 1.5rem',
+            padding: '0.75rem 1.5rem',
             borderRadius: '0.5rem',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-            zIndex: 1000,
-            animation: 'slideIn 0.3s ease-out'
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            zIndex: 9999,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            minWidth: '300px',
+            maxWidth: '500px',
+            animation: 'slideDown 0.3s ease-out',
+            transition: 'opacity 0.2s ease-out'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
-          {toast.message}
+          {/* Icon */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Icon 
+              icon={toast.type === 'success' ? Check : toast.type === 'error' ? AlertTriangle : Info}
+              size="md"
+              color="white"
+            />
+          </div>
+          {/* Message */}
+          <span style={{ flex: 1 }}>{toast.message}</span>
+          {/* Close hint */}
+          <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>Click to dismiss</span>
         </div>
       )}
       

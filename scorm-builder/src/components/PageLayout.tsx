@@ -67,7 +67,6 @@ interface PageLayoutProps {
   isGenerating?: boolean
   onSettingsClick?: () => void
   onSave?: () => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onHelp?: () => void
   onBack?: () => void
@@ -88,7 +87,6 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
   isGenerating,
   onSettingsClick,
   onSave,
-  onSaveAs,
   onOpen,
   onHelp,
   onBack,
@@ -107,16 +105,16 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
           <div className={styles.actionBar} data-testid="top-bar">
             {/* Left group: Open, Save, AutoSave */}
             <div data-testid="top-bar-left" className={styles.headerButtonGroup}>
-              <Tooltip content="Open an existing project file" position="bottom">
+              <Tooltip content="Exit to dashboard" position="bottom">
                 <div>
                   <Button 
                     onClick={onOpen}
                     variant="secondary"
                     size="small"
-                    aria-label="Open project"
-                    data-testid="open-button"
+                    aria-label="Exit to dashboard"
+                    data-testid="exit-button"
                   >
-                    Open
+                    Exit to Dashboard
                   </Button>
                 </div>
               </Tooltip>
@@ -132,20 +130,6 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   </Button>
                 </div>
               </Tooltip>
-              {onSaveAs && (
-                <Tooltip content="Save project with a new name" position="bottom">
-                  <div>
-                    <Button 
-                      onClick={onSaveAs}
-                      variant="secondary"
-                      size="small"
-                      aria-label="Save project as"
-                    >
-                      Save as...
-                    </Button>
-                  </div>
-                </Tooltip>
-              )}
               {autoSaveIndicator && (
                 <div className={styles.autoSaveWrapper} data-testid="autosave-indicator">
                   {autoSaveIndicator}
@@ -184,20 +168,6 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
             
             {/* Right group: Exit, Back, Next/Generate */}
             <div data-testid="top-bar-right" className={styles.headerButtonGroup}>
-              {onBack && currentStep === 0 && (
-                <Tooltip content="Exit to dashboard" position="bottom">
-                  <div>
-                    <Button 
-                      onClick={onBack}
-                      variant="secondary"
-                      size="medium"
-                      data-testid="exit-button"
-                    >
-                      Exit to Dashboard
-                    </Button>
-                  </div>
-                </Tooltip>
-              )}
               {onBack && currentStep > 0 && (
                 <Tooltip content="Go to previous step" position="bottom">
                   <div>

@@ -15,7 +15,6 @@ interface AIPromptGeneratorProps {
   onBack: () => void
   onSettingsClick?: () => void
   onSave?: () => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -27,7 +26,6 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   onBack,
   onSettingsClick,
   onSave,
-  onSaveAs,
   onOpen,
   onHelp,
   onStepClick
@@ -74,7 +72,7 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
     return `Please create a comprehensive SCORM course JSON structure for the following course:
 
 Title: ${courseSeedData?.courseTitle || 'Untitled Course'}
-Difficulty Level: ${courseSeedData?.difficulty || 3}/5
+Difficulty Level: ${getDifficultyLabel(courseSeedData?.difficulty || 3)} (${courseSeedData?.difficulty || 3}/5)
 Template: ${courseSeedData?.template || 'standard'}
 
 Topics to cover:
@@ -261,6 +259,12 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
     }
   }
 
+  // Helper function to get difficulty label
+  const getDifficultyLabel = (level: number): string => {
+    const labels = ['Basic', 'Easy', 'Medium', 'Hard', 'Expert']
+    return labels[level - 1] || 'Medium'
+  }
+
   const prompt = generatePrompt()
 
   // Removed Reset, Save as Template, and History functionality per UX requirements
@@ -279,7 +283,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         autoSaveIndicator={autoSaveIndicator}
         onSettingsClick={onSettingsClick}
         onSave={onSave}
-        onSaveAs={onSaveAs}
         onOpen={handleOpen}
         onHelp={onHelp}
         onBack={handleBack}
@@ -293,6 +296,19 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         </div>
       )}
 
+      {/* Instructions */}
+      <div className={styles.sectionWrapper}>
+        <h2 className={styles.sectionTitle}>Instructions</h2>
+        <Card>
+          <ol className={styles.instructionsList}>
+            <li>Copy the prompt to your clipboard</li>
+            <li>Paste it into your preferred AI chatbot (ChatGPT, Claude, etc.)</li>
+            <li>Copy the JSON response from the AI</li>
+            <li>Click Next to proceed to the JSON import step</li>
+          </ol>
+        </Card>
+      </div>
+
       {/* Course Information */}
       <div className={styles.sectionWrapper}>
         <h2 className={styles.sectionTitle}>Course Information</h2>
@@ -302,7 +318,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
               <strong className={styles.courseInfoLabel}>Title:</strong> {courseSeedData.courseTitle}
             </p>
             <p className={styles.courseInfoItem}>
-              <strong className={styles.courseInfoLabel}>Difficulty:</strong> {courseSeedData.difficulty}/5
+              <strong className={styles.courseInfoLabel}>Difficulty:</strong> {getDifficultyLabel(courseSeedData.difficulty)} ({courseSeedData.difficulty} out of 5)
             </p>
             <p className={styles.courseInfoItem}>
               <strong className={styles.courseInfoLabel}>Template:</strong> {courseSeedData.template}
@@ -345,18 +361,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
               </>
             )}
           </Button>
-        </Card>
-      </div>
-
-      {/* Instructions */}
-      <div className={styles.sectionWrapper}>
-        <Card title="Instructions">
-          <ol className={styles.instructionsList}>
-            <li>Copy this prompt using the button above</li>
-            <li>Paste it into your preferred AI chatbot (ChatGPT, Claude, etc.)</li>
-            <li>Copy the JSON response from the AI</li>
-            <li>Click Next to proceed to the JSON import step</li>
-          </ol>
         </Card>
       </div>
 

@@ -15,8 +15,10 @@ import {
   Flex,
   Grid,
   Alert,
-  QuestionTypeBadge
+  QuestionTypeBadge,
+  Icon
 } from './DesignSystem'
+import { Check } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { generateActivityId } from '../utils/idGenerator'
@@ -31,7 +33,6 @@ interface ActivitiesEditorProps {
   onUpdateContent?: (content: CourseContentUnion) => void  // FIX: Add callback to update parent
   onSettingsClick?: () => void
   onSave?: () => void
-  onSaveAs?: () => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -71,7 +72,6 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   onUpdateContent,  // FIX: Add onUpdateContent 
   onSettingsClick, 
   onSave, 
-  onSaveAs,
   onOpen, 
   onHelp,
   onStepClick 
@@ -298,7 +298,6 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
         onNext(latestContent)
       }}
       onSave={onSave}
-      onSaveAs={onSaveAs}
       onOpen={onOpen}
       onHelp={onHelp}
       onStepClick={onStepClick}
@@ -410,7 +409,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                                       })
                                     }} />
                                     {opt === question.correctAnswer && (
-                                      <span className={styles.correctAnswer}>✓</span>
+                                      <Icon icon={Check} size="sm" color="var(--color-success)" className={styles.correctAnswer} />
                                     )}
                                   </li>
                                 ))}
@@ -630,7 +629,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                               })
                             }} />
                             {opt === question.correctAnswer && (
-                              <span className={styles.correctMark}>✓</span>
+                              <Icon icon={Check} size="sm" color="var(--color-success)" className={styles.correctMark} />
                             )}
                           </li>
                         ))}
@@ -909,7 +908,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                         {question.options.map((opt, idx) => (
                           <li key={idx} className={styles.optionItem}>
                             {opt} {opt === question.correctAnswer && (
-                              <span className={styles.correctMark}>✓</span>
+                              <Icon icon={Check} size="sm" color="var(--color-success)" className={styles.correctMark} />
                             )}
                           </li>
                         ))}
