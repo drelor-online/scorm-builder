@@ -225,6 +225,14 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             // Guard against undefined/null/empty IDs
             if (!item.id || item.id === '') return false
             
+            // Skip invalid placeholder IDs that don't correspond to actual media files
+            if (item.id === 'learning-objectives' || 
+                item.id === 'welcome' || 
+                item.id === 'objectives') {
+              logger.warn('[UnifiedMediaContext] Skipping placeholder media ID:', item.id)
+              return false
+            }
+            
             // Skip YouTube videos without proper URLs (they don't need blob preloading)
             if (item.metadata?.type === 'youtube' && !item.metadata?.url) {
               logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id)

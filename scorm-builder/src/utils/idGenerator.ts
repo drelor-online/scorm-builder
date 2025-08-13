@@ -106,10 +106,12 @@ export function generateAudioRecordingId(): string {
 }
 
 /**
- * Generate a notification ID with timestamp
+ * Generate a notification ID with timestamp and counter to ensure uniqueness
  */
+let notificationCounter = 0
 export function generateNotificationId(): NotificationId {
-  return `notification-${Date.now()}` as NotificationId
+  notificationCounter++
+  return `notification-${Date.now()}-${notificationCounter}` as NotificationId
 }
 
 /**
