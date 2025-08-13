@@ -82,7 +82,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     getMediaForPage,
     createBlobUrl
   } = useUnifiedMedia()
-  const { success, error: notifyError, info, progress } = useNotifications()
+  const { success, error: notifyError, info, progress, warning } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
     componentName: 'SCORMPackageBuilder',
     trackRenders: true
@@ -191,10 +191,15 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     return null
   }
 
-  const loadMediaFromRegistry = async (enhancedContent: any) => {
+  const loadMediaFromRegistry = async (enhancedContent: any): Promise<string[]> => {
     console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
     
-    // Track loaded media to prevent duplicates
+    // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
+    const createMediaTrackingKey = (id: string, type?: string) => {
+      return type ? `${id}:${type}` : id
+    }
+    
+    // Track loaded media to prevent duplicates (using ID:type to allow same ID with different types)
     const loadedMediaIds = new Set<string>()
     const failedMedia: string[] = []
     let loadedCount = 0
@@ -243,6 +248,19 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     // Load media for each page
     // Use correct property name 'welcome' instead of 'welcomePage'
     if (enhancedContent.welcome) {
+      // Handle audioBlob without ID FIRST (recorded audio that hasn't been saved to registry)
+      if (enhancedContent.welcome.audioBlob && !enhancedContent.welcome.audioId && !enhancedContent.welcome.audioFile) {
+        const generatedId = `audio-welcome-blob-${Date.now()}`
+        console.log(`[SCORMPackageBuilder] Processing welcome audioBlob without ID, generating: ${generatedId}`)
+        mediaFilesRef.current.set(`${generatedId}.mp3`, enhancedContent.welcome.audioBlob)
+        // Mark this ID as already loaded to avoid trying to fetch it from registry
+        loadedMediaIds.add(generatedId)
+        // Update the content to include the generated ID so Rust generator can find it
+        enhancedContent.welcome.audioId = generatedId
+        loadedCount++
+        console.log(`[SCORMPackageBuilder] ✓ Added welcome audioBlob: ${generatedId}`)
+      }
+      
       // Welcome page media - look for audioFile/captionFile which contain the media IDs
       const welcomeAudioId = enhancedContent.welcome.audioId || enhancedContent.welcome.audioFile
       const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
@@ -279,22 +297,25 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       for (const mediaItem of welcomeMedia) {
-        if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
-          loadedMediaIds.add(mediaItem.id)
+        const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
+        if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
           totalMediaToLoad++
-          console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id}`)
+          console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id} (${mediaItem.type})`)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
           if (mediaBlob) {
-            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
-            mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
+            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+            // Generate unique filename by including type to prevent overwrites
+            const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
+            mediaFilesRef.current.set(uniqueFilename, mediaBlob)
             loadedCount++
-            console.log(`[SCORMPackageBuilder] ✓ Loaded welcome media: ${mediaItem.id}`)
+            console.log(`[SCORMPackageBuilder] ✓ Loaded welcome media: ${mediaItem.id} as ${uniqueFilename}`)
           } else {
             failedMedia.push(`welcome ${mediaItem.type || 'media'}: ${mediaItem.id}`)
             console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome media: ${mediaItem.id}`)
           }
-        } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
-          console.log(`[SCORMPackageBuilder] Skipping duplicate welcome media: ${mediaItem.id}`)
+        } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
+          console.log(`[SCORMPackageBuilder] Skipping duplicate welcome media: ${mediaItem.id} (${mediaItem.type})`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
           const newId = await handleRemoteMedia(mediaItem.url, 'image', 'welcome')
@@ -348,16 +369,19 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       for (const mediaItem of objectivesMedia) {
-        if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
-          loadedMediaIds.add(mediaItem.id)
+        const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
+        if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
           if (mediaBlob) {
-            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
-            mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
-            console.log('[SCORMPackageBuilder] Loaded objectives media:', mediaItem.id)
+            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+            // Generate unique filename by including type to prevent overwrites
+            const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
+            mediaFilesRef.current.set(uniqueFilename, mediaBlob)
+            console.log(`[SCORMPackageBuilder] Loaded objectives media: ${mediaItem.id} as ${uniqueFilename}`)
           }
-        } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
-          console.log(`[SCORMPackageBuilder] Skipping duplicate objectives media: ${mediaItem.id}`)
+        } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
+          console.log(`[SCORMPackageBuilder] Skipping duplicate objectives media: ${mediaItem.id} (${mediaItem.type})`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
           const newId = await handleRemoteMedia(mediaItem.url, 'image', 'objectives')
@@ -377,6 +401,20 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     if (enhancedContent.topics) {
       for (let topicIndex = 0; topicIndex < enhancedContent.topics.length; topicIndex++) {
         const topic = enhancedContent.topics[topicIndex]
+        
+        // Handle audioBlob without ID FIRST for this topic (recorded audio that hasn't been saved to registry)
+        if (topic.audioBlob && !topic.audioId && !topic.audioFile) {
+          const generatedId = `audio-topic-${topicIndex}-blob-${Date.now()}`
+          console.log(`[SCORMPackageBuilder] Processing topic ${topicIndex} audioBlob without ID, generating: ${generatedId}`)
+          mediaFilesRef.current.set(`${generatedId}.mp3`, topic.audioBlob)
+          // Mark this ID as already loaded to avoid trying to fetch it from registry
+          loadedMediaIds.add(generatedId)
+          // Update the content to include the generated ID so Rust generator can find it
+          topic.audioId = generatedId
+          loadedCount++
+          console.log(`[SCORMPackageBuilder] ✓ Added topic ${topicIndex} audioBlob: ${generatedId}`)
+        }
+        
         const topicAudioId = topic.audioId || topic.audioFile
         const topicCaptionId = topic.captionId || topic.captionFile
         const topicMedia = topic.media || []
@@ -412,16 +450,19 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
         
         for (const mediaItem of topicMedia) {
-          if (mediaItem.id && !loadedMediaIds.has(mediaItem.id)) {
-            loadedMediaIds.add(mediaItem.id)
+          const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
+          if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
+            loadedMediaIds.add(trackingKey)
             const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
             if (mediaBlob) {
-              const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
-              mediaFilesRef.current.set(`${mediaItem.id}${extension}`, mediaBlob)
-              console.log('[SCORMPackageBuilder] Loaded topic media:', mediaItem.id)
+              const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+              // Generate unique filename by including type to prevent overwrites
+              const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
+              mediaFilesRef.current.set(uniqueFilename, mediaBlob)
+              console.log(`[SCORMPackageBuilder] Loaded topic ${topicIndex} media: ${mediaItem.id} as ${uniqueFilename}`)
             }
-          } else if (mediaItem.id && loadedMediaIds.has(mediaItem.id)) {
-            console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id}`)
+          } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
+            console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id} (${mediaItem.type})`)
           } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
             // Handle remote media
             const newId = await handleRemoteMedia(mediaItem.url, 'image', `topic-${topicIndex}`)
@@ -445,6 +486,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       console.warn('[SCORMPackageBuilder] Failed media items:', failedMedia)
     }
     console.log('[SCORMPackageBuilder] Total files in package:', mediaFilesRef.current.size)
+    
+    return failedMedia
   }
 
   const generatePackage = async () => {
@@ -517,9 +560,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       // Load media from MediaRegistry and collect blobs for SCORM generation
       performanceMetrics.mediaLoadStart = Date.now()
+      let failedMedia: string[] = []
       try {
         console.log('[SCORMPackageBuilder] === STARTING MEDIA LOAD PHASE ===')
-        await loadMediaFromRegistry(enhancedContent)
+        failedMedia = await loadMediaFromRegistry(enhancedContent)
         console.log('[SCORMPackageBuilder] === MEDIA LOAD PHASE COMPLETE ===')
         console.log('[SCORMPackageBuilder] Media files ready for packaging:', mediaFilesRef.current.size)
         
@@ -670,7 +714,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       // FIX: Don't auto-download. Let user choose when to download
       console.log('[SCORMPackageBuilder] Package generated successfully, ready for download')
-      success('SCORM package generated successfully!')
+      
+      // Check if there were any failed media before showing success
+      if (failedMedia.length === 0) {
+        success('SCORM package generated successfully!')
+      } else {
+        warning(`Package generated with ${failedMedia.length} missing media files`)
+        console.warn('[SCORMPackageBuilder] Package generated with missing media:', failedMedia)
+      }
     } catch (error) {
       console.error('Error generating SCORM package:', error)
       const errorMsg = `Error generating SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
