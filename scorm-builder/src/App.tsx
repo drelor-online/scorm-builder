@@ -59,6 +59,7 @@ const HelpPage = lazy(() =>
 )
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
+import { NotificationPanel } from '@/components/NotificationPanel'
 import { NetworkStatusIndicator, Icon } from '@/components/DesignSystem'
 import { Check, AlertTriangle, Info } from 'lucide-react'
 // LoadingComponent removed - using inline loading
@@ -1824,7 +1825,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       />
       
       
-      {/* Notifications are now handled by NotificationPanel */}
+      {/* Notifications for course editing context */}
+      <NotificationPanel />
       
       {/* Debug Panel - Always accessible */}
       <DebugPanel />

@@ -168,7 +168,8 @@ export function AudioNarrationWizard({
     getAllMedia,
     deleteMedia,
     hasAudioCached,
-    getCachedAudio
+    getCachedAudio,
+    clearAudioFromCache
   } = useUnifiedMedia()
   const { success, error: notifyError, info } = useNotifications()
   
@@ -1696,6 +1697,8 @@ export function AudioNarrationWizard({
       const existingAudio = audioFiles.find(f => f.blockNumber === block.blockNumber)
       if (existingAudio?.mediaId && deleteMedia) {
         try {
+          // Clear from cache first to ensure fresh replacement
+          clearAudioFromCache(existingAudio.mediaId)
           await deleteMedia(existingAudio.mediaId)
           logger.log(`[AudioNarrationWizard] Deleted old audio before replacement: ${existingAudio.mediaId}`)
         } catch (error) {
@@ -3438,7 +3441,14 @@ export function AudioNarrationWizard({
       {/* Hidden TauriAudioPlayer for asset:// URL playback - Always rendered to prevent layout shifts */}
       <div className={styles.hiddenAudioPlayer}>
         <TauriAudioPlayer
-          key={`audio-${playingBlockNumber || 'none'}-v${audioVersionMap.get(playingBlockNumber || '') || 0}-t${Date.now()}`} // Force remount with timestamp in key
+          key={(() => {
+            if (!playingBlockNumber) return 'audio-none'
+            const audioFile = audioFiles.find(f => f.blockNumber === playingBlockNumber)
+            const version = audioVersionMap.get(playingBlockNumber) || 0
+            return audioFile?.mediaId 
+              ? `${audioFile.mediaId}-v${version}`
+              : `audio-${playingBlockNumber}-v${version}`
+          })()} // Use mediaId + version for reliable cache busting
           src={(() => {
             if (!playingBlockNumber) return undefined
             const audioFile = audioFiles.find(f => f.blockNumber === playingBlockNumber)

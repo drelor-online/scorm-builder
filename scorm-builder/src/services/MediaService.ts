@@ -765,6 +765,31 @@ export class MediaService {
     
     console.log('[MediaService] Audio cache cleared')
   }
+
+  /**
+   * Clear audio cache for a specific media ID - use when replacing audio
+   */
+  clearAudioFromCache(mediaId: string): void {
+    console.log('[MediaService] Clearing audio from cache:', mediaId)
+    
+    // Clear blob URL if exists
+    const url = this.blobUrlCache.get(mediaId)
+    if (url && url.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(url)
+        console.log('[MediaService] Revoked blob URL for:', mediaId)
+      } catch (e) {
+        console.warn('[MediaService] Failed to revoke blob URL:', e)
+      }
+    }
+    
+    // Remove from caches
+    this.audioDataCache.delete(mediaId)
+    this.blobUrlCache.delete(mediaId) 
+    this.audioLoadingPromises.delete(mediaId)
+    
+    console.log('[MediaService] Audio cleared from cache:', mediaId)
+  }
   
   /**
    * Check if audio is cached
@@ -1052,6 +1077,10 @@ export class MediaService {
       if (deleted) {
         // Remove from cache only if deletion succeeded
         this.mediaCache.delete(mediaId)
+        // Clear from audio cache if it's audio media
+        if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
+          this.clearAudioFromCache(mediaId)
+        }
         // Revoke blob URL if it exists
         blobUrlManager.revokeUrl(mediaId)
         

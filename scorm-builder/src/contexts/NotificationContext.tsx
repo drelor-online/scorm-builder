@@ -3,6 +3,16 @@ import { generateNotificationId } from '../utils/idGenerator'
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info' | 'progress'
 
+// Notification duration constants (in milliseconds)
+// Follow audit guidelines for consistent notification behavior
+export const NOTIFICATION_DURATIONS = {
+  SUCCESS_DURATION: 5000,      // Success: 5 seconds
+  INFO_DURATION: 5000,         // Info: 5 seconds  
+  WARNING_DURATION: 8000,      // Warning: 8 seconds (longer for important warnings)
+  ERROR_DURATION: null,        // Error: no auto-dismiss (user must manually dismiss)
+  PROGRESS_DURATION: null      // Progress: no auto-dismiss (dismisses when complete)
+} as const
+
 export interface Notification {
   id: string
   message: string
@@ -86,20 +96,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     timersRef.current.clear()
   }, [])
 
-  // Convenience methods
-  const success = useCallback((message: string, duration = 5000) => {
+  // Convenience methods - follow audit guidelines for duration
+  const success = useCallback((message: string, duration = NOTIFICATION_DURATIONS.SUCCESS_DURATION) => {
     addNotification({ message, type: 'success', duration })
   }, [addNotification])
 
   const error = useCallback((message: string, action?: Notification['action']) => {
-    addNotification({ message, type: 'error', action })
+    // Errors don't auto-dismiss - user must manually close them
+    addNotification({ message, type: 'error', action, duration: NOTIFICATION_DURATIONS.ERROR_DURATION })
   }, [addNotification])
 
-  const warning = useCallback((message: string, duration = 5000) => {
+  const warning = useCallback((message: string, duration = NOTIFICATION_DURATIONS.WARNING_DURATION) => {
     addNotification({ message, type: 'warning', duration })
   }, [addNotification])
 
-  const info = useCallback((message: string, duration = 5000) => {
+  const info = useCallback((message: string, duration = NOTIFICATION_DURATIONS.INFO_DURATION) => {
     addNotification({ message, type: 'info', duration })
   }, [addNotification])
 
@@ -107,7 +118,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return addNotification({ 
       message, 
       type: 'progress', 
-      progress: { current, total } 
+      progress: { current, total },
+      duration: NOTIFICATION_DURATIONS.PROGRESS_DURATION // No auto-dismiss
     })
   }, [addNotification])
 
@@ -129,3 +141,39 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     </NotificationContext.Provider>
   )
 }
+
+// Usage guidelines for consistent notification behavior across the application
+export const NOTIFICATION_USAGE_GUIDELINES = {
+  success: [
+    'File saved successfully', 
+    'Project exported',
+    'Audio generated successfully',
+    'Media uploaded',
+    'SCORM package created'
+  ],
+  warning: [
+    'File size is large, may take time to process',
+    'Some optional fields are empty',
+    'API rate limit approaching',
+    'Unsaved changes detected'
+  ],
+  error: [
+    'Failed to save file',
+    'Network connection lost', 
+    'Invalid file format',
+    'Required field missing',
+    'Authentication failed'
+  ],
+  info: [
+    'Processing started',
+    'New version available',
+    'Tip or helpful information',
+    'Step completed successfully'
+  ],
+  progress: [
+    'Uploading file...',
+    'Generating SCORM package...',
+    'Processing audio...',
+    'Loading project...'
+  ]
+} as const

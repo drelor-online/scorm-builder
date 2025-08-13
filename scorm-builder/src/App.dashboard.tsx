@@ -394,7 +394,6 @@ export function AppWithDashboard() {
     <PersistentStorageProvider>
       <NotificationProvider>
         <DashboardContent />
-        <NotificationPanel />
         <DebugInfo />
         <DebugPanel />
         <ErrorNotification />

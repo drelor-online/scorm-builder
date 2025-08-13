@@ -1,11 +1,24 @@
 /* Notification Panel Styles */
 
+/* Screen reader only class for accessibility */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .notificationPanel {
   position: fixed;
   right: var(--space-xl);
   top: 80px; /* Below the header */
   width: 320px;
-  max-height: 500px;
+  max-height: 140px; /* enough for 2 notifications */
   overflow-y: auto;
   z-index: 9999; /* Ensure it's above everything */
   /* Remove debug background */
@@ -56,29 +69,33 @@
   box-shadow: var(--shadow-lg);
 }
 
-/* Notification type variants - using dark-appropriate colors */
+/* Notification type variants - using solid, readable colors */
 .notification-success {
   border-left: 3px solid var(--color-success-500);
-  background-color: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.2);
+  background-color: rgba(34, 197, 94, 0.9);
+  border: 1px solid rgba(34, 197, 94, 0.8);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .notification-error {
   border-left: 3px solid var(--color-danger-500);
-  background-color: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background-color: rgba(239, 68, 68, 0.9);
+  border: 1px solid rgba(239, 68, 68, 0.8);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .notification-warning {
   border-left: 3px solid var(--color-warning-500);
-  background-color: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background-color: rgba(245, 158, 11, 0.9);
+  border: 1px solid rgba(245, 158, 11, 0.8);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .notification-info {
   border-left: 3px solid var(--color-primary-500);
-  background-color: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background-color: rgba(59, 130, 246, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.8);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .notification-progress {

@@ -33,6 +33,7 @@ interface UnifiedMediaContextType {
   // Cache operations (for performance optimization)
   hasAudioCached: (mediaId: string) => boolean
   getCachedAudio: (mediaId: string) => { data: Uint8Array; metadata: MediaMetadata } | null
+  clearAudioFromCache: (mediaId: string) => void
   
   // Utility
   isLoading: boolean
@@ -501,6 +502,16 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     }
     return null
   }, [])
+
+  const clearAudioFromCache = useCallback((mediaId: string): void => {
+    const mediaService = mediaServiceRef.current
+    if (!mediaService) return
+    
+    // Check if MediaService has the clearAudioFromCache method
+    if (typeof (mediaService as any).clearAudioFromCache === 'function') {
+      (mediaService as any).clearAudioFromCache(mediaId)
+    }
+  }, [])
   
   const value = useMemo<UnifiedMediaContextType>(() => ({
     storeMedia,
@@ -514,6 +525,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     revokeBlobUrl,
     hasAudioCached,
     getCachedAudio,
+    clearAudioFromCache,
     isLoading,
     error,
     clearError,
@@ -530,6 +542,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     revokeBlobUrl,
     hasAudioCached,
     getCachedAudio,
+    clearAudioFromCache,
     isLoading,
     error,
     clearError,
