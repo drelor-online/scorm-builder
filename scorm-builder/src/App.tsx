@@ -235,16 +235,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
   
   // Track last saved time separately to avoid triggering auto-save
-  const [lastSavedTime, setLastSavedTime] = useState<string>(new Date().toISOString())
+  // Using useRef instead of useState to prevent re-renders that trigger autosave loops
+  const lastSavedTimeRef = useRef<string>(new Date().toISOString())
   
   // Create project data for saving - memoized to prevent unnecessary re-renders
+  // IMPORTANT: lastModified is NOT included in dependencies to prevent autosave loop
   const projectData: ProjectData = useMemo(() => {
     return courseSeedData ? {
       courseTitle: courseSeedData.courseTitle,
       courseSeedData: courseSeedData,
       courseContent: courseContent || undefined,
       currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
-      lastModified: lastSavedTime, // Use stable value that only updates on actual saves
+      lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: {},
       audioFiles: {}
     } : {
@@ -257,11 +259,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         templateTopics: []
       },
       currentStep: 0,
-      lastModified: lastSavedTime, // Use stable value
+      lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: {},
       audioFiles: {}
     }
-  }, [courseSeedData, courseContent, currentStep, lastSavedTime])
+  }, [courseSeedData, courseContent, currentStep]) // lastSavedTime removed from deps
   
   // Load API keys on first load
   useEffect(() => {
@@ -720,14 +722,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       await storage.saveProject()
       success('Project saved successfully')
       setHasUnsavedChanges(false)
-      setLastSavedTime(new Date().toISOString()) // Update last saved time
+      lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
     } catch (error: any) {
       console.error('[handleSave] Save error:', error)
       showError(error.message || 'Failed to save project')
       return { success: false, error: error.message }
     }
-  }, [storage, projectData, setLastSavedTime])
+  }, [storage, projectData])
 
   // Autosave functionality (no toast)
   const handleAutosave = useCallback(async (data: ProjectData) => {
@@ -749,14 +751,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       await storage.saveProject()
       setHasUnsavedChanges(false)
-      setLastSavedTime(new Date().toISOString()) // Update last saved time
+      lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
     } catch (error: any) {
       // Only show error toast for autosave failures
       showError('Autosave failed')
       return { success: false, error: error.message }
     }
-  }, [storage, setLastSavedTime])
+  }, [storage])
   
   const autoSaveState = useAutoSave({
     data: projectData,
