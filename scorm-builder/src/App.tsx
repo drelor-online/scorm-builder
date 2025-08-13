@@ -99,6 +99,9 @@ const EMPTY_MEDIA_FILES = {}
 const EMPTY_AUDIO_FILES = {}
 const EMPTY_CUSTOM_TOPICS: string[] = []
 
+// DEBUG: Track loadProject calls to identify infinite loops
+let loadProjectCallCount = 0
+
 // Inner component that uses StepNavigationContext
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
   const storage = useStorage()
@@ -333,6 +336,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Load project data from PersistentStorage on mount
   useEffect(() => {
+    // DEBUG: Track how many times this effect runs
+    loadProjectCallCount++
+    console.log(`[DEBUG] loadProject useEffect called ${loadProjectCallCount} times for project:`, storage.currentProjectId)
+    if (loadProjectCallCount > 3) {
+      console.error('[ERROR] loadProject called too many times! This indicates an infinite loop.')
+      console.trace('Stack trace for excessive loadProject calls')
+      return
+    }
+    
     if (!storage.currentProjectId || !storage.isInitialized) {
       debugLogger.info('App.loadProject', 'Skipping load - no project or storage not initialized', {
         currentProjectId: storage.currentProjectId,
@@ -760,11 +772,26 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   //   debugLogger.info('Current step when courseContent updates:', currentStep)
   // }, [courseContent, currentStep])
 
-  // Track unsaved changes
+  // DISABLED: This was causing re-render loops by setting hasUnsavedChanges on every state change
+  // Track unsaved changes - NOW ONLY SET ON USER ACTIONS
+  // useEffect(() => {
+  //   // Set unsaved changes if we have course data
+  //   setHasUnsavedChanges(!!courseSeedData?.courseTitle)
+  // }, [courseSeedData, courseContent, currentStep])
+
+  // DEBUG: Track state changes to identify what's triggering re-renders
   useEffect(() => {
-    // Set unsaved changes if we have course data
-    setHasUnsavedChanges(!!courseSeedData?.courseTitle)
-  }, [courseSeedData, courseContent, currentStep])
+    console.log('[DEBUG] State Change Detected:', {
+      courseSeedDataTitle: courseSeedData?.courseTitle,
+      hasCourseContent: !!courseContent,
+      currentStep,
+      isDirty,
+      hasUnsavedChanges,
+      isLoadingProject,
+      timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    })
+  }) // No dependencies - runs on every render to catch all changes
   
   // Manual save functionality (shows toast)
   const handleSave = useCallback(async (data?: ProjectData) => {
@@ -838,15 +865,23 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [storage])
   
-  const autoSaveState = useAutoSave({
-    data: autoSaveDataRef.current,
-    onSave: handleAutosave,
-    delay: DURATIONS.autosaveInterval,
-    disabled: !storage.currentProjectId,
-    isDirty,
-    onSaveComplete: () => setIsDirty(false),
-    minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
-  })
+  // EMERGENCY FIX: Autosave completely disabled to stop infinite loop
+  // const autoSaveState = useAutoSave({
+  //   data: autoSaveDataRef.current,
+  //   onSave: handleAutosave,
+  //   delay: DURATIONS.autosaveInterval,
+  //   disabled: !storage.currentProjectId,
+  //   isDirty,
+  //   onSaveComplete: () => setIsDirty(false),
+  //   minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
+  // })
+  
+  // Dummy autosave state for compatibility
+  const autoSaveState = {
+    isSaving: false,
+    lastSaved: null,
+    forceSave: async () => {}
+  }
   
   // Notification wrapper for backwards compatibility
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -865,6 +900,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // VERSION MARKER: v2.0.2 - Returns Promise for proper async handling
     debugLogger.info('App.handleCourseSeedSubmit v2.0.2', 'Course seed data submitted', { title: data.courseTitle })
     setIsDirty(true) // Mark as dirty for autosave
+    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
     try {
       await measureAsync('handleCourseSeedSubmit', async () => {
         // Create a new project if we don't have one - BEFORE setting state or navigating
@@ -941,6 +977,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleJSONNext = async (data: CourseContent) => {
     setIsDirty(true) // Mark as dirty for autosave
+    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
     setCourseContent(data)
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
@@ -1012,6 +1049,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleMediaNext = async (data: CourseContentUnion) => {
     setIsDirty(true) // Mark as dirty for autosave
+    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
     setCourseContent(data as CourseContent)
     setCurrentStep('audio')
     navigation.navigateToStep(stepNumbers.audio)
@@ -1099,6 +1137,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleAudioNext = useCallback(async (data: CourseContentUnion) => {
     setIsDirty(true) // Mark as dirty for autosave
+    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
     setCourseContent(data as CourseContent)
     setCurrentStep('activities')
     navigation.navigateToStep(stepNumbers.activities)
@@ -1173,6 +1212,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleActivitiesNext = async (data: CourseContentUnion) => {
     setIsDirty(true) // Mark as dirty for autosave
+    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
     setCourseContent(data as CourseContent)
     setCurrentStep('scorm')
     navigation.navigateToStep(stepNumbers.scorm)
@@ -1653,6 +1693,33 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             lastSaved={autoSaveState.lastSaved}
             hasUnsavedChanges={hasUnsavedChanges}
           >
+            {/* EMERGENCY MANUAL SAVE BUTTON - Autosave is disabled */}
+            <div style={{
+              position: 'fixed',
+              top: '20px',
+              right: '20px',
+              zIndex: 1000,
+              padding: '10px',
+              backgroundColor: hasUnsavedChanges ? '#ff6b6b' : '#51cf66',
+              color: 'white',
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'center'
+            }}>
+              <Button
+                onClick={() => handleSave()}
+                disabled={!hasUnsavedChanges}
+                variant={hasUnsavedChanges ? "primary" : "secondary"}
+                size="sm"
+              >
+                💾 {hasUnsavedChanges ? 'Save Now' : 'Saved'}
+              </Button>
+              <span style={{ fontSize: '12px' }}>
+                {hasUnsavedChanges ? 'Unsaved changes' : 'All saved'}
+              </span>
+            </div>
             {currentStep === 'seed' && (
               <CourseSeedInput 
                 onBack={onBackToDashboard}
@@ -1662,10 +1729,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onSave={(content?: any) => {
                   if (content) {
                     setCourseSeedData(content);
-                    handleManualSave();
-                  } else {
-                    handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // handleManualSave();
                   }
+                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                  // else {
+                  //   handleManualSave();
+                  // }
                 }}
                 onSubmit={handleCourseSeedSubmit}
                 onStepClick={handleStepClick}
@@ -1684,12 +1754,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    if (!silent) {
-                      handleManualSave();
-                    }
-                  } else if (!silent) {
-                    handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // if (!silent) {
+                    //   handleManualSave();
+                    // }
                   }
+                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                  // else if (!silent) {
+                  //   handleManualSave();
+                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1707,12 +1780,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    if (!silent) {
-                      handleManualSave();
-                    }
-                  } else if (!silent) {
-                    handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // if (!silent) {
+                    //   handleManualSave();
+                    // }
                   }
+                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                  // else if (!silent) {
+                  //   handleManualSave();
+                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1731,11 +1807,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       // Type guard to ensure we have CourseContent, not LegacyCourseContent
                       if ('welcomePage' in content) {
                         setCourseContent(content as CourseContent);
+                        // EMERGENCY FIX: Removed automatic save to stop infinite loop
                         // Save the updated content to backend
-                        handleSave({
-                          ...projectData,
-                          courseContent: content as CourseContent
-                        });
+                        // handleSave({
+                        //   ...projectData,
+                        //   courseContent: content as CourseContent
+                        // });
                       }
                     }}
                     onNext={handleMediaNext}
@@ -1813,7 +1890,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     }
                   } else if (!silent) {
                     // No content provided, just trigger a regular save
-                    await handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // await handleManualSave();
                   }
                 }}
                   onOpen={handleOpen}
@@ -1834,12 +1912,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    if (!silent) {
-                      handleManualSave();
-                    }
-                  } else if (!silent) {
-                    handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // if (!silent) {
+                    //   handleManualSave();
+                    // }
                   }
+                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                  // else if (!silent) {
+                  //   handleManualSave();
+                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1874,12 +1955,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    if (!silent) {
-                      handleManualSave();
-                    }
-                  } else if (!silent) {
-                    handleManualSave();
+                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                    // if (!silent) {
+                    //   handleManualSave();
+                    // }
                   }
+                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
+                  // else if (!silent) {
+                  //   handleManualSave();
+                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}

@@ -103,8 +103,20 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   
+  // Track media loads to prevent infinite reloading
+  const hasLoadedRef = useRef<Set<string>>(new Set())
+  
   // Load initial media list when projectId changes
   useEffect(() => {
+    // EMERGENCY DEBUG: Track media context loads
+    console.log('[DEBUG] UnifiedMediaContext useEffect triggered for project:', actualProjectId)
+    
+    // Stronger guard against reloads
+    if (hasLoadedRef.current.has(actualProjectId)) {
+      console.log('[UnifiedMediaContext] Already loaded this project, SKIPPING:', actualProjectId)
+      return
+    }
+    
     // Only proceed if project ID has actually changed
     if (lastLoadedProjectIdRef.current === actualProjectId) {
       logger.info('[UnifiedMediaContext] Project ID unchanged, skipping media reload:', actualProjectId)
@@ -116,6 +128,9 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       logger.info('[UnifiedMediaContext] Already loading media, skipping duplicate load')
       return
     }
+    
+    // Mark this project as being loaded
+    hasLoadedRef.current.add(actualProjectId)
     
     // Clear the audio cache from the previous project's MediaService
     if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
