@@ -94,6 +94,11 @@ interface AppProps {
   onPendingProjectHandled?: () => void
 }
 
+// Stable empty objects to prevent unnecessary projectData recalculations
+const EMPTY_MEDIA_FILES = {}
+const EMPTY_AUDIO_FILES = {}
+const EMPTY_CUSTOM_TOPICS: string[] = []
+
 // Inner component that uses StepNavigationContext
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
   const storage = useStorage()
@@ -241,27 +246,34 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Create project data for saving - memoized to prevent unnecessary re-renders
   // IMPORTANT: lastModified is NOT included in dependencies to prevent autosave loop
   const projectData: ProjectData = useMemo(() => {
+    debugLogger.debug('App.projectData', 'Recalculating projectData useMemo', {
+      hasSeedData: !!courseSeedData,
+      hasContent: !!courseContent,
+      currentStep,
+      seedDataTitle: courseSeedData?.courseTitle
+    })
+    
     return courseSeedData ? {
       courseTitle: courseSeedData.courseTitle,
       courseSeedData: courseSeedData,
       courseContent: courseContent || undefined,
       currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
-      mediaFiles: {},
-      audioFiles: {}
+      mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
+      audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
     } : {
       courseTitle: '',
       courseSeedData: {
         courseTitle: '',
         difficulty: 3,
-        customTopics: [],
+        customTopics: EMPTY_CUSTOM_TOPICS, // Use stable reference
         template: 'None',
-        templateTopics: []
+        templateTopics: EMPTY_CUSTOM_TOPICS // Use stable reference
       },
       currentStep: 0,
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
-      mediaFiles: {},
-      audioFiles: {}
+      mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
+      audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
     }
   }, [courseSeedData, courseContent, currentStep]) // lastSavedTime removed from deps
   

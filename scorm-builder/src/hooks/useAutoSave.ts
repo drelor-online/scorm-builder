@@ -93,7 +93,30 @@ export function useAutoSave<T>({
       const cleanOldData = removeIgnoredKeys(oldData, ignoredKeys)
       const cleanNewData = removeIgnoredKeys(newData, ignoredKeys)
       
-      return safeStringify(cleanOldData) !== safeStringify(cleanNewData)
+      const oldStr = safeStringify(cleanOldData)
+      const newStr = safeStringify(cleanNewData)
+      const hasChanged = oldStr !== newStr
+      
+      // Debug logging can be enabled for troubleshooting (disabled by default)
+      if (hasChanged && false) { // Set to true for debugging
+        console.log('[useAutoSave] Data change detected', {
+          ignoredKeys,
+          oldDataKeys: oldData && typeof oldData === 'object' ? Object.keys(oldData) : 'not object',
+          newDataKeys: newData && typeof newData === 'object' ? Object.keys(newData) : 'not object',
+          cleanOldDataKeys: cleanOldData && typeof cleanOldData === 'object' ? Object.keys(cleanOldData) : 'not object',
+          cleanNewDataKeys: cleanNewData && typeof cleanNewData === 'object' ? Object.keys(cleanNewData) : 'not object'
+        })
+        
+        // Show a sample of what changed (first 200 chars)
+        if (oldStr !== newStr) {
+          console.log('[useAutoSave] String comparison preview:', {
+            oldDataPreview: oldStr.substring(0, 200) + (oldStr.length > 200 ? '...' : ''),
+            newDataPreview: newStr.substring(0, 200) + (newStr.length > 200 ? '...' : '')
+          })
+        }
+      }
+      
+      return hasChanged
     } catch (error) {
       console.warn('[useAutoSave] Error comparing data:', error)
       return true // Assume changed if comparison fails
