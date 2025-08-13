@@ -7,6 +7,7 @@ interface UseAutoSaveOptions<T> {
   onError?: (error: Error) => void
   onConflict?: (conflict: { localData: T; serverData: T }) => void
   disabled?: boolean
+  ignoredKeys?: string[] // Keys to ignore when detecting changes
 }
 
 interface UseAutoSaveResult {
@@ -21,13 +22,52 @@ export function useAutoSave<T>({
   delay = 2000,
   onError,
   onConflict,
-  disabled = false
+  disabled = false,
+  ignoredKeys = []
 }: UseAutoSaveOptions<T>): UseAutoSaveResult {
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousDataRef = useRef<T>(data)
   const mountedRef = useRef(true)
+
+  // Remove ignored keys from an object for comparison
+  const removeIgnoredKeys = useCallback((obj: any, keysToIgnore: string[]): any => {
+    if (!obj || typeof obj !== 'object' || keysToIgnore.length === 0) {
+      return obj
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => removeIgnoredKeys(item, keysToIgnore))
+    }
+
+    const result: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      // Check if this key should be ignored (support nested paths like 'metadata.lastModified')
+      const shouldIgnore = keysToIgnore.some(ignoredKey => {
+        if (ignoredKey.includes('.')) {
+          // For nested paths, only ignore if this is the first part of the path
+          return key === ignoredKey.split('.')[0]
+        }
+        return key === ignoredKey
+      })
+
+      if (!shouldIgnore) {
+        // For nested objects, recursively remove ignored keys
+        if (value && typeof value === 'object') {
+          // Handle nested paths by removing the first part of the path
+          const nestedIgnoredKeys = keysToIgnore
+            .filter(ignoredKey => ignoredKey.startsWith(`${key}.`))
+            .map(ignoredKey => ignoredKey.substring(key.length + 1))
+          
+          result[key] = removeIgnoredKeys(value, nestedIgnoredKeys)
+        } else {
+          result[key] = value
+        }
+      }
+    }
+    return result
+  }, [])
 
   // Safe JSON stringify that handles circular references
   const safeStringify = (obj: any): string => {
@@ -46,12 +86,16 @@ export function useAutoSave<T>({
   // Check if data has changed
   const hasDataChanged = useCallback((oldData: T, newData: T): boolean => {
     try {
-      return safeStringify(oldData) !== safeStringify(newData)
+      // Remove ignored keys before comparison
+      const cleanOldData = removeIgnoredKeys(oldData, ignoredKeys)
+      const cleanNewData = removeIgnoredKeys(newData, ignoredKeys)
+      
+      return safeStringify(cleanOldData) !== safeStringify(cleanNewData)
     } catch (error) {
       console.warn('[useAutoSave] Error comparing data:', error)
       return true // Assume changed if comparison fails
     }
-  }, [])
+  }, [removeIgnoredKeys, ignoredKeys])
 
   // Perform save operation
   const performSave = useCallback(async (dataToSave: T) => {

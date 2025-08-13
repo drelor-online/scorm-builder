@@ -764,7 +764,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     data: projectData,
     onSave: handleAutosave,
     delay: DURATIONS.autosaveInterval,
-    disabled: !storage.currentProjectId
+    disabled: !storage.currentProjectId,
+    ignoredKeys: ['lastModified', 'mediaFiles', 'audioFiles']
   })
   
   // Notification wrapper for backwards compatibility
