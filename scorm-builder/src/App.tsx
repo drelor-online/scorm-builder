@@ -113,6 +113,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
 
   // Set up debug log export on window close
   useEffect(() => {
@@ -243,6 +244,27 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Using useRef instead of useState to prevent re-renders that trigger autosave loops
   const lastSavedTimeRef = useRef<string>(new Date().toISOString())
   
+  // Track if we have already loaded this project to prevent duplicate loads
+  const hasLoadedProjectRef = useRef<string | null>(null)
+  
+  // Create stable data snapshot for autosave that only updates when isDirty is true
+  const autoSaveDataRef = useRef<ProjectData | null>(null)
+  
+  // Update autoSaveDataRef only when isDirty becomes true
+  useEffect(() => {
+    if (isDirty && courseSeedData) {
+      autoSaveDataRef.current = {
+        courseTitle: courseSeedData.courseTitle,
+        courseSeedData: courseSeedData,
+        courseContent: courseContent || undefined,
+        currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
+        lastModified: lastSavedTimeRef.current,
+        mediaFiles: EMPTY_MEDIA_FILES,
+        audioFiles: EMPTY_AUDIO_FILES
+      }
+    }
+  }, [isDirty, courseSeedData, courseContent, currentStep])
+  
   // Create project data for saving - memoized to prevent unnecessary re-renders
   // IMPORTANT: lastModified is NOT included in dependencies to prevent autosave loop
   const projectData: ProjectData = useMemo(() => {
@@ -324,9 +346,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return
     }
     
-    // For new projects, we should always load even if it's the same ID
-    // because the project might have just been created
-    if (lastLoadedProjectId === storage.currentProjectId && courseSeedData) {
+    // Use hasLoadedProjectRef to prevent duplicate loads
+    if (hasLoadedProjectRef.current === storage.currentProjectId) {
       debugLogger.info('App.loadProject', 'Skipping load - already loaded this project', {
         projectId: storage.currentProjectId,
         hasCourseSeedData: !!courseSeedData
@@ -342,6 +363,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       debugLogger.info('App.loadProject', 'Starting to load project data', { 
         projectId: storage.currentProjectId 
       })
+      hasLoadedProjectRef.current = storage.currentProjectId
       setLastLoadedProjectId(storage.currentProjectId)
       try {
         let loadedCourseContent: CourseContent | null = null
@@ -710,7 +732,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
       } catch (error) {
         console.error('Failed to load project data:', error)
-        // Reset loading state immediately on error
+        // Reset loading state and ref on error
+        hasLoadedProjectRef.current = null
         setIsLoadingProject(false)
         setLoadingProgress(undefined)
       } finally {
@@ -728,7 +751,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       setIsLoadingProject(false)
       setLoadingProgress(undefined)
     })
-  }, [storage.currentProjectId, storage.isInitialized, lastLoadedProjectId, navigation, measureAsync, isLoadingProject])
+  }, [storage.currentProjectId, storage.isInitialized])
   
   // Debug courseContent changes - DISABLED to prevent console spam
   // useEffect(() => {
@@ -815,11 +838,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [storage])
   
   const autoSaveState = useAutoSave({
-    data: projectData,
+    data: autoSaveDataRef.current,
     onSave: handleAutosave,
     delay: DURATIONS.autosaveInterval,
     disabled: !storage.currentProjectId,
-    ignoredKeys: ['lastModified', 'mediaFiles', 'audioFiles'],
+    isDirty,
+    onSaveComplete: () => setIsDirty(false),
     minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
   })
   
@@ -839,6 +863,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
     // VERSION MARKER: v2.0.2 - Returns Promise for proper async handling
     debugLogger.info('App.handleCourseSeedSubmit v2.0.2', 'Course seed data submitted', { title: data.courseTitle })
+    setIsDirty(true) // Mark as dirty for autosave
     try {
       await measureAsync('handleCourseSeedSubmit', async () => {
         // Create a new project if we don't have one - BEFORE setting state or navigating
@@ -914,6 +939,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleJSONNext = async (data: CourseContent) => {
+    setIsDirty(true) // Mark as dirty for autosave
     setCourseContent(data)
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
@@ -984,6 +1010,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleMediaNext = async (data: CourseContentUnion) => {
+    setIsDirty(true) // Mark as dirty for autosave
     setCourseContent(data as CourseContent)
     setCurrentStep('audio')
     navigation.navigateToStep(stepNumbers.audio)
@@ -1070,6 +1097,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleAudioNext = useCallback(async (data: CourseContentUnion) => {
+    setIsDirty(true) // Mark as dirty for autosave
     setCourseContent(data as CourseContent)
     setCurrentStep('activities')
     navigation.navigateToStep(stepNumbers.activities)
@@ -1143,6 +1171,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [storage, navigation, stepNumbers.media])
 
   const handleActivitiesNext = async (data: CourseContentUnion) => {
+    setIsDirty(true) // Mark as dirty for autosave
     setCourseContent(data as CourseContent)
     setCurrentStep('scorm')
     navigation.navigateToStep(stepNumbers.scorm)

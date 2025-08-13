@@ -220,7 +220,26 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       // PERFORMANCE OPTIMIZATION: Preload all media blob URLs
       if (allMedia.length > 0) {
         logger.info('[UnifiedMediaContext] Preloading blob URLs for', allMedia.length, 'media items...')
-        const mediaIds = allMedia.map(item => item.id)
+        const mediaIds = allMedia
+          .filter(item => {
+            // Guard against undefined/null/empty IDs
+            if (!item.id || item.id === '') return false
+            
+            // Skip YouTube videos without proper URLs (they don't need blob preloading)
+            if (item.metadata?.type === 'youtube' && !item.metadata?.url) {
+              logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id)
+              return false
+            }
+            
+            return true
+          })
+          .map(item => item.id)
+        
+        // Skip if no valid media IDs
+        if (mediaIds.length === 0) {
+          logger.info('[UnifiedMediaContext] No valid media IDs found, skipping preload')
+          return
+        }
         
         // Use BlobURLCache to preload all media
         const preloadedUrls = await blobCache.preloadMedia(mediaIds, async (id) => {

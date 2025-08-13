@@ -33,6 +33,7 @@ export function StepNavigationProvider({ children, initialStep = 0 }: StepNaviga
   const [visitedSteps, setVisitedSteps] = useState<number[]>([initialStep])
   const [isLoaded, setIsLoaded] = useState(false)
   const stepChangeHandlersRef = useRef<Set<StepChangeHandler>>(new Set())
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Load visited steps from storage when the context mounts
   useEffect(() => {
@@ -49,12 +50,27 @@ export function StepNavigationProvider({ children, initialStep = 0 }: StepNaviga
     }
   }, [storage.isInitialized, storage.currentProjectId, isLoaded])
   
-  // Save visited steps when they change
+  // Save visited steps when they change (debounced)
   useEffect(() => {
     if (storage.isInitialized && storage.currentProjectId && isLoaded && visitedSteps.length > 0) {
-      storage.saveContent('visitedSteps', { steps: visitedSteps }).catch((error) => {
-        console.error('Failed to save visited steps:', error)
-      })
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      
+      // Set new timeout to debounce saves
+      saveTimeoutRef.current = setTimeout(() => {
+        storage.saveContent('visitedSteps', { steps: visitedSteps }).catch((error) => {
+          console.error('Failed to save visited steps:', error)
+        })
+      }, 1000) // Debounce for 1 second
+      
+      // Cleanup function
+      return () => {
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+      }
     }
   }, [visitedSteps, storage.isInitialized, storage.currentProjectId, isLoaded])
 
