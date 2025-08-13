@@ -251,6 +251,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const autoSaveDataRef = useRef<ProjectData | null>(null)
   
   // Update autoSaveDataRef only when isDirty becomes true
+  // CRITICAL FIX: Only depend on isDirty to prevent infinite save loops
+  // The ref should only update when the user explicitly makes a change (isDirty = true)
+  // NOT when the app state changes for other reasons (like loading data)
   useEffect(() => {
     if (isDirty && courseSeedData) {
       autoSaveDataRef.current = {
@@ -263,7 +266,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         audioFiles: EMPTY_AUDIO_FILES
       }
     }
-  }, [isDirty, courseSeedData, courseContent, currentStep])
+  }, [isDirty]) // Only depend on isDirty - capture current state when user makes changes
   
   // Create project data for saving - memoized to prevent unnecessary re-renders
   // IMPORTANT: lastModified is NOT included in dependencies to prevent autosave loop

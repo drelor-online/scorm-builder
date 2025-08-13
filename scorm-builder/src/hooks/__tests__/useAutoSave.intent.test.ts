@@ -1,4 +1,4 @@
-import { describe, it, expect, act, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useAutoSave } from '../useAutoSave'
 
@@ -18,23 +18,23 @@ describe('useAutoSave - User Intent Tests', () => {
       const testData = { title: 'Test Course', content: 'Initial content' }
 
       const { result, rerender } = renderHook(
-        ({ data }) => useAutoSave({ data, onSave: mockOnSave, delay: 1000 }),
-        { initialProps: { data: testData } }
+        ({ data, isDirty }) => useAutoSave({ data, onSave: mockOnSave, delay: 1000, isDirty }),
+        { initialProps: { data: testData, isDirty: false } }
       )
 
       // Initially not saving
       expect(result.current.isSaving).toBe(false)
       expect(mockOnSave).not.toHaveBeenCalled()
 
-      // Update data
+      // Update data and mark as dirty (user action)
       const updatedData = { title: 'Test Course', content: 'Updated content' }
-      rerender({ data: updatedData })
+      rerender({ data: updatedData, isDirty: true })
 
       // Should not save immediately
       expect(mockOnSave).not.toHaveBeenCalled()
 
       // Fast forward past delay
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(1000)
       })
 
@@ -44,27 +44,34 @@ describe('useAutoSave - User Intent Tests', () => {
 
     it('should debounce rapid changes', async () => {
       const mockOnSave = vi.fn().mockResolvedValue({ success: true })
+      const mockOnSaveComplete = vi.fn()
       const testData = { title: 'Test', content: 'Initial' }
 
       const { rerender } = renderHook(
-        ({ data }) => useAutoSave({ data, onSave: mockOnSave, delay: 1000 }),
-        { initialProps: { data: testData } }
+        ({ data, isDirty }) => useAutoSave({ 
+          data, 
+          onSave: mockOnSave, 
+          delay: 1000, 
+          isDirty,
+          onSaveComplete: mockOnSaveComplete
+        }),
+        { initialProps: { data: testData, isDirty: false } }
       )
 
-      // Make multiple rapid changes
-      rerender({ data: { title: 'Test', content: 'Update 1' } })
+      // Mark as dirty and make rapid changes
+      rerender({ data: { title: 'Test', content: 'Update 1' }, isDirty: true })
       vi.advanceTimersByTime(500)
       
-      rerender({ data: { title: 'Test', content: 'Update 2' } })
+      rerender({ data: { title: 'Test', content: 'Update 2' }, isDirty: true })
       vi.advanceTimersByTime(500)
       
-      rerender({ data: { title: 'Test', content: 'Update 3' } })
+      rerender({ data: { title: 'Test', content: 'Update 3' }, isDirty: true })
       
       // Should not have saved yet
       expect(mockOnSave).not.toHaveBeenCalled()
 
       // Complete the delay
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(1000)
       })
 
