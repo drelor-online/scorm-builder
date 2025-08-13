@@ -469,6 +469,20 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       // Enhanced course content for Rust
       performanceMetrics.conversionStart = Date.now()
+      
+      // Debug: Log the incoming course content to check for audio media
+      console.log('[SCORMPackageBuilder] DEBUG - Incoming course content:', {
+        hasWelcomePage: !!courseContent.welcomePage,
+        welcomeMedia: courseContent.welcomePage?.media,
+        welcomeMediaTypes: courseContent.welcomePage?.media?.map((m: any) => ({ id: m.id, type: m.type })),
+        hasObjectivesPage: !!courseContent.learningObjectivesPage,
+        objectivesMedia: courseContent.learningObjectivesPage?.media,
+        objectivesMediaTypes: courseContent.learningObjectivesPage?.media?.map((m: any) => ({ id: m.id, type: m.type })),
+        topicCount: courseContent.topics?.length,
+        firstTopicMedia: courseContent.topics?.[0]?.media,
+        firstTopicMediaTypes: courseContent.topics?.[0]?.media?.map((m: any) => ({ id: m.id, type: m.type }))
+      })
+      
       const metadata: CourseMetadata = {
         title: courseSeedData?.courseTitle || 'Untitled Course',
         identifier: storage.currentProjectId || 'default-project',
@@ -480,6 +494,22 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const enhancedContent = await convertToEnhancedCourseContent(courseContent, metadata)
       performanceMetrics.conversionDuration = Date.now() - performanceMetrics.conversionStart
       console.log('[SCORMPackageBuilder] Enhanced content ready:', enhancedContent)
+      
+      // Debug: Log the enhanced content to check audio/caption fields
+      console.log('[SCORMPackageBuilder] DEBUG - Enhanced content audio/caption fields:', {
+        welcomeAudioFile: enhancedContent.welcome?.audioFile,
+        welcomeAudioId: enhancedContent.welcome?.audioId,
+        welcomeCaptionFile: enhancedContent.welcome?.captionFile,
+        welcomeCaptionId: enhancedContent.welcome?.captionId,
+        objectivesAudioFile: enhancedContent.objectivesPage?.audioFile,
+        objectivesAudioId: enhancedContent.objectivesPage?.audioId,
+        objectivesCaptionFile: enhancedContent.objectivesPage?.captionFile,
+        objectivesCaptionId: enhancedContent.objectivesPage?.captionId,
+        firstTopicAudioFile: enhancedContent.topics?.[0]?.audioFile,
+        firstTopicAudioId: enhancedContent.topics?.[0]?.audioId,
+        firstTopicCaptionFile: enhancedContent.topics?.[0]?.captionFile,
+        firstTopicCaptionId: enhancedContent.topics?.[0]?.captionId
+      })
       
       setLoadingMessage('Loading media files...')
       

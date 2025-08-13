@@ -57,10 +57,18 @@ function convertNewFormat(
 ): EnhancedCourseContent {
     // Process welcome page media
     const welcomeMedia = courseContent.welcomePage.media || []
+    
+    // Debug logging
+    console.log('[CourseContentConverter] Welcome media array:', welcomeMedia)
+    console.log('[CourseContentConverter] Welcome media types:', welcomeMedia.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+    
     const welcomeAudioMedia = welcomeMedia.find(m => m.type === 'audio')
     const welcomeCaptionMedia = welcomeMedia.find((m: any) => m.type === 'caption')
     const welcomeImageMedia = welcomeMedia.find(m => m.type === 'image')
     const welcomeVideoMedia = welcomeMedia.find(m => m.type === 'video')
+    
+    console.log('[CourseContentConverter] Found welcome audio:', welcomeAudioMedia)
+    console.log('[CourseContentConverter] Found welcome caption:', welcomeCaptionMedia)
     
     const welcome = {
       title: courseContent.welcomePage.title,
@@ -69,11 +77,15 @@ function convertNewFormat(
       startButtonText: 'Start Course',
       // Use storageId or id from image media for imageUrl
       imageUrl: welcomeImageMedia ? (welcomeImageMedia as any).storageId || welcomeImageMedia.id : undefined,
-      audioFile: welcomeAudioMedia?.id || (courseContent.welcomePage as any).audioId || courseContent.welcomePage.audioFile,
-      audioId: (courseContent.welcomePage as any).audioId,
+      // FIXED: Use the audio media's ID or storageId if available
+      audioFile: welcomeAudioMedia ? (welcomeAudioMedia as any).storageId || welcomeAudioMedia.id : 
+                 (courseContent.welcomePage as any).audioId || courseContent.welcomePage.audioFile,
+      audioId: welcomeAudioMedia?.id || (courseContent.welcomePage as any).audioId,
       audioBlob: (courseContent.welcomePage as any).audioBlob,
-      captionFile: welcomeCaptionMedia?.id || (courseContent.welcomePage as any).captionId || courseContent.welcomePage.captionFile,
-      captionId: (courseContent.welcomePage as any).captionId,
+      // FIXED: Use the caption media's ID or storageId if available
+      captionFile: welcomeCaptionMedia ? (welcomeCaptionMedia as any).storageId || welcomeCaptionMedia.id :
+                   (courseContent.welcomePage as any).captionId || courseContent.welcomePage.captionFile,
+      captionId: welcomeCaptionMedia?.id || (courseContent.welcomePage as any).captionId,
       captionBlob: (courseContent.welcomePage as any).captionBlob,
       embedUrl: welcomeVideoMedia?.embedUrl,
       media: welcomeMedia.map(m => ({
@@ -94,6 +106,11 @@ function convertNewFormat(
     
     // Process objectives page media
     const objectivesMedia = courseContent.learningObjectivesPage.media || []
+    
+    // Debug logging
+    console.log('[CourseContentConverter] Objectives media array:', objectivesMedia)
+    console.log('[CourseContentConverter] Objectives media types:', objectivesMedia.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+    
     const objectivesImageMedia = objectivesMedia.find(m => m.type === 'image')
     const objectivesVideoMedia = objectivesMedia.find(m => m.type === 'video')
     
@@ -101,14 +118,21 @@ function convertNewFormat(
     const objectivesAudioMedia = objectivesMedia.find(m => m.type === 'audio')
     const objectivesCaptionMedia = objectivesMedia.find((m: any) => m.type === 'caption')
     
+    console.log('[CourseContentConverter] Found objectives audio:', objectivesAudioMedia)
+    console.log('[CourseContentConverter] Found objectives caption:', objectivesCaptionMedia)
+    
     const objectivesPage = {
       narration: courseContent.learningObjectivesPage.narration,
       // Use storageId or id from image media for imageUrl
       imageUrl: objectivesImageMedia ? (objectivesImageMedia as any).storageId || objectivesImageMedia.id : undefined,
-      audioFile: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile,
+      // FIXED: Use the audio media's ID or storageId if available
+      audioFile: objectivesAudioMedia ? (objectivesAudioMedia as any).storageId || objectivesAudioMedia.id :
+                 (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile,
       audioId: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId,
       audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
-      captionFile: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile,
+      // FIXED: Use the caption media's ID or storageId if available
+      captionFile: objectivesCaptionMedia ? (objectivesCaptionMedia as any).storageId || objectivesCaptionMedia.id :
+                   (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile,
       captionId: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId,
       captionBlob: (courseContent.learningObjectivesPage as any).captionBlob,
       embedUrl: objectivesVideoMedia?.embedUrl,
@@ -129,6 +153,12 @@ function convertNewFormat(
     const enhancedTopics = courseContent.topics.map((topic, index) => {
       // Generate block number for audio files (starting from 1 for topics)
       
+      // Debug logging for first topic
+      if (index === 0) {
+        console.log('[CourseContentConverter] First topic media:', topic.media)
+        console.log('[CourseContentConverter] First topic media types:', topic.media?.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+      }
+      
       // Handle knowledge check from new format
       const knowledgeCheck = convertKnowledgeCheck(topic.knowledgeCheck)
       
@@ -145,8 +175,11 @@ function convertNewFormat(
       const topicAudioMedia = topic.media?.find(m => m.type === 'audio')
       const topicCaptionMedia = topic.media?.find((m: any) => m.type === 'caption')
       
-      const audioFile = topicAudioMedia?.id || (topic as any).audioId || topic.audioFile
-      const captionFile = topicCaptionMedia?.id || (topic as any).captionId || topic.captionFile
+      // FIXED: Use the media's storageId or id if available
+      const audioFile = topicAudioMedia ? (topicAudioMedia as any).storageId || topicAudioMedia.id :
+                        (topic as any).audioId || topic.audioFile
+      const captionFile = topicCaptionMedia ? (topicCaptionMedia as any).storageId || topicCaptionMedia.id :
+                          (topic as any).captionId || topic.captionFile
       
       // Use storageId or id from image media for imageUrl
       const imageUrl = imageMedia ? (imageMedia as any).storageId || imageMedia.id : undefined
