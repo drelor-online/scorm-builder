@@ -8,6 +8,7 @@ interface UseAutoSaveOptions<T> {
   onConflict?: (conflict: { localData: T; serverData: T }) => void
   disabled?: boolean
   ignoredKeys?: string[] // Keys to ignore when detecting changes
+  minSaveInterval?: number // Minimum milliseconds between saves (default 5000)
 }
 
 interface UseAutoSaveResult {
@@ -23,13 +24,15 @@ export function useAutoSave<T>({
   onError,
   onConflict,
   disabled = false,
-  ignoredKeys = []
+  ignoredKeys = [],
+  minSaveInterval = 5000 // Default 5 seconds minimum between saves
 }: UseAutoSaveOptions<T>): UseAutoSaveResult {
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousDataRef = useRef<T>(data)
   const mountedRef = useRef(true)
+  const lastSaveTimeRef = useRef<number>(0) // Track last save time for debouncing
 
   // Remove ignored keys from an object for comparison
   const removeIgnoredKeys = useCallback((obj: any, keysToIgnore: string[]): any => {
@@ -97,16 +100,27 @@ export function useAutoSave<T>({
     }
   }, [removeIgnoredKeys, ignoredKeys])
 
-  // Perform save operation
-  const performSave = useCallback(async (dataToSave: T) => {
+  // Perform save operation with debouncing
+  const performSave = useCallback(async (dataToSave: T, skipDebounce = false) => {
     if (!mountedRef.current || disabled) return
+
+    // Check if we should debounce this save
+    const now = Date.now()
+    const timeSinceLastSave = now - lastSaveTimeRef.current
+    
+    if (!skipDebounce && timeSinceLastSave < minSaveInterval) {
+      console.log(`[useAutoSave] Debouncing save - only ${timeSinceLastSave}ms since last save (min: ${minSaveInterval}ms)`)
+      return
+    }
 
     try {
       setIsSaving(true)
       await onSave(dataToSave)
       
       if (mountedRef.current) {
-        setLastSaved(new Date())
+        const saveTime = new Date()
+        setLastSaved(saveTime)
+        lastSaveTimeRef.current = saveTime.getTime()
         previousDataRef.current = dataToSave
       }
     } catch (error: any) {
@@ -125,15 +139,15 @@ export function useAutoSave<T>({
         setIsSaving(false)
       }
     }
-  }, [onSave, onError, onConflict, disabled])
+  }, [onSave, onError, onConflict, disabled, minSaveInterval])
 
-  // Force save immediately
+  // Force save immediately (bypasses debouncing)
   const forceSave = useCallback(async () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
-    await performSave(data)
+    await performSave(data, true) // Skip debounce for forced saves
   }, [data, performSave])
 
   // Set up auto-save effect

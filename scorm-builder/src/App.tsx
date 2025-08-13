@@ -306,7 +306,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return
     }
     
-    // Check if already loading
+    // Check if already loading - CRITICAL: Do this check first
     if (isLoadingProject) {
       debugLogger.info('App.loadProject', 'Already loading project, skipping duplicate load')
       return
@@ -322,8 +322,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return
     }
 
+    // IMPORTANT: Set loading state IMMEDIATELY to prevent race conditions
+    setIsLoadingProject(true)
+
     const loadProjectData = async () => {
-      setIsLoadingProject(true)
       setLoadingProgress({ current: 0, total: 5, phase: 'Initializing...' })
       debugLogger.info('App.loadProject', 'Starting to load project data', { 
         projectId: storage.currentProjectId 
@@ -370,17 +372,28 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 if (!loadedCourseContent.welcomePage.media) {
                   loadedCourseContent.welcomePage.media = []
                 }
-                // Add audio references - only if there's a valid ID
-                if (audioNarrationData?.welcome && audioNarrationData.welcome.id) {
-                  const audioItem = { 
-                    id: audioNarrationData.welcome.id,
-                    type: 'audio' as const,
-                    url: '',
-                    title: 'Audio Narration',
-                    pageId: 'welcome'
+                // Add audio references - handle both string IDs and object formats
+                if (audioNarrationData?.welcome) {
+                  let audioId: string | null = null
+                  
+                  // Handle different audio data formats
+                  if (typeof audioNarrationData.welcome === 'string') {
+                    audioId = audioNarrationData.welcome
+                  } else if (audioNarrationData.welcome && typeof audioNarrationData.welcome === 'object' && audioNarrationData.welcome.id) {
+                    audioId = audioNarrationData.welcome.id
                   }
-                  if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
-                    loadedCourseContent.welcomePage.media.push(audioItem)
+                  
+                  if (audioId) {
+                    const audioItem = { 
+                      id: audioId,
+                      type: 'audio' as const,
+                      url: '',
+                      title: 'Audio Narration',
+                      pageId: 'welcome'
+                    }
+                    if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
+                      loadedCourseContent.welcomePage.media.push(audioItem)
+                    }
                   }
                 }
                 // Add media enhancement references
@@ -401,17 +414,28 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 if (!loadedCourseContent.learningObjectivesPage.media) {
                   loadedCourseContent.learningObjectivesPage.media = []
                 }
-                // Add audio references - only if there's a valid ID
-                if (audioNarrationData?.objectives && audioNarrationData.objectives.id) {
-                  const audioItem = {
-                    id: audioNarrationData.objectives.id,
-                    type: 'audio' as const,
-                    url: '',
-                    title: 'Audio Narration',
-                    pageId: 'objectives'
+                // Add audio references - handle both string IDs and object formats
+                if (audioNarrationData?.objectives) {
+                  let audioId: string | null = null
+                  
+                  // Handle different audio data formats
+                  if (typeof audioNarrationData.objectives === 'string') {
+                    audioId = audioNarrationData.objectives
+                  } else if (audioNarrationData.objectives && typeof audioNarrationData.objectives === 'object' && audioNarrationData.objectives.id) {
+                    audioId = audioNarrationData.objectives.id
                   }
-                  if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
-                    loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                  
+                  if (audioId) {
+                    const audioItem = {
+                      id: audioId,
+                      type: 'audio' as const,
+                      url: '',
+                      title: 'Audio Narration',
+                      pageId: 'objectives'
+                    }
+                    if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
+                      loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                    }
                   }
                 }
                 // Add media enhancement references
@@ -435,17 +459,28 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }
                   const topicKey = `topic-${index}`
                   
-                  // Add audio references - only if there's a valid ID
-                  if (audioNarrationData?.[topicKey] && audioNarrationData[topicKey].id) {
-                    const audioItem = {
-                      id: audioNarrationData[topicKey].id,
-                      type: 'audio' as const,
-                      url: '',
-                      title: 'Audio Narration',
-                      pageId: topicKey
+                  // Add audio references - handle both string IDs and object formats
+                  if (audioNarrationData?.[topicKey]) {
+                    let audioId: string | null = null
+                    
+                    // Handle different audio data formats
+                    if (typeof audioNarrationData[topicKey] === 'string') {
+                      audioId = audioNarrationData[topicKey]
+                    } else if (audioNarrationData[topicKey] && typeof audioNarrationData[topicKey] === 'object' && audioNarrationData[topicKey].id) {
+                      audioId = audioNarrationData[topicKey].id
                     }
-                    if (!topic.media.some(m => m.id === audioItem.id)) {
-                      topic.media.push(audioItem)
+                    
+                    if (audioId) {
+                      const audioItem = {
+                        id: audioId,
+                        type: 'audio' as const,
+                        url: '',
+                        title: 'Audio Narration',
+                        pageId: topicKey
+                      }
+                      if (!topic.media.some(m => m.id === audioItem.id)) {
+                        topic.media.push(audioItem)
+                      }
                     }
                   }
                   
@@ -663,6 +698,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
       } catch (error) {
         console.error('Failed to load project data:', error)
+        // Reset loading state immediately on error
+        setIsLoadingProject(false)
+        setLoadingProgress(undefined)
       } finally {
         setLoadingProgress({ current: 5, total: 5, phase: 'Complete!' })
         // Clear loading state after a brief moment to show completion
@@ -673,7 +711,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       }
     }
 
-    loadProjectData()
+    loadProjectData().catch((error) => {
+      console.error('loadProjectData async error:', error)
+      setIsLoadingProject(false)
+      setLoadingProgress(undefined)
+    })
   }, [storage.currentProjectId, storage.isInitialized, lastLoadedProjectId, navigation, measureAsync, isLoadingProject])
   
   // Debug courseContent changes - DISABLED to prevent console spam
@@ -765,7 +807,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     onSave: handleAutosave,
     delay: DURATIONS.autosaveInterval,
     disabled: !storage.currentProjectId,
-    ignoredKeys: ['lastModified', 'mediaFiles', 'audioFiles']
+    ignoredKeys: ['lastModified', 'mediaFiles', 'audioFiles'],
+    minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
   })
   
   // Notification wrapper for backwards compatibility
