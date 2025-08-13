@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { MediaService, createMediaService, type MediaItem, type MediaMetadata, type ProgressCallback } from '../services/MediaService'
 import { logger } from '../utils/logger'
-// Removed blobUrlManager - now using asset URLs from MediaService
+import { BlobURLCache } from '../services/BlobURLCache'
 import type { MediaType } from '../utils/idGenerator'
 import { useStorage } from './PersistentStorageContext'
 
@@ -29,6 +29,10 @@ interface UnifiedMediaContextType {
   // URL management (now using asset URLs)
   createBlobUrl: (mediaId: string) => Promise<string | null>  // Returns asset URL
   revokeBlobUrl: (url: string) => void  // No-op for asset URLs
+  
+  // Cache operations (for performance optimization)
+  hasAudioCached: (mediaId: string) => boolean
+  getCachedAudio: (mediaId: string) => { data: Uint8Array; metadata: MediaMetadata } | null
   
   // Utility
   isLoading: boolean
@@ -54,6 +58,9 @@ export function getMediaFromContext() {
 export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProviderProps) {
   // Get the shared FileStorage instance from PersistentStorageContext
   const storage = useStorage()
+  
+  // Get the global BlobURLCache instance
+  const blobCache = useMemo(() => BlobURLCache.getInstance(), [])
   
   // Extract actual project ID from path if needed
   // ProjectId might be a full path like "C:\...\project.scormproj" or just an ID like "1234567890"
@@ -86,45 +93,94 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const actualProjectId = extractProjectId(projectId)
   
-  // Use a ref to track the media service to avoid re-creating it
+  // Use refs to track the media service and last loaded project ID
   const mediaServiceRef = React.useRef<MediaService | null>(null)
+  const lastLoadedProjectIdRef = React.useRef<string | null>(null)
+  const isLoadingRef = React.useRef<boolean>(false)
   
-  // Get or create the media service for this project with shared FileStorage
-  // Use the extracted project ID instead of the raw projectId prop
-  if (!mediaServiceRef.current || mediaServiceRef.current !== createMediaService(actualProjectId, storage.fileStorage)) {
-    mediaServiceRef.current = createMediaService(actualProjectId, storage.fileStorage)
-  }
-  
-  const mediaService = mediaServiceRef.current
   const [mediaCache, setMediaCache] = useState<Map<string, MediaItem>>(new Map())
-  const [blobUrlCache, setBlobUrlCache] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   
   // Load initial media list when projectId changes
   useEffect(() => {
-    // Update service ref if project changed
-    // Use the extracted project ID instead of the raw projectId prop
-    const newService = createMediaService(actualProjectId, storage.fileStorage)
-    if (mediaServiceRef.current !== newService) {
-      mediaServiceRef.current = newService
+    // Only proceed if project ID has actually changed
+    if (lastLoadedProjectIdRef.current === actualProjectId) {
+      logger.info('[UnifiedMediaContext] Project ID unchanged, skipping media reload:', actualProjectId)
+      return
     }
     
+    // Prevent concurrent loads
+    if (isLoadingRef.current) {
+      logger.info('[UnifiedMediaContext] Already loading media, skipping duplicate load')
+      return
+    }
+    
+    // Clear the audio cache from the previous project's MediaService
+    if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+      logger.info('[UnifiedMediaContext] Clearing audio cache from previous project')
+      ;(mediaServiceRef.current as any).clearAudioCache()
+    }
+    
+    // Update the media service if needed
+    const newService = createMediaService(actualProjectId, storage.fileStorage)
+    mediaServiceRef.current = newService
+    
+    // Update the last loaded project ID
+    lastLoadedProjectIdRef.current = actualProjectId
+    
+    // Load media for the new project
+    logger.info('[UnifiedMediaContext] Loading media for new project:', actualProjectId)
     refreshMedia()
     
     // Cleanup project-specific blob URLs on unmount
     return () => {
-      // Clean up any blob URLs created for this project
+      // Clear audio cache when unmounting
+      if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+        logger.info('[UnifiedMediaContext] Clearing audio cache on unmount')
+        ;(mediaServiceRef.current as any).clearAudioCache()
+      }
+      
+      // Clean up blob URLs for this project using BlobURLCache
       logger.info('[UnifiedMediaContext] Cleaning up project-specific blob URLs')
+      blobCache.clearProject(actualProjectId)
     }
-  }, [actualProjectId, storage.fileStorage])
+  }, [actualProjectId, storage.fileStorage, blobCache])
   
   const refreshMedia = useCallback(async () => {
+    // Prevent concurrent loads
+    if (isLoadingRef.current) {
+      logger.info('[UnifiedMediaContext] Already loading, skipping refresh')
+      return
+    }
+    
+    isLoadingRef.current = true
     setIsLoading(true)
     setError(null)
     
     try {
-      // First, try to load media from saved project data
+      // Get the current media service from ref
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        logger.warn('[UnifiedMediaContext] No media service available')
+        return
+      }
+      
+      // CRITICAL FIX: Load media from disk first to handle session restart
+      // This ensures blob URLs are regenerated for media stored in previous sessions
+      logger.info('[UnifiedMediaContext v2.1.1] Loading media from disk for session restart handling')
+      
+      // Check if MediaService has loadMediaFromDisk method
+      if (typeof (mediaService as any).loadMediaFromDisk === 'function') {
+        try {
+          await (mediaService as any).loadMediaFromDisk()
+          logger.info('[UnifiedMediaContext v2.1.1] Successfully loaded media from disk')
+        } catch (diskLoadError) {
+          logger.warn('[UnifiedMediaContext v2.1.1] Failed to load media from disk, continuing with project data:', diskLoadError)
+        }
+      }
+      
+      // Then try to load media from saved project data
       logger.info('[UnifiedMediaContext] Attempting to load media from project data')
       
       // Get saved media data from storage
@@ -159,13 +215,45 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       })
       setMediaCache(newCache)
       logger.info('[UnifiedMediaContext] Loaded', allMedia.length, 'media items')
+      
+      // PERFORMANCE OPTIMIZATION: Preload all media blob URLs
+      if (allMedia.length > 0) {
+        logger.info('[UnifiedMediaContext] Preloading blob URLs for', allMedia.length, 'media items...')
+        const mediaIds = allMedia.map(item => item.id)
+        
+        // Use BlobURLCache to preload all media
+        const preloadedUrls = await blobCache.preloadMedia(mediaIds, async (id) => {
+          const media = await mediaService.getMedia(id)
+          if (!media || !media.data) return null
+          
+          // Determine MIME type
+          let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+          
+          // Fix common MIME type issues
+          if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
+            mimeType = 'image/jpeg'
+          } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
+            mimeType = 'audio/mpeg'
+          } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
+            mimeType = 'video/mp4'
+          } else if (media.metadata?.type === 'caption') {
+            mimeType = 'text/vtt'
+          }
+          
+          return { data: media.data, mimeType }
+        })
+        
+        const successCount = preloadedUrls.filter(url => url !== null).length
+        logger.info('[UnifiedMediaContext] Preloaded', successCount, 'of', allMedia.length, 'blob URLs')
+      }
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to load media:', err)
       setError(err as Error)
     } finally {
       setIsLoading(false)
+      isLoadingRef.current = false
     }
-  }, [mediaService, storage])
+  }, [storage, blobCache])
   
   const storeMedia = useCallback(async (
     file: File | Blob,
@@ -175,19 +263,15 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     progressCallback?: ProgressCallback
   ): Promise<MediaItem> => {
     try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
       const item = await mediaService.storeMedia(file, pageId, type, metadata, progressCallback)
       
       // Clear any existing blob URL for this media ID to force regeneration
-      setBlobUrlCache(prev => {
-        const updated = new Map(prev)
-        const existingUrl = updated.get(item.id)
-        if (existingUrl && existingUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(existingUrl)
-          console.log('[UnifiedMediaContext] Revoked old blob URL for replaced media:', item.id, existingUrl)
-        }
-        updated.delete(item.id)
-        return updated
-      })
+      blobCache.revoke(item.id)
+      console.log('[UnifiedMediaContext] Cleared blob URL cache for replaced media:', item.id)
       
       // Update cache
       setMediaCache(prev => {
@@ -202,20 +286,28 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       setError(err as Error)
       throw err
     }
-  }, [mediaService])
+  }, [blobCache])
   
   const getMedia = useCallback(async (mediaId: string) => {
     try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
       return await mediaService.getMedia(mediaId)
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to get media:', mediaId, err)
       setError(err as Error)
       return null
     }
-  }, [mediaService])
+  }, [])
   
   const deleteMedia = useCallback(async (mediaId: string): Promise<boolean> => {
     try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
       const success = await mediaService.deleteMedia(mediaService.projectId, mediaId)
       
       if (success) {
@@ -227,16 +319,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         })
         
         // Clear blob URL cache for this media
-        setBlobUrlCache(prev => {
-          const updated = new Map(prev)
-          const existingUrl = updated.get(mediaId)
-          if (existingUrl && existingUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(existingUrl)
-            console.log('[UnifiedMediaContext] Revoked blob URL for deleted media:', mediaId, existingUrl)
-          }
-          updated.delete(mediaId)
-          return updated
-        })
+        blobCache.revoke(mediaId)
+        console.log('[UnifiedMediaContext] Cleared blob URL cache for deleted media:', mediaId)
       }
       
       return success
@@ -245,7 +329,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       setError(err as Error)
       return false
     }
-  }, [mediaService])
+  }, [blobCache])
   
   const storeYouTubeVideo = useCallback(async (
     youtubeUrl: string,
@@ -254,6 +338,10 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     metadata?: Partial<MediaMetadata>
   ): Promise<MediaItem> => {
     try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
       const item = await mediaService.storeYouTubeVideo(youtubeUrl, embedUrl, pageId, metadata)
       
       // Update cache
@@ -269,7 +357,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       setError(err as Error)
       throw err
     }
-  }, [mediaService])
+  }, [])
   
   const getMediaForPage = useCallback((pageId: string): MediaItem[] => {
     return Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
@@ -285,170 +373,138 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      console.log('[UnifiedMediaContext v2.0.8] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
+      console.log('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
-      // CRITICAL FIX: Don't return cached blob URLs that might be stale
-      // Always check if we need to create a fresh one
-      const cachedUrl = blobUrlCache.get(mediaId)
-      if (cachedUrl && cachedUrl.startsWith('blob:')) {
-        // Validate the cached blob URL is still accessible
-        // For now, we'll skip the cache for blob URLs to ensure freshness
-        console.log('[UnifiedMediaContext v2.0.8] Found cached blob URL, but will create fresh one for reliability:', cachedUrl)
-        // Remove the stale URL from cache
-        setBlobUrlCache(prev => {
-          const updated = new Map(prev)
-          updated.delete(mediaId)
-          return updated
-        })
-        // Revoke the old URL to free memory
-        try {
-          URL.revokeObjectURL(cachedUrl)
-        } catch (e) {
-          console.warn('[UnifiedMediaContext v2.0.8] Failed to revoke old blob URL:', e)
+      // Use BlobURLCache for efficient caching
+      return await blobCache.getOrCreate(mediaId, async () => {
+      
+        // Get media with data from MediaService
+        const mediaService = mediaServiceRef.current
+        if (!mediaService) {
+          logger.error('[UnifiedMediaContext] No media service available for createBlobUrl')
+          return null
         }
-      }
-      
-      // Get media with data from MediaService
-      const media = await mediaService.getMedia(mediaId)
-      console.log('[UnifiedMediaContext v2.0.8] Media data retrieved:', {
-        found: !!media,
-        hasUrl: !!(media?.url),
-        hasData: !!(media?.data),
-        dataSize: media?.data?.length || 0,
-        url: media?.url,
-        urlType: media?.url ? (media.url.startsWith('asset://') ? 'asset' : media.url.startsWith('blob:') ? 'blob' : 'other') : 'none',
-        metadata: media?.metadata,
-        metadataKeys: media?.metadata ? Object.keys(media.metadata) : []
-      })
-      
-      if (!media) {
-        console.error('[UnifiedMediaContext v2.0.8] No media found for ID:', mediaId)
-        return null
-      }
-      
-      // Check if it's a YouTube or external URL
-      if (media.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
-        console.log('[UnifiedMediaContext v2.0.8] Using external/data URL directly:', media.url)
-        return media.url
-      }
-      
-      // Check if we already have a valid blob URL from MediaService
-      if (media.url && media.url.startsWith('blob:')) {
-        console.log('[UnifiedMediaContext v2.0.8] Using blob URL from MediaService:', media.url)
-        // Cache it for future use
-        setBlobUrlCache(prev => {
-          const updated = new Map(prev)
-          updated.set(mediaId, media.url!)
-          return updated
-        })
-        return media.url
-      }
-      
-      // Skip checking for existing blob URL in media object - we manage URLs separately
-      // This prevents reusing stale blob URLs after media is deleted and re-added
-      
-      // CRITICAL FIX: Create real blob URL from data instead of using asset://
-      // Since asset:// protocol is not registered, we need to use blob URLs
-      if (media.data && media.data.length > 0) {
-        console.log('[UnifiedMediaContext v2.0.8] Creating fresh blob URL from data:', {
-          mediaId,
-          dataSize: media.data.length,
-          mimeType: media.metadata?.mimeType || media.metadata?.mime_type
+        const media = await mediaService.getMedia(mediaId)
+        console.log('[UnifiedMediaContext v3.0.0] Media data retrieved:', {
+          found: !!media,
+          hasUrl: !!(media?.url),
+          hasData: !!(media?.data),
+          dataSize: media?.data?.length || 0,
+          url: media?.url,
+          urlType: media?.url ? (media.url.startsWith('asset://') ? 'asset' : media.url.startsWith('blob:') ? 'blob' : 'other') : 'none',
+          metadata: media?.metadata,
+          metadataKeys: media?.metadata ? Object.keys(media.metadata) : []
         })
         
-        // Determine MIME type
-        let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+        if (!media) {
+          console.error('[UnifiedMediaContext v3.0.0] No media found for ID:', mediaId)
+          return null
+        }
         
-        // Check if this is an SVG file by examining the content
+        // Check if it's a YouTube or external URL - don't cache these
+        if (media.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
+          console.log('[UnifiedMediaContext v3.0.0] External/data URL, returning directly:', media.url)
+          // Don't cache external URLs in BlobURLCache
+          throw new Error('External URL - skip caching')
+        }
+        
+        // Return data for BlobURLCache to create blob URL
         if (media.data && media.data.length > 0) {
-          const firstBytes = media.data.slice(0, 100)
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(firstBytes)
-          if (text.includes('<svg') || text.includes('<?xml')) {
-            mimeType = 'image/svg+xml'
-            console.log('[UnifiedMediaContext] Detected SVG content for:', mediaId)
-          }
-        }
-        
-        // Fix common MIME type issues
-        if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
-          // Check for SVG first by looking at the data
+          console.log('[UnifiedMediaContext v3.0.0] Returning data for BlobURLCache:', {
+            mediaId,
+            dataSize: media.data.length,
+            mimeType: media.metadata?.mimeType || media.metadata?.mime_type
+          })
+          
+          // Determine MIME type
+          let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+          
+          // Check if this is an SVG file by examining the content
           if (media.data && media.data.length > 0) {
-            const firstBytes = media.data.slice(0, 4)
-            if (firstBytes[0] === 60) { // '<' character, likely XML/SVG
+            const firstBytes = media.data.slice(0, 100)
+            const text = new TextDecoder('utf-8', { fatal: false }).decode(firstBytes)
+            if (text.includes('<svg') || text.includes('<?xml')) {
               mimeType = 'image/svg+xml'
+              console.log('[UnifiedMediaContext] Detected SVG content for:', mediaId)
+            }
+          }
+          
+          // Fix common MIME type issues
+          if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
+            // Check for SVG first by looking at the data
+            if (media.data && media.data.length > 0) {
+              const firstBytes = media.data.slice(0, 4)
+              if (firstBytes[0] === 60) { // '<' character, likely XML/SVG
+                mimeType = 'image/svg+xml'
+              } else {
+                mimeType = 'image/jpeg' // Default for images
+              }
             } else {
               mimeType = 'image/jpeg' // Default for images
             }
-          } else {
-            mimeType = 'image/jpeg' // Default for images
+          } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
+            mimeType = 'audio/mpeg' // Default for audio (mp3)
+          } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
+            mimeType = 'video/mp4' // Default for video
+          } else if (media.metadata?.type === 'caption') {
+            mimeType = 'text/vtt' // For captions
           }
-        } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
-          mimeType = 'audio/mpeg' // Default for audio (mp3)
-        } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
-          mimeType = 'video/mp4' // Default for video
-        } else if (media.metadata?.type === 'caption') {
-          mimeType = 'text/vtt' // For captions
+          
+          return { data: media.data, mimeType }
         }
         
-        // Create blob from Uint8Array data
-        const blob = new Blob([media.data.buffer as ArrayBuffer], { type: mimeType })
-        const blobUrl = URL.createObjectURL(blob)
-        
-        console.log('[UnifiedMediaContext v2.0.8] Successfully created fresh blob URL:', {
-          mediaId,
-          blobUrl,
-          blobSize: blob.size,
-          mimeType: blob.type
-        })
-        
-        // Cache the blob URL
-        setBlobUrlCache(prev => {
-          const updated = new Map(prev)
-          updated.set(mediaId, blobUrl)
-          return updated
-        })
-        
-        return blobUrl
-      }
-      
-      // If no data but we have an asset URL, warn about the issue
-      if (media.url && media.url.startsWith('asset://')) {
-        console.error('[UnifiedMediaContext v2.0.8] Asset URL without data - asset protocol not working:', media.url)
-        console.log('[UnifiedMediaContext v2.0.8] Attempting to fetch media data directly...')
-        
-        // Try to get the data if we don't have it
-        const assetUrl = await mediaService.createBlobUrl(mediaId)
-        if (assetUrl) {
-          console.log('[UnifiedMediaContext v2.0.8] Got URL from createBlobUrl:', assetUrl)
-          return assetUrl
-        }
-      }
-      
-      // No URL or data available
-      console.error('[UnifiedMediaContext v2.0.8] FAILED - No URL or data for media:', mediaId)
-      return null
+        // No data available
+        console.error('[UnifiedMediaContext v3.0.0] No data available for media:', mediaId)
+        return null
+      })
     } catch (err) {
-      logger.error('[UnifiedMediaContext v2.0.8] Failed to create blob URL:', mediaId, err)
+      // Check if it's an external URL that we should return directly
+      if (err instanceof Error && err.message === 'External URL - skip caching') {
+        // Get the media again to return the external URL
+        const mediaService = mediaServiceRef.current
+        if (mediaService) {
+          const media = await mediaService.getMedia(mediaId)
+          if (media?.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
+            return media.url
+          }
+        }
+      }
+      logger.error('[UnifiedMediaContext v3.0.0] Failed to create blob URL:', mediaId, err)
       setError(err as Error)
       return null
     }
-  }, [mediaService, actualProjectId, blobUrlCache])
+  }, [actualProjectId, blobCache])
   
   const revokeBlobUrl = useCallback((url: string) => {
-    // Asset URLs don't need to be revoked - they are persistent
-    // Only revoke if this is a legacy blob URL
-    if (url && url.startsWith('blob:')) {
-      console.log('[UnifiedMediaContext] Revoking legacy blob URL:', url)
-      try {
-        URL.revokeObjectURL(url)
-      } catch (err) {
-        logger.error('[UnifiedMediaContext] Failed to revoke blob URL:', url, err)
-      }
-    }
+    // BlobURLCache handles revocation - this is now a no-op
+    // Kept for backward compatibility
+    console.log('[UnifiedMediaContext] revokeBlobUrl called (handled by BlobURLCache):', url)
   }, [])
   
   const clearError = useCallback(() => {
     setError(null)
+  }, [])
+  
+  const hasAudioCached = useCallback((mediaId: string): boolean => {
+    const mediaService = mediaServiceRef.current
+    if (!mediaService) return false
+    
+    // Check if MediaService has the hasAudioCached method
+    if (typeof (mediaService as any).hasAudioCached === 'function') {
+      return (mediaService as any).hasAudioCached(mediaId)
+    }
+    return false
+  }, [])
+  
+  const getCachedAudio = useCallback((mediaId: string): { data: Uint8Array; metadata: MediaMetadata } | null => {
+    const mediaService = mediaServiceRef.current
+    if (!mediaService) return null
+    
+    // Check if MediaService has the getCachedAudio method
+    if (typeof (mediaService as any).getCachedAudio === 'function') {
+      return (mediaService as any).getCachedAudio(mediaId)
+    }
+    return null
   }, [])
   
   const value = useMemo<UnifiedMediaContextType>(() => ({
@@ -461,6 +517,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     getMediaById,
     createBlobUrl,
     revokeBlobUrl,
+    hasAudioCached,
+    getCachedAudio,
     isLoading,
     error,
     clearError,
@@ -475,6 +533,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     getMediaById,
     createBlobUrl,
     revokeBlobUrl,
+    hasAudioCached,
+    getCachedAudio,
     isLoading,
     error,
     clearError,

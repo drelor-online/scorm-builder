@@ -77,6 +77,9 @@ export class MediaService {
   private fileStorage: FileStorage
   private mediaCache: Map<string, MediaItem> = new Map()
   private blobUrlCache: Map<string, string> = new Map() // Cache blob URLs for the session
+  private loadingPromise: Promise<void> | null = null // For deduplicating concurrent loads
+  private audioDataCache: Map<string, { data: Uint8Array; metadata: MediaMetadata }> = new Map() // Persistent audio cache
+  private audioLoadingPromises: Map<string, Promise<any>> = new Map() // Deduplicate concurrent audio loads
   
   private constructor(config: MediaServiceConfig) {
     // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks
@@ -432,13 +435,37 @@ export class MediaService {
   
   /**
    * Get media from file system with asset URL
+   * Includes persistent caching for audio files to prevent reloading
    */
   async getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
     debugLogger.debug('MediaService.getMedia', 'Getting media', { mediaId })
     
+    // Check if this is audio and we have it cached
+    if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
+      const cached = this.audioDataCache.get(mediaId)
+      if (cached) {
+        console.log('[MediaService] Returning cached audio data for:', mediaId)
+        return { ...cached, url: this.blobUrlCache.get(mediaId) }
+      }
+      
+      // Check if we're already loading this audio
+      const loadingPromise = this.audioLoadingPromises.get(mediaId)
+      if (loadingPromise) {
+        console.log('[MediaService] Waiting for existing audio load:', mediaId)
+        return loadingPromise
+      }
+    }
+    
     // Note: We no longer return cached blob URLs here to avoid stale URL issues
     // Blob URLs will be created fresh in UnifiedMediaContext.createBlobUrl
     // This ensures that replaced media always gets fresh blob URLs
+    
+    // For audio files, wrap the loading in a promise to deduplicate
+    if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
+      const loadPromise = this.loadAudioWithDeduplication(mediaId)
+      this.audioLoadingPromises.set(mediaId, loadPromise)
+      return loadPromise
+    }
     
     try {
       console.log('[MediaService] Getting media from file system:', mediaId)
@@ -620,6 +647,16 @@ export class MediaService {
         url
       }
       
+      // Cache audio data persistently to prevent reloading
+      if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
+        if (data && metadata) {
+          this.audioDataCache.set(mediaId, { data, metadata })
+          console.log('[MediaService] Cached audio data for future use:', mediaId)
+        }
+        // Clear loading promise
+        this.audioLoadingPromises.delete(mediaId)
+      }
+      
       console.log('[MediaService] Returning media:', {
         mediaId,
         hasData: !!result.data,
@@ -638,6 +675,109 @@ export class MediaService {
       console.error('[MediaService] Error details:', error)
       return null
     }
+  }
+  
+  /**
+   * Load audio with deduplication to prevent concurrent loads
+   */
+  private async loadAudioWithDeduplication(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
+    try {
+      console.log('[MediaService] Loading audio from file system:', mediaId)
+      
+      const mediaInfo = await this.fileStorage.getMedia(mediaId)
+      
+      if (!mediaInfo) {
+        console.error('[MediaService] No audio info returned from FileStorage for:', mediaId)
+        this.audioLoadingPromises.delete(mediaId)
+        return null
+      }
+      
+      // Process the audio data similar to regular getMedia
+      const metadata = this.processMetadata(mediaInfo)
+      
+      // Create blob URL for audio
+      let url: string | undefined
+      if (mediaInfo.data) {
+        const blob = new Blob([mediaInfo.data], { 
+          type: metadata.mimeType || metadata.mime_type || 'audio/mpeg'
+        })
+        url = URL.createObjectURL(blob)
+        this.blobUrlCache.set(mediaId, url)
+        console.log('[MediaService] Created blob URL for audio:', mediaId)
+      }
+      
+      const data = mediaInfo.data ? new Uint8Array(mediaInfo.data) : undefined
+      
+      const result = { data, metadata, url }
+      
+      // Cache the audio data
+      if (data && metadata) {
+        this.audioDataCache.set(mediaId, { data, metadata })
+        console.log('[MediaService] Cached audio data for:', mediaId)
+      }
+      
+      // Clear loading promise
+      this.audioLoadingPromises.delete(mediaId)
+      
+      return result
+    } catch (error) {
+      console.error('[MediaService] Failed to load audio:', mediaId, error)
+      this.audioLoadingPromises.delete(mediaId)
+      return null
+    }
+  }
+  
+  /**
+   * Helper to process metadata consistently
+   */
+  private processMetadata(mediaInfo: any): MediaMetadata {
+    return {
+      type: mediaInfo.mediaType || mediaInfo.metadata?.type || 'unknown',
+      pageId: mediaInfo.metadata?.pageId || mediaInfo.metadata?.page_id || '',
+      mimeType: mediaInfo.metadata?.mimeType || mediaInfo.metadata?.mime_type,
+      mime_type: mediaInfo.metadata?.mime_type,
+      source: mediaInfo.metadata?.source,
+      embedUrl: mediaInfo.metadata?.embedUrl || mediaInfo.metadata?.embed_url,
+      isYouTube: mediaInfo.metadata?.source === 'youtube',
+      youtubeUrl: mediaInfo.metadata?.youtubeUrl,
+      title: mediaInfo.metadata?.title,
+      uploadedAt: mediaInfo.metadata?.uploadedAt || new Date().toISOString()
+    }
+  }
+  
+  /**
+   * Clear the audio cache - should be called when switching projects
+   */
+  clearAudioCache(): void {
+    console.log('[MediaService] Clearing audio cache, current size:', this.audioDataCache.size)
+    
+    // Clear blob URLs for cached audio
+    this.audioDataCache.forEach((_, mediaId) => {
+      const url = this.blobUrlCache.get(mediaId)
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url)
+      }
+    })
+    
+    // Clear the caches
+    this.audioDataCache.clear()
+    this.audioLoadingPromises.clear()
+    
+    console.log('[MediaService] Audio cache cleared')
+  }
+  
+  /**
+   * Check if audio is cached
+   */
+  hasAudioCached(mediaId: string): boolean {
+    return this.audioDataCache.has(mediaId)
+  }
+  
+  /**
+   * Get cached audio without loading from disk
+   */
+  getCachedAudio(mediaId: string): { data: Uint8Array; metadata: MediaMetadata } | null {
+    return this.audioDataCache.get(mediaId) || null
   }
   
   /**
@@ -774,6 +914,84 @@ export class MediaService {
       debugLogger.error('MediaService.listAllMedia', 'Failed to list media', error)
       logger.error('[MediaService] Failed to list all media:', error)
       return []
+    }
+  }
+
+  /**
+   * Load media from disk and rebuild cache
+   * This should be called on app startup to restore media from previous sessions
+   * Includes deduplication to prevent multiple concurrent backend calls
+   */
+  async loadMediaFromDisk(): Promise<void> {
+    // If already loading, return the existing promise to deduplicate requests
+    if (this.loadingPromise) {
+      debugLogger.info('MediaService.loadMediaFromDisk', 'Already loading, returning existing promise')
+      return this.loadingPromise
+    }
+    
+    // Create and store the loading promise
+    this.loadingPromise = this.doLoadMediaFromDisk()
+    
+    try {
+      await this.loadingPromise
+    } finally {
+      // Clear the loading promise when done (success or failure)
+      this.loadingPromise = null
+    }
+  }
+  
+  private async doLoadMediaFromDisk(): Promise<void> {
+    debugLogger.info('MediaService.doLoadMediaFromDisk', 'Loading media from disk for project', {
+      projectId: this.projectId
+    })
+    
+    try {
+      // Clear existing cache to start fresh
+      this.mediaCache.clear()
+      this.blobUrlCache.clear() // Clear blob URL cache as they're not valid across sessions
+      
+      // Check if FileStorage has getAllProjectMedia method
+      if (this.fileStorage && typeof (this.fileStorage as any).getAllProjectMedia === 'function') {
+        const fileSystemMedia = await (this.fileStorage as any).getAllProjectMedia()
+        
+        if (Array.isArray(fileSystemMedia)) {
+          debugLogger.info('MediaService.loadMediaFromDisk', 'Found media on disk', {
+            count: fileSystemMedia.length
+          })
+          
+          // Convert and add each media item to cache
+          fileSystemMedia.forEach((fsMedia: any) => {
+            const mediaItem: MediaItem = {
+              id: fsMedia.id,
+              type: fsMedia.mediaType || fsMedia.metadata?.type || 'image',
+              pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || '',
+              fileName: fsMedia.metadata?.fileName || fsMedia.metadata?.original_name || '',
+              metadata: {
+                ...fsMedia.metadata,
+                type: fsMedia.mediaType || fsMedia.metadata?.type || 'image',
+                uploadedAt: fsMedia.metadata?.uploadedAt || new Date().toISOString()
+              }
+            }
+            this.mediaCache.set(fsMedia.id, mediaItem)
+            
+            debugLogger.debug('MediaService.loadMediaFromDisk', 'Loaded media item', {
+              id: fsMedia.id,
+              type: mediaItem.type,
+              pageId: mediaItem.pageId
+            })
+          })
+          
+          logger.info('[MediaService] Loaded', fileSystemMedia.length, 'media items from disk')
+        } else {
+          debugLogger.info('MediaService.doLoadMediaFromDisk', 'No media found on disk')
+        }
+      } else {
+        debugLogger.warn('MediaService.doLoadMediaFromDisk', 'FileStorage does not support getAllProjectMedia')
+      }
+    } catch (error) {
+      debugLogger.error('MediaService.doLoadMediaFromDisk', 'Failed to load media from disk', error)
+      logger.error('[MediaService] Failed to load media from disk:', error)
+      throw error // Re-throw to handle in loadMediaFromDisk
     }
   }
 

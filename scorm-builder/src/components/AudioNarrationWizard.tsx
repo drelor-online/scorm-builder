@@ -165,7 +165,9 @@ export function AudioNarrationWizard({
     createBlobUrl,
     revokeBlobUrl,
     getAllMedia,
-    deleteMedia
+    deleteMedia,
+    hasAudioCached,
+    getCachedAudio
   } = useUnifiedMedia()
   
   // Extract narration blocks
@@ -234,6 +236,12 @@ export function AudioNarrationWizard({
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false) // Clear all confirmation dialog
   const [isBulkAudioUploading, setIsBulkAudioUploading] = useState(false) // Track bulk audio upload separately
   const [isBulkOperationActive, setIsBulkOperationActive] = useState(false) // Track ANY bulk operation
+  
+  // Confirmation dialog states for audio/caption removal
+  const [showRemoveAudioConfirm, setShowRemoveAudioConfirm] = useState(false)
+  const [showRemoveCaptionConfirm, setShowRemoveCaptionConfirm] = useState(false)
+  const [pendingRemoveBlockNumber, setPendingRemoveBlockNumber] = useState<string | null>(null)
+  
   // Version tracking no longer needed with arrays
   
   // Consolidated recording state for better performance
@@ -764,6 +772,60 @@ export function AudioNarrationWizard({
           }
           
           try {
+            // PERFORMANCE: Check if audio is already cached in MediaService first
+            if (hasAudioCached && hasAudioCached(audioId)) {
+              logger.log(`[AudioNarrationWizard] Audio already cached in MediaService for ${audioId}`)
+              const cachedAudio = getCachedAudio ? getCachedAudio(audioId) : null
+              
+              if (cachedAudio) {
+                const fileName = cachedAudio.metadata?.original_name || cachedAudio.metadata?.originalName || `${block.blockNumber}-Block.mp3`
+                
+                // Create blob URL from cached data
+                let playableUrl: string | undefined
+                try {
+                  const blob = new Blob([cachedAudio.data], { 
+                    type: cachedAudio.metadata?.mimeType || cachedAudio.metadata?.mime_type || 'audio/mpeg' 
+                  })
+                  playableUrl = URL.createObjectURL(blob)
+                  
+                  // Track blob URL for cleanup
+                  if (playableUrl) {
+                    blobUrlsRef.current.push(playableUrl)
+                    logger.log(`[AudioNarrationWizard] Created blob URL from cached audio: ${playableUrl}`)
+                  }
+                } catch (e) {
+                  logger.error(`[AudioNarrationWizard] Failed to create blob URL from cached audio:`, e)
+                }
+                
+                const file = new File([], fileName, { type: cachedAudio.metadata?.mimeType || 'audio/mpeg' })
+                
+                const audioFile: AudioFile = {
+                  blockNumber: block.blockNumber,
+                  file: file,
+                  url: playableUrl,
+                  mediaId: audioId
+                }
+                
+                // Cache locally for component use
+                mediaCache.current.set(cacheKey, {
+                  mediaData: cachedAudio,
+                  fileName: fileName,
+                  file: file,
+                  url: playableUrl
+                })
+                
+                logger.log(`[AudioNarrationWizard] Used cached audio from MediaService: ${audioId} for block ${block.blockNumber}`)
+                
+                // Update progress
+                setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
+                
+                return audioFile
+              }
+            }
+            
+            // Not cached - load from disk (will be cached by MediaService)
+            logger.log(`[AudioNarrationWizard] Audio not cached, loading from disk: ${audioId}`)
+            
             // Get media from UnifiedMedia - use asset URL directly
             const mediaData = await getMedia(audioId)
             
@@ -1810,7 +1872,13 @@ export function AudioNarrationWizard({
     }
   }
 
-  // Remove audio for a specific block
+  // Handler to show confirmation dialog for audio removal
+  const handleRemoveAudioClick = (blockNumber: string) => {
+    setPendingRemoveBlockNumber(blockNumber)
+    setShowRemoveAudioConfirm(true)
+  }
+
+  // Remove audio for a specific block (after confirmation)
   const removeAudio = async (blockNumber: string) => {
     // Find the file to remove
     const fileToRemove = audioFiles.find(f => f.blockNumber === blockNumber)
@@ -1844,11 +1912,32 @@ export function AudioNarrationWizard({
     // Update state to remove the file
     setAudioFiles(prev => prev.filter(f => f.blockNumber !== blockNumber))
   }
+  
+  // Confirm audio removal
+  const confirmRemoveAudio = async () => {
+    if (pendingRemoveBlockNumber) {
+      await removeAudio(pendingRemoveBlockNumber)
+      setShowRemoveAudioConfirm(false)
+      setPendingRemoveBlockNumber(null)
+    }
+  }
+  
+  // Cancel audio removal
+  const cancelRemoveAudio = () => {
+    setShowRemoveAudioConfirm(false)
+    setPendingRemoveBlockNumber(null)
+  }
 
   // Generate caption for a specific block
   // Caption generation removed - requires audio timing data to properly sync captions
 
-  // Remove caption for a specific block
+  // Handler to show confirmation dialog for caption removal
+  const handleRemoveCaptionClick = (blockNumber: string) => {
+    setPendingRemoveBlockNumber(blockNumber)
+    setShowRemoveCaptionConfirm(true)
+  }
+
+  // Remove caption for a specific block (after confirmation)
   const removeCaption = async (blockNumber: string) => {
     // Find the caption to remove
     const captionToRemove = captionFiles.find(f => f.blockNumber === blockNumber)
@@ -1867,6 +1956,21 @@ export function AudioNarrationWizard({
     
     // Update state to remove the caption
     setCaptionFiles(prev => prev.filter(f => f.blockNumber !== blockNumber))
+  }
+  
+  // Confirm caption removal
+  const confirmRemoveCaption = async () => {
+    if (pendingRemoveBlockNumber) {
+      await removeCaption(pendingRemoveBlockNumber)
+      setShowRemoveCaptionConfirm(false)
+      setPendingRemoveBlockNumber(null)
+    }
+  }
+  
+  // Cancel caption removal
+  const cancelRemoveCaption = () => {
+    setShowRemoveCaptionConfirm(false)
+    setPendingRemoveBlockNumber(null)
   }
 
   // Recording functions
@@ -2753,14 +2857,14 @@ export function AudioNarrationWizard({
                           onCancel={() => setEditingBlockId(null)}
                           onPlayAudio={() => playAudio(block.blockNumber)}
                           onUploadAudio={(e) => handleAudioFileChange(e, block)}
-                          onRemoveAudio={() => removeAudio(block.blockNumber)}
+                          onRemoveAudio={() => handleRemoveAudioClick(block.blockNumber)}
                           onPreviewCaption={() => {
                             setPreviewBlockId(block.id)
                             setShowPreview(true)
                           }}
                           onToggleRecording={() => handleRecordClick(block)}
                           onReplaceAudio={() => setShowReplaceAudioModal(block)}
-                          onRemoveCaption={() => removeCaption(block.blockNumber)}
+                          onRemoveCaption={() => handleRemoveCaptionClick(block.blockNumber)}
                           isRecording={recordingBlockId === block.id}
                           recordingId={recordingBlockId}
                           isPlaying={isCurrentlyPlaying}
@@ -3257,8 +3361,34 @@ export function AudioNarrationWizard({
           }}
         />
       </div>
+
+      {/* Confirmation dialog for audio removal */}
+      <ConfirmDialog
+        isOpen={showRemoveAudioConfirm}
+        title="Remove Audio"
+        message="Are you sure you want to remove this audio narration? This action cannot be undone."
+        confirmText="Delete Audio"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmRemoveAudio}
+        onCancel={cancelRemoveAudio}
+      />
+
+      {/* Confirmation dialog for caption removal */}
+      <ConfirmDialog
+        isOpen={showRemoveCaptionConfirm}
+        title="Remove Caption"
+        message="Are you sure you want to remove this caption file? This action cannot be undone."
+        confirmText="Delete Caption"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmRemoveCaption}
+        onCancel={cancelRemoveCaption}
+      />
     </PageLayout>
   )
 }
 
-export default AudioNarrationWizard;
+// Memoize the component to prevent unnecessary re-renders
+// This significantly improves performance when parent components re-render
+export default memo(AudioNarrationWizard);
