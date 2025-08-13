@@ -22,6 +22,7 @@ import { tokens } from './DesignSystem/designTokens'
 import styles from './AudioNarrationWizard.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { useStepData } from '../hooks/useStepData'
 // Removed blobUrlManager - now using asset URLs from MediaService
 import { generateAudioRecordingId } from '../utils/idGenerator'
@@ -169,6 +170,7 @@ export function AudioNarrationWizard({
     hasAudioCached,
     getCachedAudio
   } = useUnifiedMedia()
+  const { success, error: notifyError, info } = useNotifications()
   
   // Extract narration blocks
   const initialBlocks = extractNarrationBlocks(courseContent)
@@ -206,7 +208,8 @@ export function AudioNarrationWizard({
   audioFilesRef.current = audioFiles
   captionFilesRef.current = captionFiles
   narrationBlocksRef.current = narrationBlocks
-  const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null)
+  const [playingBlockNumber, setPlayingBlockNumber] = useState<string | null>(null)
+  const [audioVersionMap, setAudioVersionMap] = useState<Map<string, number>>(new Map())
   const [audioUploaded, setAudioUploaded] = useState(false)
   const [captionsUploaded, setCaptionsUploaded] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{
@@ -783,7 +786,12 @@ export function AudioNarrationWizard({
                 // Create blob URL from cached data
                 let playableUrl: string | undefined
                 try {
-                  const blob = new Blob([cachedAudio.data], { 
+                  // Create a new Uint8Array with a proper ArrayBuffer to ensure Blob compatibility
+                  // This avoids TypeScript's SharedArrayBuffer vs ArrayBuffer type issues
+                  const uint8Array = new Uint8Array(cachedAudio.data.length)
+                  uint8Array.set(cachedAudio.data)
+                  
+                  const blob = new Blob([uint8Array], { 
                     type: cachedAudio.metadata?.mimeType || cachedAudio.metadata?.mime_type || 'audio/mpeg' 
                   })
                   playableUrl = URL.createObjectURL(blob)
@@ -1676,7 +1684,7 @@ export function AudioNarrationWizard({
     if (file.size > MAX_AUDIO_SIZE) {
       setError(`Audio file is too large. Maximum size is 50MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB`)
       event.target.value = '' // Reset file input
-      return
+      return Promise.resolve() // Return resolved promise for async consistency
     }
     
     // Start operation tracking
@@ -1728,13 +1736,43 @@ export function AudioNarrationWizard({
       }
       
       setAudioFiles(prev => {
+        // Find and revoke old blob URL if it exists
+        const oldAudio = prev.find(f => f.blockNumber === block.blockNumber)
+        if (oldAudio?.url) {
+          // If we're currently playing this audio, stop it
+          if (playingBlockNumber === block.blockNumber) {
+            logger.log(`[AudioNarrationWizard] Stopping currently playing audio before replacement`)
+            setPlayingBlockNumber(null)
+          }
+          
+          // Revoke old blob URL if it's a blob
+          if (oldAudio.url.startsWith('blob:')) {
+            try {
+              URL.revokeObjectURL(oldAudio.url)
+              logger.log(`[AudioNarrationWizard] Revoked old blob URL: ${oldAudio.url}`)
+            } catch (e) {
+              logger.warn(`[AudioNarrationWizard] Failed to revoke old blob URL:`, e)
+            }
+          }
+        }
+        
         // Remove any existing audio for this block
         const filtered = prev.filter(f => f.blockNumber !== block.blockNumber)
-        // Add the new audio
+        
+        // Increment version for this block to force TauriAudioPlayer remount
+        setAudioVersionMap(prev => {
+          const newMap = new Map(prev)
+          const currentVersion = newMap.get(block.blockNumber) || 0
+          newMap.set(block.blockNumber, currentVersion + 1)
+          logger.log(`[AudioNarrationWizard] Incremented audio version for block ${block.blockNumber} to ${currentVersion + 1}`)
+          return newMap
+        })
+        
+        // Add the new audio with fresh URL
         return [...filtered, {
           blockNumber: block.blockNumber,
           file,
-          url,
+          url, // This is the fresh blob URL created above
           mediaId: storedItem.id
         }]
       })
@@ -1748,7 +1786,12 @@ export function AudioNarrationWizard({
       logger.log('[AudioNarrationWizard] Audio upload operation complete')
     } catch (error) {
       logger.error('Error registering audio:', error)
+      setError(`Failed to upload audio: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
+      // Reset the file input to allow selecting the same file again
+      if (event.target) {
+        event.target.value = ''
+      }
       // End the operation which will trigger save if no other operations are active
       endOperation(operationId)
     }
@@ -1819,6 +1862,7 @@ export function AudioNarrationWizard({
     
     logger.log('[AudioNarrationWizard] playAudio called for block:', blockNumber, 'audioFile:', audioFile)
     
+    // Always prefer the URL from state as it's the most up-to-date after replacement
     let url = audioFile.url || undefined
     
     // If we have an asset:// URL, use it directly! Tauri can handle these natively
@@ -1850,16 +1894,23 @@ export function AudioNarrationWizard({
     }
     
     if (url) {
-      // If already playing the same audio, stop it
-      if (playingAudioUrl === url) {
-        logger.log('[AudioNarrationWizard] Stopping audio:', url)
-        setPlayingAudioUrl(null)
+      // Check if we're playing the same block (not just same URL)
+      // Add timestamp to force cache invalidation when playing replaced audio
+      const urlWithTimestamp = `${url}#t=${Date.now()}`
+      
+      // If already playing the same audio block, stop it
+      if (playingBlockNumber === blockNumber) {
+        logger.log('[AudioNarrationWizard] Stopping audio for block:', blockNumber)
+        setPlayingBlockNumber(null)
+        info(`Stopped audio for block ${blockNumber}`)
         return
       }
       
-      // Store the currently playing audio URL for TauriAudioPlayer to handle
-      logger.log('[AudioNarrationWizard] Playing audio with TauriAudioPlayer:', url)
-      setPlayingAudioUrl(url)
+      // Store the block number to track what's playing
+      // This survives URL changes when audio is replaced
+      logger.log('[AudioNarrationWizard] Playing audio for block:', blockNumber, 'URL:', urlWithTimestamp)
+      setPlayingBlockNumber(blockNumber)
+      info(`Playing audio for block ${blockNumber}`)
       
       // Restore scroll position after state change
       requestAnimationFrame(() => {
@@ -2068,18 +2119,59 @@ export function AudioNarrationWizard({
         }
         
         setAudioFiles(prev => {
+          // Find and revoke old blob URL if it exists
+          const oldAudio = prev.find(f => f.blockNumber === block.blockNumber)
+          if (oldAudio?.url) {
+            // If we're currently playing this audio, stop it
+            if (playingBlockNumber === block.blockNumber) {
+              logger.log(`[AudioNarrationWizard] Stopping currently playing audio before recording replacement`)
+              setPlayingBlockNumber(null)
+            }
+            
+            // Revoke old blob URL if it's a blob
+            if (oldAudio.url.startsWith('blob:')) {
+              try {
+                URL.revokeObjectURL(oldAudio.url)
+                logger.log(`[AudioNarrationWizard] Revoked old blob URL before recording: ${oldAudio.url}`)
+              } catch (e) {
+                logger.warn(`[AudioNarrationWizard] Failed to revoke old blob URL:`, e)
+              }
+            }
+          }
+          
           // Remove any existing audio for this block
           const filtered = prev.filter(f => f.blockNumber !== block.blockNumber)
-          // Add the new audio
-          return [...filtered, {
+          
+          // Log the URL change for debugging
+          const oldUrl = oldAudio?.url || 'none'
+          logger.log(`[AudioNarrationWizard] Replacing audio URL for block ${block.blockNumber}:`)
+          logger.log(`  Old URL: ${oldUrl}`)
+          logger.log(`  New URL: ${url}`)
+          
+          // Increment version for this block to force TauriAudioPlayer remount
+          setAudioVersionMap(prev => {
+            const newMap = new Map(prev)
+            const currentVersion = newMap.get(block.blockNumber) || 0
+            newMap.set(block.blockNumber, currentVersion + 1)
+            logger.log(`[AudioNarrationWizard] Incremented audio version for block ${block.blockNumber} to ${currentVersion + 1}`)
+            return newMap
+          })
+          
+          // Add the new audio with fresh URL
+          const newAudioEntry = {
             blockNumber: block.blockNumber,
             file: audioFile,
-            url,
+            url, // This is the fresh blob URL created above
             mediaId: storedItem.id
-          }]
+          }
+          
+          return [...filtered, newAudioEntry]
         })
         
-        logger.log(`[AudioNarrationWizard] Stored recorded audio ${storedItem.id} for block ${block.blockNumber}`)
+        logger.log(`[AudioNarrationWizard] Stored recorded audio ${storedItem.id} for block ${block.blockNumber} with URL: ${url}`)
+        
+        // Show success notification
+        success(`Audio recorded for block ${block.blockNumber}`)
         
         // Operation will complete and trigger save via endOperation
         logger.log('[AudioNarrationWizard] Recording operation complete')
@@ -2715,7 +2807,7 @@ export function AudioNarrationWizard({
             {narrationBlocks.map((block) => {
               const hasAudio = audioFiles.some(f => f.blockNumber === block.blockNumber)
               const hasCaption = captionFiles.some(f => f.blockNumber === block.blockNumber)
-              const isActive = editingBlockId === block.id || playingAudioUrl === audioFiles.find(f => f.blockNumber === block.blockNumber)?.url
+              const isActive = editingBlockId === block.id || playingBlockNumber === block.blockNumber
               
               return (
                 <li 
@@ -2739,7 +2831,7 @@ export function AudioNarrationWizard({
                     </div>
                   </div>
                   <div className={styles.navItemPreview}>
-                    {block.text.substring(0, 50)}...
+                    {typeof block.text === 'string' ? block.text.substring(0, 50) : String(block.text || '').substring(0, 50)}...
                   </div>
                 </li>
               )
@@ -2835,7 +2927,7 @@ export function AudioNarrationWizard({
                     const isEditing = editingBlockId === block.id
                     
                     const audioFile = audioFiles.find(f => f.blockNumber === block.blockNumber)
-                    const isCurrentlyPlaying = playingAudioUrl === audioFile?.url
+                    const isCurrentlyPlaying = playingBlockNumber === block.blockNumber
                     
                     return (
                       <div key={block.id} id={`block-${block.blockNumber}`}>
@@ -3110,7 +3202,7 @@ export function AudioNarrationWizard({
                     controls
                     src={recordingPreviewUrl}
                   />
-                  <ButtonGroup gap="medium" align="center">
+                  <ButtonGroup gap="medium" align="center" style={{ marginTop: 'var(--space-lg)' }}>
                     <Button
                       onClick={saveRecording}
                       variant="primary"
@@ -3212,8 +3304,11 @@ export function AudioNarrationWizard({
                 accept="audio/*"
                 className={styles.hiddenInput}
                 id="replace-audio-upload"
-                onChange={(e) => {
-                  handleAudioFileChange(e, showReplaceAudioModal)
+                onChange={async (e) => {
+                  // Wait for the upload to complete before closing modal
+                  await handleAudioFileChange(e, showReplaceAudioModal)
+                  // Don't reset here - it's already done in handleAudioFileChange's finally block
+                  // Close the modal after upload completes
                   setShowReplaceAudioModal(null)
                 }}
               />
@@ -3343,20 +3438,32 @@ export function AudioNarrationWizard({
       {/* Hidden TauriAudioPlayer for asset:// URL playback - Always rendered to prevent layout shifts */}
       <div className={styles.hiddenAudioPlayer}>
         <TauriAudioPlayer
-          src={playingAudioUrl || undefined}
+          key={`audio-${playingBlockNumber || 'none'}-v${audioVersionMap.get(playingBlockNumber || '') || 0}-t${Date.now()}`} // Force remount with timestamp in key
+          src={(() => {
+            if (!playingBlockNumber) return undefined
+            const audioFile = audioFiles.find(f => f.blockNumber === playingBlockNumber)
+            if (!audioFile?.url) {
+              logger.warn(`[AudioNarrationWizard] No audio URL found for playing block ${playingBlockNumber}`)
+              return undefined
+            }
+            // Don't add query params to blob URLs - they break!
+            // The key prop on the component handles cache busting
+            logger.log(`[AudioNarrationWizard] TauriAudioPlayer src for block ${playingBlockNumber}: ${audioFile.url}`)
+            return audioFile.url
+          })()}
           controls={false}
           data-testid="hidden-audio-player"
           autoPlay={true}
           onError={(error) => {
-            if (playingAudioUrl) {
+            if (playingBlockNumber) {
               logger.error('[AudioNarrationWizard] TauriAudioPlayer error:', error)
               setError('Failed to play audio')
-              setPlayingAudioUrl(null)
+              setPlayingBlockNumber(null)
             }
           }}
           onEnded={() => {
-            if (playingAudioUrl) {
-              setPlayingAudioUrl(null)
+            if (playingBlockNumber) {
+              setPlayingBlockNumber(null)
             }
           }}
         />

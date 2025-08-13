@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, memo, useCallback, useMemo } from 'react'
 import { CourseContent, Page, Topic } from '../types/aiPrompt'
 import { Card } from './DesignSystem'
 import { tokens } from './DesignSystem/designTokens'
@@ -15,11 +15,16 @@ interface PageThumbnailGridProps {
   onPageSelect: (pageId: string) => void
 }
 
-// Media Preview Component
-const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
+// Media Preview Component - Memoized for performance
+const MediaPreview: React.FC<{ page: Page | Topic }> = memo(({ page }) => {
   const { getMediaForPage, createBlobUrl } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
   const mediaIdRef = React.useRef<string | null>(null)
+  const retryTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  
+  const MAX_RETRIES = 3
+  const RETRY_DELAYS = [1000, 2000, 4000] // Exponential backoff: 1s, 2s, 4s
   
   useEffect(() => {
     const loadMedia = async () => {
@@ -31,7 +36,7 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
       // Get media from context instead of expecting it on the page object
       // This ensures it works for both new pages and pages loaded from storage
       const pageMediaRefs = getMediaForPage(page.id) || []
-      console.log(`[PageThumbnailGrid] Page ${page.id} has ${pageMediaRefs.length} media items:`, pageMediaRefs)
+      console.log(`[PageThumbnailGrid] Page ${page.id} has ${pageMediaRefs.length} media items (retry ${retryCount}/${MAX_RETRIES}):`, pageMediaRefs)
       
       // Log detailed info about each media item
       pageMediaRefs.forEach((media: any, index: number) => {
@@ -106,15 +111,35 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
               
               if (!url) {
                 console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for:', mediaId)
-                // Fallback to normalized URL if conversion fails
-                setMediaUrl(normalizedUrl)
+                // Retry with exponential backoff if we haven't exceeded max retries
+                if (retryCount < MAX_RETRIES) {
+                  const delay = RETRY_DELAYS[retryCount]
+                  console.log(`[PageThumbnailGrid] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+                  retryTimeoutRef.current = setTimeout(() => {
+                    setRetryCount(prev => prev + 1)
+                  }, delay)
+                } else {
+                  // Fallback to normalized URL if all retries fail
+                  console.warn(`[PageThumbnailGrid] All retries exhausted for media ${mediaId}`)
+                  setMediaUrl(normalizedUrl)
+                }
               } else {
                 setMediaUrl(url)
+                setRetryCount(0) // Reset retry count on success
               }
             } catch (error) {
               console.error('[PageThumbnailGrid] Error creating blob URL:', error)
-              // Fallback to normalized URL
-              setMediaUrl(normalizedUrl)
+              // Retry on error
+              if (retryCount < MAX_RETRIES) {
+                const delay = RETRY_DELAYS[retryCount]
+                console.log(`[PageThumbnailGrid] Retrying after error in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+                retryTimeoutRef.current = setTimeout(() => {
+                  setRetryCount(prev => prev + 1)
+                }, delay)
+              } else {
+                // Fallback to normalized URL
+                setMediaUrl(normalizedUrl)
+              }
             }
           } else {
             // For regular URLs, use the normalized URL directly
@@ -141,15 +166,39 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
             })
             
             if (!url) {
-              console.error('[PageThumbnailGrid v2.0.6] createBlobUrl returned null/undefined for:', mediaId)
+              console.error('[PageThumbnailGrid v2.0.7] createBlobUrl returned null/undefined for:', mediaId)
+              // Retry with exponential backoff
+              if (retryCount < MAX_RETRIES) {
+                const delay = RETRY_DELAYS[retryCount]
+                console.log(`[PageThumbnailGrid] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+                retryTimeoutRef.current = setTimeout(() => {
+                  setRetryCount(prev => prev + 1)
+                }, delay)
+              }
             } else if (url === '') {
-              console.error('[PageThumbnailGrid v2.0.6] createBlobUrl returned empty string for:', mediaId)
+              console.error('[PageThumbnailGrid v2.0.7] createBlobUrl returned empty string for:', mediaId)
+              // Retry for empty string as well
+              if (retryCount < MAX_RETRIES) {
+                const delay = RETRY_DELAYS[retryCount]
+                retryTimeoutRef.current = setTimeout(() => {
+                  setRetryCount(prev => prev + 1)
+                }, delay)
+              }
             } else {
-              console.log('[PageThumbnailGrid v2.0.6] Setting media URL:', url)
+              console.log('[PageThumbnailGrid v2.0.7] Setting media URL:', url)
+              setMediaUrl(url)
+              setRetryCount(0) // Reset retry count on success
             }
-            setMediaUrl(url)
           } catch (error) {
-            console.error('[PageThumbnailGrid v2.0.6] Error creating blob URL:', error, 'for media:', mediaId)
+            console.error('[PageThumbnailGrid v2.0.7] Error creating blob URL:', error, 'for media:', mediaId)
+            // Retry on error
+            if (retryCount < MAX_RETRIES) {
+              const delay = RETRY_DELAYS[retryCount]
+              console.log(`[PageThumbnailGrid] Retrying after error in ${delay}ms`)
+              retryTimeoutRef.current = setTimeout(() => {
+                setRetryCount(prev => prev + 1)
+              }, delay)
+            }
           }
         }
       } else {
@@ -159,14 +208,19 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
     
     loadMedia()
     
-    // Cleanup function - no cleanup needed for blob URLs
+    // Cleanup function
     return () => {
+      // Clear any pending retry timeouts
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
+      }
       // DO NOT revoke blob URLs here!
       // Blob URLs are cached and shared across multiple components
       // Revoking them here causes images to fail loading when components re-render
       // The UnifiedMediaContext manages the blob URL cache globally
     }
-  }, [page.id, getMediaForPage, createBlobUrl])
+  }, [page.id, getMediaForPage, createBlobUrl, retryCount])
   
   // Check for video in media from context
   const mediaItems = getMediaForPage(page.id) || []
@@ -197,9 +251,12 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = ({ page }) => {
       )}
     </div>
   )
-}
+})
 
-export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
+// Add display name for debugging
+MediaPreview.displayName = 'MediaPreview'
+
+export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   courseContent,
   currentPageId,
   onPageSelect
@@ -218,38 +275,38 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
     )
   }
 
-  // Helper to extract text content and truncate
-  const getContentPreview = (html: string, maxLength: number = 100): string => {
+  // Helper to extract text content and truncate - memoized
+  const getContentPreview = useCallback((html: string, maxLength: number = 100): string => {
     const temp = document.createElement('div')
     temp.innerHTML = DOMPurify.sanitize(html)
     const text = temp.textContent || temp.innerText || ''
     
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + '...'
-  }
+  }, [])
 
   // Get context to access media
   const { getMediaForPage } = useUnifiedMedia()
   
-  // Helper to get media count (only image/video, not audio/captions)
-  const getMediaCount = (page: Page | Topic): number => {
+  // Helper to get media count (only image/video, not audio/captions) - memoized
+  const getMediaCount = useCallback((page: Page | Topic): number => {
     // Get media from context instead of page object
     const mediaItems = getMediaForPage(page.id) || []
     // Only count image and video media types for enhancement purposes
     return mediaItems.filter(m => m.type === 'image' || m.type === 'video').length
-  }
+  }, [getMediaForPage])
 
-  // Helper to check if page has media
-  const hasMedia = (page: Page | Topic): boolean => {
+  // Helper to check if page has media - memoized
+  const hasMedia = useCallback((page: Page | Topic): boolean => {
     return getMediaCount(page) > 0
-  }
+  }, [getMediaCount])
 
-  // Create array of all pages
-  const allPages: Array<Page | Topic> = [
+  // Create array of all pages - memoized to prevent recreation
+  const allPages: Array<Page | Topic> = useMemo(() => [
     courseContent.welcomePage,
     (courseContent as any).objectivesPage || courseContent.learningObjectivesPage, // Handle both naming conventions
     ...courseContent.topics
-  ].filter(Boolean) // Remove any undefined entries
+  ].filter(Boolean), [courseContent]) // Remove any undefined entries
 
   return (
     <div 
@@ -350,7 +407,10 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = ({
       })}
     </div>
   )
-}
+})
+
+// Add display name for debugging
+PageThumbnailGrid.displayName = 'PageThumbnailGrid'
 
 // Add pulse animation
 const style = document.createElement('style')

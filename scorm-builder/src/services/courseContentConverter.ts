@@ -58,17 +58,15 @@ function convertNewFormat(
     // Process welcome page media
     const welcomeMedia = courseContent.welcomePage.media || []
     
-    // Debug logging
-    console.log('[CourseContentConverter] Welcome media array:', welcomeMedia)
-    console.log('[CourseContentConverter] Welcome media types:', welcomeMedia.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+    // Debug logging - simplified to avoid console lock-up
+    console.log('[CourseContentConverter] Welcome media count:', welcomeMedia.length)
     
     const welcomeAudioMedia = welcomeMedia.find(m => m.type === 'audio')
     const welcomeCaptionMedia = welcomeMedia.find((m: any) => m.type === 'caption')
     const welcomeImageMedia = welcomeMedia.find(m => m.type === 'image')
     const welcomeVideoMedia = welcomeMedia.find(m => m.type === 'video')
     
-    console.log('[CourseContentConverter] Found welcome audio:', welcomeAudioMedia)
-    console.log('[CourseContentConverter] Found welcome caption:', welcomeCaptionMedia)
+    console.log('[CourseContentConverter] Found welcome audio:', !!welcomeAudioMedia, 'caption:', !!welcomeCaptionMedia)
     
     const welcome = {
       title: courseContent.welcomePage.title,
@@ -107,9 +105,8 @@ function convertNewFormat(
     // Process objectives page media
     const objectivesMedia = courseContent.learningObjectivesPage.media || []
     
-    // Debug logging
-    console.log('[CourseContentConverter] Objectives media array:', objectivesMedia)
-    console.log('[CourseContentConverter] Objectives media types:', objectivesMedia.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+    // Debug logging - simplified to avoid console lock-up
+    console.log('[CourseContentConverter] Objectives media count:', objectivesMedia.length)
     
     const objectivesImageMedia = objectivesMedia.find(m => m.type === 'image')
     const objectivesVideoMedia = objectivesMedia.find(m => m.type === 'video')
@@ -118,8 +115,7 @@ function convertNewFormat(
     const objectivesAudioMedia = objectivesMedia.find(m => m.type === 'audio')
     const objectivesCaptionMedia = objectivesMedia.find((m: any) => m.type === 'caption')
     
-    console.log('[CourseContentConverter] Found objectives audio:', objectivesAudioMedia)
-    console.log('[CourseContentConverter] Found objectives caption:', objectivesCaptionMedia)
+    console.log('[CourseContentConverter] Found objectives audio:', !!objectivesAudioMedia, 'caption:', !!objectivesCaptionMedia)
     
     const objectivesPage = {
       narration: courseContent.learningObjectivesPage.narration,
@@ -153,10 +149,9 @@ function convertNewFormat(
     const enhancedTopics = courseContent.topics.map((topic, index) => {
       // Generate block number for audio files (starting from 1 for topics)
       
-      // Debug logging for first topic
+      // Debug logging for first topic - simplified
       if (index === 0) {
-        console.log('[CourseContentConverter] First topic media:', topic.media)
-        console.log('[CourseContentConverter] First topic media types:', topic.media?.map(m => ({ id: m.id, type: m.type, storageId: (m as any).storageId })))
+        console.log('[CourseContentConverter] First topic media count:', topic.media?.length || 0)
       }
       
       // Handle knowledge check from new format

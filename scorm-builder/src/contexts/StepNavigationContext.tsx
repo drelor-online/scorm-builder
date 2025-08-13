@@ -9,6 +9,7 @@ interface StepNavigationContextType {
   navigateToStep: (step: number) => void
   canNavigateToStep: (step: number) => boolean
   onStepChange: (handler: StepChangeHandler) => () => void
+  unlockSteps: (steps: number[]) => void
 }
 
 const StepNavigationContext = createContext<StepNavigationContextType | undefined>(undefined)
@@ -88,12 +89,20 @@ export function StepNavigationProvider({ children, initialStep = 0 }: StepNaviga
     }
   }, [])
 
+  const unlockSteps = useCallback((steps: number[]) => {
+    setVisitedSteps(prev => {
+      const newSteps = [...new Set([...prev, ...steps])].sort((a, b) => a - b)
+      return newSteps
+    })
+  }, [])
+
   const value: StepNavigationContextType = {
     currentStep,
     visitedSteps,
     navigateToStep,
     canNavigateToStep,
-    onStepChange
+    onStepChange,
+    unlockSteps
   }
 
   return (

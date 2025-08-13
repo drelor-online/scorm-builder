@@ -76,6 +76,9 @@ import { useDialogManager } from '@/hooks/useDialogManager'
 import { StepNavigationProvider, useStepNavigation } from './contexts/StepNavigationContext'
 import { AutoSaveProvider } from './contexts/AutoSaveContext'
 import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
+import { useNotifications } from './contexts/NotificationContext'
+import MediaLoadingOverlay from './components/MediaLoadingOverlay'
+import ProjectLoadingOverlay from './components/ProjectLoadingOverlay'
 
 // Config
 import { envConfig } from '@/config/environment'
@@ -200,12 +203,17 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     youtubeApiKey: envConfig.youtubeApiKey
   })
   
-  // Save/Open state
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
-  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Use notification context instead of local toast state
+  const { success, error: showError, info } = useNotifications()
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
+  const [isLoadingProject, setIsLoadingProject] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState<{
+    current: number
+    total: number
+    phase: string
+  } | undefined>()
   
   // Check for pending project when component mounts or pendingProjectId changes
   useEffect(() => {
@@ -295,6 +303,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return
     }
     
+    // Check if already loading
+    if (isLoadingProject) {
+      debugLogger.info('App.loadProject', 'Already loading project, skipping duplicate load')
+      return
+    }
+    
     // For new projects, we should always load even if it's the same ID
     // because the project might have just been created
     if (lastLoadedProjectId === storage.currentProjectId && courseSeedData) {
@@ -306,6 +320,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
 
     const loadProjectData = async () => {
+      setIsLoadingProject(true)
+      setLoadingProgress({ current: 0, total: 5, phase: 'Initializing...' })
       debugLogger.info('App.loadProject', 'Starting to load project data', { 
         projectId: storage.currentProjectId 
       })
@@ -317,6 +333,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
         await measureAsync('loadProjectData', async () => {
           // First, always try to load the courseSeedData
+          setLoadingProgress({ current: 1, total: 5, phase: 'Loading course metadata...' })
           debugLogger.info('App.loadProject', 'Loading courseSeedData from storage')
           const seedData = await storage.getContent('courseSeedData')
           if (seedData) {
@@ -327,12 +344,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           }
           
           // Try to load course-content directly (for projects that saved complete content)
+          setLoadingProgress({ current: 2, total: 5, phase: 'Loading course content...' })
           const directCourseContent = await storage.getContent('course-content')
           if (directCourseContent) {
             debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
             loadedCourseContent = directCourseContent as CourseContent
             
             // Also load audioNarration and media-enhancements to populate media arrays
+            setLoadingProgress({ current: 3, total: 5, phase: 'Loading media data...' })
             const audioNarrationData = await storage.getContent('audioNarration')
             const mediaEnhancementsData = await storage.getContent('media-enhancements')
             
@@ -609,6 +628,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
 
         // Atomic state updates
+        setLoadingProgress({ current: 4, total: 5, phase: 'Finalizing...' })
         debugLogger.info('App.loadProject', 'About to update state', {
           loadedCourseSeedData,
           loadedCourseContent: loadedCourseContent ? 'present' : 'null',
@@ -640,11 +660,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
       } catch (error) {
         console.error('Failed to load project data:', error)
+      } finally {
+        setLoadingProgress({ current: 5, total: 5, phase: 'Complete!' })
+        // Clear loading state after a brief moment to show completion
+        setTimeout(() => {
+          setIsLoadingProject(false)
+          setLoadingProgress(undefined)
+        }, 500)
       }
     }
 
     loadProjectData()
-  }, [storage.currentProjectId, storage.isInitialized, lastLoadedProjectId, navigation, measureAsync])
+  }, [storage.currentProjectId, storage.isInitialized, lastLoadedProjectId, navigation, measureAsync, isLoadingProject])
   
   // Debug courseContent changes - DISABLED to prevent console spam
   // useEffect(() => {
@@ -690,13 +717,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // No need to check localStorage anymore
       
       await storage.saveProject()
-      showToast('Project saved successfully', 'success')
+      success('Project saved successfully')
       setHasUnsavedChanges(false)
       setLastSavedTime(new Date().toISOString()) // Update last saved time
       return { success: true }
     } catch (error: any) {
       console.error('[handleSave] Save error:', error)
-      showToast( error.message || 'Failed to save project', 'error')
+      showError(error.message || 'Failed to save project')
       return { success: false, error: error.message }
     }
   }, [storage, projectData, setLastSavedTime])
@@ -725,7 +752,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       return { success: true }
     } catch (error: any) {
       // Only show error toast for autosave failures
-      showToast('Autosave failed', 'error')
+      showError('Autosave failed')
       return { success: false, error: error.message }
     }
   }, [storage, setLastSavedTime])
@@ -737,44 +764,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     disabled: !storage.currentProjectId
   })
   
-  // Safe toast setter that prevents duplicates and manages timeouts
+  // Notification wrapper for backwards compatibility
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    // Clear existing timeout
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current)
+    if (type === 'success') {
+      success(message)
+    } else if (type === 'error') {
+      showError(message)
+    } else {
+      info(message)
     }
-    
-    // Don't show duplicate messages
-    if (toast?.message === message) {
-      return
-    }
-    
-    setToast({ message, type })
-    
-    // Set new timeout
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null)
-      toastTimeoutRef.current = null
-    }, DURATIONS.toastDuration)
-  }, [toast])
+  }, [success, showError, info])
   
-  // Clear toast on navigation
-  useEffect(() => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current)
-      toastTimeoutRef.current = null
-    }
-    setToast(null)
-  }, [currentStep])
-  
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current)
-      }
-    }
-  }, [])
+  // Clear notifications on navigation is now handled by NotificationContext
 
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
     // VERSION MARKER: v2.0.2 - Returns Promise for proper async handling
@@ -790,6 +791,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           }
           // Clear lastLoadedProjectId to force reload for new project
           setLastLoadedProjectId(null)
+          setIsLoadingProject(false)
           debugLogger.info('App.handleCourseSeedSubmit', 'Project created, forcing reload', { 
             projectId: project.id,
             currentProjectId: storage.currentProjectId 
@@ -820,10 +822,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       }) // End of measureAsync
     } catch (error) {
       console.error('Failed to save course seed data:', error)
-      setToast({ 
-        message: error instanceof Error ? error.message : 'Failed to save data', 
-        type: 'error' 
-      })
+      showError(error instanceof Error ? error.message : 'Failed to save data')
     }
   }
 
@@ -906,7 +905,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }) // End of measureAsync
       } catch (error) {
         console.error('Failed to save course content:', error)
-        showToast('Failed to save data', 'error')
+        showError('Failed to save data')
       }
     }
   }
@@ -992,7 +991,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save media-enhanced content:', error)
-        showToast('Failed to save data', 'error')
+        showError('Failed to save data')
       }
     }
   }
@@ -1011,7 +1010,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }
 
-  const handleAudioNext = async (data: CourseContentUnion) => {
+  const handleAudioNext = useCallback(async (data: CourseContentUnion) => {
     setCourseContent(data as CourseContent)
     setCurrentStep('activities')
     navigation.navigateToStep(stepNumbers.activities)
@@ -1065,12 +1064,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save audio-enhanced content:', error)
-        showToast('Failed to save data', 'error')
+        showError('Failed to save data')
       }
     }
-  }
+  }, [storage, courseSeedData, navigation, stepNumbers.activities])
 
-  const handleAudioBack = async () => {
+  const handleAudioBack = useCallback(async () => {
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
     
@@ -1082,7 +1081,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         console.error('Failed to save current step:', error)
       }
     }
-  }
+  }, [storage, navigation, stepNumbers.media])
 
   const handleActivitiesNext = async (data: CourseContentUnion) => {
     setCourseContent(data as CourseContent)
@@ -1136,7 +1135,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         }
       } catch (error) {
         console.error('Failed to save activities-enhanced content:', error)
-        showToast('Failed to save data', 'error')
+        showError('Failed to save data')
       }
     }
   }
@@ -1157,7 +1156,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleSCORMNext = async () => {
     // Could show a completion screen or download the package
-    showToast('SCORM package built successfully!', 'success')
+    success('SCORM package built successfully!')
     
     // Save completion state to PersistentStorage
     if (storage.currentProjectId) {
@@ -1204,7 +1203,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     
     // If no project is open, show error
     if (!storage.currentProjectId) {
-      showToast('Please create or open a project first', 'error')
+      showError('Please create or open a project first')
       return
     }
     
@@ -1241,7 +1240,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       }
     } else {
       // Otherwise show error as we should only use dashboard
-      showToast('Please use the project dashboard to open projects', 'error')
+      showError('Please use the project dashboard to open projects')
     }
   }
   
@@ -1255,7 +1254,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (projectToDelete) {
       try {
         await storage.deleteProject(projectToDelete.path || projectToDelete.id)
-        showToast( `Deleted project: ${projectToDelete.name}`, 'success')
+        success(`Deleted project: ${projectToDelete.name}`)
         if (storage.currentProjectId === projectToDelete.id) {
           // Current project was deleted, clear state and redirect to dashboard
           // Clear state since current project was deleted
@@ -1265,7 +1264,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           // The dashboard will automatically show when currentProjectId is null
         }
       } catch (error: any) {
-        showToast( error.message || 'Failed to delete project', 'error')
+        showError(error.message || 'Failed to delete project')
       }
     }
     hideDialog();
@@ -1470,10 +1469,24 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   return (
     <ErrorBoundary>
-      <UnifiedMediaProvider projectId={storage.currentProjectId || ''}>
-        <div style={{ backgroundColor: COLORS.background, color: COLORS.textMuted, minHeight: '100vh' }}>
+        <UnifiedMediaProvider projectId={storage.currentProjectId || ''}>
+          <div style={{ backgroundColor: COLORS.background, color: COLORS.textMuted, minHeight: '100vh' }}>
+        {/* Media loading overlay */}
+        <MediaLoadingOverlay 
+          message="Optimizing your media for instant access..." 
+          showProgress={true} 
+        />
+        
+        {/* Project loading overlay */}
+        <ProjectLoadingOverlay 
+          isLoading={isLoadingProject}
+          loadingProgress={loadingProgress}
+        />
+        
         {/* Network status indicator */}
         <NetworkStatusIndicator />
+        
+        {/* Notification Panel is now rendered at the app root level */}
       
       {/* Skip navigation link for accessibility */}
       <a href="#main-content" className="skip-link">
@@ -1811,54 +1824,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       />
       
       
-      {/* Toast notification */}
-      {toast && (
-        <div
-          data-testid="toast-notification"
-          onClick={() => setToast(null)}
-          style={{
-            position: 'fixed',
-            top: '2rem',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            backgroundColor: toast.type === 'success' ? COLORS.success : toast.type === 'error' ? COLORS.error : COLORS.primary,
-            color: 'white',
-            padding: '0.75rem 1.5rem',
-            borderRadius: '0.5rem',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            zIndex: 9999,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            minWidth: '300px',
-            maxWidth: '500px',
-            animation: 'slideDown 0.3s ease-out',
-            transition: 'opacity 0.2s ease-out'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-        >
-          {/* Icon */}
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Icon 
-              icon={toast.type === 'success' ? Check : toast.type === 'error' ? AlertTriangle : Info}
-              size="md"
-              color="white"
-            />
-          </div>
-          {/* Message */}
-          <span style={{ flex: 1 }}>{toast.message}</span>
-          {/* Close hint */}
-          <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>Click to dismiss</span>
-        </div>
-      )}
+      {/* Notifications are now handled by NotificationPanel */}
       
       {/* Debug Panel - Always accessible */}
       <DebugPanel />
       
       </div>
-      </UnifiedMediaProvider>
+        </UnifiedMediaProvider>
     </ErrorBoundary>
   )
 }

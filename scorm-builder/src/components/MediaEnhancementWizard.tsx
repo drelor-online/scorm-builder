@@ -27,6 +27,7 @@ import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
 import { RichTextEditor } from './RichTextEditor'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import DOMPurify from 'dompurify'
 import { logger } from '../utils/logger'
 import styles from './MediaEnhancementWizard.module.css'
@@ -118,6 +119,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   onOpen,
   onStepClick
 }) => {
+  const { success, error: notifyError, info } = useNotifications()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -429,6 +431,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           url: result.url
         })
         console.log('[MediaEnhancement] Successfully stored image:', storedItem)
+        success(`Image "${result.title || 'Image'}" added successfully`)
       }
 
       // Create the new media item for the page
@@ -511,7 +514,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         stack: error.stack?.split('\n')[0] // Just first line of stack
       } : error
       console.error('[MediaEnhancement] Error adding media:', errorInfo)
-      setSearchError('Failed to add media to page')
+      const errorMsg = 'Failed to add media to page'
+      setSearchError(errorMsg)
+      notifyError(errorMsg)
     } finally {
       setIsSearching(false)
     }

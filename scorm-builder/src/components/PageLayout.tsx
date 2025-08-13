@@ -110,7 +110,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   <Button 
                     onClick={onOpen}
                     variant="secondary"
-                    size="small"
+                    size="medium"
                     aria-label="Exit to dashboard"
                     data-testid="exit-button"
                   >
@@ -123,7 +123,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   <Button 
                     onClick={() => onSave && onSave()}
                     variant="secondary"
-                    size="small"
+                    size="medium"
                     aria-label="Save project"
                   >
                     Save
@@ -144,7 +144,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   <Button 
                     onClick={onHelp}
                     variant="secondary"
-                    size="small"
+                    size="medium"
                     aria-label="Help documentation"
                   >
                     Help
@@ -156,7 +156,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   <Button 
                     onClick={onSettingsClick}
                     variant="secondary"
-                    size="small"
+                    size="medium"
                     aria-label="Application settings"
                     data-testid="settings-button"
                   >
@@ -217,7 +217,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
         </div>
       </header>
 
-      {/* Stepper Progress - Moved to top */}
+      {/* Stepper Progress */}
       <div className={`${styles.stepperContainer} stepper-container sticky`}>
         <WorkflowProgress currentStep={currentStep} isDarkMode={true} onStepClick={onStepClick} />
       </div>

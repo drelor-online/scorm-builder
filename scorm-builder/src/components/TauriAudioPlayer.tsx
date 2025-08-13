@@ -34,14 +34,44 @@ export const TauriAudioPlayer: React.FC<TauriAudioPlayerProps> = ({
     
     if (!src) {
       setAudioUrl(undefined)
+      // Clear audio element when no source
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current.load()
+      }
       return
     }
 
-    // Simply use the URL as-is - it should be a blob:, data:, or web URL
-    // No conversion needed since MediaService now provides blob URLs
+    // Use the URL as-is - blob URLs cannot have query params
+    // The component key prop handles cache busting
     setAudioUrl(src)
     logger.info('[TauriAudioPlayer] Using URL directly', { url: src })
-  }, [src])
+    
+    // Force the audio element to reload when src changes
+    // This ensures cached audio is discarded
+    if (audioRef.current && src) {
+      // Stop any playing audio
+      audioRef.current.pause()
+      // Clear the current source first to force a complete reload
+      audioRef.current.src = ''
+      audioRef.current.load()
+      // Set the new source after a small delay to ensure clean state
+      setTimeout(() => {
+        if (audioRef.current && src) {
+          audioRef.current.src = src
+          audioRef.current.load()
+          // If autoPlay is enabled, try to play
+          if (autoPlay) {
+            audioRef.current.play().catch(e => {
+              logger.warn('[TauriAudioPlayer] Autoplay failed:', e)
+            })
+          }
+          logger.info('[TauriAudioPlayer] Forced complete audio element reload')
+        }
+      }, 50)
+    }
+  }, [src, autoPlay])
 
   if (!audioUrl) {
     // No URL available

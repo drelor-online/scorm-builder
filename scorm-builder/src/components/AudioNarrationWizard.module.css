@@ -727,18 +727,25 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  /* Add padding from card edges */
+  width: calc(100% - var(--space-lg));
+  margin-right: var(--space-lg);
 }
 
 .editTextarea {
   width: 100%;
-  min-height: 120px;
-  padding: var(--space-sm);
+  min-height: 150px;
+  /* Auto-expand based on content */
+  height: auto;
+  padding: var(--space-md);
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   resize: vertical;
+  line-height: var(--line-height-relaxed);
   font-family: inherit;
+  /* Match the font size of narrationText */
   font-size: var(--font-size-base);
 }
 

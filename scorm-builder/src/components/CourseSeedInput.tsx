@@ -21,6 +21,7 @@ import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
 import styles from './CourseSeedInput.module.css';
 import { useStorage } from '../contexts/PersistentStorageContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { debugLogger } from '../utils/ultraSimpleLogger';
 
 interface CourseSeedInputProps {
@@ -78,6 +79,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   onStepClick,
   initialData
 }) => {
+  const { success, error: notifyError, info } = useNotifications();
   // VERSION MARKER: v2.0.4 - Fixed infinite loop and Next button
   debugLogger.info('CourseSeedInput v2.0.4', 'Component mounted/updated', {
     hasInitialData: !!initialData,
@@ -410,8 +412,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     try {
       // Await the submission process from the parent component
       debugLogger.info('CourseSeedInput v2.0.4', 'Calling onSubmit callback');
+      info('Generating course content...');
       await onSubmit(data);
       debugLogger.info('CourseSeedInput v2.0.4', 'onSubmit completed successfully');
+      success('Course content generated successfully!');
 
       // Update the form's initial values only after a successful submission
       updateInitialValues({
@@ -424,7 +428,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       // The parent component will show a toast, but we can log here too
       debugLogger.error('CourseSeedInput v2.0.4', 'Submission failed', error);
       console.error('[CourseSeedInput v2.0.4] Submission failed', error);
-      setError('Failed to create course. Please check the logs and try again.');
+      const errorMessage = 'Failed to create course. Please check the logs and try again.';
+      setError(errorMessage);
+      notifyError(errorMessage);
     } finally {
       // Reliably reset the submitting flag when the operation is complete
       setIsSubmitting(false);
@@ -480,6 +486,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           console.log('[CourseSeedInput v2.0.4] Ignoring Next click - already submitting')
           return
         }
+        
+        // Don't show validation alert - the button being disabled is sufficient feedback
+        // The nextDisabled prop already prevents clicking when invalid
         
         // Programmatically submit the form with Tauri fallback
         if (formRef.current) {
@@ -795,6 +804,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           />
         </Modal>
       )}
+
+      {/* Removed validation alert - the disabled Next button provides sufficient feedback */}
     </PageLayout>
     
   </>

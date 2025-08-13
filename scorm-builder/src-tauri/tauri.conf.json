@@ -37,7 +37,8 @@
         "media-src": "'self' asset: https://asset.localhost http://asset.localhost blob: data:",
         "style-src": "'self' 'unsafe-inline'",
         "script-src": "'self' 'unsafe-eval' 'unsafe-inline'",
-        "connect-src": "'self' ipc: http: https:"
+        "connect-src": "'self' ipc: http: https:",
+        "frame-src": "'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://player.vimeo.com"
       },
       "assetProtocol": {
         "enable": true,

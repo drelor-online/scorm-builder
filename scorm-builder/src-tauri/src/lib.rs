@@ -26,7 +26,7 @@ use localstorage_migration::{
     clear_recent_files, migrate_from_localstorage,
 };
 use media_storage::{
-    delete_media, get_all_project_media, get_media, store_media, store_media_base64,
+    delete_media, get_all_project_media, get_all_project_media_metadata, get_media, store_media, store_media_base64,
 };
 use project_export_import::{
     create_project_zip, create_project_zip_with_progress, extract_project_zip,
@@ -62,6 +62,7 @@ pub fn run() {
             store_media,
             store_media_base64,
             get_all_project_media,
+            get_all_project_media_metadata,
             delete_media,
             get_media,
             save_api_keys,

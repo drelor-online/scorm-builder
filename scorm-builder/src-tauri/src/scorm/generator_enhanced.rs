@@ -113,6 +113,8 @@ pub struct ObjectivesPage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caption_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub media: Option<Vec<MediaItem>>,
 }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { Button } from './DesignSystem/Button'
 import { ButtonGroup } from './DesignSystem/ButtonGroup'
@@ -9,7 +10,7 @@ import { LoadingSpinner } from './DesignSystem/LoadingSpinner'
 import { Tooltip } from './DesignSystem/Tooltip'
 import { Icon } from './DesignSystem/Icons'
 import { formatDistanceToNow } from 'date-fns'
-import { showError, showInfo, showSuccess } from './ErrorNotification'
+// Removed notifyError, info, success - using NotificationContext instead
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap, Edit2, Check, X } from 'lucide-react'
@@ -72,6 +73,7 @@ function formatProjectDate(project: Project): string {
 
 export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   const storage = useStorage()
+  const { success, error: notifyError, info } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
     componentName: 'ProjectDashboard',
     trackRenders: false
@@ -207,26 +209,26 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       const trimmedName = newProjectName.trim()
       
       if (!trimmedName) {
-        showError('Please enter a project name')
+        notifyError('Please enter a project name')
         return
       }
       
       // Validate project name length
       if (trimmedName.length > 100) {
-        showError('Project name must be 100 characters or less')
+        notifyError('Project name must be 100 characters or less')
         return
       }
       
       // Validate project name characters (allow alphanumeric, spaces, hyphens, underscores)
       const validNameRegex = /^[a-zA-Z0-9\s\-_]+$/
       if (!validNameRegex.test(trimmedName)) {
-        showError('Project name can only contain letters, numbers, spaces, hyphens, and underscores')
+        notifyError('Project name can only contain letters, numbers, spaces, hyphens, and underscores')
         return
       }
       
       if (!storage.isInitialized) {
         debugLogger.error('ProjectDashboard.handleCreateProject', 'Storage not initialized')
-        showError('Storage system not ready. Please refresh the page.')
+        notifyError('Storage system not ready. Please refresh the page.')
         return
       }
       
@@ -242,7 +244,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       )
       
       if (duplicateProject) {
-        showError(`A project with the name "${duplicateProject.name}" already exists. Please choose a different name.`)
+        notifyError(`A project with the name "${duplicateProject.name}" already exists. Please choose a different name.`)
         return
       }
       
@@ -258,7 +260,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       // Don't open the project here - let the parent handle it
       setShowNewProjectDialog(false)
       setNewProjectName('')
-      showInfo('Project created successfully')
+      info('Project created successfully')
       
       debugLogger.info('ProjectDashboard.handleCreateProject', 'Calling onProjectSelected', {
         path: project.path,
@@ -279,10 +281,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       }
       
       // Show error to user
-      showError(`Failed to create project: ${errorMessage}`, {
-        label: 'Retry',
-        onClick: () => handleCreateProject()
-      })
+      notifyError(`Failed to create project: ${errorMessage}`)
     }
   }
   
@@ -300,10 +299,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       onProjectSelected(pathToOpen)
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleOpenProject', 'Failed to open project', error)
-      showError('Failed to open project', {
-        label: 'Retry',
-        onClick: () => handleOpenProject(projectIdOrPath, projectPath)
-      })
+      notifyError('Failed to open project')
     }
   }
   
@@ -338,7 +334,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       debugLogger.info('ProjectDashboard.handleDeleteProject', 'Project deleted successfully', { projectId })
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleDeleteProject', 'Failed to delete project', { projectId, error })
-      showError(`Failed to delete project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      notifyError(`Failed to delete project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -380,7 +376,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       setRenameValue('')
       setRenameError(null)
       
-      showSuccess('Project renamed successfully')
+      success('Project renamed successfully')
       debugLogger.info('ProjectDashboard.handleSaveRename', 'Project renamed successfully')
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleSaveRename', 'Failed to rename project', error)
@@ -438,14 +434,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       const projectId = storage.getCurrentProjectId()
       if (projectId) {
         debugLogger.info('ProjectDashboard.handleImportProject', 'Project imported successfully', { projectId })
-        showSuccess('Project imported successfully')
+        success('Project imported successfully')
         onProjectSelected(projectId)
       } else {
         debugLogger.warn('ProjectDashboard.handleImportProject', 'No project ID after import')
       }
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleImportProject', 'Failed to import project', error)
-      showError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      notifyError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setImportingProject(false)
     }
@@ -497,10 +493,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         totalSize: zipResult.totalSize,
         zipSize: zipBlob.size
       })
-      showSuccess('Project exported successfully')
+      success('Project exported successfully')
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleExportProject', 'Failed to export project', { projectId, error })
-      showError(`Failed to export project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      notifyError(`Failed to export project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setExportingProjectId(null)
     }
@@ -560,14 +556,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               onProjectSelected(filePath)
             }
           } catch (innerError) {
-            showError('Unable to open project: Could not determine project ID')
+            notifyError('Unable to open project: Could not determine project ID')
           }
           return
         }
-        showError(`Failed to open project: ${error.message || 'Unknown error'}`)
+        notifyError(`Failed to open project: ${error.message || 'Unknown error'}`)
       }
     } else {
-      showError('Please drop a .scormproj file')
+      notifyError('Please drop a .scormproj file')
     }
   }
 
@@ -592,23 +588,23 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         // Reload projects from the new directory
         await loadProjects()
         
-        showSuccess(`Default folder set to: ${selected}`)
+        success(`Default folder set to: ${selected}`)
       }
     } catch (error) {
       console.error('Failed to change default folder:', error)
-      showError(`Failed to change default folder: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      notifyError(`Failed to change default folder: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   function handleClearDefaultFolder() {
     setDefaultFolder(null)
     localStorage.removeItem('defaultProjectsFolder')
-    showInfo('Default folder cleared')
+    info('Default folder cleared')
   }
 
   async function handleRunAutomation() {
     // Automation features have been removed
-    showInfo('Automation features are currently disabled')
+    info('Automation features are currently disabled')
   }
   
   if (loading) {
@@ -696,7 +692,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               <Button
                 onClick={() => {
                   // Recording features have been removed
-                  showInfo('Recording features are currently disabled')
+                  info('Recording features are currently disabled')
                 }}
                 variant={isRecording ? "danger" : "secondary"}
                 data-testid="manual-recording-button"
@@ -723,10 +719,10 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                 try {
                   await storage.clearRecentFilesCache()
                   await loadProjects()
-                  showInfo('Cache cleared successfully. Stuck projects should be removed.')
+                  info('Cache cleared successfully. Stuck projects should be removed.')
                 } catch (error) {
                   console.error('Failed to clear cache:', error)
-                  showError('Failed to clear cache')
+                  notifyError('Failed to clear cache')
                 }
               }}
               className={styles.sessionButton}

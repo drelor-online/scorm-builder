@@ -373,7 +373,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      console.log('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
+      // Reduced logging to prevent console lock-up
+      // console.log('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
       // Use BlobURLCache for efficient caching
       return await blobCache.getOrCreate(mediaId, async () => {
@@ -385,16 +386,10 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           return null
         }
         const media = await mediaService.getMedia(mediaId)
-        console.log('[UnifiedMediaContext v3.0.0] Media data retrieved:', {
-          found: !!media,
-          hasUrl: !!(media?.url),
-          hasData: !!(media?.data),
-          dataSize: media?.data?.length || 0,
-          url: media?.url,
-          urlType: media?.url ? (media.url.startsWith('asset://') ? 'asset' : media.url.startsWith('blob:') ? 'blob' : 'other') : 'none',
-          metadata: media?.metadata,
-          metadataKeys: media?.metadata ? Object.keys(media.metadata) : []
-        })
+        // Simplified logging to prevent console lock-up
+        if (media) {
+          console.log('[UnifiedMediaContext v3.0.0] Media found, size:', media?.data?.length || 0)
+        }
         
         if (!media) {
           console.error('[UnifiedMediaContext v3.0.0] No media found for ID:', mediaId)

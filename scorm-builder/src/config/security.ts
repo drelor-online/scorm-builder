@@ -44,12 +44,15 @@ export const CSP_CONFIG = {
   'frame-src': [
     "'self'",
     "https://www.youtube.com", // For YouTube embeds
+    "https://youtube.com", // For YouTube embeds (without www)
+    "https://www.youtube-nocookie.com", // For privacy-enhanced YouTube embeds
     "https://player.vimeo.com" // For Vimeo embeds
   ],
   'object-src': ["'none'"],
   'base-uri': ["'self'"],
   'form-action': ["'self'"],
-  'frame-ancestors': ["'none'"], // Prevent clickjacking
+  // Removed frame-ancestors as it controls who can embed THIS page, not what we can embed
+  // This was causing YouTube to block itself when checking if it's allowed to be embedded
   'upgrade-insecure-requests': [] // Force HTTPS in production
 }
 

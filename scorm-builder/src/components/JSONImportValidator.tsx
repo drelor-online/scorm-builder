@@ -9,7 +9,8 @@ import {
   Section,
   Flex,
   Icon,
-  Alert
+  Alert,
+  Modal
 } from './DesignSystem'
 import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -18,6 +19,7 @@ import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Ta
 import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { useStepNavigation } from '../contexts/StepNavigationContext'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
@@ -45,6 +47,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   onStepClick
 }) => {
   const storage = useStorage()
+  const navigation = useStepNavigation()
   // Always start with empty JSON input - users should paste their own content
   const [jsonInput, setJsonInput] = useState('')
   
@@ -672,8 +675,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
   const handleNext = () => {
     if (validationResult?.isValid && validationResult.data) {
+      // Unlock all subsequent steps when JSON is validated successfully
+      // Steps: 0=Seed, 1=Prompt, 2=JSON, 3=Media, 4=Audio, 5=Activities, 6=SCORM
+      navigation.unlockSteps([3, 4, 5, 6])
       onNext(validationResult.data)
     }
+    // Don't show alert - the disabled Next button provides sufficient feedback
   }
 
   // Removed keyboard shortcuts for undo/redo
@@ -1064,6 +1071,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       onSave={onSave}
       onBack={onBack}
       onNext={handleNext}
+      nextDisabled={!validationResult?.isValid}
       onOpen={onOpen}
       onHelp={onHelp}
       onStepClick={onStepClick}
@@ -1249,6 +1257,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         onConfirm={handleConfirmClear}
         onCancel={handleCancelClear}
       />
+
+      {/* Removed validation alert - the disabled Next button provides sufficient feedback */}
     </PageLayout>
   )
 }

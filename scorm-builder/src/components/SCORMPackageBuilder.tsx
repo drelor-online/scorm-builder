@@ -8,6 +8,7 @@ import { convertToEnhancedCourseContent } from '../services/courseContentConvert
 import { generateRustSCORM } from '../services/rustScormGenerator'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { sanitizeScormFileName } from '../utils/fileSanitizer'
 
@@ -81,6 +82,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     getMediaForPage,
     createBlobUrl
   } = useUnifiedMedia()
+  const { success, error: notifyError, info, progress } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
     componentName: 'SCORMPackageBuilder',
     trackRenders: true
@@ -571,11 +573,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       } catch (mediaError) {
         console.error('[SCORMPackageBuilder] Error loading media:', mediaError)
+        const warningMsg = 'Some media files could not be loaded. The SCORM package will be generated without them.'
         setMessages(prev => [...prev, {
           id: `warning-media-${Date.now()}`,
           type: 'warning',
-          text: 'Some media files could not be loaded. The SCORM package will be generated without them.'
+          text: warningMsg
         }])
+        info(warningMsg)
       }
       performanceMetrics.mediaLoadDuration = Date.now() - performanceMetrics.mediaLoadStart
       
@@ -666,13 +670,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       // FIX: Don't auto-download. Let user choose when to download
       console.log('[SCORMPackageBuilder] Package generated successfully, ready for download')
+      success('SCORM package generated successfully!')
     } catch (error) {
       console.error('Error generating SCORM package:', error)
+      const errorMsg = `Error generating SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
       setMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
         type: 'error',
-        text: `Error generating SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
+        text: errorMsg
       }])
+      notifyError(errorMsg)
       setLoadingMessage('')
     } finally {
       setIsGenerating(false)
@@ -752,6 +759,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         await writeFile(filePath, data)
         
         console.log('[SCORMPackageBuilder] File written successfully')
+        success(`SCORM package saved to: ${filePath}`)
         // Don't add success message - let the user see the file save location from their OS
         // setMessages(prev => [...prev, {
         //   id: `download-success-${Date.now()}`,
@@ -770,11 +778,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         type: typeof error,
         constructor: error?.constructor?.name
       })
+      const errorMsg = `Error saving SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
       setMessages(prev => [...prev, {
         id: `download-error-${Date.now()}`,
         type: 'error',
-        text: `Error saving SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
+        text: errorMsg
       }])
+      notifyError(errorMsg)
     } finally {
       console.log('[SCORMPackageBuilder] Download process complete')
       setIsDownloading(false)

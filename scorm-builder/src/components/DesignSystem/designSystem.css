@@ -997,6 +997,34 @@ li:last-child {
   }
 }
 
+/* Global button spacing rules to prevent buttons from touching */
+.modal-footer > button + button,
+.dialog-actions > button + button,
+.button-row > button + button,
+.button-group > button + button {
+  margin-left: var(--space-md) !important;
+}
+
+/* Default button container spacing */
+.dialog-actions,
+.button-row,
+.modal-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* Ensure ButtonGroup components have proper spacing */
+.button-group {
+  display: flex;
+  align-items: center;
+}
+
+.button-group.button-group-gap-0 {
+  gap: var(--space-sm) !important; /* Never allow 0 gap */
+}
+
 .animate-slideInUp {
   animation: slideInUp var(--transition-normal) var(--ease-out);
 }

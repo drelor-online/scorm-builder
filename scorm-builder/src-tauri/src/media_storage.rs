@@ -155,6 +155,8 @@ pub fn store_media_base64(
     store_media(id, actual_project_id, data, metadata)
 }
 
+// DEPRECATED: This function loads all binary data and is very slow
+// Use get_all_project_media_metadata instead for better performance
 #[tauri::command]
 pub fn get_all_project_media(
     #[allow(non_snake_case)] projectId: String,
@@ -162,7 +164,83 @@ pub fn get_all_project_media(
     // Extract actual project ID in case a path was passed
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] Loading all media for project {projectId} (extracted: {actual_project_id})"
+        "[media_storage] DEPRECATED: Loading all media with binary data for project {projectId} (extracted: {actual_project_id})"
+    );
+    println!("[media_storage] WARNING: This function is slow and loads all binary data into memory!");
+
+    let media_dir = get_media_directory(&actual_project_id)?;
+    let mut media_list = Vec::new();
+
+    if !media_dir.exists() {
+        println!("[media_storage] Media directory doesn't exist, returning empty list");
+        return Ok(media_list);
+    }
+
+    // Read all .json files in the media directory
+    let entries =
+        fs::read_dir(&media_dir).map_err(|e| format!("Failed to read media directory: {e}"))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {e}"))?;
+        let path = entry.path();
+
+        // Only process .json files
+        if path.extension() == Some(std::ffi::OsStr::new("json")) {
+            let media_id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| "Invalid file name".to_string())?;
+
+            // Read metadata
+            let metadata_json = fs::read_to_string(&path)
+                .map_err(|e| format!("Failed to read metadata for {media_id}: {e}"))?;
+            let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
+                .map_err(|e| format!("Failed to parse metadata for {media_id}: {e}"))?;
+
+            // Read binary data - THIS IS THE SLOW PART!
+            let data_path = get_media_path(&actual_project_id, media_id)?;
+            if data_path.exists() {
+                let data = fs::read(&data_path)
+                    .map_err(|e| format!("Failed to read media data for {media_id}: {e}"))?;
+
+                let data_len = data.len();
+
+                media_list.push(MediaData {
+                    id: media_id.to_string(),
+                    data,
+                    metadata,
+                });
+
+                println!("[media_storage] Loaded media {media_id} ({data_len} bytes)");
+            } else {
+                println!(
+                    "[media_storage] Warning: metadata exists but data missing for {media_id}"
+                );
+            }
+        }
+    }
+
+    println!("[media_storage] Loaded {} media items with binary data", media_list.len());
+    Ok(media_list)
+}
+
+// New structure for metadata-only responses
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MediaMetadataInfo {
+    pub id: String,
+    pub metadata: MediaMetadata,
+    pub size: u64, // File size in bytes
+}
+
+// OPTIMIZED: Returns only metadata without loading binary data
+#[tauri::command]
+pub fn get_all_project_media_metadata(
+    #[allow(non_snake_case)] projectId: String,
+) -> Result<Vec<MediaMetadataInfo>, String> {
+    // Extract actual project ID in case a path was passed
+    let actual_project_id = extract_project_id(&projectId);
+    println!(
+        "[media_storage] Loading media metadata for project {projectId} (extracted: {actual_project_id})"
     );
 
     let media_dir = get_media_directory(&actual_project_id)?;
@@ -194,30 +272,30 @@ pub fn get_all_project_media(
             let metadata: MediaMetadata = serde_json::from_str(&metadata_json)
                 .map_err(|e| format!("Failed to parse metadata for {media_id}: {e}"))?;
 
-            // Read binary data
+            // Get file size WITHOUT reading the data
             let data_path = get_media_path(&actual_project_id, media_id)?;
-            if data_path.exists() {
-                let data = fs::read(&data_path)
-                    .map_err(|e| format!("Failed to read media data for {media_id}: {e}"))?;
-
-                let data_len = data.len();
-
-                media_list.push(MediaData {
-                    id: media_id.to_string(),
-                    data,
-                    metadata,
-                });
-
-                println!("[media_storage] Loaded media {media_id} ({data_len} bytes)");
+            let size = if data_path.exists() {
+                fs::metadata(&data_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0)
             } else {
                 println!(
                     "[media_storage] Warning: metadata exists but data missing for {media_id}"
                 );
-            }
+                0
+            };
+
+            media_list.push(MediaMetadataInfo {
+                id: media_id.to_string(),
+                metadata,
+                size,
+            });
+
+            println!("[media_storage] Found media {media_id} ({size} bytes)");
         }
     }
 
-    println!("[media_storage] Loaded {} media items", media_list.len());
+    println!("[media_storage] Found {} media items (metadata only)", media_list.len());
     Ok(media_list)
 }
 
