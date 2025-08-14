@@ -5,7 +5,6 @@ import { PersistentStorageProvider, useStorage } from './contexts/PersistentStor
 import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
-import { NotificationPanel } from './components/NotificationPanel'
 import { handleFileAssociation } from './utils/fileAssociation'
 import { DebugInfo } from './components/DebugInfo'
 import { DebugPanel } from './components/DebugPanel'
@@ -152,7 +151,7 @@ function DashboardContent() {
     
     try {
       // recoverFromBackup expects the project path, not the backup path
-      const result = await storage.recoverFromBackup(recoveryInfo.backupPath)
+      const _result = await storage.recoverFromBackup(recoveryInfo.backupPath)
       setShowRecoveryDialog(false)
       setRecoveryInfo(null)
       // Open the recovered project

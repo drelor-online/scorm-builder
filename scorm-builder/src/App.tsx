@@ -60,8 +60,7 @@ const HelpPage = lazy(() =>
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
 import { NotificationPanel } from '@/components/NotificationPanel'
-import { NetworkStatusIndicator, Icon } from '@/components/DesignSystem'
-import { Check, AlertTriangle, Info } from 'lucide-react'
+import { NetworkStatusIndicator } from '@/components/DesignSystem'
 // LoadingComponent removed - using inline loading
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
 
@@ -113,7 +112,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     projectToDelete,
     showDialog,
     hideDialog,
-    setProjectToDelete: _setProjectToDelete,
   } = useDialogManager();
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
@@ -215,9 +213,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   })
   
   // Use notification context instead of local toast state
-  const { success, error: showError, info } = useNotifications()
+  const { success, error: showError } = useNotifications()
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null)
-  const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState<{
@@ -309,7 +306,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Only remove truly obsolete localStorage data
     // Keep UI preferences and non-critical data in localStorage
     
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = () => {
       // Reserved for future keyboard shortcuts
     }
     
@@ -378,7 +375,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         projectId: storage.currentProjectId 
       })
       hasLoadedProjectRef.current = storage.currentProjectId
-      setLastLoadedProjectId(storage.currentProjectId)
       try {
         let loadedCourseContent: CourseContent | null = null
         let loadedCourseSeedData: CourseSeedData | null = null
@@ -849,17 +845,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [storage, projectData])
 
-  // Create a wrapper that handles saving state for manual saves
-  const createSaveHandler = useCallback((saveCallback: () => void | Promise<void>) => {
-    return async () => {
-      setIsSaving(true)
-      try {
-        await saveCallback()
-      } finally {
-        setIsSaving(false)
-      }
-    }
-  }, [])
 
   // Autosave functionality (no toast)
   const handleAutosave = useCallback(async (data: ProjectData) => {
@@ -910,15 +895,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   })
   
   // Notification wrapper for backwards compatibility
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    if (type === 'success') {
-      success(message)
-    } else if (type === 'error') {
-      showError(message)
-    } else {
-      info(message)
-    }
-  }, [success, showError, info])
   
   // Clear notifications on navigation is now handled by NotificationContext
 
@@ -935,8 +911,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           if (!project || !project.id) {
             throw new Error('Failed to create project')
           }
-          // Clear lastLoadedProjectId to force reload for new project
-          setLastLoadedProjectId(null)
+          // Clear loaded project reference to force reload for new project
           setIsLoadingProject(false)
           debugLogger.info('App.handleCourseSeedSubmit', 'Project created, forcing reload', { 
             projectId: project.id,
@@ -1550,7 +1525,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
     
     const stepMapping = Object.entries(stepNumbers).find(
-      ([_, num]) => num === stepIndex
+      (entry) => entry[1] === stepIndex
     )
     if (stepMapping) {
       setCurrentStep(stepMapping[0])
