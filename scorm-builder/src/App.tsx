@@ -793,6 +793,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     })
   }) // No dependencies - runs on every render to catch all changes
   
+  // DEBUG: Track isDirty flag changes for autosave monitoring
+  useEffect(() => {
+    debugLogger.debug('App.autosave', 'isDirty flag changed', { 
+      isDirty, 
+      hasData: !!autoSaveDataRef.current,
+      hasProjectId: !!storage.currentProjectId,
+      autosaveWillTrigger: isDirty && !!autoSaveDataRef.current && !!storage.currentProjectId
+    })
+  }, [isDirty, storage.currentProjectId])
+  
   // Manual save functionality (shows toast)
   const handleSave = useCallback(async (data?: ProjectData) => {
     debugLogger.debug('App.handleSave', 'Called with data', data)
@@ -838,6 +848,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Autosave functionality (no toast)
   const handleAutosave = useCallback(async (data: ProjectData) => {
+    debugLogger.debug('App.autoSave', 'Autosave triggered', { 
+      hasCourseSeedData: !!data.courseSeedData,
+      hasCourseContent: !!data.courseContent,
+      projectId: storage.currentProjectId
+    })
     try {
       // The data is passed directly from useAutoSave, no need for fallback
       const dataToSave = data
@@ -865,23 +880,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [storage])
   
-  // EMERGENCY FIX: Autosave completely disabled to stop infinite loop
-  // const autoSaveState = useAutoSave({
-  //   data: autoSaveDataRef.current,
-  //   onSave: handleAutosave,
-  //   delay: DURATIONS.autosaveInterval,
-  //   disabled: !storage.currentProjectId,
-  //   isDirty,
-  //   onSaveComplete: () => setIsDirty(false),
-  //   minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
-  // })
-  
-  // Dummy autosave state for compatibility
-  const autoSaveState = {
-    isSaving: false,
-    lastSaved: null,
-    forceSave: async () => {}
-  }
+  // Re-enabled autosave with proper safeguards to prevent infinite loops
+  const autoSaveState = useAutoSave({
+    data: autoSaveDataRef.current,
+    onSave: handleAutosave,
+    delay: DURATIONS.autosaveInterval,
+    disabled: !isDirty || !storage.currentProjectId, // Only save when dirty AND project exists
+    isDirty,
+    onSaveComplete: () => {
+      debugLogger.debug('App.autoSave', 'Save completed, resetting isDirty flag')
+      setIsDirty(false)
+    },
+    minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
+  })
   
   // Notification wrapper for backwards compatibility
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
