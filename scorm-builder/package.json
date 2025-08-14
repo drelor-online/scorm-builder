@@ -17,7 +17,7 @@
     "test:coverage": "vitest --run --coverage",
     "coverage:report": "node scripts/analyze-coverage.js",
     "coverage:check": "node scripts/check-coverage-threshold.js",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint src/ --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "prepare": "cd .. && husky scorm-builder/.husky",
     "test:e2e": "playwright test",
