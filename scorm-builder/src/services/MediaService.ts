@@ -24,7 +24,7 @@ export interface MediaMetadata {
   originalName?: string
   pageId?: string
   type: MediaType
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface MediaItem {
@@ -79,7 +79,7 @@ export class MediaService {
   private blobUrlCache: Map<string, string> = new Map() // Cache blob URLs for the session
   private loadingPromise: Promise<void> | null = null // For deduplicating concurrent loads
   private audioDataCache: Map<string, { data: Uint8Array; metadata: MediaMetadata }> = new Map() // Persistent audio cache
-  private audioLoadingPromises: Map<string, Promise<any>> = new Map() // Deduplicate concurrent audio loads
+  private audioLoadingPromises: Map<string, Promise<{ data: Uint8Array; metadata: MediaMetadata }>> = new Map() // Deduplicate concurrent audio loads
   
   private constructor(config: MediaServiceConfig) {
     // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks

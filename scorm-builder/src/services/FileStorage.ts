@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { debugLogger } from '@/utils/ultraSimpleLogger';
+import type { ProjectData, MediaFile, SaveResult, LoadResult, DeleteResult } from '@/types/project';
+import type { MediaReference } from '@/types/projectStructure';
 
 interface Project {
   id: string;
@@ -10,12 +12,50 @@ interface Project {
   updatedAt: string;
 }
 
+// Tauri backend response types
+interface TauriProjectMetadata {
+  id: string;
+  name: string;
+  path: string;
+  created: string;
+  last_modified: string;
+}
+
+interface TauriProjectFile {
+  project: ProjectData;
+  metadata: {
+    version: string;
+    created: string;
+    lastModified: string;
+  };
+}
+
+interface TauriRecoveryInfo {
+  hasRecovery: boolean;
+  backupPath?: string;
+  lastModified?: string;
+  backupTimestamp?: string;
+}
+
+interface ExtendedLoadResult extends LoadResult {
+  hasRecovery?: boolean;
+  backupTimestamp?: string;
+}
+
 interface MediaInfo {
   id: string;
   mediaType: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   size?: number;
   data?: ArrayBuffer;
+}
+
+// Save queue entry type
+interface SaveQueueEntry {
+  key: string;
+  data: unknown;
+  retryCount: number;
+  timestamp: number;
 }
 
 export class FileStorage {
@@ -25,7 +65,7 @@ export class FileStorage {
   
   // Debouncing for save operations
   private saveTimeouts: Map<string, NodeJS.Timeout> = new Map();
-  private saveQueue: Map<string, any> = new Map();
+  private saveQueue: Map<string, SaveQueueEntry> = new Map();
   private isSaving: Map<string, boolean> = new Map();
   private lastSaveTime: Map<string, number> = new Map();
   private SAVE_DEBOUNCE_MS = 500; // Debounce saves by 500ms
@@ -49,7 +89,7 @@ export class FileStorage {
       debugLogger.info('FileStorage.createProject', `Creating new project: ${name}`, { name, projectsDir });
       
       // Call backend to create project with proper folder structure
-      const projectMetadata = await invoke<any>('create_project', { name });
+      const projectMetadata = await invoke<TauriProjectMetadata>('create_project', { name });
       
       debugLogger.debug('FileStorage.createProject', 'Project created by backend', {
         id: projectMetadata.id,
@@ -77,25 +117,29 @@ export class FileStorage {
     }
   }
 
-  async openProject(projectId: string): Promise<any> {
+  async openProject(projectId: string): Promise<ExtendedLoadResult> {
     try {
       debugLogger.info('FileStorage.openProject', `Opening project: ${projectId}`);
       
       // Check for recovery before opening
-      let recoveryInfo = null;
+      let recoveryInfo: TauriRecoveryInfo | null = null;
       try {
-        recoveryInfo = await invoke<any>('check_recovery', { projectId });
+        recoveryInfo = await invoke<TauriRecoveryInfo>('check_recovery', { projectId });
         debugLogger.debug('FileStorage.openProject', 'Recovery check result', recoveryInfo);
       } catch (recoveryError) {
         // Recovery check is optional, continue without it
         debugLogger.debug('FileStorage.openProject', 'Recovery check not available', recoveryError);
       }
       
-      const projectFile = await invoke<any>('load_project', { filePath: projectId });
+      const projectFile = await invoke<TauriProjectFile>('load_project', { filePath: projectId });
       
       // Ensure projectFile has proper structure
       if (!projectFile || !projectFile.project) {
-        const result: any = { pages: [], metadata: {} };
+        const result: ExtendedLoadResult = { 
+          success: false,
+          error: 'Project file not found or corrupted',
+          data: undefined
+        };
         if (recoveryInfo && recoveryInfo.hasRecovery) {
           result.hasRecovery = true;
           result.backupTimestamp = recoveryInfo.backupTimestamp;
@@ -116,7 +160,10 @@ export class FileStorage {
       debugLogger.info('FileStorage.openProject', `Project opened successfully: ${projectFile.project.name}`);
       
       // Return data with recovery info if available
-      const result: any = { pages: [], metadata: {} };
+      const result: ExtendedLoadResult = { 
+        success: true,
+        data: projectFile.project
+      };
       if (recoveryInfo && recoveryInfo.hasRecovery) {
         result.hasRecovery = true;
         result.backupTimestamp = recoveryInfo.backupTimestamp;
@@ -128,7 +175,7 @@ export class FileStorage {
     }
   }
 
-  async saveContent(contentId: string, content: any): Promise<void> {
+  async saveContent(contentId: string, content: ProjectData | unknown): Promise<void> {
     if (!this._currentProjectPath) throw new Error('No project open');
     
     // Cancel any pending save for this contentId
@@ -212,10 +259,10 @@ export class FileStorage {
     });
   }
   
-  private async performSave(contentId: string, content: any): Promise<void> {
+  private async performSave(contentId: string, content: ProjectData | unknown): Promise<void> {
     try {
       // Load current project, update content, and save
-      const projectFile = await invoke<any>('load_project', { filePath: this._currentProjectPath });
+      const projectFile = await invoke<TauriProjectFile>('load_project', { filePath: this._currentProjectPath });
       
       debugLogger.debug('FileStorage.performSave', `Saving content type: ${contentId}`, {
         hasContent: !!content,
