@@ -3,7 +3,7 @@ import { CourseContent, LegacyCourseContent, CourseContentUnion, KnowledgeCheckQ
 import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
 import { COLORS } from '../constants'
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
+import { AutoSaveBadge } from './AutoSaveBadge'
 import { ConfirmDialog } from './ConfirmDialog'
 import QuestionEditorModal from './QuestionEditorModal'
 import { 
@@ -281,7 +281,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       description={isNewFormat(content) 
         ? 'Review and edit all questions in your course'
         : 'Create engaging activities and assessments for your course'}
-      autoSaveIndicator={<AutoSaveIndicatorConnected />}
+      autoSaveIndicator={<AutoSaveBadge />}
       onSettingsClick={onSettingsClick}
       onBack={onBack}
       onNext={async () => {

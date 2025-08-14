@@ -3,7 +3,7 @@ import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
 import { Toast } from './Toast'
 import { useFormChanges } from '../hooks/useFormChanges'
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
+import { AutoSaveBadge } from './AutoSaveBadge'
 import { Check, Copy } from 'lucide-react'
 import { Card, Button } from './DesignSystem'
 import './DesignSystem/designSystem.css'
@@ -270,7 +270,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
   // Removed Reset, Save as Template, and History functionality per UX requirements
 
   const autoSaveIndicator = (
-    <AutoSaveIndicatorConnected />
+    <AutoSaveBadge />
   )
 
 

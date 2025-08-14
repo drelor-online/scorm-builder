@@ -5,7 +5,7 @@ import { searchGoogleImages, searchYouTubeVideos, SearchError } from '../service
 import { isKnownCorsRestrictedDomain, downloadExternalImage } from '../services/externalImageDownloader'
 import { PageLayout } from './PageLayout'
 import { ConfirmDialog } from './ConfirmDialog'
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
+import { AutoSaveBadge } from './AutoSaveBadge'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import { 
   Button, 
@@ -1460,7 +1460,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       onSave={onSave}
       onOpen={onOpen}
       onStepClick={onStepClick}
-      autoSaveIndicator={onSave && <AutoSaveIndicatorConnected />}
+      autoSaveIndicator={onSave && <AutoSaveBadge />}
       actions={
         <Button
           variant="primary"

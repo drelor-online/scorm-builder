@@ -16,7 +16,7 @@ import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Target, FileQuestion, Award, Edit2, Check, X, Wand2 } from 'lucide-react'
 // import { useUndoRedo } from '../hooks/useUndoRedo' // Removed undo/redo functionality
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
+import { AutoSaveBadge } from './AutoSaveBadge'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useStepNavigation } from '../contexts/StepNavigationContext'
@@ -1057,7 +1057,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   }
 
   const autoSaveIndicator = (
-    <AutoSaveIndicatorConnected />
+    <AutoSaveBadge />
   )
 
 

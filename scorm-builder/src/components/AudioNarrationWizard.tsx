@@ -4,7 +4,7 @@ import { CourseSeedData } from '../types/course'
 import JSZip from 'jszip'
 import { PageLayout } from './PageLayout'
 import { ConfirmDialog } from './ConfirmDialog'
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected'
+import { AutoSaveBadge } from './AutoSaveBadge'
 import { 
   Button, 
   Card, 
@@ -2758,7 +2758,7 @@ export function AudioNarrationWizard({
       currentStep={4}
       title="Audio Narration"
       description="Add audio narration and captions to your course"
-      autoSaveIndicator={<AutoSaveIndicatorConnected />}
+      autoSaveIndicator={<AutoSaveBadge />}
       onNext={handleNext}
       onBack={onBack}
       onSave={onSave}

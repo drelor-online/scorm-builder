@@ -66,12 +66,13 @@ interface PageLayoutProps {
   autoSaveIndicator?: React.ReactNode
   isGenerating?: boolean
   onSettingsClick?: () => void
-  onSave?: () => void
+  onSave?: () => void | Promise<void>
   onOpen?: () => void
   onHelp?: () => void
   onBack?: () => void
   onNext?: () => void
   nextDisabled?: boolean
+  isSaving?: boolean
   onGenerateSCORM?: () => void
   onStepClick?: (stepIndex: number) => void
   onExport?: () => void
@@ -92,6 +93,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
   onBack,
   onNext,
   nextDisabled,
+  isSaving,
   onGenerateSCORM,
   onStepClick,
   onExport: _onExport,
@@ -125,8 +127,9 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     variant="secondary"
                     size="medium"
                     aria-label="Save project"
+                    disabled={isSaving || !onSave}
                   >
-                    Save
+                    {isSaving ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
               </Tooltip>

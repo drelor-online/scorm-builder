@@ -10,7 +10,8 @@ export const NOTIFICATION_DURATIONS = {
   INFO_DURATION: 5000,         // Info: 5 seconds  
   WARNING_DURATION: 8000,      // Warning: 8 seconds (longer for important warnings)
   ERROR_DURATION: undefined,   // Error: no auto-dismiss (user must manually dismiss)
-  PROGRESS_DURATION: undefined // Progress: no auto-dismiss (dismisses when complete)
+  PROGRESS_DURATION: undefined, // Progress: no auto-dismiss (dismisses when complete)
+  AUTOSAVE_DURATION: 3000      // Autosave: 3 seconds (quick feedback)
 } as const
 
 export interface Notification {
@@ -40,6 +41,10 @@ interface NotificationContextType {
   warning: (message: string, duration?: number | undefined) => void
   info: (message: string, duration?: number | undefined) => void
   progress: (message: string, current: number, total: number) => string
+  // Autosave-specific methods
+  autoSaveStart: () => string
+  autoSaveSuccess: () => void
+  autoSaveError: (error: string, onRetry?: () => void) => void
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
@@ -123,6 +128,35 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     })
   }, [addNotification])
 
+  // Autosave-specific notification methods
+  const autoSaveStart = useCallback(() => {
+    return addNotification({
+      message: 'Saving changes...',
+      type: 'info',
+      duration: NOTIFICATION_DURATIONS.AUTOSAVE_DURATION
+    })
+  }, [addNotification])
+
+  const autoSaveSuccess = useCallback(() => {
+    addNotification({
+      message: 'Changes saved',
+      type: 'success',
+      duration: NOTIFICATION_DURATIONS.AUTOSAVE_DURATION
+    })
+  }, [addNotification])
+
+  const autoSaveError = useCallback((error: string, onRetry?: () => void) => {
+    addNotification({
+      message: `Failed to save changes: ${error}`,
+      type: 'error',
+      action: onRetry ? {
+        label: 'Retry',
+        onClick: onRetry
+      } : undefined,
+      duration: NOTIFICATION_DURATIONS.ERROR_DURATION // No auto-dismiss for errors
+    })
+  }, [addNotification])
+
   const value: NotificationContextType = {
     notifications,
     addNotification,
@@ -132,7 +166,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     error,
     warning,
     info,
-    progress
+    progress,
+    autoSaveStart,
+    autoSaveSuccess,
+    autoSaveError
   }
 
   return (

@@ -219,6 +219,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState<{
     current: number
     total: number
@@ -808,6 +809,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     debugLogger.debug('App.handleSave', 'Called with data', data)
     debugLogger.debug('App.handleSave', 'Storage state', { initialized: storage.isInitialized, projectId: storage.currentProjectId })
     
+    setIsSaving(true)
     try {
       // Use passed data if provided, otherwise use state
       const dataToSave = data || projectData
@@ -843,8 +845,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       console.error('[handleSave] Save error:', error)
       showError(error.message || 'Failed to save project')
       return { success: false, error: error.message }
+    } finally {
+      setIsSaving(false)
     }
   }, [storage, projectData])
+
+  // Create a wrapper that handles saving state for manual saves
+  const createSaveHandler = useCallback((saveCallback: () => void | Promise<void>) => {
+    return async () => {
+      setIsSaving(true)
+      try {
+        await saveCallback()
+      } finally {
+        setIsSaving(false)
+      }
+    }
+  }, [])
 
   // Autosave functionality (no toast)
   const handleAutosave = useCallback(async (data: ProjectData) => {
@@ -1700,7 +1716,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         
         {!activeDialog && (
           <AutoSaveProvider 
-            isSaving={autoSaveState.isSaving}
+            isSaving={autoSaveState.isSaving || isSaving}
             lastSaved={autoSaveState.lastSaved}
             hasUnsavedChanges={hasUnsavedChanges}
           >
@@ -1710,6 +1726,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onSettingsClick={() => showDialog('settings')}
                 onHelp={() => showDialog('help')}
                 onOpen={handleOpen}
+                isSaving={isSaving}
                 onSave={(content?: any) => {
                   if (content) {
                     setCourseSeedData(content);

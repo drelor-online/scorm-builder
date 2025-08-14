@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNotifications } from '../contexts/NotificationContext'
 
 interface UseAutoSaveOptions<T> {
   data: T | null
@@ -34,6 +35,8 @@ export function useAutoSave<T>({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const mountedRef = useRef(true)
   const lastSaveTimeRef = useRef<number>(0) // Track last save time for debouncing
+  const notifications = useNotifications()
+  const currentNotificationRef = useRef<string | null>(null)
 
   // Perform save operation with debouncing
   const performSave = useCallback(async (dataToSave: T, skipDebounce = false) => {
@@ -50,32 +53,52 @@ export function useAutoSave<T>({
 
     try {
       setIsSaving(true)
+      
+      // Show autosave start notification
+      currentNotificationRef.current = notifications.autoSaveStart()
+      
       await onSave(dataToSave)
       
       if (mountedRef.current) {
         const saveTime = new Date()
         setLastSaved(saveTime)
         lastSaveTimeRef.current = saveTime.getTime()
+        
+        // Show success notification
+        notifications.autoSaveSuccess()
+        
         // Call onSaveComplete to reset dirty flag
         onSaveComplete?.()
       }
     } catch (error: any) {
       if (!mountedRef.current) return
 
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
       if (error.type === 'CONFLICT' && onConflict) {
         onConflict({
           localData: dataToSave,
           serverData: error.serverData
         })
-      } else if (onError) {
-        onError(error instanceof Error ? error : new Error(String(error)))
+      } else {
+        // Show error notification with retry option
+        notifications.autoSaveError(errorMessage, () => {
+          // Retry save operation
+          performSave(dataToSave, true)
+        })
+        
+        // Also call the original error handler if provided
+        if (onError) {
+          onError(error instanceof Error ? error : new Error(errorMessage))
+        }
       }
     } finally {
       if (mountedRef.current) {
         setIsSaving(false)
+        currentNotificationRef.current = null
       }
     }
-  }, [onSave, onError, onConflict, disabled, minSaveInterval])
+  }, [onSave, onError, onConflict, disabled, minSaveInterval, notifications])
 
   // Force save immediately (bypasses debouncing)
   const forceSave = useCallback(async () => {

@@ -3,7 +3,7 @@ import { CourseSeedData, CourseTemplate, templateTopics } from '../types/course'
 import { PageLayout } from './PageLayout';
 import { TemplateEditor } from './TemplateEditor';
 import { useFormChanges } from '../hooks/useFormChanges';
-import { AutoSaveIndicatorConnected } from './AutoSaveIndicatorConnected';
+import { AutoSaveBadge } from './AutoSaveBadge';
 import { 
   Card, 
   Button,
@@ -34,6 +34,7 @@ interface CourseSeedInputProps {
   onHelp?: () => void;
   onStepClick?: (stepIndex: number) => void;
   initialData?: CourseSeedData;
+  isSaving?: boolean;
 }
 
 // Alert component removed - using DesignSystem Alert
@@ -77,7 +78,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   onOpen,
   onHelp,
   onStepClick,
-  initialData
+  initialData,
+  isSaving
 }) => {
   const { success, error: notifyError, info } = useNotifications();
   // VERSION MARKER: v2.0.4 - Fixed infinite loop and Next button
@@ -440,7 +442,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   }
   
   const autoSaveIndicator = (
-    <AutoSaveIndicatorConnected />
+    <AutoSaveBadge />
   )
 
 
@@ -471,6 +473,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       title="Course Configuration"
       description="Set up your course fundamentals to generate targeted learning content"
       autoSaveIndicator={autoSaveIndicator}
+      isSaving={isSaving}
       onBack={onBack}
       onSettingsClick={onSettingsClick}
       onNext={() => {

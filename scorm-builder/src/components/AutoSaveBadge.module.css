@@ -1,0 +1,106 @@
+.autoSaveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid;
+  transition: all var(--transition-fast);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.badge-saving {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--color-primary-600);
+}
+
+.badge-unsaved {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--color-warning-600);
+}
+
+.badge-saved {
+  background-color: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--color-success-600);
+}
+
+.spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.spinnerIcon {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-top: 1.5px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.badgeText {
+  flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.lastSaved {
+  font-size: var(--font-size-2xs);
+  opacity: 0.7;
+  margin-left: var(--space-xs);
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .badge-saving {
+    background-color: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: var(--color-primary-400);
+  }
+
+  .badge-unsaved {
+    background-color: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: var(--color-warning-400);
+  }
+
+  .badge-saved {
+    background-color: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--color-success-400);
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .autoSaveBadge {
+    max-width: 150px;
+    font-size: var(--font-size-2xs);
+    padding: var(--space-2xs) var(--space-xs);
+  }
+  
+  .lastSaved {
+    display: none; /* Hide relative time on mobile to save space */
+  }
+}
