@@ -22,6 +22,7 @@ import './DesignSystem/designSystem.css';
 import styles from './CourseSeedInput.module.css';
 import { useStorage } from '../contexts/PersistentStorageContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext';
 import { debugLogger } from '../utils/ultraSimpleLogger';
 
 interface CourseSeedInputProps {
@@ -82,6 +83,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   isSaving
 }) => {
   const { success, error: notifyError, info } = useNotifications();
+  const { markDirty, resetDirty } = useUnsavedChanges();
+  
   // VERSION MARKER: v2.0.4 - Fixed infinite loop and Next button
   debugLogger.info('CourseSeedInput v2.0.4', 'Component mounted/updated', {
     hasInitialData: !!initialData,
@@ -309,11 +312,13 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedTemplate = e.target.value
     setTemplate(selectedTemplate as CourseTemplate)
+    markDirty('courseSeed')
     
     // If it's a custom template, immediately populate topics
     if (customTemplates[selectedTemplate]) {
       const topics = customTemplates[selectedTemplate].topics.join('\n')
       setCustomTopics(topics)
+      // Don't need to markDirty again since we already did it above
     }
   }
   
@@ -338,10 +343,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       if (customTemplates[template]) {
         const topics = customTemplates[template].topics.join('\n')
         setCustomTopics(topics)
+        markDirty('courseSeed')
       } else if (templateTopics[template]) {
         // Otherwise use default template topics
         const topics = templateTopics[template].join('\n')
         setCustomTopics(topics)
+        markDirty('courseSeed')
       }
     }
     setShowTopicWarning(false)
@@ -426,6 +433,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         courseTitle,
         difficulty
       });
+      
+      // Reset dirty flag after successful submission
+      resetDirty('courseSeed');
     } catch (error) {
       // The parent component will show a toast, but we can log here too
       debugLogger.error('CourseSeedInput v2.0.4', 'Submission failed', error);
@@ -557,7 +567,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   id="course-title"
                   placeholder="Enter your course title"
                   value={courseTitle}
-                  onChange={(e) => !isTitleLocked && setCourseTitle(e.target.value)}
+                  onChange={(e) => {
+                    if (!isTitleLocked) {
+                      setCourseTitle(e.target.value)
+                      markDirty('courseSeed')
+                    }
+                  }}
                   required
                   readOnly={isTitleLocked}
                   data-testid="course-title-input"
@@ -585,7 +600,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         <Button
                           key={label}
                           variant={isSelected ? 'primary' : 'secondary'}
-                          onClick={() => setDifficulty(index + 1)}
+                          onClick={() => {
+                            setDifficulty(index + 1)
+                            markDirty('courseSeed')
+                          }}
                           type="button"
                           size="medium"
                           aria-pressed={isSelected}
@@ -670,6 +688,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                           if (window.confirm('Clear all topics? This cannot be undone.')) {
                             setCustomTopics('')
                             setIsTopicsEditable(true)
+                            markDirty('courseSeed')
                           }
                         }}
                         type="button"
@@ -692,6 +711,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     const value = e.target.value
                     // Just set the value as-is - topics are only separated by newlines
                     setCustomTopics(value)
+                    markDirty('courseSeed')
                   }
                 }}
                 data-testid="topics-textarea"

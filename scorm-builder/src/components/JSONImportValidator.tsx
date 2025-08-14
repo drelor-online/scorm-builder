@@ -20,6 +20,7 @@ import { AutoSaveBadge } from './AutoSaveBadge'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useStepNavigation } from '../contexts/StepNavigationContext'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
@@ -48,6 +49,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 }) => {
   const storage = useStorage()
   const navigation = useStepNavigation()
+  const { markDirty, resetDirty } = useUnsavedChanges()
+  
   // Always start with empty JSON input - users should paste their own content
   const [jsonInput, setJsonInput] = useState('')
   
@@ -561,6 +564,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         // Format the fixed JSON nicely
         const formattedJson = JSON.stringify(parsedData, null, 2)
         setJsonInput(formattedJson)
+        markDirty('courseContent') // Mark dirty when formatting content
         setToast({ 
           message: `✨ Automatically fixed ${fixes.length} formatting issue(s)`, 
           type: 'success' 
@@ -640,6 +644,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         if (autoFixed !== processedInput) {
           wasAutoFixed = true
           setJsonInput(autoFixed)
+          markDirty('courseContent') // Mark dirty when auto-fixing content
           setToast({ message: 'Applied auto-fixes, validating...', type: 'info' })
           // Try validation again with fixed JSON
           setTimeout(() => {
@@ -664,6 +669,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     try {
       const text = await navigator.clipboard.readText()
       setJsonInput(text)
+      markDirty('courseContent') // Mark dirty when pasting content
       setToast({ message: 'Content pasted from clipboard!', type: 'success' })
       // Automatically validate immediately after pasting
       setTimeout(() => validateJSON(), 100)
@@ -678,6 +684,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Unlock all subsequent steps when JSON is validated successfully
       // Steps: 0=Seed, 1=Prompt, 2=JSON, 3=Media, 4=Audio, 5=Activities, 6=SCORM
       navigation.unlockSteps([3, 4, 5, 6])
+      resetDirty('courseContent') // Reset dirty flag on successful next
       onNext(validationResult.data)
     }
     // Don't show alert - the disabled Next button provides sufficient feedback
@@ -691,6 +698,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   
   const handleConfirmClear = async () => {
     setJsonInput('')
+    markDirty('courseContent') // Mark dirty when clearing content
     setValidationResult(null)
     setIsLocked(false)
     setToast({ message: 'JSON cleared. Data on following pages has been reset.', type: 'info' })
@@ -1130,6 +1138,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 if (!isLocked) {
                   const prevLength = jsonInput.length
                   setJsonInput(value)
+                  markDirty('courseContent') // Mark dirty when user changes JSON content
                   
                   // Clear error if input becomes empty
                   if (!value.trim()) {

@@ -7,6 +7,7 @@ import { PageLayout } from './PageLayout'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AutoSaveBadge } from './AutoSaveBadge'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { 
   Button, 
   Card, 
@@ -120,6 +121,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   onStepClick
 }) => {
   const { success, error: notifyError, info } = useNotifications()
+  const { markDirty, resetDirty } = useUnsavedChanges()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -502,6 +504,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setSuccessMessage('Media added to page')
       setTimeout(() => setSuccessMessage(null), 3000)
       console.log('[MediaEnhancement] Media added to page successfully')
+      
+      // Mark media section as dirty after successful media addition
+      markDirty('media')
       
       // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
       // This ensures the component shows the latest data with proper blob URLs
@@ -1195,6 +1200,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       updatePageInCourseContent(currentPage, updatedMedia)
     }
     
+    // Mark media section as dirty after successful media removal
+    markDirty('media')
+    
     setRemoveConfirm(null)
   }
   
@@ -1263,6 +1271,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
     
     onUpdateContent(updatedContent)
+    
+    // Mark media section as dirty after content editing
+    markDirty('media')
+    
     setIsEditingContent(false)
   }
   
@@ -1447,13 +1459,26 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }
 
+  // Wrapped onNext function that resets dirty flag on successful navigation
+  const handleNext = React.useCallback(async (content: CourseContentUnion) => {
+    try {
+      await onNext(content)
+      // Reset media dirty flag only on successful next
+      resetDirty('media')
+    } catch (error) {
+      // If onNext fails, don't reset dirty flag
+      console.error('Failed to proceed to next step:', error)
+      throw error // Re-throw to maintain error handling
+    }
+  }, [onNext, resetDirty])
+
   return (
     <PageLayout
       currentStep={3}
       title="Media Enhancement"
       description="Add images and videos to your course content"
       onBack={onBack}
-      onNext={() => onNext(courseContentRef.current)}
+      onNext={() => handleNext(courseContentRef.current)}
       nextDisabled={false}
       onSettingsClick={onSettingsClick}
       onHelp={onHelp}

@@ -22,6 +22,7 @@ import { tokens } from './DesignSystem/designTokens'
 import styles from './AudioNarrationWizard.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useStepData } from '../hooks/useStepData'
 // Removed blobUrlManager - now using asset URLs from MediaService
@@ -172,6 +173,7 @@ export function AudioNarrationWizard({
     clearAudioFromCache
   } = useUnifiedMedia()
   const { success, error: notifyError, info } = useNotifications()
+  const { markDirty, resetDirty } = useUnsavedChanges()
   
   // Extract narration blocks
   const initialBlocks = extractNarrationBlocks(courseContent)
@@ -1671,7 +1673,15 @@ export function AudioNarrationWizard({
       }))
     })
     
-    onNext(contentWithAudio)
+    try {
+      await onNext(contentWithAudio)
+      // Reset media dirty flag only on successful next
+      resetDirty('media')
+    } catch (error) {
+      // If onNext fails, don't reset dirty flag
+      console.error('Failed to proceed to next step:', error)
+      throw error // Re-throw to maintain error handling
+    }
   }
 
   // Handle file uploads using MediaRegistry
@@ -1785,6 +1795,9 @@ export function AudioNarrationWizard({
       
       logger.log(`[AudioNarrationWizard] Stored audio ${storedItem.id} for block ${block.blockNumber}`)
       
+      // Mark media section as dirty after successful audio upload
+      markDirty('media')
+      
       // Operation will complete and trigger save via endOperation
       logger.log('[AudioNarrationWizard] Audio upload operation complete')
     } catch (error) {
@@ -1837,6 +1850,9 @@ export function AudioNarrationWizard({
           mediaId: storedItem.id
         }]
       })
+      
+      // Mark media section as dirty after generating/adding caption
+      markDirty('media')
       
       logger.log(`[AudioNarrationWizard] Stored caption ${storedItem.id} for block ${block.blockNumber}`)
       
@@ -1971,6 +1987,10 @@ export function AudioNarrationWizard({
   const confirmRemoveAudio = async () => {
     if (pendingRemoveBlockNumber) {
       await removeAudio(pendingRemoveBlockNumber)
+      
+      // Mark media section as dirty after successful audio removal
+      markDirty('media')
+      
       setShowRemoveAudioConfirm(false)
       setPendingRemoveBlockNumber(null)
     }
@@ -2016,6 +2036,10 @@ export function AudioNarrationWizard({
   const confirmRemoveCaption = async () => {
     if (pendingRemoveBlockNumber) {
       await removeCaption(pendingRemoveBlockNumber)
+      
+      // Mark media section as dirty after successful caption removal
+      markDirty('media')
+      
       setShowRemoveCaptionConfirm(false)
       setPendingRemoveBlockNumber(null)
     }
@@ -2172,6 +2196,9 @@ export function AudioNarrationWizard({
         })
         
         logger.log(`[AudioNarrationWizard] Stored recorded audio ${storedItem.id} for block ${block.blockNumber} with URL: ${url}`)
+        
+        // Mark media section as dirty after successful audio recording
+        markDirty('media')
         
         // Show success notification
         success(`Audio recorded for block ${block.blockNumber}`)
@@ -2466,6 +2493,9 @@ export function AudioNarrationWizard({
       if (newAudioFiles.length > 0) {
         setAudioUploaded(true)
         hasBulkUploadedRef.current = true // Mark that we have bulk uploaded files
+        
+        // Mark media section as dirty after successful bulk audio upload
+        markDirty('media')
       }
       
       // Log success for debugging
@@ -2697,6 +2727,9 @@ export function AudioNarrationWizard({
       if (newCaptionFiles.length > 0) {
         setCaptionsUploaded(true)
         hasBulkUploadedRef.current = true // Mark that we have bulk uploaded files
+        
+        // Mark media section as dirty after successful bulk caption upload
+        markDirty('media')
       }
       
       // Log success for debugging
@@ -3381,6 +3414,9 @@ export function AudioNarrationWizard({
             // Clear state FIRST
             setAudioFiles([])
             setCaptionFiles([])
+            
+            // Mark media section as dirty after clearing all audio/captions
+            markDirty('media')
             
             // Now explicitly clear media arrays from course content
             const clearedContent = JSON.parse(JSON.stringify(courseContent))

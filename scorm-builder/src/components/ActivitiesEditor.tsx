@@ -21,6 +21,7 @@ import {
 import { Check } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { generateActivityId } from '../utils/idGenerator'
 import DOMPurify from 'dompurify'
 import styles from './ActivitiesEditor.module.css'
@@ -77,6 +78,10 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   onStepClick 
 }) => {
   const [content, setContent] = useState(courseContent)
+  const { markDirty, resetDirty } = useUnsavedChanges()
+  
+  // Track user interactions to distinguish from loading/syncing operations
+  const hasUserInteracted = React.useRef(false)
   
   // FIX: Use ref to track latest content and avoid stale closures
   const contentRef = React.useRef(content)
@@ -94,8 +99,14 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     // Skip initial mount and only update if content has actually changed
     if (onUpdateContent && content !== courseContent) {
       onUpdateContent(content)
+      
+      // Mark dirty only if this is a user-initiated change (not initial load or sync)
+      if (hasUserInteracted.current) {
+        markDirty('activities')
+        hasUserInteracted.current = false // Reset flag after marking dirty
+      }
     }
-  }, [content, onUpdateContent, courseContent])
+  }, [content, onUpdateContent, courseContent, markDirty])
   const [editingKnowledgeCheck, setEditingKnowledgeCheck] = useState<EditingKnowledgeCheck | null>(null)
   const [editingAssessment, setEditingAssessment] = useState<EditingAssessment | null>(null)
   const [editingActivity, setEditingActivity] = useState<string | null>(null)
@@ -175,6 +186,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       type: 'multiple-choice' as const,
       content: {}
     }
+    hasUserInteracted.current = true // Mark as user interaction
     setContent(prev => {
       if (!isOldFormat(prev)) return prev;
       return { ...prev, activities: [...prev.activities, newActivity] };
@@ -187,6 +199,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   }
 
   const handleSaveActivity = (activityId: string) => {
+    hasUserInteracted.current = true // Mark as user interaction
     setContent(prev => {
       if (!isOldFormat(prev)) return prev;
       return {
@@ -212,6 +225,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     const { type, topicId, questionIndex } = itemToRemove
     
     if (type === 'knowledgeCheck') {
+      hasUserInteracted.current = true // Mark as user interaction
       setContent(prev => {
         if (!isNewFormat(prev)) return prev
         return {
@@ -234,6 +248,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       })
     } else if (type === 'assessment') {
       // FIX: Remove from assessment questions, not knowledge check questions
+      hasUserInteracted.current = true // Mark as user interaction
       setContent(prev => {
         if (!isNewFormat(prev)) return prev
         return {
@@ -296,7 +311,15 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             console.error('Error saving activities data before navigation:', error)
           }
         }
-        onNext(latestContent)
+        try {
+          await onNext(latestContent)
+          // Reset activities dirty flag only on successful next
+          resetDirty('activities')
+        } catch (error) {
+          // If onNext fails, don't reset dirty flag
+          console.error('Failed to proceed to next step:', error)
+          throw error // Re-throw to maintain error handling
+        }
       }}
       onSave={onSave}
       onOpen={onOpen}
@@ -519,6 +542,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                     <span>%</span>
                     <Button
                       onClick={() => {
+                        hasUserInteracted.current = true // Mark as user interaction
                         setContent(prev => {
                           if (!isNewFormat(prev)) return prev
                           return {
@@ -687,6 +711,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             title="Add Knowledge Check Question"
             onSave={(newQuestion) => {
               if (isAddingKnowledgeCheck) {
+                hasUserInteracted.current = true // Mark as user interaction
                 setContent(prev => {
                   if (!isNewFormat(prev)) return prev
                   return {
@@ -724,6 +749,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             question={null}
             title="Add Assessment Question"
             onSave={(newQuestion) => {
+              hasUserInteracted.current = true // Mark as user interaction
               setContent(prev => {
                 if (!isNewFormat(prev)) return prev
                 const currentQuestions = prev.assessment?.questions || []
@@ -754,6 +780,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             title="Edit Knowledge Check Question"
             onSave={(updatedQuestion) => {
               if (editingKnowledgeCheck) {
+                hasUserInteracted.current = true // Mark as user interaction
                 setContent(prev => {
                   if (!isNewFormat(prev)) return prev;
                   return {
@@ -788,6 +815,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
             title="Edit Assessment Question"
             onSave={(updatedQuestion) => {
               if (editingAssessment) {
+                hasUserInteracted.current = true // Mark as user interaction
                 setContent(prev => {
                   if (!isNewFormat(prev)) return prev;
                   return {

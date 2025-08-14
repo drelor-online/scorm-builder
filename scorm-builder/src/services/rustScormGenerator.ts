@@ -20,6 +20,34 @@ export function clearMediaCache(): void {
 }
 
 /**
+ * Extract objectives from HTML content (for CourseContent format)
+ */
+function extractObjectivesFromContent(content: string): string[] {
+  // Simple extraction - look for list items in the content
+  const listItemRegex = /<li[^>]*>(.*?)<\/li>/gi
+  const objectives: string[] = []
+  let match
+  
+  while ((match = listItemRegex.exec(content)) !== null) {
+    // Remove HTML tags and trim
+    const objective = match[1].replace(/<[^>]*>/g, '').trim()
+    if (objective) {
+      objectives.push(objective)
+    }
+  }
+  
+  // If no list items found, split by line breaks and filter
+  if (objectives.length === 0) {
+    const lines = content.split(/\n|<br\s*\/?>/).map(line => 
+      line.replace(/<[^>]*>/g, '').trim()
+    ).filter(line => line.length > 0)
+    objectives.push(...lines)
+  }
+  
+  return objectives
+}
+
+/**
  * Pre-load media into the cache from a Map of blobs
  * This allows SCORMPackageBuilder to pass already-loaded media
  */
@@ -206,11 +234,12 @@ async function resolveImageUrl(
   mediaFiles: MediaFile[],
   mediaCounter: { [type: string]: number }
 ): Promise<string | undefined> {
-  console.log(`[Rust SCORM] resolveImageUrl called with:`, imageUrl)
-  
+  // Only log when we have a valid imageUrl to avoid cluttering logs with undefined values
   if (!imageUrl) {
     return undefined;
   }
+  
+  console.log(`[Rust SCORM] resolveImageUrl called with:`, imageUrl)
   
   // If it's an external URL, try to download it
   if (isExternalUrl(imageUrl)) {
@@ -844,7 +873,9 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
     } : undefined,
     
     learning_objectives_page: cc.learningObjectivesPage ? {
-      objectives: cc.learningObjectivesPage.objectives || [],
+      // For CourseContent format, extract objectives from content; for other formats, use objectives property
+      objectives: cc.learningObjectivesPage.objectives || 
+                  (cc.learningObjectivesPage.content ? extractObjectivesFromContent(cc.learningObjectivesPage.content) : []),
       audio_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.audioFile, projectId, mediaFiles),
       caption_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.captionFile, projectId, mediaFiles),
       // Extract image from media array to set as image_url (same as topics)
@@ -1081,22 +1112,39 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       audio_file: await resolveAudioCaptionFile(
         (courseContent.objectivesPage as any)?.audioId || 
         courseContent.objectivesPage?.audioFile || 
-        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id, 
+        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id ||
+        // Fallback to learningObjectivesPage for backward compatibility
+        (courseContent as any).learningObjectivesPage?.audioFile ||
+        (courseContent as any).learningObjectivesPage?.media?.find((m: any) => m.type === 'audio')?.id, 
         projectId, 
         mediaFiles, 
-        (courseContent.objectivesPage as any)?.audioBlob
+        (courseContent.objectivesPage as any)?.audioBlob || (courseContent as any).learningObjectivesPage?.audioBlob
       ),
       caption_file: await resolveAudioCaptionFile(
         (courseContent.objectivesPage as any)?.captionId || 
         courseContent.objectivesPage?.captionFile || 
-        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'caption')?.id, 
+        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'caption')?.id ||
+        // Fallback to learningObjectivesPage for backward compatibility
+        (courseContent as any).learningObjectivesPage?.captionFile ||
+        (courseContent as any).learningObjectivesPage?.media?.find((m: any) => m.type === 'caption')?.id, 
         projectId, 
         mediaFiles, 
-        (courseContent.objectivesPage as any)?.captionBlob
+        (courseContent.objectivesPage as any)?.captionBlob || (courseContent as any).learningObjectivesPage?.captionBlob
       ),
-      image_url: await resolveImageUrl(courseContent.objectivesPage?.imageUrl, projectId, mediaFiles, mediaCounter),
+      image_url: await resolveImageUrl(
+        courseContent.objectivesPage?.imageUrl || (courseContent as any).learningObjectivesPage?.imageUrl, 
+        projectId, 
+        mediaFiles, 
+        mediaCounter
+      ),
       // Filter out audio/caption from media array since they're handled separately
-      media: await resolveMedia(courseContent.objectivesPage?.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
+      // Support both objectivesPage and learningObjectivesPage for backward compatibility
+      media: await resolveMedia(
+        (courseContent.objectivesPage?.media || (courseContent as any).learningObjectivesPage?.media)?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), 
+        projectId, 
+        mediaFiles, 
+        mediaCounter
+      ),
     } : undefined,
     
     topics: await Promise.all(courseContent.topics.map(async topic => {
