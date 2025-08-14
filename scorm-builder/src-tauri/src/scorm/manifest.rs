@@ -17,6 +17,7 @@ pub struct ManifestOptions {
     pub scorm_version: String,
 }
 
+#[allow(dead_code)]
 pub fn generate_manifest(options: &ManifestOptions) -> Result<String, String> {
     // Validate SCORM version
     match options.scorm_version.as_str() {

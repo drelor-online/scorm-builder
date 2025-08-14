@@ -8,8 +8,7 @@ pub mod output_validator;
 pub mod package;
 pub mod style_generator;
 
-// Re-export commonly used types
-pub use generator::CourseMetadata;
+// Re-export commonly used types - removed unused CourseMetadata export
 
 #[cfg(test)]
 mod generator_guard_test;

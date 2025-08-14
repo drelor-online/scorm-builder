@@ -415,6 +415,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render assessment template: {e}"))
     }
 
+    #[allow(dead_code)]
     pub fn with_objectives(mut self, has_objectives: bool) -> Self {
         self.has_objectives = has_objectives;
         self

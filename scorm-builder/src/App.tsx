@@ -78,6 +78,7 @@ import { StepNavigationProvider, useStepNavigation } from './contexts/StepNaviga
 import { AutoSaveProvider } from './contexts/AutoSaveContext'
 import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { useNotifications } from './contexts/NotificationContext'
+import { useUnsavedChanges } from './contexts/UnsavedChangesContext'
 import MediaLoadingOverlay from './components/MediaLoadingOverlay'
 import ProjectLoadingOverlay from './components/ProjectLoadingOverlay'
 
@@ -106,6 +107,7 @@ let loadProjectCallCount = 0
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
   const storage = useStorage()
   const navigation = useStepNavigation()
+  const { hasUnsavedChanges, resetAll: resetAllUnsavedChanges } = useUnsavedChanges()
   const {
     activeDialog,
     projectToDelete,
@@ -116,7 +118,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
-  const [isDirty, setIsDirty] = useState(false)
 
   // Set up debug log export on window close
   useEffect(() => {
@@ -216,7 +217,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Use notification context instead of local toast state
   const { success, error: showError, info } = useNotifications()
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState<string | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -251,11 +251,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   // Track if we have already loaded this project to prevent duplicate loads
   const hasLoadedProjectRef = useRef<string | null>(null)
   
-  // Create stable data snapshot for autosave that only updates when isDirty is true
+  // Create stable data snapshot for autosave
   const autoSaveDataRef = useRef<ProjectData | null>(null)
   
   // Update autoSaveDataRef whenever project data changes
-  // The useAutoSave hook will only save when isDirty is true, but the ref needs current data
+  // The useAutoSave hook will only save when hasUnsavedChanges is true, but the ref needs current data
   useEffect(() => {
     if (courseSeedData) {
       autoSaveDataRef.current = {
@@ -268,7 +268,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         audioFiles: EMPTY_AUDIO_FILES
       }
     }
-  }, [courseSeedData, courseContent, currentStep]) // Update ref when data changes, autosave controlled by isDirty
+  }, [courseSeedData, courseContent, currentStep]) // Update ref when data changes, autosave controlled by hasUnsavedChanges
   
   // Create project data for saving - memoized to prevent unnecessary re-renders
   // IMPORTANT: lastModified is NOT included in dependencies to prevent autosave loop
@@ -786,7 +786,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       courseSeedDataTitle: courseSeedData?.courseTitle,
       hasCourseContent: !!courseContent,
       currentStep,
-      isDirty,
       hasUnsavedChanges,
       isLoadingProject,
       timestamp: new Date().toISOString(),
@@ -794,15 +793,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     })
   }) // No dependencies - runs on every render to catch all changes
   
-  // DEBUG: Track isDirty flag changes for autosave monitoring
+  // DEBUG: Track hasUnsavedChanges flag changes for autosave monitoring
   useEffect(() => {
-    debugLogger.debug('App.autosave', 'isDirty flag changed', { 
-      isDirty, 
+    debugLogger.debug('App.autosave', 'hasUnsavedChanges flag changed', { 
+      hasUnsavedChanges, 
       hasData: !!autoSaveDataRef.current,
       hasProjectId: !!storage.currentProjectId,
-      autosaveWillTrigger: isDirty && !!autoSaveDataRef.current && !!storage.currentProjectId
+      autosaveWillTrigger: hasUnsavedChanges && !!autoSaveDataRef.current && !!storage.currentProjectId
     })
-  }, [isDirty, storage.currentProjectId])
+  }, [hasUnsavedChanges, storage.currentProjectId])
   
   // Manual save functionality (shows toast)
   const handleSave = useCallback(async (data?: ProjectData) => {
@@ -838,7 +837,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       await storage.saveProject()
       success('Project saved successfully')
-      setHasUnsavedChanges(false)
+      resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
     } catch (error: any) {
@@ -886,7 +885,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // No need to check localStorage anymore
       
       await storage.saveProject()
-      setHasUnsavedChanges(false)
+      resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
     } catch (error: any) {
@@ -901,11 +900,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     data: autoSaveDataRef.current,
     onSave: handleAutosave,
     delay: DURATIONS.autosaveInterval,
-    disabled: !isDirty || !storage.currentProjectId, // Only save when dirty AND project exists
-    isDirty,
+    disabled: !hasUnsavedChanges || !storage.currentProjectId, // Only save when dirty AND project exists
+    isDirty: hasUnsavedChanges,
     onSaveComplete: () => {
-      debugLogger.debug('App.autoSave', 'Save completed, resetting isDirty flag')
-      setIsDirty(false)
+      debugLogger.debug('App.autoSave', 'Save completed, resetting all dirty flags')
+      resetAllUnsavedChanges()
     },
     minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
   })
@@ -926,8 +925,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleCourseSeedSubmit = async (data: CourseSeedData) => {
     // VERSION MARKER: v2.0.2 - Returns Promise for proper async handling
     debugLogger.info('App.handleCourseSeedSubmit v2.0.2', 'Course seed data submitted', { title: data.courseTitle })
-    setIsDirty(true) // Mark as dirty for autosave
-    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
+    // Note: CourseSeedInput component handles marking 'courseSeed' section dirty automatically
     try {
       await measureAsync('handleCourseSeedSubmit', async () => {
         // Create a new project if we don't have one - BEFORE setting state or navigating
@@ -963,7 +961,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         setCourseSeedData(data)
         setCurrentStep('prompt')
         navigation.navigateToStep(stepNumbers.prompt)
-        setHasUnsavedChanges(true)
+        // Note: Dirty state is handled automatically by components
         
         // Return success to resolve the promise
         return true
@@ -1003,8 +1001,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleJSONNext = async (data: CourseContent) => {
-    setIsDirty(true) // Mark as dirty for autosave
-    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
+    // Note: JSONImportValidator component handles marking 'courseContent' section dirty automatically
     setCourseContent(data)
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
@@ -1075,8 +1072,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleMediaNext = async (data: CourseContentUnion) => {
-    setIsDirty(true) // Mark as dirty for autosave
-    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
+    // Note: MediaEnhancementWizard component handles marking 'media' section dirty automatically
     setCourseContent(data as CourseContent)
     setCurrentStep('audio')
     navigation.navigateToStep(stepNumbers.audio)
@@ -1163,8 +1159,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleAudioNext = useCallback(async (data: CourseContentUnion) => {
-    setIsDirty(true) // Mark as dirty for autosave
-    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
+    // Note: AudioNarrationWizard component handles marking 'media' section dirty automatically
     setCourseContent(data as CourseContent)
     setCurrentStep('activities')
     navigation.navigateToStep(stepNumbers.activities)
@@ -1238,8 +1233,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [storage, navigation, stepNumbers.media])
 
   const handleActivitiesNext = async (data: CourseContentUnion) => {
-    setIsDirty(true) // Mark as dirty for autosave
-    setHasUnsavedChanges(true) // Mark as unsaved for manual save button
+    // Note: ActivitiesEditor component handles marking 'activities' section dirty automatically
     setCourseContent(data as CourseContent)
     setCurrentStep('scorm')
     navigation.navigateToStep(stepNumbers.scorm)
@@ -1431,7 +1425,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     const result = await handleSave(projectData)
     if (result.success) {
       hideDialog();
-      setHasUnsavedChanges(false)
+      // Note: handleSave already resets all dirty flags
       
       // Execute pending navigation action if exists (e.g., Exit to Dashboard)
       if (pendingNavigationAction) {
@@ -1451,7 +1445,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   const handleDiscardChanges = async () => {
     hideDialog();
-    setHasUnsavedChanges(false)
+    resetAllUnsavedChanges()
     
     // Execute pending navigation action if exists (e.g., Exit to Dashboard)
     if (pendingNavigationAction) {
@@ -1730,13 +1724,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onSave={(content?: any) => {
                   if (content) {
                     setCourseSeedData(content);
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // handleManualSave();
+                    handleManualSave(content);
+                  } else {
+                    handleManualSave();
                   }
-                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                  // else {
-                  //   handleManualSave();
-                  // }
                 }}
                 onSubmit={handleCourseSeedSubmit}
                 onStepClick={handleStepClick}
@@ -1755,15 +1746,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // if (!silent) {
-                    //   handleManualSave();
-                    // }
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
                   }
-                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                  // else if (!silent) {
-                  //   handleManualSave();
-                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1781,15 +1769,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // if (!silent) {
-                    //   handleManualSave();
-                    // }
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
                   }
-                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                  // else if (!silent) {
-                  //   handleManualSave();
-                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1808,12 +1793,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       // Type guard to ensure we have CourseContent, not LegacyCourseContent
                       if ('welcomePage' in content) {
                         setCourseContent(content as CourseContent);
-                        // EMERGENCY FIX: Removed automatic save to stop infinite loop
-                        // Save the updated content to backend
-                        // handleSave({
-                        //   ...projectData,
-                        //   courseContent: content as CourseContent
-                        // });
+                        // onUpdateContent should only update state, not trigger saves
+                        // Saves are handled by the onSave callback below
                       }
                     }}
                     onNext={handleMediaNext}
@@ -1864,6 +1845,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   courseSeedData={courseSeedData}
                   onNext={handleAudioNext}
                   onBack={handleAudioBack}
+                  onUpdateContent={(content: CourseContentUnion) => {
+                    setCourseContent(content as CourseContent)
+                  }}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
                   onSave={async (content?: any, silent?: boolean) => {
@@ -1891,8 +1875,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     }
                   } else if (!silent) {
                     // No content provided, just trigger a regular save
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // await handleManualSave();
+                    await handleManualSave();
                   }
                 }}
                   onOpen={handleOpen}
@@ -1908,20 +1891,20 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   courseSeedData={courseSeedData}
                   onNext={handleActivitiesNext}
                   onBack={handleActivitiesBack}
+                  onUpdateContent={(content: CourseContentUnion) => {
+                    setCourseContent(content as CourseContent)
+                  }}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // if (!silent) {
-                    //   handleManualSave();
-                    // }
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
                   }
-                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                  // else if (!silent) {
-                  //   handleManualSave();
-                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
@@ -1956,15 +1939,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onSave={(content?: any, silent?: boolean) => {
                   if (content) {
                     setCourseContent(content);
-                    // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                    // if (!silent) {
-                    //   handleManualSave();
-                    // }
+                    if (!silent) {
+                      handleManualSave();
+                    }
+                  } else if (!silent) {
+                    handleManualSave();
                   }
-                  // EMERGENCY FIX: Removed handleManualSave to stop infinite loop
-                  // else if (!silent) {
-                  //   handleManualSave();
-                  // }
                 }}
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}

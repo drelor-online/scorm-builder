@@ -23,6 +23,7 @@ pub struct StreamableResource {
     pub file_path: PathBuf,
 }
 
+#[allow(dead_code)]
 pub fn create_scorm_package(content: &PackageContent, output_path: &Path) -> Result<(), String> {
     let file = std::fs::File::create(output_path)
         .map_err(|e| format!("Failed to create output file: {e}"))?;

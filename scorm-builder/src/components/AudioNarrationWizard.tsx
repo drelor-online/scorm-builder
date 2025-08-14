@@ -61,6 +61,7 @@ interface AudioNarrationWizardProps {
   courseSeedData?: CourseSeedData
   onNext: (enhancedContent: CourseContentUnion) => void
   onBack: () => void
+  onUpdateContent?: (content: CourseContentUnion) => void  // Add callback to update parent
   onSettingsClick?: () => void
   onSave?: (content?: any, silent?: boolean) => void
   onOpen?: () => void
@@ -153,6 +154,7 @@ export function AudioNarrationWizard({
   courseContent,
   onNext,
   onBack,
+  onUpdateContent,  // Add onUpdateContent prop
   onSettingsClick,
   onSave,
   onOpen,
@@ -1524,6 +1526,11 @@ export function AudioNarrationWizard({
         // Reset bulk upload flag after successful save
         // The data is now persisted to the parent
         hasBulkUploadedRef.current = false
+      }
+      
+      // Update parent content immediately for unsaved changes tracking
+      if (onUpdateContent) {
+        onUpdateContent(contentWithAudio)
       }
     } finally {
       // Always reset isSaving flag after a short delay
@@ -3462,6 +3469,11 @@ export function AudioNarrationWizard({
             // Pass cleared content to parent
             if (onSave) {
               onSave(clearedContent, true) // Pass silent=true to avoid double save
+            }
+            
+            // Update parent content immediately for unsaved changes tracking
+            if (onUpdateContent) {
+              onUpdateContent(clearedContent)
             }
             
             setShowClearAllConfirm(false)

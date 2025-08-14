@@ -33,7 +33,7 @@ interface ActivitiesEditorProps {
   onBack: () => void
   onUpdateContent?: (content: CourseContentUnion) => void  // FIX: Add callback to update parent
   onSettingsClick?: () => void
-  onSave?: () => void
+  onSave?: (content?: any, silent?: boolean) => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -152,30 +152,29 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     loadActivitiesData()
   }, [storage])
   
-  // EMERGENCY FIX: Disabled automatic save to stop infinite loop
-  // Save content to storage whenever it changes
-  // useEffect(() => {
-  //   const saveActivitiesData = async () => {
-  //     // Only save if storage is available and initialized
-  //     if (!storage || !storage.isInitialized || !storage.currentProjectId) {
-  //       return
-  //     }
-  //     
-  //     try {
-  //       await storage.saveContent('activities', content)
-  //       // Also trigger the onSave callback for silent save
-  //       if (onSave) {
-  //         onSave() // Silent save already handled by localStorage
-  //       }
-  //     } catch (error) {
-  //       console.error('Error saving activities data:', error)
-  //     }
-  //   }
-  //   
-  //   // Debounce saving to avoid too many writes
-  //   const timeoutId = setTimeout(saveActivitiesData, 1000)
-  //   return () => clearTimeout(timeoutId)
-  // }, [content, storage, onSave])
+  // Auto-save content to storage whenever it changes (with debouncing)
+  useEffect(() => {
+    const saveActivitiesData = async () => {
+      // Only save if storage is available and initialized
+      if (!storage || !storage.isInitialized || !storage.currentProjectId) {
+        return
+      }
+      
+      try {
+        await storage.saveContent('activities', content)
+        // Trigger the onSave callback with silent=true to prevent infinite loops
+        if (onSave) {
+          onSave(content, true) // Pass content and silent=true for auto-save
+        }
+      } catch (error) {
+        console.error('Error saving activities data:', error)
+      }
+    }
+    
+    // Debounce saving to avoid too many writes
+    const timeoutId = setTimeout(saveActivitiesData, 1000)
+    return () => clearTimeout(timeoutId)
+  }, [content, storage, onSave])
 
   const addActivity = useCallback(() => {
     if (!isOldFormat(content)) return;

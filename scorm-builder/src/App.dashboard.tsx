@@ -4,6 +4,7 @@ import { ProjectLoadingDialog } from './components/ProjectLoadingDialog'
 import { PersistentStorageProvider, useStorage } from './contexts/PersistentStorageContext'
 import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { NotificationProvider } from './contexts/NotificationContext'
+import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import { NotificationPanel } from './components/NotificationPanel'
 import { handleFileAssociation } from './utils/fileAssociation'
 import { DebugInfo } from './components/DebugInfo'
@@ -393,10 +394,12 @@ export function AppWithDashboard() {
   return (
     <PersistentStorageProvider>
       <NotificationProvider>
-        <DashboardContent />
-        <DebugInfo />
-        <DebugPanel />
-        <ErrorNotification />
+        <UnsavedChangesProvider>
+          <DashboardContent />
+          <DebugInfo />
+          <DebugPanel />
+          <ErrorNotification />
+        </UnsavedChangesProvider>
       </NotificationProvider>
     </PersistentStorageProvider>
   )

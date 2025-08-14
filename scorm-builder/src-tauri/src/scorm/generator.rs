@@ -309,6 +309,7 @@ fn sanitize_filename(name: &str) -> String {
         .collect()
 }
 
+#[allow(dead_code)]
 fn get_file_extension(mime_type: &str) -> String {
     match mime_type {
         "image/jpeg" => ".jpg",

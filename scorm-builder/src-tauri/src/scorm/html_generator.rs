@@ -1,6 +1,7 @@
 use crate::scorm::generator::CourseMetadata;
 use serde_json::Value;
 
+#[allow(dead_code)]
 pub fn generate_welcome_page_html(welcome: &Value) -> String {
     let title = welcome
         .get("title")
@@ -68,6 +69,7 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
     html
 }
 
+#[allow(dead_code)]
 pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
     let content = objectives_page
         .get("content")
@@ -128,6 +130,7 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
     html
 }
 
+#[allow(dead_code)]
 pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
     let title = topic
         .get("title")
@@ -273,6 +276,7 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
     html
 }
 
+#[allow(dead_code)]
 pub fn generate_assessment_page_html(assessment: &Value) -> String {
     let pass_mark = assessment
         .get("passMark")
@@ -411,6 +415,7 @@ pub fn generate_assessment_page_html(assessment: &Value) -> String {
     html
 }
 
+#[allow(dead_code)]
 pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMetadata) -> String {
     let mut html = format!(
         r#"<!DOCTYPE html>

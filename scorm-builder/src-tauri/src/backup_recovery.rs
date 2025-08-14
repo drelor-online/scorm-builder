@@ -22,6 +22,7 @@ pub struct CleanupResult {
 }
 
 /// Extract project ID from a path or return the ID if it's already just an ID
+#[allow(dead_code)]
 fn extract_project_id(project_id_or_path: &str) -> String {
     // If it contains .scormproj, extract the ID from the filename
     if project_id_or_path.contains(".scormproj") {

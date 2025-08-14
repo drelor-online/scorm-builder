@@ -96,6 +96,7 @@ fn validate_project_path(file_path: &str) -> Result<PathBuf, String> {
 }
 
 /// List of allowed image domains
+#[allow(dead_code)]
 const ALLOWED_IMAGE_DOMAINS: &[&str] = &[
     "images.unsplash.com",
     "i.imgur.com",
@@ -107,6 +108,7 @@ const ALLOWED_IMAGE_DOMAINS: &[&str] = &[
 ];
 
 /// Validates URL for image download
+#[allow(dead_code)]
 fn validate_image_url(url_str: &str) -> Result<Url, String> {
     let url = Url::parse(url_str).map_err(|_| "Invalid URL format")?;
 
@@ -163,6 +165,7 @@ fn validate_image_url(url_str: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn generate_scorm_manifest(request: GenerateManifestRequest) -> Result<String, String> {
     // Validate inputs
@@ -187,6 +190,7 @@ pub async fn generate_scorm_manifest(request: GenerateManifestRequest) -> Result
     manifest::generate_manifest(&options)
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn create_scorm_package(request: CreatePackageRequest) -> Result<String, String> {
     // Validate output path
@@ -216,6 +220,7 @@ pub async fn create_scorm_package(request: CreatePackageRequest) -> Result<Strin
     ))
 }
 
+#[allow(dead_code)]
 fn validate_package_output_path(path_str: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(path_str);
 
@@ -476,6 +481,7 @@ pub struct DownloadImageResponse {
     pub content_type: String,
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn download_image(url: String) -> Result<DownloadImageResponse, String> {
     // Validate URL first

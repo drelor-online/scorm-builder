@@ -1,5 +1,5 @@
-use crate::media_storage::{get_media_directory, MediaData, MediaMetadata};
-use crate::project_storage::{load_project_file, save_project_file, ProjectFile};
+use crate::media_storage::{get_media_directory, MediaData};
+use crate::project_storage::{save_project_file, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
@@ -67,8 +67,8 @@ pub async fn create_project_zip(
             .map_err(|e| format!("Failed to write project to ZIP: {}", e))?;
         
         
-        file_count = 1;
-        total_size = project_content.len();
+        file_count += 1;
+        total_size += project_content.len();
 
         // Add media files if requested
         if include_media {
