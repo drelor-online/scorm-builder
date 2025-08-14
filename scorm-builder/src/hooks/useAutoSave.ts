@@ -83,7 +83,9 @@ export function useAutoSave<T>({
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
-    await performSave(data, true) // Skip debounce for forced saves
+    if (data !== null) {
+      await performSave(data, true) // Skip debounce for forced saves
+    }
   }, [data, performSave])
 
   // Set up auto-save effect based on isDirty flag

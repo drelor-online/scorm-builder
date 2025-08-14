@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
-import type { CourseContent } from '../services/types/aiPrompt'
-import type { CourseMetadata } from '../services/types/metadata'
+import type { CourseContent } from '../types/aiPrompt'
+import type { CourseMetadata } from '../types/metadata'
 
 export interface MockMediaFile {
   id: string

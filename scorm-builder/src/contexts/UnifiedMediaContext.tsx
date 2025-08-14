@@ -249,7 +249,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             }
             
             // Skip YouTube videos without proper URLs (they don't need blob preloading)
-            if (item.metadata?.type === 'youtube' && !item.metadata?.url) {
+            if ((item.metadata?.type as string) === 'youtube' && !item.metadata?.url) {
               logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id)
               return false
             }

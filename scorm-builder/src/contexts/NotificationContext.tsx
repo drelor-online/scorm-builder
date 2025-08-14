@@ -9,8 +9,8 @@ export const NOTIFICATION_DURATIONS = {
   SUCCESS_DURATION: 5000,      // Success: 5 seconds
   INFO_DURATION: 5000,         // Info: 5 seconds  
   WARNING_DURATION: 8000,      // Warning: 8 seconds (longer for important warnings)
-  ERROR_DURATION: null,        // Error: no auto-dismiss (user must manually dismiss)
-  PROGRESS_DURATION: null      // Progress: no auto-dismiss (dismisses when complete)
+  ERROR_DURATION: undefined,   // Error: no auto-dismiss (user must manually dismiss)
+  PROGRESS_DURATION: undefined // Progress: no auto-dismiss (dismisses when complete)
 } as const
 
 export interface Notification {
@@ -35,10 +35,10 @@ interface NotificationContextType {
   removeNotification: (id: string) => void
   clearAll: () => void
   // Convenience methods
-  success: (message: string, duration?: number) => void
+  success: (message: string, duration?: number | undefined) => void
   error: (message: string, action?: Notification['action']) => void
-  warning: (message: string, duration?: number) => void
-  info: (message: string, duration?: number) => void
+  warning: (message: string, duration?: number | undefined) => void
+  info: (message: string, duration?: number | undefined) => void
   progress: (message: string, current: number, total: number) => string
 }
 
@@ -97,8 +97,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [])
 
   // Convenience methods - follow audit guidelines for duration
-  const success = useCallback((message: string, duration = NOTIFICATION_DURATIONS.SUCCESS_DURATION) => {
-    addNotification({ message, type: 'success', duration })
+  const success = useCallback((message: string, duration?: number | undefined) => {
+    addNotification({ message, type: 'success', duration: duration ?? NOTIFICATION_DURATIONS.SUCCESS_DURATION })
   }, [addNotification])
 
   const error = useCallback((message: string, action?: Notification['action']) => {
@@ -106,12 +106,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     addNotification({ message, type: 'error', action, duration: NOTIFICATION_DURATIONS.ERROR_DURATION })
   }, [addNotification])
 
-  const warning = useCallback((message: string, duration = NOTIFICATION_DURATIONS.WARNING_DURATION) => {
-    addNotification({ message, type: 'warning', duration })
+  const warning = useCallback((message: string, duration?: number | undefined) => {
+    addNotification({ message, type: 'warning', duration: duration ?? NOTIFICATION_DURATIONS.WARNING_DURATION })
   }, [addNotification])
 
-  const info = useCallback((message: string, duration = NOTIFICATION_DURATIONS.INFO_DURATION) => {
-    addNotification({ message, type: 'info', duration })
+  const info = useCallback((message: string, duration?: number | undefined) => {
+    addNotification({ message, type: 'info', duration: duration ?? NOTIFICATION_DURATIONS.INFO_DURATION })
   }, [addNotification])
 
   const progress = useCallback((message: string, current: number, total: number) => {

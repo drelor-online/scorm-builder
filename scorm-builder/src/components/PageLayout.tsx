@@ -130,8 +130,9 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                   </Button>
                 </div>
               </Tooltip>
+              {/* Non-interactive autosave status indicator - positioned near Save button */}
               {autoSaveIndicator && (
-                <div className={styles.autoSaveWrapper} data-testid="autosave-indicator">
+                <div className={styles.autoSaveWrapper} data-testid="autosave-indicator" role="status" aria-live="polite">
                   {autoSaveIndicator}
                 </div>
               )}

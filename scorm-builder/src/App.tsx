@@ -1704,33 +1704,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             lastSaved={autoSaveState.lastSaved}
             hasUnsavedChanges={hasUnsavedChanges}
           >
-            {/* EMERGENCY MANUAL SAVE BUTTON - Autosave is disabled */}
-            <div style={{
-              position: 'fixed',
-              top: '20px',
-              right: '20px',
-              zIndex: 1000,
-              padding: '10px',
-              backgroundColor: hasUnsavedChanges ? '#ff6b6b' : '#51cf66',
-              color: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-              display: 'flex',
-              gap: '10px',
-              alignItems: 'center'
-            }}>
-              <Button
-                onClick={() => handleSave()}
-                disabled={!hasUnsavedChanges}
-                variant={hasUnsavedChanges ? "primary" : "secondary"}
-                size="sm"
-              >
-                💾 {hasUnsavedChanges ? 'Save Now' : 'Saved'}
-              </Button>
-              <span style={{ fontSize: '12px' }}>
-                {hasUnsavedChanges ? 'Unsaved changes' : 'All saved'}
-              </span>
-            </div>
             {currentStep === 'seed' && (
               <CourseSeedInput 
                 onBack={onBackToDashboard}
