@@ -96,15 +96,11 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
   
   // FIX: Update parent whenever content changes - include all dependencies to avoid stale closures
   useEffect(() => {
-    // Skip initial mount and only update if content has actually changed
-    if (onUpdateContent && content !== courseContent) {
+    // Skip initial mount and only update if content has actually changed AND user has interacted
+    if (onUpdateContent && content !== courseContent && hasUserInteracted.current) {
       onUpdateContent(content)
-      
-      // Mark dirty only if this is a user-initiated change (not initial load or sync)
-      if (hasUserInteracted.current) {
-        markDirty('activities')
-        hasUserInteracted.current = false // Reset flag after marking dirty
-      }
+      markDirty('activities')
+      hasUserInteracted.current = false // Reset flag after marking dirty
     }
   }, [content, onUpdateContent, courseContent, markDirty])
   const [editingKnowledgeCheck, setEditingKnowledgeCheck] = useState<EditingKnowledgeCheck | null>(null)
@@ -128,35 +124,25 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     console.warn('PersistentStorage not available, activities will not be persisted:', error)
   }
   
-  // Load existing activities data on mount
-  useEffect(() => {
-    const loadActivitiesData = async () => {
-      // Only load if storage is available and initialized
-      if (!storage || !storage.isInitialized || !storage.currentProjectId) {
-        return
-      }
-      
-      setIsLoading(true)
-      try {
-        const savedContent = await storage.getContent('activities')
-        if (savedContent) {
-          setContent(savedContent)
-        }
-      } catch (error) {
-        console.error('Error loading activities data:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    
-    loadActivitiesData()
-  }, [storage])
+  // REMOVED: Loading from storage on mount to prevent circular updates
+  // The parent component should handle loading and provide the correct content via props
   
   // Auto-save content to storage whenever it changes (with debouncing)
+  // Only save when user has actually made changes, not on prop sync or initial mount
   useEffect(() => {
     const saveActivitiesData = async () => {
       // Only save if storage is available and initialized
       if (!storage || !storage.isInitialized || !storage.currentProjectId) {
+        return
+      }
+      
+      // Skip auto-save if this is just a prop sync (content matches incoming props)
+      if (content === courseContent) {
+        return
+      }
+      
+      // Skip auto-save if user hasn't interacted yet (initial mount)
+      if (!hasUserInteracted.current) {
         return
       }
       
@@ -174,7 +160,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     // Debounce saving to avoid too many writes
     const timeoutId = setTimeout(saveActivitiesData, 1000)
     return () => clearTimeout(timeoutId)
-  }, [content, storage, onSave])
+  }, [content, storage, onSave, courseContent])
 
   const addActivity = useCallback(() => {
     if (!isOldFormat(content)) return;

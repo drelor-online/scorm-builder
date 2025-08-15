@@ -1184,6 +1184,15 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   return
                 }
                 
+                // If JSON is syntactically valid, automatically trigger full validation
+                if (isValid && jsonInput.trim().length > 0) {
+                  // Use a short delay to ensure the JSON content is fully processed
+                  setTimeout(() => {
+                    validateJSON()
+                  }, 50)
+                  return
+                }
+                
                 // Only show syntax feedback for unlocked state with actual content
                 if (!isLocked && errors && errors.length > 0) {
                   // Don't show error for empty input
