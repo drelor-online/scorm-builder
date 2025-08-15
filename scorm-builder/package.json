@@ -29,7 +29,7 @@
     "test:bdd:headed": "cross-env HEADLESS=false npx cucumber-js --config cucumber.mjs",
     "test:bdd:browser": "node tests/bdd/run-browser-tests.js",
     "test:bdd:watch": "cross-env NODE_ENV=test BASE_URL=http://localhost:1421 npx cucumber-js --config cucumber.mjs",
-    "test:bdd:single": "cross-env NODE_ENV=test BASE_URL=http://localhost:1421 npx cucumber-js --config cucumber.mjs",
+    "test:bdd:single": "cross-env NODE_ENV=test BASE_URL=http://localhost:1421 tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
     "validate-scorm": "tsx src/utils/validateScormCLI.ts",
     "test:bdd:e2e": "npm run test:bdd:browser -- --tags @e2e",
     "test:bdd:working": "npm run test:bdd:browser -- --tags @working",

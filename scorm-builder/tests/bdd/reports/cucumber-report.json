@@ -10,14 +10,6 @@
         "name": "Application loads without errors",
         "steps": [
           {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
-          {
             "arguments": [],
             "keyword": "Given ",
             "line": 8,
@@ -68,14 +60,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -97,14 +81,6 @@
         "line": 14,
         "name": "CSS loads correctly",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -156,14 +132,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -192,14 +160,6 @@
         "line": 4,
         "name": "App loads and renders",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -238,14 +198,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -274,14 +226,6 @@
         "line": 6,
         "name": "Application loads successfully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -321,14 +265,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -341,14 +277,6 @@
         "line": 13,
         "name": "Navigate to Course Seed Input",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -437,14 +365,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -462,14 +382,6 @@
         "line": 23,
         "name": "Enable Next button with valid input",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -541,14 +453,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -572,14 +476,6 @@
         "line": 4,
         "name": "Navigate from dashboard to course creation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -651,14 +547,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -691,14 +579,6 @@
         "line": 6,
         "name": "Application loads without errors",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "When ",
@@ -737,14 +617,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -768,14 +640,6 @@
         "line": 11,
         "name": "Create a basic SCORM course with all steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -1533,14 +1397,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -1562,14 +1418,6 @@
         "line": 134,
         "name": "Validate required fields at each step",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -1745,14 +1593,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -1770,14 +1610,6 @@
         "line": 154,
         "name": "Navigate between steps using the progress indicator",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -1894,14 +1726,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -1919,14 +1743,6 @@
         "line": 165,
         "name": "Save and resume course creation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2050,14 +1866,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2075,14 +1883,6 @@
         "line": 177,
         "name": "Advanced media enhancement features",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2212,14 +2012,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2237,14 +2029,6 @@
         "line": 192,
         "name": "Audio narration with individual page controls",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2361,14 +2145,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2386,14 +2162,6 @@
         "line": 206,
         "name": "Configure advanced SCORM options",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2510,14 +2278,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2535,14 +2295,6 @@
         "line": 218,
         "name": "Recover from errors gracefully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2679,14 +2431,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2704,14 +2448,6 @@
         "line": 235,
         "name": "Ensure accessibility features work",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -2851,14 +2587,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -2887,14 +2615,6 @@
         "line": 10,
         "name": "Successfully create course with minimum required fields",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3011,14 +2731,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3031,14 +2743,6 @@
         "line": 19,
         "name": "Validation prevents proceeding with empty title",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3142,14 +2846,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3162,14 +2858,6 @@
         "line": 27,
         "name": "Validation prevents proceeding with empty audience",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3273,14 +2961,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3293,14 +2973,6 @@
         "line": 35,
         "name": "Validation prevents proceeding without topics",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3404,14 +3076,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3424,14 +3088,6 @@
         "line": 43,
         "name": "Duration validation enforces minimum and maximum",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3561,14 +3217,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3581,14 +3229,6 @@
         "line": 53,
         "name": "Add and remove topics",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3718,14 +3358,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3738,14 +3370,6 @@
         "line": 63,
         "name": "Prevent duplicate topics",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3836,14 +3460,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3856,14 +3472,6 @@
         "line": 70,
         "name": "Maximum topics limit",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -3954,14 +3562,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -3974,14 +3574,6 @@
         "line": 77,
         "name": "Use a course template",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4085,14 +3677,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -4105,14 +3689,6 @@
         "line": 85,
         "name": "Character limits are enforced",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4207,14 +3783,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -4227,14 +3795,6 @@
         "line": 93,
         "name": "Auto-save triggers after changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4312,14 +3872,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -4332,14 +3884,6 @@
         "line": 99,
         "name": "Preview shows course structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4498,14 +4042,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [],
@@ -4529,14 +4065,6 @@
         "line": 5,
         "name": "Application loads dashboard successfully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4576,14 +4104,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -4601,14 +4121,6 @@
         "line": 12,
         "name": "Create new project and navigate to course seed",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -4690,14 +4202,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -4726,14 +4230,6 @@
         "line": 11,
         "name": "Create a complete SCORM package from scratch",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -5109,14 +4605,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -5138,14 +4626,6 @@
         "line": 72,
         "name": "Quick SCORM creation with minimal steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -5257,14 +4737,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -5297,14 +4769,6 @@
         "line": 5,
         "name": "Basic project creation flow",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -5363,14 +4827,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -5388,14 +4844,6 @@
         "line": 13,
         "name": "Enter course information",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -5529,14 +4977,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -5558,14 +4998,6 @@
         "line": 28,
         "name": "Test Course Seed Input step in isolation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -5706,14 +5138,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -5735,14 +5159,6 @@
         "line": 43,
         "name": "Complete E2E flow through all steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6068,14 +5484,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6108,14 +5516,6 @@
         "line": 7,
         "name": "Create a minimal SCORM package",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6379,14 +5779,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6419,14 +5811,6 @@
         "line": 11,
         "name": "Generate comprehensive prompt",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6554,14 +5938,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6579,14 +5955,6 @@
         "line": 27,
         "name": "Copy prompt to clipboard",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6661,14 +6029,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6686,14 +6046,6 @@
         "line": 34,
         "name": "Edit generated prompt",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6781,14 +6133,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6806,14 +6150,6 @@
         "line": 43,
         "name": "Verify prompt structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -6899,14 +6235,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -6924,14 +6252,6 @@
         "line": 54,
         "name": "Navigation with unsaved changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7039,14 +6359,6 @@
               "status": "ambiguous",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7064,14 +6376,6 @@
         "line": 66,
         "name": "Instructions for AI usage",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7145,14 +6449,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7170,14 +6466,6 @@
         "line": 75,
         "name": "Prompt display on different screen sizes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7253,14 +6541,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7278,14 +6558,6 @@
         "line": 84,
         "name": "Template-specific prompt additions",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7342,14 +6614,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7367,14 +6631,6 @@
         "line": 93,
         "name": "Generate prompts for different languages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7452,14 +6708,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7477,14 +6725,6 @@
         "line": 100,
         "name": "Handle very long course configurations",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7562,14 +6802,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7598,14 +6830,6 @@
         "line": 12,
         "name": "Enter course information with template",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7763,14 +6987,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7788,14 +7004,6 @@
         "line": 28,
         "name": "Validation prevents empty course title",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -7874,14 +7082,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -7903,14 +7103,6 @@
         "line": 35,
         "name": "Add and remove topics dynamically",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8035,14 +7227,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8064,14 +7248,6 @@
         "line": 46,
         "name": "Template selection pre-fills topics",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8163,14 +7339,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8192,14 +7360,6 @@
         "line": 54,
         "name": "Course settings validation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8328,14 +7488,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8368,14 +7520,6 @@
         "line": 11,
         "name": "Validate correct JSON structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8500,14 +7644,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8525,14 +7661,6 @@
         "line": 25,
         "name": "Handle invalid JSON syntax",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8612,14 +7740,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8637,14 +7757,6 @@
         "line": 38,
         "name": "Auto-fix common JSON issues",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8714,14 +7826,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8739,14 +7843,6 @@
         "line": 50,
         "name": "Detect missing required fields",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8831,14 +7927,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8856,14 +7944,6 @@
         "line": 66,
         "name": "Validate content structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -8922,14 +8002,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -8947,14 +8019,6 @@
         "line": 67,
         "name": "Validate content structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9013,14 +8077,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9038,14 +8094,6 @@
         "line": 68,
         "name": "Validate content structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9104,14 +8152,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9129,14 +8169,6 @@
         "line": 69,
         "name": "Validate content structure",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9195,14 +8227,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9220,14 +8244,6 @@
         "line": 72,
         "name": "Multiple import methods",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9344,14 +8360,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9369,14 +8377,6 @@
         "line": 87,
         "name": "Preview parsed content",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9463,14 +8463,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9488,14 +8480,6 @@
         "line": 97,
         "name": "Edit JSON after validation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9596,14 +8580,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9621,14 +8597,6 @@
         "line": 107,
         "name": "Handle large JSON files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9704,14 +8672,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9729,14 +8689,6 @@
         "line": 116,
         "name": "Recover from malformed JSON",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9822,14 +8774,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9847,14 +8791,6 @@
         "line": 126,
         "name": "Validate against expected schema",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -9925,14 +8861,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -9950,14 +8878,6 @@
         "line": 135,
         "name": "Lock JSON after successful validation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10046,14 +8966,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10082,14 +8994,6 @@
         "line": 12,
         "name": "Navigate between course pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10212,14 +9116,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10237,14 +9133,6 @@
         "line": 28,
         "name": "Search and add images from web",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10380,14 +9268,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10405,14 +9285,6 @@
         "line": 43,
         "name": "Use AI-suggested keywords",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10515,14 +9387,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10540,14 +9404,6 @@
         "line": 55,
         "name": "Upload local images",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10640,14 +9496,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10665,14 +9513,6 @@
         "line": 65,
         "name": "Embed YouTube videos",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10765,14 +9605,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10790,14 +9622,6 @@
         "line": 75,
         "name": "Replace existing media",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -10890,14 +9714,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -10915,14 +9731,6 @@
         "line": 85,
         "name": "Remove media from pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11015,14 +9823,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11040,14 +9840,6 @@
         "line": 95,
         "name": "Add images to multiple pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11150,14 +9942,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11175,14 +9959,6 @@
         "line": 106,
         "name": "Preview pages with media",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11265,14 +10041,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11290,14 +10058,6 @@
         "line": 115,
         "name": "Handle large images",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11370,14 +10130,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11395,14 +10147,6 @@
         "line": 122,
         "name": "Handle API rate limits",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11475,14 +10219,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11500,14 +10236,6 @@
         "line": 129,
         "name": "Ensure images work on all devices",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11593,14 +10321,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11618,14 +10338,6 @@
         "line": 138,
         "name": "Add alt text to images",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11708,14 +10420,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11733,14 +10437,6 @@
         "line": 147,
         "name": "Handle search failures gracefully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11833,14 +10529,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -11869,14 +10557,6 @@
         "line": 12,
         "name": "View narration text for all pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -11982,14 +10662,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12007,14 +10679,6 @@
         "line": 25,
         "name": "Download narration text file",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12097,14 +10761,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12122,14 +10778,6 @@
         "line": 35,
         "name": "Upload audio for individual pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12248,14 +10896,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12273,14 +10913,6 @@
         "line": 47,
         "name": "Upload audio files in bulk via ZIP",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12403,14 +11035,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12428,14 +11052,6 @@
         "line": 62,
         "name": "Validate audio file formats",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12528,14 +11144,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12553,14 +11161,6 @@
         "line": 73,
         "name": "Upload caption files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12663,14 +11263,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12688,14 +11280,6 @@
         "line": 84,
         "name": "Upload captions for individual pages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12768,14 +11352,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12793,14 +11369,6 @@
         "line": 91,
         "name": "Prompt for AI audio generation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12873,14 +11441,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -12898,14 +11458,6 @@
         "line": 99,
         "name": "Preview course with audio",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -12988,14 +11540,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13013,14 +11557,6 @@
         "line": 107,
         "name": "Edit narration text",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13103,14 +11639,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13128,14 +11656,6 @@
         "line": 116,
         "name": "Calculate and display course duration",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13239,14 +11759,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13264,14 +11776,6 @@
         "line": 128,
         "name": "Warn about missing audio",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13357,14 +11861,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13382,14 +11878,6 @@
         "line": 137,
         "name": "Ensure audio matches narration text",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13471,14 +11959,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13496,14 +11976,6 @@
         "line": 145,
         "name": "Replace existing audio",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13596,14 +12068,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13621,14 +12085,6 @@
         "line": 155,
         "name": "Accessibility for audio content",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13711,14 +12167,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13736,14 +12184,6 @@
         "line": 164,
         "name": "Handle large audio files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13816,14 +12256,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13841,14 +12273,6 @@
         "line": 171,
         "name": "Handle upload errors gracefully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -13941,14 +12365,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -13977,14 +12393,6 @@
         "line": 13,
         "name": "Edit module content",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14082,14 +12490,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14107,14 +12507,6 @@
         "line": 31,
         "name": "Use rich text formatting",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14222,14 +12614,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14251,14 +12635,6 @@
         "line": 42,
         "name": "Add images to content",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14361,14 +12737,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14390,14 +12758,6 @@
         "line": 51,
         "name": "Preview module as learner",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14490,14 +12850,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14519,14 +12871,6 @@
         "line": 59,
         "name": "Navigate between modules",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14629,14 +12973,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14658,14 +12994,6 @@
         "line": 68,
         "name": "Validate content requirements",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14768,14 +13096,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14797,14 +13117,6 @@
         "line": 77,
         "name": "Auto-save functionality",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -14910,14 +13222,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -14950,14 +13254,6 @@
         "line": 12,
         "name": "View all knowledge checks",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15074,14 +13370,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15099,14 +13387,6 @@
         "line": 27,
         "name": "Edit knowledge check question",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15202,14 +13482,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15227,14 +13499,6 @@
         "line": 37,
         "name": "Modify answer options",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15327,14 +13591,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15352,14 +13608,6 @@
         "line": 47,
         "name": "Update correct answer",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15442,14 +13690,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15467,14 +13707,6 @@
         "line": 55,
         "name": "Customize feedback messages",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15570,14 +13802,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15595,14 +13819,6 @@
         "line": 65,
         "name": "Validate question requirements",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15695,14 +13911,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15720,14 +13928,6 @@
         "line": 76,
         "name": "Add knowledge check to topic without one",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15861,14 +14061,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -15886,14 +14078,6 @@
         "line": 92,
         "name": "Remove a knowledge check",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -15976,14 +14160,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16001,14 +14177,6 @@
         "line": 101,
         "name": "Edit final assessment questions",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16091,14 +14259,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16116,14 +14276,6 @@
         "line": 110,
         "name": "Add more assessment questions",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16206,14 +14358,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16231,14 +14375,6 @@
         "line": 119,
         "name": "Reorder questions",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16321,14 +14457,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16346,14 +14474,6 @@
         "line": 128,
         "name": "Import/Export question bank",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16446,14 +14566,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16471,14 +14583,6 @@
         "line": 138,
         "name": "Preview knowledge checks and assessment",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16561,14 +14665,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16586,14 +14682,6 @@
         "line": 147,
         "name": "Bulk edit operations",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16676,14 +14764,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16701,14 +14781,6 @@
         "line": 156,
         "name": "Support different question types",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16801,14 +14873,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16826,14 +14890,6 @@
         "line": 167,
         "name": "Configure activity settings",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -16927,14 +14983,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -16952,14 +15000,6 @@
         "line": 178,
         "name": "Set up scoring rules",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17041,14 +15081,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17066,14 +15098,6 @@
         "line": 187,
         "name": "Organize questions by category",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17165,14 +15189,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17190,14 +15206,6 @@
         "line": 197,
         "name": "Ensure activity accessibility",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17280,14 +15288,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17305,14 +15305,6 @@
         "line": 207,
         "name": "Optimize for mobile devices",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17385,14 +15377,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17421,14 +15405,6 @@
         "line": 13,
         "name": "Generate narration using text-to-speech",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17551,14 +15527,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17580,14 +15548,6 @@
         "line": 24,
         "name": "Upload custom audio files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17693,14 +15653,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17722,14 +15674,6 @@
         "line": 33,
         "name": "Edit narration text",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17842,14 +15786,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -17871,14 +15807,6 @@
         "line": 43,
         "name": "Sync audio with content",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -17971,14 +15899,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18000,14 +15920,6 @@
         "line": 51,
         "name": "Choose different voices",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18135,14 +16047,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18164,14 +16068,6 @@
         "line": 64,
         "name": "Skip narration for specific modules",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18257,14 +16153,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18286,14 +16174,6 @@
         "line": 71,
         "name": "Generate narration for all modules",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18376,14 +16256,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18416,14 +16288,6 @@
         "line": 12,
         "name": "Upload multiple media files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18539,14 +16403,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18568,14 +16424,6 @@
         "line": 24,
         "name": "Organize media by modules",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18668,14 +16516,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18697,14 +16537,6 @@
         "line": 33,
         "name": "Preview media files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18831,14 +16663,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18860,14 +16684,6 @@
         "line": 48,
         "name": "Search and filter media",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -18970,14 +16786,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -18999,14 +16807,6 @@
         "line": 58,
         "name": "Edit media properties",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19118,14 +16918,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19147,14 +16939,6 @@
         "line": 70,
         "name": "Optimize media for SCORM",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19267,14 +17051,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19296,14 +17072,6 @@
         "line": 82,
         "name": "Use stock media",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19396,14 +17164,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19436,14 +17196,6 @@
         "line": 12,
         "name": "Configure SCORM package settings",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19527,14 +17279,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19552,14 +17296,6 @@
         "line": 22,
         "name": "Select SCORM version",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19668,14 +17404,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19693,14 +17421,6 @@
         "line": 34,
         "name": "Set completion criteria",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19822,14 +17542,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19847,14 +17559,6 @@
         "line": 47,
         "name": "Configure passing score",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -19950,14 +17654,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -19975,14 +17671,6 @@
         "line": 58,
         "name": "Add course metadata",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20082,14 +17770,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20107,14 +17787,6 @@
         "line": 70,
         "name": "Preview complete course",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20227,14 +17899,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20252,14 +17916,6 @@
         "line": 84,
         "name": "Preview on different devices",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20368,14 +18024,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20393,14 +18041,6 @@
         "line": 96,
         "name": "Generate SCORM package",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20514,14 +18154,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20539,14 +18171,6 @@
         "line": 110,
         "name": "Validate SCORM package",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20639,14 +18263,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20664,14 +18280,6 @@
         "line": 121,
         "name": "Handle packaging errors",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20754,14 +18362,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20779,14 +18379,6 @@
         "line": 130,
         "name": "Advanced manifest options",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20864,14 +18456,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -20889,14 +18473,6 @@
         "line": 139,
         "name": "Optimize package size",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -20982,14 +18558,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21007,14 +18575,6 @@
         "line": 147,
         "name": "Configure language settings",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21092,14 +18652,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21117,14 +18669,6 @@
         "line": 155,
         "name": "LMS-specific configurations",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21203,14 +18747,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21228,14 +18764,6 @@
         "line": 163,
         "name": "Review package contents",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21328,14 +18856,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21353,14 +18873,6 @@
         "line": 175,
         "name": "Regenerate with changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21453,14 +18965,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21478,14 +18982,6 @@
         "line": 185,
         "name": "Export source files",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21568,14 +19064,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21593,14 +19081,6 @@
         "line": 195,
         "name": "Test package compatibility",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21673,14 +19153,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21698,14 +19170,6 @@
         "line": 203,
         "name": "Include completion certificate",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21781,14 +19245,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21806,14 +19262,6 @@
         "line": 210,
         "name": "Configure analytics tracking",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -21894,14 +19342,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -21919,14 +19359,6 @@
         "line": 219,
         "name": "Show package summary",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22016,14 +19448,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22052,14 +19476,6 @@
         "line": 12,
         "name": "Choose SCORM version",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22178,14 +19594,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22207,14 +19615,6 @@
         "line": 25,
         "name": "Configure export settings",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22318,14 +19718,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22347,14 +19739,6 @@
         "line": 37,
         "name": "Add course metadata",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22468,14 +19852,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22497,14 +19873,6 @@
         "line": 50,
         "name": "Preview before export",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22592,14 +19960,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22621,14 +19981,6 @@
         "line": 60,
         "name": "Generate SCORM package",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22756,14 +20108,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22785,14 +20129,6 @@
         "line": 74,
         "name": "Validate SCORM package",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -22890,14 +20226,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -22919,14 +20247,6 @@
         "line": 85,
         "name": "Handle export errors",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23019,14 +20339,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23048,14 +20360,6 @@
         "line": 95,
         "name": "Export in multiple formats",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23163,14 +20467,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23203,14 +20499,6 @@
         "line": 8,
         "name": "Navigate backward through workflow steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23419,14 +20707,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23452,14 +20732,6 @@
         "line": 34,
         "name": "Navigate backward multiple steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23551,14 +20823,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23584,14 +20848,6 @@
         "line": 48,
         "name": "Navigate directly to specific steps using step indicators",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23692,14 +20948,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23725,14 +20973,6 @@
         "line": 60,
         "name": "Refresh browser during workflow",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23817,14 +21057,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23846,14 +21078,6 @@
         "line": 71,
         "name": "Refresh with unsaved changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -23909,14 +21133,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -23938,14 +21154,6 @@
         "line": 78,
         "name": "Resume project from dashboard",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24132,14 +21340,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24165,14 +21365,6 @@
         "line": 102,
         "name": "Navigate with unsaved changes warning",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24300,14 +21492,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24329,14 +21513,6 @@
         "line": 119,
         "name": "Navigate using keyboard shortcuts",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24447,14 +21623,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24476,14 +21644,6 @@
         "line": 134,
         "name": "Prevent navigation with invalid data",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24640,14 +21800,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24673,14 +21825,6 @@
         "line": 153,
         "name": "Quick complete with skip buttons",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24736,14 +21880,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24776,14 +21912,6 @@
         "line": 8,
         "name": "Create project with dialog",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -24855,14 +21983,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -24884,14 +22004,6 @@
         "line": 16,
         "name": "Fill course seed and navigate",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25009,14 +22121,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25038,14 +22142,6 @@
         "line": 28,
         "name": "Navigate back from AI Prompt",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25238,14 +22334,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25278,14 +22366,6 @@
         "line": 5,
         "name": "Capture screenshots during navigation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25422,14 +22502,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25451,14 +22523,6 @@
         "line": 19,
         "name": "Check for JavaScript errors",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25497,14 +22561,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25526,14 +22582,6 @@
         "line": 25,
         "name": "Debug form inputs",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25683,14 +22731,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25723,14 +22763,6 @@
         "line": 5,
         "name": "Intentional failure to test screenshot",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25802,14 +22834,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25842,14 +22866,6 @@
         "line": 5,
         "name": "Test screenshot capture",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -25885,14 +22901,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -25921,14 +22929,6 @@
         "line": 5,
         "name": "Debug navigation to AI Prompt with screenshots",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -26225,14 +23225,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -26261,14 +23253,6 @@
         "line": 5,
         "name": "Navigate to AI Prompt with proper form fill",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -26497,14 +23481,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -26533,14 +23509,6 @@
         "line": 5,
         "name": "Check console logs during navigation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -26725,14 +23693,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -26761,14 +23721,6 @@
         "line": 5,
         "name": "Capture dashboard baseline",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -26807,14 +23759,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -26836,14 +23780,6 @@
         "line": 11,
         "name": "Capture project dialog baseline",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -26919,14 +23855,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -26948,14 +23876,6 @@
         "line": 21,
         "name": "Capture course seed form baseline",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27043,14 +23963,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27072,14 +23984,6 @@
         "line": 31,
         "name": "Capture filled form baseline",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27226,14 +24130,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27266,14 +24162,6 @@
         "line": 5,
         "name": "Test button states",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27456,14 +24344,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27485,14 +24365,6 @@
         "line": 25,
         "name": "Test form validation states",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27654,14 +24526,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27683,14 +24547,6 @@
         "line": 43,
         "name": "Test responsive layout",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27794,14 +24650,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27834,14 +24682,6 @@
         "line": 12,
         "name": "Course title is required",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -27968,14 +24808,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -27997,14 +24829,6 @@
         "line": 21,
         "name": "Topics are required",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28115,14 +24939,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28144,14 +24960,6 @@
         "line": 28,
         "name": "Course title character limit",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28259,14 +25067,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28288,14 +25088,6 @@
         "line": 35,
         "name": "Multiple topics can be added",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28436,14 +25228,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28465,14 +25249,6 @@
         "line": 45,
         "name": "Empty topics are filtered out",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28603,14 +25379,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28632,14 +25400,6 @@
         "line": 56,
         "name": "Difficulty level selection",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28770,14 +25530,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28810,14 +25562,6 @@
         "line": 12,
         "name": "Default template selection",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -28942,14 +25686,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -28971,14 +25707,6 @@
         "line": 24,
         "name": "Template selection persists",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29099,14 +25827,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29128,14 +25848,6 @@
         "line": 32,
         "name": "Template dropdown visual consistency",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29268,14 +25980,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29301,14 +26005,6 @@
         "line": 41,
         "name": "Manage templates button exists",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29390,14 +26086,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29430,14 +26118,6 @@
         "line": 12,
         "name": "Auto-save indicator shows correct status",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29545,14 +26225,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29574,14 +26246,6 @@
         "line": 19,
         "name": "Auto-save triggers after form changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29702,14 +26366,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29731,14 +26387,6 @@
         "line": 27,
         "name": "Auto-save handles multiple rapid changes",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -29869,14 +26517,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -29898,14 +26538,6 @@
         "line": 36,
         "name": "Topics are auto-saved",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -30059,14 +26691,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -30099,14 +26723,6 @@
         "line": 9,
         "name": "Complete workflow from start to finish",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -30419,14 +27035,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -30452,14 +27060,6 @@
         "line": 50,
         "name": "Navigation with unsaved changes warning",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -30661,14 +27261,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -30694,14 +27286,6 @@
         "line": 76,
         "name": "Navigate using step indicators",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -30926,14 +27510,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -30959,14 +27535,6 @@
         "line": 104,
         "name": "Navigation state persists after page refresh",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -31165,14 +27733,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -31198,14 +27758,6 @@
         "line": 128,
         "name": "Navigation continues after error recovery",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -31401,14 +27953,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -31434,14 +27978,6 @@
         "line": 154,
         "name": "Keyboard navigation through steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -31614,14 +28150,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -31654,14 +28182,6 @@
         "line": 5,
         "name": "Basic forward navigation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -31831,14 +28351,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -31875,14 +28387,6 @@
         "line": 11,
         "name": "Create a basic course with all steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -32672,14 +29176,6 @@
               "status": "skipped",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -32701,14 +29197,6 @@
         "line": 142,
         "name": "Save and resume course creation",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -32846,14 +29334,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -32871,14 +29351,6 @@
         "line": 157,
         "name": "Navigation validation prevents skipping steps",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -32984,14 +29456,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -33009,14 +29473,6 @@
         "line": 168,
         "name": "Recover from API errors gracefully",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -33105,14 +29561,6 @@
               "status": "undefined",
               "duration": 0
             }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
           }
         ],
         "tags": [
@@ -33130,14 +29578,6 @@
         "line": 177,
         "name": "Handle media size limits",
         "steps": [
-          {
-            "keyword": "Before",
-            "hidden": true,
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
           {
             "arguments": [],
             "keyword": "Given ",
@@ -33238,14 +29678,6 @@
             "match": {
               "location": "tests\\bdd\\steps\\media-enhancement.steps.ts:37"
             },
-            "result": {
-              "status": "skipped",
-              "duration": 0
-            }
-          },
-          {
-            "keyword": "After",
-            "hidden": true,
             "result": {
               "status": "skipped",
               "duration": 0

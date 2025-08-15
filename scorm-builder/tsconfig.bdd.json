@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": false,
+    "noEmit": false,
+    "outDir": "./dist-bdd"
+  },
+  "include": [
+    "tests/bdd/**/*",
+    "src/types/**/*",
+    "src/utils/idGenerator.ts",
+    "src/services/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "dist-bdd",
+    "node_modules"
+  ],
+  "ts-node": {
+    "esm": false,
+    "compilerOptions": {
+      "module": "CommonJS",
+      "moduleResolution": "node"
+    }
+  }
+}
