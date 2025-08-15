@@ -125,6 +125,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <Button
             variant={getButtonVariant() as any}
             onClick={onConfirm}
+            data-testid="button-confirm"
           >
             {confirmText}
           </Button>

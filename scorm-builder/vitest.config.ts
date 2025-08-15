@@ -14,6 +14,16 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     reporters: ['default'],
+    testTimeout: 30000, // 30 seconds per test
+    hookTimeout: 10000, // 10 seconds for beforeEach/afterEach
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        maxThreads: 4,
+        minThreads: 1
+      }
+    },
     include: [
       'src/**/*.{test,spec}.{ts,tsx}',
       'src/**/__tests__/**/*.{ts,tsx}'

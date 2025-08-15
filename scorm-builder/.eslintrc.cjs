@@ -7,14 +7,43 @@ module.exports = {
     jest: true
   },
   globals: {
+    // Browser APIs
     TextEncoder: 'readonly',
     TextDecoder: 'readonly',
     ReadableStream: 'readonly',
     btoa: 'readonly',
     atob: 'readonly',
+    MediaRecorder: 'readonly',
+    requestAnimationFrame: 'readonly',
+    Storage: 'readonly',
+    crypto: 'readonly',
+    confirm: 'readonly',
+    // Node.js globals
+    Buffer: 'readonly',
+    __filename: 'readonly',
+    require: 'readonly',
+    // DOM types
+    HTMLButtonElement: 'readonly',
+    HTMLDivElement: 'readonly',
+    HTMLAudioElement: 'readonly',
+    HTMLAnchorElement: 'readonly',
+    HTMLFormElement: 'readonly',
+    Element: 'readonly',
+    Node: 'readonly',
+    NodeJS: 'readonly',
+    CSSStyleDeclaration: 'readonly',
+    BeforeUnloadEvent: 'readonly',
+    PopStateEvent: 'readonly',
+    TouchEvent: 'readonly',
+    ErrorEvent: 'readonly',
+    MediaStream: 'readonly',
+    Response: 'readonly',
+    URLSearchParams: 'readonly',
+    AbortController: 'readonly',
+    AbortSignal: 'readonly',
+    // Testing globals
     MediaReference: 'readonly',
     afterEach: 'readonly',
-    require: 'readonly',
     __REACT_DEVTOOLS_GLOBAL_HOOK__: 'readonly',
     // Vitest globals
     vi: 'readonly',
@@ -24,7 +53,10 @@ module.exports = {
     expect: 'readonly',
     beforeEach: 'readonly',
     beforeAll: 'readonly',
-    afterAll: 'readonly'
+    afterAll: 'readonly',
+    waitFor: 'readonly',
+    fireEvent: 'readonly',
+    jest: 'readonly'
   },
   extends: [
     'eslint:recommended',

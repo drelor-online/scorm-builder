@@ -77,13 +77,17 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = memo(({ page }) => {
               console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', ytUrl)
             }
           }
-        } else if (firstMediaRef.metadata?.url && firstMediaRef.metadata.url.startsWith('data:image/svg+xml')) {
+        } else if (typeof firstMediaRef.metadata?.url === 'string' && firstMediaRef.metadata.url.startsWith('data:image/svg+xml')) {
           // SVG data URLs work directly, no conversion needed
           console.log('[PageThumbnailGrid] Using SVG data URL directly')
-          setMediaUrl(firstMediaRef.metadata.url)
+          const safeUrl = typeof firstMediaRef.metadata?.url === 'string' ? firstMediaRef.metadata.url : null
+          if (safeUrl) {
+            setMediaUrl(safeUrl)
+          }
         } else if (firstMediaRef.metadata?.url) {
           // Normalize the URL first to fix double-encoding issues
-          const normalizedUrl = normalizeAssetUrl(firstMediaRef.metadata.url)
+          const safeUrl = typeof firstMediaRef.metadata?.url === 'string' ? firstMediaRef.metadata.url : ''
+          const normalizedUrl = normalizeAssetUrl(safeUrl)
           console.log('[PageThumbnailGrid] URL normalized:', {
             original: firstMediaRef.metadata.url,
             normalized: normalizedUrl,

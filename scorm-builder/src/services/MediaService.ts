@@ -21,9 +21,12 @@ export interface MediaMetadata {
   embedUrl?: string
   thumbnail?: string
   mimeType?: string
+  mime_type?: string
   originalName?: string
-  pageId?: string
+  pageId: string
   type: MediaType
+  source?: string
+  isYouTube?: boolean
   [key: string]: unknown
 }
 
@@ -79,7 +82,7 @@ export class MediaService {
   private blobUrlCache: Map<string, string> = new Map() // Cache blob URLs for the session
   private loadingPromise: Promise<void> | null = null // For deduplicating concurrent loads
   private audioDataCache: Map<string, { data: Uint8Array; metadata: MediaMetadata }> = new Map() // Persistent audio cache
-  private audioLoadingPromises: Map<string, Promise<{ data: Uint8Array; metadata: MediaMetadata }>> = new Map() // Deduplicate concurrent audio loads
+  private audioLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate concurrent audio loads
   
   private constructor(config: MediaServiceConfig) {
     // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks
@@ -405,15 +408,16 @@ export class MediaService {
       logger.info('[MediaService] Stored YouTube video to FILE SYSTEM:', id)
       
       // Update cache
+      const safePageId = typeof pageId === 'string' ? pageId : ''
       const mediaItem: MediaItem = {
         id,
         type: 'video',
-        pageId,
-        fileName: metadata?.title || 'YouTube Video',
+        pageId: safePageId,
+        fileName: (typeof metadata?.title === 'string' ? metadata.title : '') || 'YouTube Video',
         metadata: {
           uploadedAt: new Date().toISOString(),
           type: 'video',
-          pageId,
+          pageId: safePageId,
           youtubeUrl,
           embedUrl,  // Include embedUrl
           isYouTube: true,  // Mark as YouTube video
@@ -503,10 +507,10 @@ export class MediaService {
         pageId: cachedItem?.pageId
       })
       
-      const metadata = cachedItem?.metadata || {
+      const metadata: MediaMetadata = cachedItem?.metadata || {
         uploadedAt: new Date().toISOString(),
         type: mediaInfo.mediaType as MediaType,
-        pageId: mediaInfo.metadata?.page_id || '',
+        pageId: (typeof mediaInfo.metadata?.page_id === 'string' ? mediaInfo.metadata.page_id : ''),
         size: mediaInfo.data?.byteLength || 0,
         ...mediaInfo.metadata
       }
@@ -731,9 +735,10 @@ export class MediaService {
    * Helper to process metadata consistently
    */
   private processMetadata(mediaInfo: any): MediaMetadata {
+    const pageId = mediaInfo.metadata?.pageId || mediaInfo.metadata?.page_id || ''
     return {
       type: mediaInfo.mediaType || mediaInfo.metadata?.type || 'unknown',
-      pageId: mediaInfo.metadata?.pageId || mediaInfo.metadata?.page_id || '',
+      pageId: (typeof pageId === 'string' ? pageId : ''),
       mimeType: mediaInfo.metadata?.mimeType || mediaInfo.metadata?.mime_type,
       mime_type: mediaInfo.metadata?.mime_type,
       source: mediaInfo.metadata?.source,

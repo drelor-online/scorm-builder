@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { CourseContent } from '../types/aiPrompt'
+import { CourseContent, Media } from '../types/aiPrompt'
+import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
@@ -61,7 +62,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const [messages, setMessages] = useState<Message[]>([])
   const [generatedPackage, setGeneratedPackage] = useState<{
     data: ArrayBuffer
-    metadata: any // SCORMMetadata type not defined
+    metadata: Record<string, unknown> // SCORMMetadata type not defined
   } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState('Preparing SCORM package...')
   // Autoplay is always enabled
@@ -168,7 +169,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               type: blob.type
             })
             return blob
-          } catch (fetchError: any) {
+          } catch (fetchError: unknown) {
             if (fetchError.name === 'AbortError') {
               console.warn(`[SCORMPackageBuilder] Blob fetch timed out for: ${mediaId}`)
             } else {
@@ -191,7 +192,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     return null
   }
 
-  const loadMediaFromRegistry = async (enhancedContent: any): Promise<string[]> => {
+  const loadMediaFromRegistry = async (enhancedContent: EnhancedCourseContent): Promise<string[]> => {
     console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
     
     // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
@@ -510,7 +511,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     try {
       const startTime = Date.now()
-      const performanceMetrics: any = {}
+      const performanceMetrics: Record<string, unknown> = {}
       
       // Enhanced course content for Rust
       performanceMetrics.conversionStart = Date.now()
@@ -519,13 +520,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       console.log('[SCORMPackageBuilder] DEBUG - Incoming course content:', {
         hasWelcomePage: !!courseContent.welcomePage,
         welcomeMedia: courseContent.welcomePage?.media,
-        welcomeMediaTypes: courseContent.welcomePage?.media?.map((m: any) => ({ id: m.id, type: m.type })),
+        welcomeMediaTypes: courseContent.welcomePage?.media?.map((m: Media) => ({ id: m.id, type: m.type })),
         hasObjectivesPage: !!courseContent.learningObjectivesPage,
         objectivesMedia: courseContent.learningObjectivesPage?.media,
-        objectivesMediaTypes: courseContent.learningObjectivesPage?.media?.map((m: any) => ({ id: m.id, type: m.type })),
+        objectivesMediaTypes: courseContent.learningObjectivesPage?.media?.map((m: Media) => ({ id: m.id, type: m.type })),
         topicCount: courseContent.topics?.length,
         firstTopicMedia: courseContent.topics?.[0]?.media,
-        firstTopicMediaTypes: courseContent.topics?.[0]?.media?.map((m: any) => ({ id: m.id, type: m.type }))
+        firstTopicMediaTypes: courseContent.topics?.[0]?.media?.map((m: Media) => ({ id: m.id, type: m.type }))
       })
       
       const metadata: CourseMetadata = {
@@ -676,7 +677,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               },
               mediaFilesRef.current // Pass the pre-loaded media files
             )
-          } catch (rustError: any) {
+          } catch (rustError: unknown) {
             console.error('[SCORMPackageBuilder] Rust generation failed:', rustError)
             throw rustError
           }
@@ -820,7 +821,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       } else {
         console.log('[SCORMPackageBuilder] User cancelled save dialog or no path returned')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SCORMPackageBuilder] Error saving SCORM package:', error)
       console.error('[SCORMPackageBuilder] Error details:', {
         name: error?.name,

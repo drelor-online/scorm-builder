@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
-import { CourseContentUnion, Media } from '../types/aiPrompt'
+import { CourseContentUnion, Media, Topic } from '../types/aiPrompt'
+
+// Extended Media type to include caption type used in this component
+type ExtendedMedia = Media & { type: 'image' | 'video' | 'audio' | 'caption' }
 import { CourseSeedData } from '../types/course'
 import JSZip from 'jszip'
 import { PageLayout } from './PageLayout'
@@ -15,10 +18,9 @@ import {
   Icon,
   ProgressBar
 } from './DesignSystem'
-import { FileAudio, FileText, Eye, Mic, Circle, Save, Upload, Play, Square, CheckCircle, ChevronDown, ChevronUp, Volume2, Pause, X } from 'lucide-react'
+import { FileText, Eye, Mic, Circle, Save, Upload, Play, Square, CheckCircle, Volume2 } from 'lucide-react'
 import { TauriAudioPlayer } from './TauriAudioPlayer'
 import './DesignSystem/designSystem.css'
-import { tokens } from './DesignSystem/designTokens'
 import styles from './AudioNarrationWizard.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
@@ -31,7 +33,7 @@ import { logger } from '../utils/logger'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 
 // Debounce helper
-function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+function debounce<T extends (...args: unknown[]) => unknown>(func: T, wait: number): T {
   let timeout: NodeJS.Timeout | null = null
   return ((...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout)
@@ -63,7 +65,7 @@ interface AudioNarrationWizardProps {
   onBack: () => void
   onUpdateContent?: (content: CourseContentUnion) => void  // Add callback to update parent
   onSettingsClick?: () => void
-  onSave?: (content?: any, silent?: boolean) => void
+  onSave?: (content?: CourseContentUnion, silent?: boolean) => void
   onOpen?: () => void
   onHelp?: () => void
   onStepClick?: (stepIndex: number) => void
@@ -106,27 +108,26 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
   
   if (hasNewPages) {
     // Add welcome page narration
-    const anyContent = content as any
-    if (anyContent.welcomePage?.narration) {
+    if ('welcomePage' in content && content.welcomePage?.narration) {
       blocks.push({
         id: `welcome-narration`,
-        text: anyContent.welcomePage.narration,
+        text: content.welcomePage.narration,
         blockNumber: String(blockCounter++).padStart(4, '0'),
         // Always use 'welcome' for consistency with media ID generation
         pageId: 'welcome',
-        pageTitle: anyContent.welcomePage.title
+        pageTitle: content.welcomePage.title
       })
     }
 
     // Add learning objectives page narration
-    if (anyContent.learningObjectivesPage?.narration) {
+    if ('learningObjectivesPage' in content && content.learningObjectivesPage?.narration) {
       blocks.push({
         id: `objectives-narration`,
-        text: anyContent.learningObjectivesPage.narration,
+        text: content.learningObjectivesPage.narration,
         blockNumber: String(blockCounter++).padStart(4, '0'),
         // Always use 'objectives' for consistency with media ID generation
         pageId: 'objectives',
-        pageTitle: anyContent.learningObjectivesPage.title
+        pageTitle: content.learningObjectivesPage.title
       })
     }
   }
@@ -134,14 +135,13 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
   // Process topics (both formats)
   if (content.topics && Array.isArray(content.topics)) {
     content.topics.forEach(topic => {
-      const anyTopic = topic as any
-      if (anyTopic.narration) {
+      if (topic.narration) {
         blocks.push({
-          id: `${anyTopic.id}-narration`,
-          text: anyTopic.narration,
+          id: `${topic.id}-narration`,
+          text: topic.narration,
           blockNumber: String(blockCounter++).padStart(4, '0'),
-          pageId: anyTopic.id,
-          pageTitle: anyTopic.title
+          pageId: topic.id,
+          pageTitle: topic.title
         })
       }
     })
@@ -165,7 +165,7 @@ export function AudioNarrationWizard({
   const { 
     storeMedia,
     getMedia,
-    getMediaForPage,
+    getMediaForPage: _getMediaForPage,
     createBlobUrl,
     revokeBlobUrl,
     getAllMedia,
@@ -174,7 +174,7 @@ export function AudioNarrationWizard({
     getCachedAudio,
     clearAudioFromCache
   } = useUnifiedMedia()
-  const { success, error: notifyError, info } = useNotifications()
+  const { success, error: _notifyError, info } = useNotifications()
   const { markDirty, resetDirty } = useUnsavedChanges()
   
   // Extract narration blocks
@@ -223,7 +223,11 @@ export function AudioNarrationWizard({
   } | null>(null)
   
   // Media loading cache to prevent redundant reads
-  const mediaCache = useRef<Map<string, any>>(new Map())
+  interface CachedMediaData {
+    mediaData: unknown;
+    url?: string;
+  }
+  const mediaCache = useRef<Map<string, CachedMediaData | string>>(new Map())
   
   // Track when we last loaded data to prevent excessive reloads
   const lastLoadTime = useRef<number>(0)
@@ -234,15 +238,15 @@ export function AudioNarrationWizard({
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
-  const [editingText, setEditingText] = useState('')
+  const [_editingText, setEditingText] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [previewBlockId, setPreviewBlockId] = useState<string | null>(null)
   const [blockToReplaceAudio, setBlockToReplaceAudio] = useState<UnifiedNarrationBlock | null>(null)
   const [showReplaceAudioModal, setShowReplaceAudioModal] = useState<UnifiedNarrationBlock | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false) // Collapsible bulk upload section
-  const [showInstructions, setShowInstructions] = useState(false) // Collapsible instructions
+  const [_showInstructions, _setShowInstructions] = useState(false) // Collapsible instructions
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false) // Clear all confirmation dialog
-  const [isBulkAudioUploading, setIsBulkAudioUploading] = useState(false) // Track bulk audio upload separately
+  const [_isBulkAudioUploading, setIsBulkAudioUploading] = useState(false) // Track bulk audio upload separately
   const [isBulkOperationActive, setIsBulkOperationActive] = useState(false) // Track ANY bulk operation
   
   // Confirmation dialog states for audio/caption removal
@@ -341,7 +345,7 @@ export function AudioNarrationWizard({
     recordingId,
     isPlaying
   }: {
-    block: any,
+    block: UnifiedNarrationBlock,
     hasAudio: boolean,
     hasCaption: boolean,
     isEditing: boolean,
@@ -695,7 +699,7 @@ export function AudioNarrationWizard({
         const welcomeAudio = courseContent.welcomePage.media?.find(m => m.type === 'audio')
         audioIdsInContent.push(welcomeAudio?.id || null)
         // Look for captions in media array too
-        const welcomeCaption = courseContent.welcomePage.media?.find((m: any) => m.type === 'caption')
+        const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
         captionIdsInContent.push(welcomeCaption?.id || null)
       }
       
@@ -704,17 +708,17 @@ export function AudioNarrationWizard({
         const objAudio = courseContent.learningObjectivesPage.media?.find(m => m.type === 'audio')
         audioIdsInContent.push(objAudio?.id || null)
         // Look for captions in media array too
-        const objCaption = courseContent.learningObjectivesPage.media?.find((m: any) => m.type === 'caption')
+        const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
         captionIdsInContent.push(objCaption?.id || null)
       }
       
       // Check topics - push null if no media to maintain index alignment
       if ('topics' in courseContent && Array.isArray(courseContent.topics)) {
-        courseContent.topics.forEach((topic: any) => {
-          const topicAudio = topic.media?.find((m: any) => m.type === 'audio')
+        courseContent.topics.forEach((topic: Topic) => {
+          const topicAudio = topic.media?.find((m: Media) => m.type === 'audio')
           audioIdsInContent.push(topicAudio?.id || null)
           // Look for captions in media array too
-          const topicCaption = topic.media?.find((m: any) => m.type === 'caption')
+          const topicCaption = topic.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
           captionIdsInContent.push(topicCaption?.id || null)
         })
       }
@@ -786,7 +790,9 @@ export function AudioNarrationWizard({
               const cachedAudio = getCachedAudio ? getCachedAudio(audioId) : null
               
               if (cachedAudio) {
-                const fileName = cachedAudio.metadata?.original_name || cachedAudio.metadata?.originalName || `${block.blockNumber}-Block.mp3`
+                const fileName = (typeof cachedAudio.metadata?.original_name === 'string' ? cachedAudio.metadata.original_name : 
+                                 typeof cachedAudio.metadata?.originalName === 'string' ? cachedAudio.metadata.originalName : 
+                                 `${block.blockNumber}-Block.mp3`)
                 
                 // Create blob URL from cached data
                 let playableUrl: string | undefined
@@ -810,7 +816,8 @@ export function AudioNarrationWizard({
                   logger.error(`[AudioNarrationWizard] Failed to create blob URL from cached audio:`, e)
                 }
                 
-                const file = new File([], fileName, { type: cachedAudio.metadata?.mimeType || 'audio/mpeg' })
+                const mimeType = typeof cachedAudio.metadata?.mimeType === 'string' ? cachedAudio.metadata.mimeType : 'audio/mpeg'
+                const file = new File([], fileName, { type: mimeType })
                 
                 const audioFile: AudioFile = {
                   blockNumber: block.blockNumber,
@@ -843,7 +850,9 @@ export function AudioNarrationWizard({
             const mediaData = await getMedia(audioId)
             
             if (mediaData) {
-              const fileName = mediaData.metadata?.original_name || mediaData.metadata?.originalName || `${block.blockNumber}-Block.mp3`
+              const fileName = (typeof mediaData.metadata?.original_name === 'string' ? mediaData.metadata.original_name : 
+                               typeof mediaData.metadata?.originalName === 'string' ? mediaData.metadata.originalName : 
+                               `${block.blockNumber}-Block.mp3`)
               
               // Normalize the URL to fix double-encoding issues
               const playableUrl = mediaData.url
@@ -858,7 +867,8 @@ export function AudioNarrationWizard({
               }
               
               // Create a placeholder file for UI consistency (no actual data needed)
-              const file = new File([], fileName, { type: mediaData.metadata?.mimeType || 'audio/mpeg' })
+              const mimeType = typeof mediaData.metadata?.mimeType === 'string' ? mediaData.metadata.mimeType : 'audio/mpeg'
+              const file = new File([], fileName, { type: mimeType })
               
               const audioFile: AudioFile = {
                 blockNumber: block.blockNumber,
@@ -940,24 +950,24 @@ export function AudioNarrationWizard({
                 content = new TextDecoder().decode(mediaData.data)
               } else if (mediaData.metadata?.content) {
                 // Caption content might be stored in metadata
-                content = mediaData.metadata.content
+                content = typeof mediaData.metadata.content === 'string' ? mediaData.metadata.content : ''
               }
               
               // Also check if content is directly in the media array in course content
               if (!content) {
                 // Check the corresponding page in courseContent for embedded caption content
                 if (index === 0 && 'welcomePage' in courseContent) {
-                  const welcomeCaption = courseContent.welcomePage.media?.find((m: any) => m.id === captionId && m.type === 'caption') as any
+                  const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
                   if (welcomeCaption?.content) {
                     content = welcomeCaption.content
                   }
                 } else if (index === 1 && 'learningObjectivesPage' in courseContent) {
-                  const objCaption = courseContent.learningObjectivesPage.media?.find((m: any) => m.id === captionId && m.type === 'caption') as any
+                  const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
                   if (objCaption?.content) {
                     content = objCaption.content
                   }
                 } else if ('topics' in courseContent && courseContent.topics[index - 2]) {
-                  const topicCaption = courseContent.topics[index - 2].media?.find((m: any) => m.id === captionId && m.type === 'caption') as any
+                  const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
                   if (topicCaption?.content) {
                     content = topicCaption.content
                   }
@@ -1061,7 +1071,7 @@ export function AudioNarrationWizard({
       }
       
       // Always check getAllMedia as a fallback to catch media not in course content  
-      let allMediaItems: any[] = []
+      let allMediaItems: Media[] = []
       
       try {
         const mediaResult = getAllMedia ? getAllMedia() : []
@@ -1162,7 +1172,7 @@ export function AudioNarrationWizard({
               content = new TextDecoder().decode(mediaData.data)
             } else if (mediaData.metadata?.content) {
               // Caption content might be stored in metadata
-              content = mediaData.metadata.content
+              content = typeof mediaData.metadata.content === 'string' ? mediaData.metadata.content : ''
             }
             
             if (content) {
@@ -1236,9 +1246,9 @@ export function AudioNarrationWizard({
           courseContent.topics?.some(t => t.media?.some((m: Media) => m.type === 'audio')) || false
         
         hasCaptionInContent =
-          courseContent.welcomePage?.media?.some((m: any) => m.type === 'caption') ||
-          courseContent.learningObjectivesPage?.media?.some((m: any) => m.type === 'caption') ||
-          courseContent.topics?.some(t => t.media?.some((m: any) => m.type === 'caption')) || false
+          courseContent.welcomePage?.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption') ||
+          courseContent.learningObjectivesPage?.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption') ||
+          courseContent.topics?.some(t => t.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption')) || false
       }
       
       // If we have media in content but no files loaded yet, trigger load
@@ -1369,7 +1379,7 @@ export function AudioNarrationWizard({
             contentWithAudio.welcomePage.media = []
           }
           // Remove any existing audio from media array
-          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: any) => m.type !== 'audio')
+          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: Media) => m.type !== 'audio')
           // Add the new audio (without URL to prevent invalid blob URLs)
           contentWithAudio.welcomePage.media.push({
             id: audioFile.mediaId,
@@ -1385,7 +1395,7 @@ export function AudioNarrationWizard({
             contentWithAudio.welcomePage.media = []
           }
           // Remove any existing caption from media array
-          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: any) => m.type !== 'caption')
+          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: Media) => m.type !== 'caption')
           // Add the new caption
           contentWithAudio.welcomePage.media.push({
             id: captionFile.mediaId,
@@ -1426,7 +1436,7 @@ export function AudioNarrationWizard({
             contentWithAudio.learningObjectivesPage.media = []
           }
           // Remove any existing audio from media array
-          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: any) => m.type !== 'audio')
+          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: Media) => m.type !== 'audio')
           // Add the new audio (without URL to prevent invalid blob URLs)
           contentWithAudio.learningObjectivesPage.media.push({
             id: audioFile.mediaId,
@@ -1441,7 +1451,7 @@ export function AudioNarrationWizard({
             contentWithAudio.learningObjectivesPage.media = []
           }
           // Remove any existing caption from media array
-          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: any) => m.type !== 'caption')
+          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: Media) => m.type !== 'caption')
           // Add the new caption
           contentWithAudio.learningObjectivesPage.media.push({
             id: captionFile.mediaId,
@@ -1455,7 +1465,7 @@ export function AudioNarrationWizard({
     }
     
     // Process topics
-    contentWithAudio.topics.forEach((topic: any) => {
+    contentWithAudio.topics.forEach((topic: Topic) => {
       const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
       if (topicBlock) {
         // Update narration text
@@ -1475,7 +1485,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing audio from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'audio')
+          topic.media = topic.media.filter((m: Media) => m.type !== 'audio')
           // Add the new audio
           topic.media.push({
             id: audioFile.mediaId,
@@ -1490,7 +1500,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
+          topic.media = topic.media.filter((m: Media) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
@@ -1623,7 +1633,7 @@ export function AudioNarrationWizard({
     }
     
     // Process topics - update both narration and media
-    contentWithAudio.topics.forEach((topic: any) => {
+    contentWithAudio.topics.forEach((topic: Topic) => {
       const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
       if (topicBlock) {
         // Update narration text
@@ -1643,7 +1653,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing audio from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'audio')
+          topic.media = topic.media.filter((m: Media) => m.type !== 'audio')
           // Add the new audio
           topic.media.push({
             id: audioFile.mediaId,
@@ -1658,7 +1668,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
+          topic.media = topic.media.filter((m: Media) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
@@ -1672,11 +1682,11 @@ export function AudioNarrationWizard({
     })
     
     logger.log('[AudioNarrationWizard] Final content with audio:', {
-      welcomeMedia: contentWithAudio.welcomePage?.media?.filter((m: any) => m.type === 'audio'),
-      objectivesMedia: contentWithAudio.learningObjectivesPage?.media?.filter((m: any) => m.type === 'audio'),
-      topicMedia: contentWithAudio.topics?.map((t: any) => ({ 
+      welcomeMedia: contentWithAudio.welcomePage?.media?.filter((m: Media) => m.type === 'audio'),
+      objectivesMedia: contentWithAudio.learningObjectivesPage?.media?.filter((m: Media) => m.type === 'audio'),
+      topicMedia: contentWithAudio.topics?.map((t: Topic) => ({ 
         id: t.id, 
-        audioMedia: t.media?.filter((m: any) => m.type === 'audio') 
+        audioMedia: t.media?.filter((m: Media) => m.type === 'audio') 
       }))
     })
     
@@ -2490,7 +2500,7 @@ export function AudioNarrationWizard({
       }
       
       // Replace all existing audio files using immutable update
-      setAudioFiles(prev => {
+      setAudioFiles(_prev => {
         // Clear existing files for this bulk upload (replace, not merge)
         logger.log('[AudioNarrationWizard] Replacing audio files with bulk upload:', newAudioFiles.length)
         return [...newAudioFiles]
@@ -2724,7 +2734,7 @@ export function AudioNarrationWizard({
       }
       
       // Replace all existing caption files using immutable update
-      setCaptionFiles(prev => {
+      setCaptionFiles(_prev => {
         // Clear existing files for this bulk upload (replace, not merge)
         logger.log('[AudioNarrationWizard] Replacing caption files with bulk upload:', newCaptionFiles.length)
         return [...newCaptionFiles]
@@ -3446,7 +3456,7 @@ export function AudioNarrationWizard({
             
             // Clear all topic media
             if (clearedContent.topics && Array.isArray(clearedContent.topics)) {
-              clearedContent.topics.forEach((topic: any) => {
+              clearedContent.topics.forEach((topic: Topic) => {
                 topic.media = []
                 // Also clear the deprecated audioId and captionId fields
                 delete topic.audioId

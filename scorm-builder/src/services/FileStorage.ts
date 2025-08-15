@@ -21,13 +21,46 @@ interface TauriProjectMetadata {
   last_modified: string;
 }
 
+// Extended ProjectData interface for Tauri backend usage
+interface TauriProjectData extends ProjectData {
+  id: string;
+  name: string;
+}
+
 interface TauriProjectFile {
-  project: ProjectData;
+  project: TauriProjectData;
   metadata: {
     version: string;
     created: string;
     lastModified: string;
   };
+  // Backend data fields accessed throughout FileStorage
+  course_content?: Record<string, unknown>;
+  course_seed_data?: unknown;
+  course_data?: {
+    title?: string;
+    difficulty?: number;
+    template?: string;
+    topics?: string[];
+    custom_topics?: string[] | null;
+  };
+  ai_prompt?: {
+    prompt?: string;
+  };
+  audio_settings?: {
+    voice?: string;
+    speed?: number;
+    [key: string]: unknown;
+  };
+  scorm_config?: {
+    packageTitle?: string;
+    [key: string]: unknown;
+  };
+  json_import_data?: unknown;
+  activities_data?: unknown;
+  media_enhancements?: unknown;
+  content_edits?: unknown;
+  current_step?: number;
 }
 
 interface TauriRecoveryInfo {
@@ -175,7 +208,7 @@ export class FileStorage {
     }
   }
 
-  async saveContent(contentId: string, content: ProjectData | unknown): Promise<void> {
+  async saveContent(contentId: string, content: ProjectData | Record<string, unknown> | string | number | unknown): Promise<void> {
     if (!this._currentProjectPath) throw new Error('No project open');
     
     // Cancel any pending save for this contentId
@@ -205,7 +238,13 @@ export class FileStorage {
     }
     
     // Queue the content for saving
-    this.saveQueue.set(contentId, content);
+    const queueEntry: SaveQueueEntry = {
+      key: contentId,
+      data: content,
+      retryCount: 0,
+      timestamp: Date.now()
+    };
+    this.saveQueue.set(contentId, queueEntry);
     
     // Create a promise that resolves when the save completes
     return new Promise((resolve, reject) => {
@@ -271,58 +310,89 @@ export class FileStorage {
       
       // Update the appropriate field based on contentId
       if (contentId === 'course-content') {
-        projectFile.course_content = content;
+        projectFile.course_content = content as Record<string, unknown>;
         debugLogger.debug('FileStorage.performSave', 'Updated course-content');
       } else if (contentId === 'metadata') {
         // Ensure metadata conforms to CourseData structure
         // Handle both 'courseTitle' and 'title' fields, with courseTitle taking precedence
-        const title = content.courseTitle || content.title || projectFile.course_data.title || 'Untitled';
+        const contentObj = content as Record<string, unknown>;
+        const title = (typeof contentObj.courseTitle === 'string' ? contentObj.courseTitle : 
+                      typeof contentObj.title === 'string' ? contentObj.title : 
+                      projectFile.course_data?.title) || 'Untitled';
+        
+        // Ensure course_data exists
+        if (!projectFile.course_data) {
+          projectFile.course_data = {
+            title: 'Untitled',
+            difficulty: 1,
+            template: 'default',
+            topics: []
+          };
+        }
         
         debugLogger.debug('FileStorage.performSave', 'Updating metadata', {
           oldTitle: projectFile.course_data.title,
           newTitle: title,
-          source: content.courseTitle ? 'courseTitle' : content.title ? 'title' : 'existing'
+          source: contentObj.courseTitle ? 'courseTitle' : contentObj.title ? 'title' : 'existing'
         });
         
         projectFile.course_data = {
           title: title,
-          difficulty: content.difficulty || projectFile.course_data.difficulty || 1,
-          template: content.template || projectFile.course_data.template || 'default',
-          topics: content.topics || projectFile.course_data.topics || [],
-          custom_topics: content.custom_topics || projectFile.course_data.custom_topics || null
+          difficulty: (typeof contentObj.difficulty === 'number' ? contentObj.difficulty : projectFile.course_data.difficulty) || 1,
+          template: (typeof contentObj.template === 'string' ? contentObj.template : projectFile.course_data.template) || 'default',
+          topics: (Array.isArray(contentObj.topics) ? contentObj.topics as string[] : projectFile.course_data.topics) || [],
+          custom_topics: (Array.isArray(contentObj.custom_topics) ? contentObj.custom_topics as string[] : projectFile.course_data.custom_topics) || null
         };
       } else if (contentId === 'aiPrompt') {
-        projectFile.ai_prompt = { prompt: content, generated_at: new Date().toISOString() };
+        if (!projectFile.ai_prompt) {
+          projectFile.ai_prompt = {};
+        }
+        projectFile.ai_prompt.prompt = typeof content === 'string' ? content : JSON.stringify(content);
       } else if (contentId === 'audioSettings') {
         // Ensure audio settings has all required fields
-        projectFile.audio_settings = {
-          voice: content.voice || projectFile.audio_settings.voice || 'default',
-          speed: content.speed !== undefined ? content.speed : (projectFile.audio_settings.speed || 1.0),
-          pitch: content.pitch !== undefined ? content.pitch : (projectFile.audio_settings.pitch || 1.0)
-        };
+        if (!projectFile.audio_settings) {
+          projectFile.audio_settings = {};
+        }
+        const audioContent = content as Record<string, unknown>;
+        projectFile.audio_settings.voice = (typeof audioContent.voice === 'string' ? audioContent.voice : projectFile.audio_settings.voice) || 'default';
+        projectFile.audio_settings.speed = (typeof audioContent.speed === 'number' ? audioContent.speed : projectFile.audio_settings.speed) || 1.0;
+        projectFile.audio_settings.pitch = (typeof audioContent.pitch === 'number' ? audioContent.pitch : projectFile.audio_settings.pitch) || 1.0;
       } else if (contentId === 'scormConfig') {
         // Ensure SCORM config has all required fields
-        projectFile.scorm_config = {
-          version: content.version || projectFile.scorm_config.version || 'SCORM_2004',
-          completion_criteria: content.completion_criteria || projectFile.scorm_config.completion_criteria || 'all',
-          passing_score: content.passing_score !== undefined ? content.passing_score : (projectFile.scorm_config.passing_score || 80)
-        };
+        if (!projectFile.scorm_config) {
+          projectFile.scorm_config = {};
+        }
+        const scormContent = content as Record<string, unknown>;
+        projectFile.scorm_config.version = (typeof scormContent.version === 'string' ? scormContent.version : projectFile.scorm_config.version) || 'SCORM_2004';
+        projectFile.scorm_config.completion_criteria = (typeof scormContent.completion_criteria === 'string' ? scormContent.completion_criteria : projectFile.scorm_config.completion_criteria) || 'all';
+        projectFile.scorm_config.passing_score = (typeof scormContent.passing_score === 'number' ? scormContent.passing_score : projectFile.scorm_config.passing_score) || 80;
       } else if (contentId === 'courseSeedData') {
         // Save complete course seed data and sync topics to course_data
         projectFile.course_seed_data = content;
         
+        const seedContent = content as Record<string, unknown>;
         debugLogger.debug('FileStorage.performSave', 'Saving course seed data', {
-          courseTitle: content.courseTitle,
-          topicsCount: content.customTopics?.length || 0,
-          difficulty: content.difficulty
+          courseTitle: seedContent.courseTitle,
+          topicsCount: Array.isArray(seedContent.customTopics) ? seedContent.customTopics.length : 0,
+          difficulty: seedContent.difficulty
         });
         
+        // Ensure course_data exists
+        if (!projectFile.course_data) {
+          projectFile.course_data = {
+            title: 'Untitled',
+            difficulty: 1,
+            template: 'default',
+            topics: []
+          };
+        }
+        
         // Unified data model: sync customTopics to course_data.topics
-        if (content.customTopics && Array.isArray(content.customTopics)) {
-          projectFile.course_data.topics = content.customTopics;
-          projectFile.course_data.title = content.courseTitle || projectFile.course_data.title;
-          projectFile.course_data.difficulty = content.difficulty || projectFile.course_data.difficulty;
-          projectFile.course_data.template = content.template || projectFile.course_data.template;
+        if (seedContent.customTopics && Array.isArray(seedContent.customTopics)) {
+          projectFile.course_data.topics = seedContent.customTopics as string[];
+          projectFile.course_data.title = (typeof seedContent.courseTitle === 'string' ? seedContent.courseTitle : projectFile.course_data.title) || projectFile.course_data.title;
+          projectFile.course_data.difficulty = (typeof seedContent.difficulty === 'number' ? seedContent.difficulty : projectFile.course_data.difficulty) || projectFile.course_data.difficulty;
+          projectFile.course_data.template = (typeof seedContent.template === 'string' ? seedContent.template : projectFile.course_data.template) || projectFile.course_data.template;
         }
       } else if (contentId === 'json-import-data') {
         // Save raw JSON import and validated content
@@ -341,7 +411,10 @@ export class FileStorage {
         projectFile.content_edits = content;
       } else if (contentId === 'currentStep') {
         // Save current workflow step
-        projectFile.current_step = content.step || content;
+        const stepContent = content as Record<string, unknown> | number;
+        projectFile.current_step = typeof stepContent === 'number' ? stepContent : 
+                                   (typeof stepContent === 'object' && typeof stepContent.step === 'number') ? stepContent.step :
+                                   Number(stepContent) || 1;
       } else if (contentId === 'audioNarration') {
         // Special handling for audioNarration to prevent excessive saves
         debugLogger.debug('FileStorage.performSave', 'Saving audio narration data');

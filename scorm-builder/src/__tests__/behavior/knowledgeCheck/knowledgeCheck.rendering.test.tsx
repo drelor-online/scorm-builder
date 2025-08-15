@@ -1,9 +1,5 @@
-import React from 'react'
 import { describe, it, expect, vi, beforeEach, test } from 'vitest'
-import { render, fireEvent } from '../../../test/testProviders'
 import '@testing-library/jest-dom'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 
 // Mock the Rust SCORM generator
 vi.mock('@tauri-apps/api/tauri', () => ({
@@ -11,7 +7,7 @@ vi.mock('@tauri-apps/api/tauri', () => ({
 }))
 
 describe('Knowledge Check Rendering in SCORM Package', () => {
-  const mockEnhancedContent = {
+  const _mockEnhancedContent = {
     title: 'Test Course',
     topics: [
       {
@@ -51,7 +47,7 @@ describe('Knowledge Check Rendering in SCORM Package', () => {
 
   it('should render knowledge check questions in the generated HTML', async () => {
     // Simulate what the Rust generator should produce
-    const expectedHtml = `
+    const _expectedHtml = `
       <div class="knowledge-check-container">
         <h3>Knowledge Check</h3>
         <div class="kc-question-wrapper" data-question-index="0">
@@ -98,7 +94,7 @@ describe('Knowledge Check Rendering in SCORM Package', () => {
   })
 
   it('should render fill-in-the-blank questions correctly', async () => {
-    const expectedHtml = `
+    const _expectedHtml = `
       <div class="kc-question-wrapper">
         <p class="kc-question">The capital of France is ___.</p>
         <div class="kc-input-group">
@@ -137,8 +133,8 @@ describe('Knowledge Check Rendering in SCORM Package', () => {
     `
 
     // Mock the submit function
-    window.submitMultipleChoice = vi.fn((index) => {
-      const submitButton = document.querySelector(`[data-question-index="${index}"]`)
+    window.submitMultipleChoice = vi.fn((_index) => {
+      const submitButton = document.querySelector(`[data-question-index="${_index}"]`)
       if (submitButton) {
         submitButton.disabled = true
         submitButton.textContent = 'Answer Submitted'
@@ -218,11 +214,11 @@ describe('Knowledge Check Rendering in SCORM Package', () => {
     const kcContainer = container.querySelector('.knowledge-check-container') as HTMLElement
 
     // Mock the submit function that should be in navigation.js
-    window.submitMultipleChoice = vi.fn((index) => {
-      const btn = document.querySelector(`[data-question-index="${index}"]`) as HTMLButtonElement
+    window.submitMultipleChoice = vi.fn((_index) => {
+      const btn = document.querySelector(`[data-question-index="${_index}"]`) as HTMLButtonElement
       if (btn) {
         btn.disabled = true
-        const feedback = document.getElementById(`feedback-${index}`)
+        const feedback = document.getElementById(`feedback-${_index}`)
         if (feedback) {
           feedback.textContent = 'Correct!'
           feedback.style.display = 'block'
@@ -273,11 +269,11 @@ describe('Knowledge Check Rendering in SCORM Package', () => {
     const questionWrapper = container.querySelector('.kc-question-wrapper') as HTMLElement
 
     // Mock the fill-in-blank function
-    window.checkFillInBlank = vi.fn((index, correctAnswer, correctFeedback, incorrectFeedback, event) => {
+    window.checkFillInBlank = vi.fn((_index, correctAnswer, correctFeedback, incorrectFeedback, event) => {
       event.preventDefault()
-      const inputEl = document.getElementById(`fill-blank-${index}`) as HTMLInputElement
+      const inputEl = document.getElementById(`fill-blank-${_index}`) as HTMLInputElement
       const submitBtn = event.target as HTMLButtonElement
-      const feedback = document.getElementById(`feedback-${index}`)
+      const feedback = document.getElementById(`feedback-${_index}`)
       
       if (inputEl && submitBtn && feedback) {
         const isCorrect = inputEl.value.toLowerCase() === correctAnswer.toLowerCase()

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { CourseContentUnion, CourseContent, Media, Page, Topic } from '../types/aiPrompt'
+import type { MediaItem } from '../services/MediaService'
 import { CourseSeedData } from '../types/course'
 import { searchGoogleImages, searchYouTubeVideos, SearchError } from '../services/searchService'
 import { isKnownCorsRestrictedDomain, downloadExternalImage } from '../services/externalImageDownloader'
@@ -52,13 +53,13 @@ interface SearchResult {
 interface MediaEnhancementWizardRefactoredProps {
   courseContent: CourseContentUnion
   courseSeedData?: CourseSeedData
-  apiKeys?: any
+  apiKeys?: Record<string, string>
   onUpdateContent?: (content: CourseContentUnion) => void
   onNext: (content: CourseContentUnion) => void
   onBack: () => void
   onSettingsClick?: () => void
   onHelp?: () => void
-  onSave?: (content?: any, silent?: boolean) => void
+  onSave?: (content?: CourseContentUnion, silent?: boolean) => void
   onOpen?: () => void
   onStepClick?: (step: number) => void
 }
@@ -353,7 +354,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const pageId = getPageId(currentPage)
       
       // Variable to store the result of storing media
-      let storedItem: any
+      let storedItem: MediaItem
       
       // Check if it's a YouTube video - check isYouTube flag first
       if (result.isYouTube || result.embedUrl || (result.url && (result.url.includes('youtube.com') || result.url.includes('youtu.be')))) {
@@ -600,7 +601,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     console.log('[MediaEnhancement] Loading media for page:', pageId)
     
     // Get media items for the current page
-    let pageMediaItems: any[] = []
+    let pageMediaItems: Media[] = []
     try {
       const result = getMediaForPage(pageId)
       // Handle both promise and direct return
@@ -967,7 +968,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
     const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
     const allResults = [...searchResultsArray, ...uploadedMediaArray]
-    const selectedItems: any[] = []
+    const selectedItems: (SearchResult | Media)[] = []
     
     if (selectedItems.length === 0) return
     

@@ -44,8 +44,13 @@ const SCORMPackageBuilder = lazy(() =>
 )
 // Types
 import type { CourseSeedData } from '@/types/course'
-import type { CourseContent, CourseContentUnion, Topic } from '@/types/aiPrompt'
+import type { CourseContent, CourseContentUnion, Topic, Media } from '@/types/aiPrompt'
 import type { ProjectData } from '@/types/project'
+
+// Type guards
+function isNewFormat(content: CourseContentUnion): content is CourseContent {
+  return content != null && 'welcomePage' in content && 'learningObjectivesPage' in content && 'assessment' in content
+}
 
 // Components
 // DevTools removed - not needed
@@ -445,7 +450,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const mediaItems = Array.isArray(mediaEnhancementsData.welcome) 
                     ? mediaEnhancementsData.welcome 
                     : [mediaEnhancementsData.welcome]
-                  mediaItems.forEach((item: any) => {
+                  mediaItems.forEach((item: Media) => {
                     if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
                       loadedCourseContent.welcomePage!.media!.push(item)
                     }
@@ -487,7 +492,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const mediaItems = Array.isArray(mediaEnhancementsData.objectives)
                     ? mediaEnhancementsData.objectives
                     : [mediaEnhancementsData.objectives]
-                  mediaItems.forEach((item: any) => {
+                  mediaItems.forEach((item: Media) => {
                     if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
                       loadedCourseContent.learningObjectivesPage!.media!.push(item)
                     }
@@ -533,7 +538,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     const mediaItems = Array.isArray(mediaEnhancementsData[topicKey])
                       ? mediaEnhancementsData[topicKey]
                       : [mediaEnhancementsData[topicKey]]
-                    mediaItems.forEach((item: any) => {
+                    mediaItems.forEach((item: Media) => {
                       if (!topic.media!.some(m => m.id === item.id)) {
                         topic.media!.push(item)
                       }
@@ -836,10 +841,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[handleSave] Save error:', error)
-      showError(error.message || 'Failed to save project')
-      return { success: false, error: error.message }
+      showError((error instanceof Error ? error.message : String(error)) || 'Failed to save project')
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     } finally {
       setIsSaving(false)
     }
@@ -873,10 +878,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Only show error toast for autosave failures
       showError('Autosave failed')
-      return { success: false, error: error.message }
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
   }, [storage])
   
@@ -1388,8 +1393,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           setCurrentStep('seed')
           // The dashboard will automatically show when currentProjectId is null
         }
-      } catch (error: any) {
-        showError(error.message || 'Failed to delete project')
+      } catch (error: unknown) {
+        showError((error instanceof Error ? error.message : String(error)) || 'Failed to delete project')
       }
     }
     hideDialog();
@@ -1696,7 +1701,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onHelp={() => showDialog('help')}
                 onOpen={handleOpen}
                 isSaving={isSaving}
-                onSave={(content?: any) => {
+                onSave={(content?: CourseSeedData) => {
                   if (content) {
                     setCourseSeedData(content);
                     handleManualSave(content);
@@ -1718,8 +1723,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onBack={handlePromptBack}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={(content?: any, silent?: boolean) => {
-                  if (content) {
+                  onSave={(content?: CourseContentUnion, silent?: boolean) => {
+                  if (content && isNewFormat(content)) {
                     setCourseContent(content);
                     if (!silent) {
                       handleManualSave();
@@ -1741,8 +1746,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onBack={handleJSONBack}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={(content?: any, silent?: boolean) => {
-                  if (content) {
+                  onSave={(content?: CourseContentUnion, silent?: boolean) => {
+                  if (content && isNewFormat(content)) {
                     setCourseContent(content);
                     if (!silent) {
                       handleManualSave();
@@ -1777,8 +1782,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     apiKeys={apiKeys}
                     onSettingsClick={() => showDialog('settings')}
                     onHelp={() => showDialog('help')}
-                    onSave={(content?: any, silent?: boolean) => {
-                    if (content) {
+                    onSave={(content?: CourseContentUnion, silent?: boolean) => {
+                    if (content && isNewFormat(content)) {
                       setCourseContent(content);
                       if (!silent) {
                         handleManualSave();
@@ -1825,10 +1830,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={async (content?: any, silent?: boolean) => {
+                  onSave={async (content?: CourseContentUnion, silent?: boolean) => {
                   logger.log('[App] AudioNarrationWizard onSave called', { hasContent: !!content, silent })
                   
-                  if (content) {
+                  if (content && isNewFormat(content)) {
                     // Update local state with the new content
                     setCourseContent(content);
                     
@@ -1871,8 +1876,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={(content?: any, silent?: boolean) => {
-                  if (content) {
+                  onSave={(content?: CourseContentUnion, silent?: boolean) => {
+                  if (content && isNewFormat(content)) {
                     setCourseContent(content);
                     if (!silent) {
                       handleManualSave();
@@ -1911,8 +1916,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onBack={handleSCORMBack}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
-                  onSave={(content?: any, silent?: boolean) => {
-                  if (content) {
+                  onSave={(content?: CourseContentUnion, silent?: boolean) => {
+                  if (content && isNewFormat(content)) {
                     setCourseContent(content);
                     if (!silent) {
                       handleManualSave();

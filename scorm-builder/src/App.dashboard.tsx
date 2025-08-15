@@ -106,8 +106,8 @@ function DashboardContent() {
       // Don't close the dialog yet - wait for media to load
       // The dialog will close when progress reaches 100%
       setShowDashboard(false)
-    } catch (err: any) {
-      if (err.message === 'UNSAVED_CHANGES') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'UNSAVED_CHANGES') {
         // Store the pending project ID to open after saving/discarding
         setPendingProjectId(projectId)
         // Show dashboard is already false, which will show the App component
@@ -151,7 +151,7 @@ function DashboardContent() {
     
     try {
       // recoverFromBackup expects the project path, not the backup path
-      const _result = await storage.recoverFromBackup(recoveryInfo.backupPath)
+      await storage.recoverFromBackup(recoveryInfo.backupPath)
       setShowRecoveryDialog(false)
       setRecoveryInfo(null)
       // Open the recovered project
@@ -159,9 +159,9 @@ function DashboardContent() {
         setLoadingProgress(progress as any)
       })
       setShowDashboard(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Show error but keep dialog open for retry
-      showError(`Failed to recover: ${error.message}`)
+      showError(`Failed to recover: ${error instanceof Error ? error.message : String(error)}`)
       // Dialog stays open so user can retry
     }
   }
@@ -199,8 +199,8 @@ function DashboardContent() {
             // Don't show success message yet - wait for 100% completion
           }
         })
-        .catch((error: any) => {
-          setError(error.message)
+        .catch((error: unknown) => {
+          setError(error instanceof Error ? error.message : String(error))
           setTimeout(() => setError(null), 5000)
           setIsLoadingProject(false)
         })
@@ -220,8 +220,8 @@ function DashboardContent() {
           setShowDashboard(false)
           // Don't show success message yet - wait for 100% completion
         })
-        .catch((error: any) => {
-          setError(error.message)
+        .catch((error: unknown) => {
+          setError(error instanceof Error ? error.message : String(error))
           setTimeout(() => setError(null), 5000)
           setIsLoadingProject(false)
         })

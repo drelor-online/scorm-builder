@@ -70,10 +70,24 @@ global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
 global.URL.revokeObjectURL = vi.fn()
 
 // Mock window.__TAURI__ for Tauri API
-;(global as any).window.__TAURI__ = {
-  invoke: vi.fn().mockResolvedValue({}),
+const mockTauriInvoke = vi.fn().mockImplementation(() => Promise.resolve({}))
+
+Object.defineProperty(window, '__TAURI__', {
+  value: {
+    invoke: mockTauriInvoke,
+    tauri: {
+      invoke: mockTauriInvoke,
+    },
+  },
+  writable: true,
+  configurable: true,
+})
+
+// Also add to global for cases where window might not be available
+;(global as any).__TAURI__ = {
+  invoke: mockTauriInvoke,
   tauri: {
-    invoke: vi.fn().mockResolvedValue({}),
+    invoke: mockTauriInvoke,
   },
 }
 

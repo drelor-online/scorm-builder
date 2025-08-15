@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Button, Modal } from './DesignSystem'
 import { tokens } from './DesignSystem/designTokens'
-import type { CourseContent } from '../types/aiPrompt'
+import type { CourseContent, Topic } from '../types/aiPrompt'
+import type { EnhancedCourseContent, EnhancedTopic } from '../types/scorm'
 import type { CourseSeedData } from '../types/course'
 import type { CourseMetadata } from '../types/metadata'
 import { convertToEnhancedCourseContent } from '../services/courseContentConverter'
@@ -42,7 +43,7 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
   const storage = useStorage()
 
   // Define helper functions first to avoid initialization errors
-  const removeMediaFromContent = (content: any) => {
+  const removeMediaFromContent = (content: EnhancedCourseContent) => {
     // Remove media from all sections
     if (content.welcome) {
       content.welcome.media = []
@@ -54,14 +55,14 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
       delete content.objectivesPage.imageUrl
       delete content.objectivesPage.embedUrl
     }
-    content.topics.forEach((topic: any) => {
+    content.topics.forEach((topic: EnhancedTopic) => {
       topic.media = []
       delete topic.imageUrl
       delete topic.embedUrl
     })
   }
 
-  const removeAudioFromContent = (content: any) => {
+  const removeAudioFromContent = (content: EnhancedCourseContent) => {
     // Remove audio from all sections
     if (content.welcome) {
       delete content.welcome.audioFile
@@ -75,7 +76,7 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
       delete content.objectivesPage.captionFile
       delete content.objectivesPage.captionBlob
     }
-    content.topics.forEach((topic: any) => {
+    content.topics.forEach((topic: EnhancedTopic) => {
       delete topic.audioFile
       delete topic.audioBlob
       delete topic.captionFile
@@ -83,7 +84,7 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     })
   }
 
-  const processContentForPreview = async (content: any, step: string) => {
+  const processContentForPreview = async (content: EnhancedCourseContent, step: string) => {
     // Clone the content to avoid modifying original
     const processed = JSON.parse(JSON.stringify(content))
     
@@ -114,7 +115,7 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     return processed
   }
   
-  const loadMediaUrls = async (content: any) => {
+  const loadMediaUrls = async (content: EnhancedCourseContent) => {
     if (!storage || !storage.isInitialized) return
     
     // Load welcome page media
@@ -173,11 +174,11 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     }
   }
   
-  const loadAudioUrls = async (content: any) => {
+  const loadAudioUrls = async (content: EnhancedCourseContent) => {
     if (!storage || !storage.isInitialized) return
     
     // Helper to load audio and caption for a section
-    const loadSectionAudio = async (section: any, prefix: string) => {
+    const loadSectionAudio = async (section: { audioFile?: string; audioId?: string; audioBlob?: Blob; captionFile?: string; captionId?: string; captionBlob?: Blob }, prefix: string) => {
       if (section.audioFile && !section.audioUrl) {
         try {
           // For audio, we need to get media by ID pattern

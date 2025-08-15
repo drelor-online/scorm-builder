@@ -1,0 +1,378 @@
+  171:13  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+    3:10  error  'AppWithDashboard' is defined but never used                                                                             @typescript-eslint/no-unused-vars
+    1:8   error  'React' is defined but never used                @typescript-eslint/no-unused-vars
+    3:10  error  'render' is defined but never used               @typescript-eslint/no-unused-vars
+    3:18  error  'screen' is defined but never used               @typescript-eslint/no-unused-vars
+    3:26  error  'fireEvent' is defined but never used            @typescript-eslint/no-unused-vars
+    3:37  error  'waitFor' is defined but never used              @typescript-eslint/no-unused-vars
+    4:10  error  'App' is defined but never used                  @typescript-eslint/no-unused-vars
+  275:13  error  'getItemSpy' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   20:9   error  'createMockDocument' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  102:11  error  'template' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  112:11  error  'data' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  2:37  error  'waitFor' is defined but never used  @typescript-eslint/no-unused-vars
+    1:8   error  'React' is defined but never used                         @typescript-eslint/no-unused-vars
+    3:10  error  'render' is defined but never used                        @typescript-eslint/no-unused-vars
+    3:18  error  'fireEvent' is defined but never used                     @typescript-eslint/no-unused-vars
+    5:22  error  'fs' is defined but never used                            @typescript-eslint/no-unused-vars
+    6:13  error  'path' is defined but never used                          @typescript-eslint/no-unused-vars
+   14:9   error  'mockEnhancedContent' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   54:11  error  'expectedHtml' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  101:11  error  'expectedHtml' is assigned a value but never used         @typescript-eslint/no-unused-vars
+    2:37  error  'waitFor' is defined but never used        @typescript-eslint/no-unused-vars
+  126:42  error  'questionIndex' is defined but never used  @typescript-eslint/no-unused-vars
+  166:42  error  'questionIndex' is defined but never used  @typescript-eslint/no-unused-vars
+  245:42  error  'questionIndex' is defined but never used  @typescript-eslint/no-unused-vars
+  5:7  error  'mockMediaStore' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   43:11  error  'courseData' is assigned a value but never used        @typescript-eslint/no-unused-vars
+  150:11  error  'mediaWithBlobUrl' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   80:11  error  'courseContent' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  101:11  error  'expectedOutput' is assigned a value but never used           @typescript-eslint/no-unused-vars
+  123:11  error  'courseWithMultipleMedia' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  145:11  error  'expectedMediaFiles' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  2:46  error  'act' is defined but never used  @typescript-eslint/no-unused-vars
+  121:55  error  'args' is defined but never used               @typescript-eslint/no-unused-vars
+  162:55  error  'args' is defined but never used               @typescript-eslint/no-unused-vars
+  175:21  error  'setError' is assigned a value but never used  @typescript-eslint/no-unused-vars
+    7:10  error  'CourseContent' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   59:23  error  '_' is defined but never used                                                                                            @typescript-eslint/no-unused-vars
+  160:48  error  'args' is defined but never used  @typescript-eslint/no-unused-vars
+  163:23  error  'command' is defined but never used       @typescript-eslint/no-unused-vars
+    5:10  error  'SCORMPackageBuilder' is defined but never used  @typescript-eslint/no-unused-vars
+   85:11  error  'youtubeUrl' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   86:11  error  'embedUrl' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  157:11  error  'user' is assigned a value but never used        @typescript-eslint/no-unused-vars
+    7:10  error  'vi' is defined but never used            @typescript-eslint/no-unused-vars
+    8:10  error  'vi' is defined but never used  @typescript-eslint/no-unused-vars
+   36:9   error  'testBackupPath' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   42:41  error  'args' is defined but never used                     @typescript-eslint/no-unused-vars
+   68:41  error  'args' is defined but never used                     @typescript-eslint/no-unused-vars
+  171:41  error  'args' is defined but never used                     @typescript-eslint/no-unused-vars
+  298:41  error  'args' is defined but never used                     @typescript-eslint/no-unused-vars
+  33:11  error  'styles' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  86:11  error  'styles' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  238:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+    5:10  error    'COLORS' is defined but never used                                                                                             @typescript-eslint/no-unused-vars
+    18:10   error    'FileAudio' is defined but never used                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+    18:90   error    'ChevronDown' is defined but never used                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+    18:103  error    'ChevronUp' is defined but never used                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+    18:123  error    'Pause' is defined but never used                                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+    18:130  error    'X' is defined but never used                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+    21:10   error    'tokens' is defined but never used                                                                                                                                                                                                  @typescript-eslint/no-unused-vars
+   168:5    error    'getMediaForPage' is assigned a value but never used                                                                                                                                                                                @typescript-eslint/no-unused-vars
+   177:27   error    'notifyError' is assigned a value but never used                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+   237:10   error    'editingText' is assigned a value but never used                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+   243:10   error    'showInstructions' is assigned a value but never used                                                                                                                                                                               @typescript-eslint/no-unused-vars
+   243:28   error    'setShowInstructions' is assigned a value but never used                                                                                                                                                                            @typescript-eslint/no-unused-vars
+   245:10   error    'isBulkAudioUploading' is assigned a value but never used                                                                                                                                                                           @typescript-eslint/no-unused-vars
+   340:5    error    'isRecording' is defined but never used                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   341:5    error    'recordingId' is defined but never used                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   726:13   error    'hasValidCaptionIds' is assigned a value but never used                                                                                                                                                                             @typescript-eslint/no-unused-vars
+  2499:21   error    'prev' is defined but never used                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+  2711:17   error    'processedCount' is assigned a value but never used                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  2733:23   error    'prev' is defined but never used                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+  2978:27   error    'audioFile' is assigned a value but never used                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+   10:3   error    'Input' is defined but never used                                                                                                                               @typescript-eslint/no-unused-vars
+   20:10  error    'tokens' is defined but never used                                                                                                                              @typescript-eslint/no-unused-vars
+  6:19  error  'setMetrics' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   43:14  error  'error' is defined but never used         @typescript-eslint/no-unused-vars
+  2:10  error  'tokens' is defined but never used  @typescript-eslint/no-unused-vars
+   1:27  error  'useRef' is defined but never used     @typescript-eslint/no-unused-vars
+   1:35  error  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+  57:34  error    'action' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+  63:34  error    'action' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+  66:31  error    'action' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+   20:10  error  'tokens' is defined but never used        @typescript-eslint/no-unused-vars
+   24:3   error  'getTopicById' is defined but never used  @typescript-eslint/no-unused-vars
+     7:3    error    'Input' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+     8:3    error    'ButtonGroup' is defined but never used                                                                     @typescript-eslint/no-unused-vars
+    13:3    error    'Modal' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+    17:29   error    'CheckCircle' is defined but never used                                                                     @typescript-eslint/no-unused-vars
+    17:108  error    'Edit2' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+    17:122  error    'X' is defined but never used                                                                               @typescript-eslint/no-unused-vars
+   253:16   error    'e' is defined but never used                                                                               @typescript-eslint/no-unused-vars
+   459:18   error    'finalError' is defined but never used                                                                      @typescript-eslint/no-unused-vars
+   493:22   error    'newlineError' is defined but never used                                                                    @typescript-eslint/no-unused-vars
+   676:14   error    'error' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+   992:69   error    'qIdx' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+    27:10  error    'tokens' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+    74:7   error    '_getPageMedia' is assigned a value but never used                                                                 @typescript-eslint/no-unused-vars
+   112:3   error    'courseSeedData' is defined but never used                                                                         @typescript-eslint/no-unused-vars
+   123:40  error    'info' is assigned a value but never used                                                                          @typescript-eslint/no-unused-vars
+   131:10  error    'mediaSource' is assigned a value but never used                                                                   @typescript-eslint/no-unused-vars
+   131:23  error    'setMediaSource' is assigned a value but never used                                                                @typescript-eslint/no-unused-vars
+   138:10  error    'contentHistory' is assigned a value but never used                                                                @typescript-eslint/no-unused-vars
+   138:26  error    'setContentHistory' is assigned a value but never used                                                             @typescript-eslint/no-unused-vars
+   140:10  error    'existingMediaIdMap' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+   140:30  error    'setExistingMediaIdMap' is assigned a value but never used                                                         @typescript-eslint/no-unused-vars
+   141:9   error    'currentlyLoadingRef' is assigned a value but never used                                                           @typescript-eslint/no-unused-vars
+   143:10  error    'stickyReminders' is assigned a value but never used                                                               @typescript-eslint/no-unused-vars
+   143:27  error    'setStickyReminders' is assigned a value but never used                                                            @typescript-eslint/no-unused-vars
+   149:9   error    'fileInputIdRef' is assigned a value but never used                                                                @typescript-eslint/no-unused-vars
+   188:5   error    'getMedia' is assigned a value but never used                                                                      @typescript-eslint/no-unused-vars
+   194:9   error    'storage' is assigned a value but never used                                                                       @typescript-eslint/no-unused-vars
+   269:9   error    'getMediaType' is assigned a value but never used                                                                  @typescript-eslint/no-unused-vars
+   339:9   error    'handleToggleSelection' is assigned a value but never used                                                         @typescript-eslint/no-unused-vars
+   802:11  error    'existingMedia' is assigned a value but never used                                                                 @typescript-eslint/no-unused-vars
+   959:9   error    'handleAddSelectedMedia' is assigned a value but never used                                                        @typescript-eslint/no-unused-vars
+   969:11  error    'allResults' is assigned a value but never used                                                                    @typescript-eslint/no-unused-vars
+  126:17  error  'parsed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  97:53  error  'index' is defined but never used  @typescript-eslint/no-unused-vars
+   99:13  error  '_onExport' is defined but never used  @typescript-eslint/no-unused-vars
+  100:13  error  '_onImport' is defined but never used  @typescript-eslint/no-unused-vars
+    4:10  error    'tokens' is defined but never used                                                                                                                                                                 @typescript-eslint/no-unused-vars
+    16:72  error    'Zap' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+    69:12  error    'error' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+    91:10  error    'runningAutomation' is assigned a value but never used                                                           @typescript-eslint/no-unused-vars
+    91:29  error    'setRunningAutomation' is assigned a value but never used                                                        @typescript-eslint/no-unused-vars
+    92:10  error    'showAutomationMenu' is assigned a value but never used                                                          @typescript-eslint/no-unused-vars
+    92:30  error    'setShowAutomationMenu' is assigned a value but never used                                                       @typescript-eslint/no-unused-vars
+    93:23  error    'setIsRecording' is assigned a value but never used                                                              @typescript-eslint/no-unused-vars
+   558:20  error    'innerError' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+   605:18  error    'handleRunAutomation' is defined but never used                                                                  @typescript-eslint/no-unused-vars
+   48:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  156:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+  19:10  error  'editorContent' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   49:3   error  'onNext' is defined but never used                         @typescript-eslint/no-unused-vars
+   68:9   error  'audioAutoplay' is assigned a value but never used         @typescript-eslint/no-unused-vars
+   70:29  error  'setMediaLoadProgress' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   71:26  error  'setLoadingDetails' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   82:5   error  'getMediaForPage' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   83:5   error  'createBlobUrl' is assigned a value but never used         @typescript-eslint/no-unused-vars
+   85:46  error  'progress' is assigned a value but never used              @typescript-eslint/no-unused-vars
+  213:51  error  'mediaType' is defined but never used                      @typescript-eslint/no-unused-vars
+  213:81  error  'pageId' is defined but never used                         @typescript-eslint/no-unused-vars
+  231:15  error  'blob' is assigned a value but never used                  @typescript-eslint/no-unused-vars
+  595:50  error  'index' is defined but never used                          @typescript-eslint/no-unused-vars
+  658:13  error  'estimatedSeconds' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  52:11  error  '_onNext' is defined but never used  @typescript-eslint/no-unused-vars
+  53:11  error  '_onBack' is defined but never used  @typescript-eslint/no-unused-vars
+  11:10  error  'Badge' is defined but never used  @typescript-eslint/no-unused-vars
+   3:36  error  'Wand2' is defined but never used                       @typescript-eslint/no-unused-vars
+  31:3   error  'schema' is defined but never used                      @typescript-eslint/no-unused-vars
+  32:3   error  'showMinimap' is defined but never used                 @typescript-eslint/no-unused-vars
+  36:10  error  'showAutoFixButton' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  37:10  error  'autoFixApplied' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   12:10  error    'tokens' is defined but never used                                                                          @typescript-eslint/no-unused-vars
+   53:74  error    '_onClose' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   31:10  error  'render' is defined but never used  @typescript-eslint/no-unused-vars
+   31:18  error  'screen' is defined but never used  @typescript-eslint/no-unused-vars
+  212:58  error  'data' is defined but never used    @typescript-eslint/no-unused-vars
+   71:52  error  'size' is defined but never used                                     @typescript-eslint/no-unused-vars
+  200:15  error  'generateProgressivePreviewHTML' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   24:37  error  'waitFor' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+   25:8   error  'userEvent' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   33:8   error  'ErrorMessage' is defined but never used                                                                             @typescript-eslint/no-unused-vars
+   24:8   error  'userEvent' is defined but never used                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+   48:9   error  'mockOnSave' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   49:9   error  'mockOnOpen' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  220:15  error  'container' is assigned a value but never used   @typescript-eslint/no-unused-vars
+   23:8   error  'userEvent' is defined but never used          @typescript-eslint/no-unused-vars
+  408:15  error  'rerender' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   25:10  error  'NotificationProvider' is defined but never used  @typescript-eslint/no-unused-vars
+  209:13  error  'durationElements' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  253:13  error  'mediaElements' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   25:26  error  'fireEvent' is defined but never used             @typescript-eslint/no-unused-vars
+  594:13  error  'mockStorage' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  703:13  error  'mockStorage' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  407:38  error  'index' is defined but never used         @typescript-eslint/no-unused-vars
+  700:13  error  'invalidFile' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  720:13  error  'user' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  762:13  error  'user' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  430:15  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  41:12  error  'content' is defined but never used       @typescript-eslint/no-unused-vars
+   22:8   error  'userEvent' is defined but never used           @typescript-eslint/no-unused-vars
+  122:15  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  128:15  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  134:15  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  140:15  error  'container' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   61:15   error  'isCorrect' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  11:3  error  'Download' is defined but never used      @typescript-eslint/no-unused-vars
+  12:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  13:3  error  'ChevronRight' is defined but never used  @typescript-eslint/no-unused-vars
+   2:10  error  'MediaEnhancementMockup' is defined but never used  @typescript-eslint/no-unused-vars
+   3:10  error  'VideoSearchMockup' is defined but never used       @typescript-eslint/no-unused-vars
+   4:10  error  'AIToolsMockup' is defined but never used           @typescript-eslint/no-unused-vars
+  11:3   error  'ChevronLeft' is defined but never used             @typescript-eslint/no-unused-vars
+  12:3   error  'ChevronRight' is defined but never used            @typescript-eslint/no-unused-vars
+  6:3  error  'Search' is defined but never used  @typescript-eslint/no-unused-vars
+  8:3  error  'Clock' is defined but never used   @typescript-eslint/no-unused-vars
+  36:12  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+  113:43  error  'key' is defined but never used  @typescript-eslint/no-unused-vars
+  51:12  error  'TestColorKey' is defined but never used          @typescript-eslint/no-unused-vars
+  52:12  error  'TestActivityColorKey' is defined but never used  @typescript-eslint/no-unused-vars
+  53:12  error  'TestAlertColorKey' is defined but never used     @typescript-eslint/no-unused-vars
+  62:12  error  'TestSpacingKey' is defined but never used        @typescript-eslint/no-unused-vars
+  63:12  error  'TestBreakpointKey' is defined but never used     @typescript-eslint/no-unused-vars
+  74:12  error  'TestDurationKey' is defined but never used       @typescript-eslint/no-unused-vars
+    2:18  error  'screen' is defined but never used                     @typescript-eslint/no-unused-vars
+    2:26  error  'waitFor' is defined but never used                    @typescript-eslint/no-unused-vars
+    4:10  error  'PersistentStorageProvider' is defined but never used  @typescript-eslint/no-unused-vars
+   6:10  error  'MediaService' is defined but never used  @typescript-eslint/no-unused-vars
+   2:10  error  'render' is defined but never used        @typescript-eslint/no-unused-vars
+   2:18  error  'screen' is defined but never used        @typescript-eslint/no-unused-vars
+    5:10  error  'MediaService' is defined but never used  @typescript-eslint/no-unused-vars
+    8:15  error  'MediaType' is defined but never used     @typescript-eslint/no-unused-vars
+   26:29  error  'blob' is defined but never used          @typescript-eslint/no-unused-vars
+    9:5   error  'progressCallbackCapture' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   27:18  error  'err' is defined but never used                               @typescript-eslint/no-unused-vars
+  59:9   error  'mockInvoke' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  148:9   error  'savedBlob' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  124:13  error  'firstMediaRecorder' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  200:13  error  'timeAfterStop' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  418:13  error  'firstPreviewUrl' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  1:23  error  'waitFor' is defined but never used  @typescript-eslint/no-unused-vars
+  183:11  error  'pendingCallback' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  209:13  error  'pendingNav' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   16:7   error  'consoleErrorSpy' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  118:15  error  'result' is assigned a value but never used           @typescript-eslint/no-unused-vars
+  352:23  error  'arrayResult' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  366:23  error  'stringResult' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  386:23  error  'complexResult' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  72:26  error  '_' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  106:29  error  '_handler' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+  14:41  error  'blob' is defined but never used          @typescript-eslint/no-unused-vars
+     2:16  error  'save' is defined but never used            @typescript-eslint/no-unused-vars
+     4:28  error  'MediaFile' is defined but never used       @typescript-eslint/no-unused-vars
+     4:39  error  'SaveResult' is defined but never used      @typescript-eslint/no-unused-vars
+     4:63  error  'DeleteResult' is defined but never used    @typescript-eslint/no-unused-vars
+     5:15  error  'MediaReference' is defined but never used  @typescript-eslint/no-unused-vars
+  1091:47  error  'options' is defined but never used         @typescript-eslint/no-unused-vars
+   18:37  error  'projectsDir' is defined but never used   @typescript-eslint/no-unused-vars
+  117:26  error  '_callback' is defined but never used     @typescript-eslint/no-unused-vars
+  136:47  error  'options' is defined but never used       @typescript-eslint/no-unused-vars
+  179:30  error  'zipBlob' is defined but never used       @typescript-eslint/no-unused-vars
+  212:14  error  'error' is defined but never used         @typescript-eslint/no-unused-vars
+   12:41  error  'blob' is defined but never used                @typescript-eslint/no-unused-vars
+   92:13  error  'startTime' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  146:13  error  'startTime' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  272:43  error  'blob' is defined but never used                @typescript-eslint/no-unused-vars
+  308:43  error  'url' is defined but never used                 @typescript-eslint/no-unused-vars
+  211:13  error  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   27:49  error  'args' is defined but never used                       @typescript-eslint/no-unused-vars
+   70:57  error  'delay' is defined but never used                      @typescript-eslint/no-unused-vars
+  112:11  error  'progressCallback' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  214:16  error  'e' is defined but never used                          @typescript-eslint/no-unused-vars
+    3:15  error  'Project' is defined but never used           @typescript-eslint/no-unused-vars
+  155:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  414:16  error  'error' is defined but never used             @typescript-eslint/no-unused-vars
+  479:16  error  'error' is defined but never used             @typescript-eslint/no-unused-vars
+  577:13  error  'before' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  582:13  error  'after' is assigned a value but never used    @typescript-eslint/no-unused-vars
+   20:10  error  'invoke' is defined but never used            @typescript-eslint/no-unused-vars
+   21:10  error  'open' is defined but never used              @typescript-eslint/no-unused-vars
+   21:16  error  'save' is defined but never used              @typescript-eslint/no-unused-vars
+  673:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   27:49  error  'args' is defined but never used          @typescript-eslint/no-unused-vars
+  151:13  error  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   24:48  error  'afterEach' is defined but never used     @typescript-eslint/no-unused-vars
+   25:10  error  'invoke' is defined but never used        @typescript-eslint/no-unused-vars
+   82:16  error  'error' is defined but never used         @typescript-eslint/no-unused-vars
+   26:41  error  'blob' is defined but never used              @typescript-eslint/no-unused-vars
+   82:51  error  'args' is defined but never used              @typescript-eslint/no-unused-vars
+  113:13  error  'mediaId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  134:13  error  'url1' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  35:9  error  'mockInvoke' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  308:13  error  'results' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   18:48  error  'afterEach' is defined but never used     @typescript-eslint/no-unused-vars
+   20:10  error  'invoke' is defined but never used        @typescript-eslint/no-unused-vars
+   21:15  error  'MediaType' is defined but never used     @typescript-eslint/no-unused-vars
+   66:23  error  'blob' is defined but never used          @typescript-eslint/no-unused-vars
+    3:10  error  'invoke' is defined but never used              @typescript-eslint/no-unused-vars
+   54:13  error  'testMedia' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  132:13  error  'blobUrl' is assigned a value but never used    @typescript-eslint/no-unused-vars
+   3:10  error  'BlobURLManager' is defined but never used  @typescript-eslint/no-unused-vars
+  24:27  error  'blob' is defined but never used            @typescript-eslint/no-unused-vars
+  1:44  error  'vi' is defined but never used         @typescript-eslint/no-unused-vars
+  3:15  error  'MediaItem' is defined but never used  @typescript-eslint/no-unused-vars
+  187:11  error  'capturedMetadata' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  278:33  error  'metadata' is defined but never used                   @typescript-eslint/no-unused-vars
+   74:48  error  'command' is defined but never used       @typescript-eslint/no-unused-vars
+   74:57  error  'params' is defined but never used        @typescript-eslint/no-unused-vars
+   1:48  error  'afterEach' is defined but never used     @typescript-eslint/no-unused-vars
+   3:10  error  'FileStorage' is defined but never used   @typescript-eslint/no-unused-vars
+    3:28  error  'SavedProject' is defined but never used           @typescript-eslint/no-unused-vars
+  314:13  error  'importResult' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   24:10  error  'invoke' is defined but never used        @typescript-eslint/no-unused-vars
+  20:48  error  'afterEach' is defined but never used     @typescript-eslint/no-unused-vars
+  21:10  error  'invoke' is defined but never used        @typescript-eslint/no-unused-vars
+   21:10  error  'invoke' is defined but never used            @typescript-eslint/no-unused-vars
+   22:10  error  'invoke' is defined but never used        @typescript-eslint/no-unused-vars
+   66:66  error  'args' is defined but never used          @typescript-eslint/no-unused-vars
+  168:66  error  'args' is defined but never used          @typescript-eslint/no-unused-vars
+   19:32  error  'vi' is defined but never used                      @typescript-eslint/no-unused-vars
+   27:3   error  'CourseContentUnion' is defined but never used      @typescript-eslint/no-unused-vars
+   28:3   error  'KnowledgeCheckQuestion' is defined but never used  @typescript-eslint/no-unused-vars
+   29:3   error  'Media' is defined but never used                   @typescript-eslint/no-unused-vars
+   32:15  error  'EnhancedCourseContent' is defined but never used   @typescript-eslint/no-unused-vars
+  569:56  error  'index' is defined but never used                   @typescript-eslint/no-unused-vars
+  17:22  error  'id' is defined but never used  @typescript-eslint/no-unused-vars
+   81:13  error  'absolutePath' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   96:13  error  'fullPath' is assigned a value but never used      @typescript-eslint/no-unused-vars
+   53:7   error  'user' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  182:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  209:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  233:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  266:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  324:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  343:16  error  'error' is defined but never used             @typescript-eslint/no-unused-vars
+  355:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  371:13  error  'project' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   84:56  error  'args' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   13:3   error  'preloadMediaCache' is defined but never used  @typescript-eslint/no-unused-vars
+  1:32  error  'vi' is defined but never used          @typescript-eslint/no-unused-vars
+  1:36  error  'beforeEach' is defined but never used  @typescript-eslint/no-unused-vars
+  438:13  error  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+    2:10  error  'getExtensionFromMimeType' is defined but never used   @typescript-eslint/no-unused-vars
+   26:28  error  'mime' is defined but never used                       @typescript-eslint/no-unused-vars
+   26:34  error  'expected' is defined but never used                   @typescript-eslint/no-unused-vars
+   53:13  error  'mediaFiles' is assigned a value but never used        @typescript-eslint/no-unused-vars
+   58:13  error  'expectedFilename' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   18:10  error  'resolveMediaUrl' is defined but never used           @typescript-eslint/no-unused-vars
+   18:52  error  '_projectId' is defined but never used                @typescript-eslint/no-unused-vars
+   56:3   error  'projectId' is defined but never used                 @typescript-eslint/no-unused-vars
+  167:13  error  'topicAudioIndex' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   39:14  error  'tauriError' is defined but never used    @typescript-eslint/no-unused-vars
+   51:16  error  'fetchError' is defined but never used    @typescript-eslint/no-unused-vars
+   1:10  error  'convertFileSrc' is defined but never used  @typescript-eslint/no-unused-vars
+  95:22  error  'hover' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  95:43  error  'disabled' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  74:3   error  'mockContext' is defined but never used   @typescript-eslint/no-unused-vars
+    2:15  error  'CourseContent' is defined but never used   @typescript-eslint/no-unused-vars
+    3:15  error  'CourseMetadata' is defined but never used  @typescript-eslint/no-unused-vars
+  208:45  error  'packageBuffer' is defined but never used   @typescript-eslint/no-unused-vars
+  13:79  error  'blob' is defined but never used           @typescript-eslint/no-unused-vars
+  51:11  error  'url2' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  52:11  error  'url3' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   15:8   error  'blob' is defined but never used                @typescript-eslint/no-unused-vars
+   30:13  error  'url1' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   31:13  error  'url2' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   32:13  error  'url3' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  191:13  error  'lockedUrl' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  87:13  error  'jsonString' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  136:11  error  'startTime' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   13:41  error  'blob' is defined but never used           @typescript-eslint/no-unused-vars
+   65:11  error  'url' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  108:11  error  'url1' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  109:11  error  'url2' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  245:13  error  'url2' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  259:13  error  'url' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  75:9   error  'parsed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  2:65  error  'RetryError' is defined but never used  @typescript-eslint/no-unused-vars
+    9:7   error  'consoleDebugSpy' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   1:32  error  'vi' is defined but never used                                                                                       @typescript-eslint/no-unused-vars
+    8:3  error  'URLValidationError' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+  272:16  error  'error' is defined but never used         @typescript-eslint/no-unused-vars
+   39:12  error  'e' is defined but never used                                                              @typescript-eslint/no-unused-vars
+   50:7   error  'stringDelimiter' is assigned a value but never used                                       @typescript-eslint/no-unused-vars
+   56:11  error  'prevChar' is assigned a value but never used                                              @typescript-eslint/no-unused-vars
+   57:11  error  'nextChar' is assigned a value but never used                                              @typescript-eslint/no-unused-vars
+  103:9   error  'keyBuffer' is assigned a value but never used                                             @typescript-eslint/no-unused-vars
+  183:9   error  'valueBuffer' is assigned a value but never used                                           @typescript-eslint/no-unused-vars
+   86:12  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+  201:12  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+  140:14  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+  13:30  error  '_config' is defined but never used       @typescript-eslint/no-unused-vars
+   25:14  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+   78:14  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+  221:12  error  'error' is defined but never used  @typescript-eslint/no-unused-vars

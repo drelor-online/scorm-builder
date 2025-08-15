@@ -4,6 +4,7 @@ import { PersistentStorageProvider } from '../contexts/PersistentStorageContext'
 import { UnifiedMediaProvider } from '../contexts/UnifiedMediaContext'
 import { StepNavigationProvider } from '../contexts/StepNavigationContext'
 import { AutoSaveProvider } from '../contexts/AutoSaveContext'
+import { NotificationProvider } from '../contexts/NotificationContext'
 
 interface AllTheProvidersProps {
   children: React.ReactNode
@@ -13,15 +14,17 @@ interface AllTheProvidersProps {
 // Provider wrapper that includes all necessary providers
 export const AllTheProviders: React.FC<AllTheProvidersProps> = ({ children, projectId = 'test-project' }) => {
   return (
-    <PersistentStorageProvider>
-      <UnifiedMediaProvider projectId={projectId}>
-        <StepNavigationProvider>
-          <AutoSaveProvider isSaving={false} lastSaved={null} hasUnsavedChanges={false}>
-            {children}
-          </AutoSaveProvider>
-        </StepNavigationProvider>
-      </UnifiedMediaProvider>
-    </PersistentStorageProvider>
+    <NotificationProvider>
+      <PersistentStorageProvider>
+        <UnifiedMediaProvider projectId={projectId}>
+          <StepNavigationProvider>
+            <AutoSaveProvider isSaving={false} lastSaved={null} hasUnsavedChanges={false}>
+              {children}
+            </AutoSaveProvider>
+          </StepNavigationProvider>
+        </UnifiedMediaProvider>
+      </PersistentStorageProvider>
+    </NotificationProvider>
   )
 }
 

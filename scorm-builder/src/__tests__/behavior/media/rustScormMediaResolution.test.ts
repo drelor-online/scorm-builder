@@ -77,7 +77,7 @@ describe('Rust SCORM Generator - Media Resolution', () => {
       content: new Uint8Array([137, 80, 78, 71]) // PNG header
     });
     
-    const courseContent = {
+    const _courseContent = {
       title: 'Test Course',
       topics: [{
         id: 'topic-1',
@@ -98,7 +98,7 @@ describe('Rust SCORM Generator - Media Resolution', () => {
     // 3. Include media files with content
     // 4. Update URLs to relative paths
     
-    const expectedOutput = {
+    const _expectedOutput = {
       topics: [{
         media: [{
           id: 'media-456',
@@ -120,7 +120,7 @@ describe('Rust SCORM Generator - Media Resolution', () => {
   });
 
   it('should handle multiple media files across pages', () => {
-    const courseWithMultipleMedia = {
+    const _courseWithMultipleMedia = {
       welcome_page: {
         media: [
           { id: 'img-1', type: 'image', url: 'blob:1', title: 'Welcome' }

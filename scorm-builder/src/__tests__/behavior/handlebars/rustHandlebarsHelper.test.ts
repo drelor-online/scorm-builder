@@ -99,7 +99,7 @@ describe('Rust Handlebars eq helper - Knowledge Check Rendering', () => {
     // This test demonstrates the core issue:
     // The eq helper in Rust returns "true" as a string instead of enabling the block
     
-    const template = `
+    const _template = `
 {{#each knowledge_check_questions}}
   {{#if (eq type "multiple-choice")}}
     <div class="mc-question">{{text}}</div>
@@ -109,7 +109,7 @@ describe('Rust Handlebars eq helper - Knowledge Check Rendering', () => {
   {{/if}}
 {{/each}}`;
     
-    const data = {
+    const _data = {
       knowledge_check_questions: [
         { type: 'multiple-choice', text: 'MC Question' },
         { type: 'fill-in-the-blank', text: 'FIB Question' }

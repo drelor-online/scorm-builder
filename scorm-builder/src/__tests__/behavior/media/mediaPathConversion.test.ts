@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { convertToCourseContent } from '../../../services/courseContentConverter';
 
 // Mock MediaStore
-const mockMediaStore = {
+const _mockMediaStore = {
   getMedia: vi.fn(),
   getFileContent: vi.fn(),
   getAllMedia: vi.fn()

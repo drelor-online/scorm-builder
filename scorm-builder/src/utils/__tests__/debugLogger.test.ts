@@ -120,7 +120,7 @@ describe('debugLogger', () => {
   describe('enable/disable', () => {
     it('should enable debug mode', () => {
       // Import fresh to test the actual implementation
-      const { debugLogger } = require('../debugLogger')
+      // debugLogger is already imported at the top
       debugLogger.enable()
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('debugMode', 'true')
@@ -143,7 +143,7 @@ describe('debugLogger', () => {
     })
 
     it('should enable performance monitoring when requested', () => {
-      const { debugLogger } = require('../debugLogger')
+      // debugLogger is already imported at the top
       debugLogger.enablePerformanceMonitoring()
       
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('performanceMonitoring', 'true')

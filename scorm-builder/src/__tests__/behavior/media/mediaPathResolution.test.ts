@@ -147,7 +147,7 @@ describe('Media Path Resolution in SCORM Package', () => {
 
   it('should convert MediaStore blob URLs to file paths', async () => {
     // Test the specific case of blob URL conversion
-    const mediaWithBlobUrl = {
+    const _mediaWithBlobUrl = {
       id: 'media-456def',
       type: 'image',
       url: 'blob:http://localhost:1420/456def-789ghi',
