@@ -1378,10 +1378,22 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         }
         
         return {
-          type: 'multiple-choice', // Enhanced assessment is always multiple choice
+          type: (q as any).type || 'multiple-choice', // Use actual question type, not always multiple-choice
           text: q.question, // Enhanced format uses 'question'
           options: q.options,
-          correct_answer: q.options[q.correctAnswer] || String(q.correctAnswer),
+          correct_answer: (() => {
+            // Handle different question types properly
+            if ((q as any).type === 'fill-in-the-blank') {
+              // For fill-in-blank, correctAnswer is already the string answer
+              return String(q.correctAnswer);
+            } else if (typeof q.correctAnswer === 'number') {
+              // For MC/TF with numeric index, use it to look up the option
+              return q.options[q.correctAnswer] || String(q.correctAnswer);
+            } else {
+              // Fallback for string correctAnswer (shouldn't happen for MC/TF but handle gracefully)
+              return String(q.correctAnswer);
+            }
+          })(),
           explanation: '', // Enhanced format doesn't have explanations for assessment
           correct_feedback: (q as any).correct_feedback || (q as any).correctFeedback || 'Correct!',
           incorrect_feedback: (q as any).incorrect_feedback || (q as any).incorrectFeedback || 'Not quite. Try again!',
