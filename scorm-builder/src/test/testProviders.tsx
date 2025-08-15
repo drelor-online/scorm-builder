@@ -5,6 +5,7 @@ import { UnifiedMediaProvider } from '../contexts/UnifiedMediaContext'
 import { StepNavigationProvider } from '../contexts/StepNavigationContext'
 import { AutoSaveProvider } from '../contexts/AutoSaveContext'
 import { NotificationProvider } from '../contexts/NotificationContext'
+import { UnsavedChangesProvider } from '../contexts/UnsavedChangesContext'
 
 interface AllTheProvidersProps {
   children: React.ReactNode
@@ -18,9 +19,11 @@ export const AllTheProviders: React.FC<AllTheProvidersProps> = ({ children, proj
       <PersistentStorageProvider>
         <UnifiedMediaProvider projectId={projectId}>
           <StepNavigationProvider>
-            <AutoSaveProvider isSaving={false} lastSaved={null} hasUnsavedChanges={false}>
-              {children}
-            </AutoSaveProvider>
+            <UnsavedChangesProvider>
+              <AutoSaveProvider isSaving={false} lastSaved={null} hasUnsavedChanges={false}>
+                {children}
+              </AutoSaveProvider>
+            </UnsavedChangesProvider>
           </StepNavigationProvider>
         </UnifiedMediaProvider>
       </PersistentStorageProvider>

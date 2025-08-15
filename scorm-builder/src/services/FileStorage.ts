@@ -470,16 +470,20 @@ export class FileStorage {
           }
         }
         
-        // Validate course_content has required fields
-        if (content && typeof content === 'object') {
+        // Validate course_content has required fields (only if it looks like full course content)
+        if (content && typeof content === 'object' && contentId === 'course-content') {
           const requiredFields = ['welcomePage', 'learningObjectivesPage', 'topics', 'assessment'];
           const missingFields = requiredFields.filter(field => !(field in content));
           
           if (missingFields.length > 0) {
-            debugLogger.warn('FileStorage.getContent', 'Missing required fields in course content', {
-              missingFields,
-              presentFields: Object.keys(content).slice(0, 10)
-            });
+            // Only warn if this looks like it should be complete course content
+            const hasAnyContentFields = requiredFields.some(field => field in content);
+            if (hasAnyContentFields) {
+              debugLogger.warn('FileStorage.getContent', 'Partial course content detected', {
+                missingFields,
+                presentFields: Object.keys(content).slice(0, 10)
+              });
+            }
           } else {
             debugLogger.debug('FileStorage.getContent', 'Course content validated', {
               fields: Object.keys(content).slice(0, 10)

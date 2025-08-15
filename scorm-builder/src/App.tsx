@@ -264,7 +264,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         courseTitle: courseSeedData.courseTitle,
         courseSeedData: courseSeedData,
         courseContent: courseContent || undefined,
-        currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
+        currentStep: currentStep,
         lastModified: lastSavedTimeRef.current,
         mediaFiles: EMPTY_MEDIA_FILES,
         audioFiles: EMPTY_AUDIO_FILES
@@ -286,7 +286,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       courseTitle: courseSeedData.courseTitle,
       courseSeedData: courseSeedData,
       courseContent: courseContent || undefined,
-      currentStep: stepNumbers[currentStep as keyof typeof stepNumbers],
+      currentStep: currentStep,
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
       audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
@@ -299,7 +299,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         template: 'None',
         templateTopics: EMPTY_CUSTOM_TOPICS // Use stable reference
       },
-      currentStep: 0,
+      currentStep: 'seed',
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
       audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
@@ -368,6 +368,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         projectId: storage.currentProjectId,
         hasCourseSeedData: !!courseSeedData
       })
+      return
+    }
+
+    // Additional guard: if we already have course seed data, skip loading unless project changed
+    if (courseSeedData && courseSeedData.courseTitle) {
+      debugLogger.info('App.loadProject', 'Skipping load - already have seed data for current project')
+      hasLoadedProjectRef.current = storage.currentProjectId // Mark as loaded
       return
     }
 

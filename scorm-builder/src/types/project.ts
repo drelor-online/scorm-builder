@@ -26,7 +26,7 @@ export interface ProjectData {
   scormSettings?: ScormSettings
   
   // Workflow state
-  currentStep: number
+  currentStep: string
   lastModified: string
   
   // Additional metadata
@@ -69,7 +69,7 @@ export interface SavedProject {
   lastModified: string
   template: string
   preview: string
-  currentStep: number
+  currentStep: string
   createdAt?: string
   size?: number
 }

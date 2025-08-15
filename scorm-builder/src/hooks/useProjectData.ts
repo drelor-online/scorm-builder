@@ -18,7 +18,7 @@ const DEFAULT_PROJECT_DATA: ProjectData = {
     template: 'None',
     templateTopics: []
   },
-  currentStep: 0,
+  currentStep: 'seed',
   lastModified: new Date().toISOString(),
   mediaFiles: {},
   audioFiles: {}
@@ -46,7 +46,7 @@ export function useProjectData({
       courseTitle: courseSeedData.courseTitle,
       courseSeedData: courseSeedData,
       courseContent: courseContent || undefined,
-      currentStep: STEP_NUMBERS[currentStep as keyof typeof STEP_NUMBERS],
+      currentStep: currentStep,
       lastModified: new Date().toISOString(),
       mediaFiles: {},
       audioFiles: {}
