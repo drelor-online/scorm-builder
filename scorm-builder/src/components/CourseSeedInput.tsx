@@ -108,24 +108,6 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTopicsEditable, setIsTopicsEditable] = useState(true)
   
-  // Sync state when initialData changes (for when component receives data after mounting)
-  useEffect(() => {
-    if (initialData?.courseTitle && !courseTitle) {
-      debugLogger.info('CourseSeedInput', 'Updating title from initialData', {
-        newTitle: initialData.courseTitle
-      });
-      setCourseTitle(initialData.courseTitle);
-    }
-    if (initialData?.difficulty && difficulty === 3) {
-      setDifficulty(initialData.difficulty);
-    }
-    if (initialData?.template && template === 'None') {
-      setTemplate(initialData.template);
-    }
-    if (initialData?.customTopics && !customTopics) {
-      setCustomTopics(initialData.customTopics.join('\n'));
-    }
-  }, [initialData])
   
   // Load custom templates from file storage
   useEffect(() => {
@@ -216,6 +198,34 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       difficulty
     })
   }, [template, customTopics, courseTitle, difficulty])
+  
+  // Sync state when initialData changes (for when component receives data after mounting)
+  useEffect(() => {
+    if (initialData) {
+      debugLogger.info('CourseSeedInput', 'Syncing state with initialData', {
+        hasTitle: !!initialData.courseTitle,
+        hasDifficulty: !!initialData.difficulty,
+        hasTemplate: !!initialData.template,
+        hasCustomTopics: !!initialData.customTopics?.length
+      });
+      
+      const newValues = {
+        courseTitle: initialData.courseTitle || '',
+        difficulty: initialData.difficulty || 3,
+        template: initialData.template || 'None',
+        customTopics: initialData.customTopics?.join('\n') || ''
+      }
+      
+      // Update all fields from initialData, overriding current state
+      setCourseTitle(newValues.courseTitle)
+      setDifficulty(newValues.difficulty)
+      setTemplate(newValues.template)
+      setCustomTopics(newValues.customTopics)
+      
+      // Update the form's initial values to prevent unsaved changes warnings
+      updateInitialValues(newValues)
+    }
+  }, [initialData, updateInitialValues])
   
   // Track if we've mounted to prevent initial save
   const hasMountedRef = useRef(false)
