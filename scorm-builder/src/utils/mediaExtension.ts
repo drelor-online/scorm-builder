@@ -137,7 +137,7 @@ export async function detectMediaTypeFromBlob(blob: Blob): Promise<{
           isImage = true;
         }
       }
-    } catch (e) {
+    } catch {
       // If reading fails, fall back to default
     }
   }

@@ -94,6 +94,7 @@ describe('Handlebars eq helper behavior', () => {
     expect(topicHtml).toContain('The sky is ___');
     
     // If these assertions fail, it means the eq helper is not working as a block helper
+    */
   });
 
   it('should test Rust eq helper directly with Tauri command', async () => {

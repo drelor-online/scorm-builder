@@ -22,7 +22,7 @@ class UltraSimpleLogger {
         // Only keep the last 100 logs to avoid flooding on startup
         this.logs = allLogs.slice(-100)
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
     
@@ -75,7 +75,7 @@ class UltraSimpleLogger {
     try {
       localStorage.setItem('debug_logs', JSON.stringify(this.logs))
       localStorage.setItem('last_debug_log', logLine)
-    } catch (e) {
+    } catch {
       // Ignore quota errors
     }
     

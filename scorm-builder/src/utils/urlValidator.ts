@@ -218,7 +218,7 @@ export function validateYouTubeURL(url: string): { valid: boolean; videoId?: str
     }
     
     return { valid: true, videoId }
-  } catch (error) {
+  } catch {
     return { valid: false, reason: 'Failed to parse YouTube URL' }
   }
 }

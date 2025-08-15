@@ -22,11 +22,11 @@ export class PathTraversalError extends Error {
 }
 
 const DANGEROUS_PATTERNS = [
-  /\.\.[\/\\]/g,  // ../ or ..\
-  /^\//,          // Absolute paths starting with /
-  /^[A-Za-z]:[\/\\]/, // Windows absolute paths
+  /\\.\\.[/\\\\]/g,  // ../ or ..\
+  /^/,          // Absolute paths starting with /
+  /^[A-Za-z]:[/\\\\]/, // Windows absolute paths
   /^\\\\/, // UNC paths
-  /\0/g,   // Null bytes
+  /\\x00/g,   // Null bytes
   /%2e%2e/gi, // URL encoded ../
   /%252e%252e/gi, // Double URL encoded ../
   /\u0000/g, // Unicode null
@@ -62,7 +62,7 @@ const DEFAULT_BLOCKED_PATTERNS = [
  */
 const pathUtils = {
   isAbsolute(filePath: string): boolean {
-    return /^\//.test(filePath) || /^[A-Za-z]:[\/\\]/.test(filePath) || /^\\\\/.test(filePath)
+    return /^/.test(filePath) || /^[A-Za-z]:[/\\\\]/.test(filePath) || /^\\\\\\\\/.test(filePath)
   },
 
   join(...parts: string[]): string {

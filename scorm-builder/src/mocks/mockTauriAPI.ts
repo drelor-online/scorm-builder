@@ -33,12 +33,13 @@ const mockTauriAPI = {
         return '/mock/projects';
         
       case 'create_file':
-      case 'write_file':
+      case 'write_file': {
         const fileId = args?.path || args?.id || Date.now().toString();
         mockStorage.mediaFiles[fileId] = args?.content || args?.data;
         return fileId;
+      }
         
-      case 'create_project':
+      case 'create_project': {
         const projectId = generateProjectId();
         const project = {
           id: projectId,
@@ -50,6 +51,7 @@ const mockTauriAPI = {
         mockStorage.projects[projectId] = project;
         mockStorage.currentProjectId = projectId;
         return project;
+      }
         
       case 'open_project':
         mockStorage.currentProjectId = args?.projectId;
