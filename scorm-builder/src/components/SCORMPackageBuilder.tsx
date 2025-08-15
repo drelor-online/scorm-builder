@@ -1063,7 +1063,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                     <>
                       <div className="flex flex-col items-center">
                         <div className="text-2xl font-bold text-green-600">
-                          {(performanceData.totalDuration / 1000).toFixed(1)}
+                          {((performanceData.totalDuration || 0) / 1000).toFixed(1)}
                         </div>
                         <div className="text-xs text-gray-500 uppercase tracking-wider">Seconds</div>
                       </div>
