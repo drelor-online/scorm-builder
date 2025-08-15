@@ -200,32 +200,51 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   }, [template, customTopics, courseTitle, difficulty])
   
   // Sync state when initialData changes (for when component receives data after mounting)
+  // Only update fields that are currently empty to avoid overriding user selections
   useEffect(() => {
     if (initialData) {
       debugLogger.info('CourseSeedInput', 'Syncing state with initialData', {
         hasTitle: !!initialData.courseTitle,
         hasDifficulty: !!initialData.difficulty,
         hasTemplate: !!initialData.template,
-        hasCustomTopics: !!initialData.customTopics?.length
+        hasCustomTopics: !!initialData.customTopics?.length,
+        currentTemplate: template,
+        currentTitle: courseTitle
       });
       
       const newValues = {
-        courseTitle: initialData.courseTitle || '',
-        difficulty: initialData.difficulty || 3,
-        template: initialData.template || 'None',
-        customTopics: initialData.customTopics?.join('\n') || ''
+        courseTitle: courseTitle,
+        difficulty: difficulty,
+        template: template,
+        customTopics: customTopics
       }
       
-      // Update all fields from initialData, overriding current state
-      setCourseTitle(newValues.courseTitle)
-      setDifficulty(newValues.difficulty)
-      setTemplate(newValues.template)
-      setCustomTopics(newValues.customTopics)
+      // Only update fields that are currently empty/default to avoid overriding user selections
+      if (!courseTitle && initialData.courseTitle) {
+        setCourseTitle(initialData.courseTitle)
+        newValues.courseTitle = initialData.courseTitle
+      }
+      
+      if (template === 'None' && initialData.template) {
+        setTemplate(initialData.template)
+        newValues.template = initialData.template
+      }
+      
+      if (difficulty === 3 && initialData.difficulty) {
+        setDifficulty(initialData.difficulty)
+        newValues.difficulty = initialData.difficulty
+      }
+      
+      if (!customTopics && initialData.customTopics?.length) {
+        const topicsStr = initialData.customTopics.join('\n')
+        setCustomTopics(topicsStr)
+        newValues.customTopics = topicsStr
+      }
       
       // Update the form's initial values to prevent unsaved changes warnings
       updateInitialValues(newValues)
     }
-  }, [initialData, updateInitialValues])
+  }, [initialData, updateInitialValues, courseTitle, template, difficulty, customTopics])
   
   // Track if we've mounted to prevent initial save
   const hasMountedRef = useRef(false)

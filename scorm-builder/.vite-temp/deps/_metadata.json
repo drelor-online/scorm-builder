@@ -1,0 +1,118 @@
+{
+  "hash": "4ca8edb6",
+  "configHash": "59871fa3",
+  "lockfileHash": "087a3293",
+  "browserHash": "811df93a",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "6bc78767",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "85b8a95a",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "dfe92897",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "b871a736",
+      "needsInterop": true
+    },
+    "@tauri-apps/api/core": {
+      "src": "../../node_modules/@tauri-apps/api/core.js",
+      "file": "@tauri-apps_api_core.js",
+      "fileHash": "81de710f",
+      "needsInterop": false
+    },
+    "@tauri-apps/api/event": {
+      "src": "../../node_modules/@tauri-apps/api/event.js",
+      "file": "@tauri-apps_api_event.js",
+      "fileHash": "86f86176",
+      "needsInterop": false
+    },
+    "@tauri-apps/api/path": {
+      "src": "../../node_modules/@tauri-apps/api/path.js",
+      "file": "@tauri-apps_api_path.js",
+      "fileHash": "721c4a7b",
+      "needsInterop": false
+    },
+    "@tauri-apps/api/window": {
+      "src": "../../node_modules/@tauri-apps/api/window.js",
+      "file": "@tauri-apps_api_window.js",
+      "fileHash": "6a712588",
+      "needsInterop": false
+    },
+    "@tauri-apps/plugin-dialog": {
+      "src": "../../node_modules/@tauri-apps/plugin-dialog/dist-js/index.js",
+      "file": "@tauri-apps_plugin-dialog.js",
+      "fileHash": "72c0ddda",
+      "needsInterop": false
+    },
+    "@tauri-apps/plugin-fs": {
+      "src": "../../node_modules/@tauri-apps/plugin-fs/dist-js/index.js",
+      "file": "@tauri-apps_plugin-fs.js",
+      "fileHash": "a938833d",
+      "needsInterop": false
+    },
+    "date-fns": {
+      "src": "../../node_modules/date-fns/index.js",
+      "file": "date-fns.js",
+      "fileHash": "64414e7b",
+      "needsInterop": false
+    },
+    "dompurify": {
+      "src": "../../node_modules/dompurify/dist/purify.es.mjs",
+      "file": "dompurify.js",
+      "fileHash": "26d7ca69",
+      "needsInterop": false
+    },
+    "jszip": {
+      "src": "../../node_modules/jszip/dist/jszip.min.js",
+      "file": "jszip.js",
+      "fileHash": "454e8ce3",
+      "needsInterop": true
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "419ed381",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "acc95e0d",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "chunk-IAQLTDVD": {
+      "file": "chunk-IAQLTDVD.js"
+    },
+    "chunk-L7Q3ILUT": {
+      "file": "chunk-L7Q3ILUT.js"
+    },
+    "chunk-55L4PLZ2": {
+      "file": "chunk-55L4PLZ2.js"
+    },
+    "chunk-SL6RB3OX": {
+      "file": "chunk-SL6RB3OX.js"
+    },
+    "chunk-HHV3XBJ5": {
+      "file": "chunk-HHV3XBJ5.js"
+    },
+    "chunk-2TUXWMP5": {
+      "file": "chunk-2TUXWMP5.js"
+    }
+  }
+}
