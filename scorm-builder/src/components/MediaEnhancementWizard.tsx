@@ -108,6 +108,46 @@ const setPageMedia = (page: Page | Topic | undefined, media: Media[]): Page | To
   return updated
 }
 
+// Helper to validate and fix courseContent structure
+const validateCourseContent = (content: CourseContentUnion): CourseContent => {
+  if (!content || typeof content !== 'object') {
+    logger.warn('[MediaEnhancementWizard] Invalid courseContent received, using default structure')
+    return {
+      welcomePage: { 
+        id: 'welcome', 
+        title: 'Welcome', 
+        content: '', 
+        narration: '', 
+        imageKeywords: [], 
+        imagePrompts: [], 
+        videoSearchTerms: [], 
+        duration: 0 
+      },
+      learningObjectivesPage: { 
+        id: 'objectives', 
+        title: 'Learning Objectives', 
+        content: '', 
+        narration: '', 
+        imageKeywords: [], 
+        imagePrompts: [], 
+        videoSearchTerms: [], 
+        duration: 0 
+      },
+      topics: [],
+      assessment: { questions: [], passMark: 80, narration: null }
+    }
+  }
+  
+  // Ensure topics is an array
+  const validatedContent = { ...content } as CourseContent
+  if (!Array.isArray(validatedContent.topics)) {
+    logger.warn('[MediaEnhancementWizard] courseContent.topics is not an array, defaulting to empty array')
+    validatedContent.topics = []
+  }
+  
+  return validatedContent
+}
+
 const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = ({
   courseContent,
   courseSeedData,
@@ -1505,7 +1545,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         <div className={styles.leftSidebar}>
           <h3 className={styles.sidebarTitle}>Page Navigation</h3>
           <PageThumbnailGrid
-            courseContent={courseContent as CourseContent}
+            courseContent={validateCourseContent(courseContent)}
             currentPageId={getCurrentPage()?.id || ''}
             onPageSelect={handlePageSelect}
           />

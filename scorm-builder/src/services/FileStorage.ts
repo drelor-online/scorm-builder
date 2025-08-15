@@ -60,7 +60,7 @@ interface TauriProjectFile {
   activities_data?: unknown;
   media_enhancements?: unknown;
   content_edits?: unknown;
-  current_step?: number;
+  current_step?: string;
 }
 
 interface TauriRecoveryInfo {
@@ -410,11 +410,11 @@ export class FileStorage {
         // Save HTML content edits
         projectFile.content_edits = content;
       } else if (contentId === 'currentStep') {
-        // Save current workflow step
-        const stepContent = content as Record<string, unknown> | number;
-        projectFile.current_step = typeof stepContent === 'number' ? stepContent : 
-                                   (typeof stepContent === 'object' && typeof stepContent.step === 'number') ? stepContent.step :
-                                   Number(stepContent) || 1;
+        // Save current workflow step as string
+        const stepContent = content as Record<string, unknown> | string;
+        projectFile.current_step = typeof stepContent === 'string' ? stepContent : 
+                                   (typeof stepContent === 'object' && typeof stepContent.step === 'string') ? stepContent.step :
+                                   'seed'; // Default to 'seed' if invalid
       } else if (contentId === 'audioNarration') {
         // Special handling for audioNarration to prevent excessive saves
         debugLogger.debug('FileStorage.performSave', 'Saving audio narration data');

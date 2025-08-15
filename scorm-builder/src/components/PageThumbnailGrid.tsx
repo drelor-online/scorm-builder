@@ -309,7 +309,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   const allPages: Array<Page | Topic> = useMemo(() => [
     courseContent.welcomePage,
     (courseContent as any).objectivesPage || courseContent.learningObjectivesPage, // Handle both naming conventions
-    ...courseContent.topics
+    ...(Array.isArray(courseContent.topics) ? courseContent.topics : [])
   ].filter(Boolean), [courseContent]) // Remove any undefined entries
 
   return (
