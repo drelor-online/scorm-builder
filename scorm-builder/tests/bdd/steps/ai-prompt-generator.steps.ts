@@ -182,3 +182,16 @@ Then('suggest splitting if too long', async function (this: World) {
     await expect(this.page.locator('text=Consider splitting')).toBeVisible()
   }
 })
+
+// API Keys configuration step
+Given('I have valid API keys configured', async function (this: World) {
+  // Simulate having valid API keys configured in the mock
+  await this.page.evaluate(() => {
+    // Set mock API keys in the global mock data
+    window.__MOCK_API_KEYS__ = {
+      google_image_api_key: 'mock_google_key',
+      google_cse_id: 'mock_cse_id', 
+      youtube_api_key: 'mock_youtube_key'
+    }
+  })
+})

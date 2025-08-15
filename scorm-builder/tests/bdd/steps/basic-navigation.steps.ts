@@ -14,6 +14,20 @@ Given('I navigate to the application', async function () {
   }
 })
 
+// Alternative navigation step used in some tests
+Given('I navigate to the SCORM Builder application', async function () {
+  const url = this.baseUrl || 'http://localhost:1420'
+  
+  try {
+    await this.page.goto(url, { timeout: 10000 })
+    await this.page.waitForLoadState('domcontentloaded')
+    // Wait a bit for React to render
+    await this.page.waitForTimeout(2000)
+  } catch (error) {
+    throw error
+  }
+})
+
 Then('I should see the Dashboard', async function () {
   // Check for dashboard container
   const dashboard = await this.page.locator('.dashboard-container').isVisible()

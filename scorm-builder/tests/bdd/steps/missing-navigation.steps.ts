@@ -24,6 +24,33 @@ Given('I have a clean browser state', async function () {
   await this.page.context().clearCookies()
 })
 
+// Clean project state (alternative step name)
+Given('I have a clean project state', async function () {
+  // Navigate to the page first to ensure we have access
+  await this.page.goto(this.baseUrl || 'http://localhost:1420')
+  
+  try {
+    // Clear any storage including project data
+    await this.page.evaluate(() => {
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+        // Clear any mock project data
+        window.__MOCK_PROJECT_DATA__ = undefined
+        window.__MOCK_CURRENT_PROJECT_ID__ = undefined
+        window.__MOCK_PROJECT_FILE_PATH__ = undefined
+      } catch (e) {
+        // Could not clear storage
+      }
+    })
+  } catch (e) {
+    // Storage clearing skipped
+  }
+  
+  // Clear cookies
+  await this.page.context().clearCookies()
+})
+
 // Application running
 Given('the application is running at {string}', async function (url: string) {
   this.baseUrl = url

@@ -317,3 +317,31 @@ Then('the title should be truncated to {int} characters', async function (maxLen
   const title = await courseSeedInputPage.getTitle()
   expect(title.length).toBeLessThanOrEqual(maxLength)
 })
+
+// Course configuration with table support
+When('I enter the following course configuration:', async function (dataTable) {
+  // Initialize page object if not already done
+  if (!courseSeedInputPage) {
+    courseSeedInputPage = new CourseSeedInputPage(this.page)
+  }
+  
+  const config = dataTable.hashes()[0]  // Get first row of data table
+  
+  // Set course title
+  if (config.Title) {
+    await courseSeedInputPage.enterTitle(config.Title)
+  }
+  
+  // Set difficulty
+  if (config.Difficulty) {
+    await courseSeedInputPage.setDifficulty(parseInt(config.Difficulty))
+  }
+  
+  // Set template
+  if (config.Template) {
+    await courseSeedInputPage.selectTemplate(config.Template)
+  }
+  
+  // Store for later validation
+  this.courseConfig = config
+})

@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename)
 let browser: Browser
 let context: BrowserContext
 
-BeforeAll(async () => {
+BeforeAll({ timeout: 30000 }, async () => {
   // Check if we're testing against Tauri or regular browser
   const isTauriTest = process.env.TAURI_TEST === 'true'
   
@@ -365,6 +365,13 @@ Before(async function (scenario) {
         },
         webviews: []
       }
+    }
+    
+    // Also set up __TAURI_PLUGIN_EVENT__
+    window.__TAURI_PLUGIN_EVENT__ = {
+      listen: async () => ({ unlisten: () => {} }),
+      emit: async () => {},
+      once: async () => ({ unlisten: () => {} })
     }
     
     console.log('✅ Mock Tauri API injected')
