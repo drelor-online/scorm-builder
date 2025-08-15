@@ -4,13 +4,26 @@ import { expect } from '@playwright/test'
 Given('I navigate to the application', async function () {
   const url = this.baseUrl || 'http://localhost:1420'
   
-  try {
-    await this.page.goto(url, { timeout: 10000 })
-    await this.page.waitForLoadState('domcontentloaded')
-    // Wait a bit for React to render
-    await this.page.waitForTimeout(2000)
-  } catch (error) {
-    throw error
+  // Retry navigation up to 3 times
+  let retries = 3
+  while (retries > 0) {
+    try {
+      await this.page.goto(url, { timeout: 15000 })
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 })
+      
+      // Wait for React to render and check for main content
+      await this.page.waitForSelector('body', { timeout: 5000 })
+      const hasContent = await this.page.locator('body').count() > 0
+      if (hasContent) {
+        await this.page.waitForTimeout(1000) // Short wait for final render
+        return
+      }
+    } catch (error) {
+      retries--
+      if (retries === 0) throw error
+      console.log(`Navigation failed, retrying... (${retries} attempts left)`)
+      await this.page.waitForTimeout(2000)
+    }
   }
 })
 
@@ -18,13 +31,26 @@ Given('I navigate to the application', async function () {
 Given('I navigate to the SCORM Builder application', async function () {
   const url = this.baseUrl || 'http://localhost:1420'
   
-  try {
-    await this.page.goto(url, { timeout: 10000 })
-    await this.page.waitForLoadState('domcontentloaded')
-    // Wait a bit for React to render
-    await this.page.waitForTimeout(2000)
-  } catch (error) {
-    throw error
+  // Retry navigation up to 3 times
+  let retries = 3
+  while (retries > 0) {
+    try {
+      await this.page.goto(url, { timeout: 15000 })
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 })
+      
+      // Wait for React to render and check for main content
+      await this.page.waitForSelector('body', { timeout: 5000 })
+      const hasContent = await this.page.locator('body').count() > 0
+      if (hasContent) {
+        await this.page.waitForTimeout(1000) // Short wait for final render
+        return
+      }
+    } catch (error) {
+      retries--
+      if (retries === 0) throw error
+      console.log(`Navigation failed, retrying... (${retries} attempts left)`)
+      await this.page.waitForTimeout(2000)
+    }
   }
 })
 

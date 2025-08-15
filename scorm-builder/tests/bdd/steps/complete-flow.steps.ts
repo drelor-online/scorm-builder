@@ -121,9 +121,7 @@ Then('the JSON should be automatically validated', async function () {
   await this.page.waitForSelector('[data-testid="validation-status"]')
 })
 
-Then('I should see {string}', async function (message: string) {
-  await expect(this.page.getByText(message)).toBeVisible()
-})
+// Removed: Duplicate of complete-e2e.steps.ts step definition
 
 When('I navigate to the {string} page tab', async function (tabName: string) {
   await this.page.click(`[data-tab="${tabName.toLowerCase()}"]`)

@@ -84,9 +84,7 @@ When('I paste JSON with syntax errors:', async function (this: World, jsonString
   await jsonTextarea.fill(jsonString)
 })
 
-Then('I should see {string}', async function (this: World, errorMessage: string) {
-  await expect(this.page.locator(`text=${errorMessage}`)).toBeVisible()
-})
+// Removed: Duplicate of complete-e2e.steps.ts step definition
 
 Then('the error should highlight line {int}', async function (this: World, lineNumber: number) {
   // Check if error message mentions the line number

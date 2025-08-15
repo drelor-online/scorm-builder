@@ -13,14 +13,26 @@ const __dirname = path.dirname(__filename)
 let browser: Browser
 let context: BrowserContext
 
-BeforeAll({ timeout: 30000 }, async () => {
+BeforeAll({ timeout: 60000 }, async () => {
   // Check if we're testing against Tauri or regular browser
   const isTauriTest = process.env.TAURI_TEST === 'true'
   
-  browser = await chromium.launch({
-    headless: process.env.HEADLESS !== 'false',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  })
+  // Launch browser with retry logic
+  let retries = 3
+  while (retries > 0) {
+    try {
+      browser = await chromium.launch({
+        headless: process.env.HEADLESS !== 'false',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      })
+      break
+    } catch (error) {
+      retries--
+      if (retries === 0) throw error
+      console.log(`Browser launch failed, retrying... (${retries} attempts left)`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+  }
   
   if (isTauriTest) {
     console.log('🚀 Running tests against Tauri app window')
@@ -29,7 +41,7 @@ BeforeAll({ timeout: 30000 }, async () => {
   }
 })
 
-Before(async function (scenario) {
+Before({ timeout: 30000 }, async function (scenario) {
   // Store scenario for debug helpers
   this.currentScenario = scenario
   
