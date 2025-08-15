@@ -3,11 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{#if enable_csp}}
     <!-- Content Security Policy for XSS protection -->
     <!-- Note: 'unsafe-inline' and 'unsafe-eval' are required for SCORM API compatibility -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; media-src 'self' blob: https:; frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors *;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: https: blob: *; media-src 'self' blob: https: *; frame-src 'self' https: *; connect-src 'self' *; font-src 'self' data: *; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors *;">
+    {{/if}}
     <title>{{course_title}}</title>
     <link rel="stylesheet" href="styles/main.css">
+    
+    <!-- Load SCORM API first for maximum LMS compatibility -->
+    <script src="scripts/scorm-api.js"></script>
 </head>
 <body>
     <!-- Alert Container -->

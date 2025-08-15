@@ -39,6 +39,7 @@ impl<'a> HtmlGenerator<'a> {
         let welcome_template = include_str!("templates/welcome.html.hbs");
         let objectives_template = include_str!("templates/objectives.html.hbs");
         let assessment_template = include_str!("templates/assessment.html.hbs");
+        let scorm_api_template = include_str!("templates/scorm-api.js.hbs");
 
         handlebars
             .register_template_string("index", index_template)
@@ -60,6 +61,10 @@ impl<'a> HtmlGenerator<'a> {
             .register_template_string("assessment", assessment_template)
             .map_err(|e| format!("Failed to register assessment template: {e}"))?;
 
+        handlebars
+            .register_template_string("scorm-api", scorm_api_template)
+            .map_err(|e| format!("Failed to register scorm-api template: {e}"))?;
+
         Ok(Self {
             handlebars,
             has_objectives: false,
@@ -70,6 +75,7 @@ impl<'a> HtmlGenerator<'a> {
         let data = json!({
             "course_title": request.course_title,
             "has_objectives": request.learning_objectives_page.is_some(),
+            "enable_csp": request.enable_csp.unwrap_or(false), // Default to false for LMS compatibility
             "topics": request.topics.iter().map(|t| json!({
                 "id": t.id,
                 "title": t.title
@@ -413,6 +419,16 @@ impl<'a> HtmlGenerator<'a> {
         self.handlebars
             .render("assessment", &data)
             .map_err(|e| format!("Failed to render assessment template: {e}"))
+    }
+
+    pub fn generate_scorm_api_js(&self, _request: &GenerateScormRequest) -> Result<String, String> {
+        // Generate the Universal SCORM API wrapper
+        // This is a static template with no dynamic content currently
+        let data = json!({});
+        
+        self.handlebars
+            .render("scorm-api", &data)
+            .map_err(|e| format!("Failed to render scorm-api template: {e}"))
     }
 
     #[allow(dead_code)]

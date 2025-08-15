@@ -1,205 +1,82 @@
-// SCORM Navigation System - Generated from Rust Template
-// This ensures consistent behavior and verifiable output
+// SCORM Navigation System - Enhanced for Universal LMS Compatibility
+// Uses UniversalSCORM API for better compatibility with VelocityEHS and other platforms
 
 (function() {
     'use strict';
     
-    // SafeSCORM Wrapper - Handles all SCORM API calls with error protection
+    // Wait for UniversalSCORM to be available and ensure SCORM is initialized
+    function initializeSCORM() {
+        console.log('[Navigation] Checking for UniversalSCORM...');
+        
+        if (window.UniversalSCORM) {
+            console.log('[Navigation] UniversalSCORM found, ensuring initialization...');
+            
+            // Ensure SCORM is initialized (may have already been done)
+            if (!window.UniversalSCORM.available) {
+                window.UniversalSCORM.init();
+            }
+            
+            return true;
+        } else {
+            console.warn('[Navigation] UniversalSCORM not found, retrying...');
+            return false;
+        }
+    }
+    
+    // Legacy SafeSCORM compatibility wrapper for existing code
     const SafeSCORM = {
-        api: null,
-        initialized: false,
-        available: false,
+        get api() { 
+            return window.UniversalSCORM ? window.UniversalSCORM.api : null; 
+        },
+        get initialized() { 
+            return window.UniversalSCORM ? window.UniversalSCORM.initialized : false; 
+        },
+        get available() { 
+            return window.UniversalSCORM ? window.UniversalSCORM.available : false; 
+        },
         
-        // Initialize the SCORM API wrapper
         init: function() {
-            try {
-                this.api = this.findAPI(window);
-                this.available = !!this.api;
-                
-                if (this.available) {
-                    console.log('[SafeSCORM] API found, attempting initialization');
-                    
-                    // Try to initialize but don't require success
-                    try {
-                        const result = this.api.LMSInitialize('');
-                        console.log('[SafeSCORM] LMSInitialize result:', result);
-                        
-                        // Even if it throws an error, we might still be able to use the API
-                        if (result === 'true' || result === true) {
-                            console.log('[SafeSCORM] Standard initialization successful');
-                        }
-                    } catch (e) {
-                        console.warn('[SafeSCORM] LMSInitialize error (may be just logging issue):', e.message);
-                        // Don't give up - the API might still work!
-                    }
-                    
-                    // Test if the API is actually functional by trying a simple operation
-                    try {
-                        // Try to get a value - this should work even if init "failed"
-                        const testValue = this.api.LMSGetValue('cmi.core.student_name');
-                        console.log('[SafeSCORM] API functionality test passed, got:', testValue || '(empty)');
-                        
-                        // If we got here without throwing, the API is working!
-                        this.initialized = true;
-                        this.available = true;
-                        
-                        // Try to set initial status (but don't fail if it doesn't work)
-                        try {
-                            this.api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
-                            this.api.LMSCommit('');
-                        } catch (statusError) {
-                            console.log('[SafeSCORM] Could not set initial status (non-critical)');
-                        }
-                        
-                    } catch (testError) {
-                        // If even basic GetValue fails, check if it's just UpdateLog
-                        if (testError.message && testError.message.includes('UpdateLog')) {
-                            console.log('[SafeSCORM] API test hit UpdateLog error - assuming API is functional');
-                            this.initialized = true;
-                            this.available = true;
-                        } else {
-                            console.error('[SafeSCORM] API functionality test failed:', testError);
-                            this.available = false;
-                            this.initialized = false;
-                        }
-                    }
-                } else {
-                    console.warn('[SafeSCORM] No SCORM API found - running in standalone mode');
-                }
-            } catch (e) {
-                console.error('[SafeSCORM] Unexpected error during initialization:', e);
-                this.available = false;
-            }
-            
-            console.log('[SafeSCORM] Final state - Available:', this.available, 'Initialized:', this.initialized);
-            return this.initialized;
+            return initializeSCORM();
         },
         
-        // Find SCORM API in window hierarchy
         findAPI: function(win) {
-            let attempts = 0;
-            while ((!win.API && !win.API_1484_11) && (win.parent) && (win.parent != win) && (attempts <= 7)) {
-                attempts++;
-                win = win.parent;
-            }
-            return win.API || win.API_1484_11;
+            return window.UniversalSCORM ? window.UniversalSCORM.findAPI(win) : null;
         },
         
-        // Safe wrapper for LMSGetValue
         getValue: function(element) {
-            if (!this.available || !this.api) return '';
-            
-            try {
-                const value = this.api.LMSGetValue(element);
-                return value || '';
-            } catch (e) {
-                // Ignore UpdateLog errors - they're not real failures
-                if (e.message && e.message.includes('UpdateLog')) {
-                    // Return empty string but don't log as error
-                    return '';
-                }
-                console.warn('[SafeSCORM] GetValue error for', element, ':', e.message);
-                return '';
-            }
+            return window.UniversalSCORM ? window.UniversalSCORM.getValue(element) : '';
         },
         
-        // Safe wrapper for LMSSetValue with UpdateLog error handling
         setValue: function(element, value) {
-            if (!this.api) {
-                console.log('[SafeSCORM] Skipping setValue - No API object');
-                return false;
-            }
-            
-            try {
-                // Convert value to string as required by SCORM
-                const stringValue = String(value);
-                const result = this.api.LMSSetValue(element, stringValue);
-                
-                if (result === 'true' || result === true) {
-                    return true;
-                } else {
-                    // Check if it's just an UpdateLog error
-                    const errorCode = this.getLastError();
-                    if (errorCode === '0' || errorCode === 0) {
-                        // No real error, just logging issue
-                        return true;
-                    }
-                    console.warn('[SafeSCORM] SetValue failed for', element, '=', stringValue);
-                    return false;
-                }
-            } catch (e) {
-                // Special handling for UpdateLog errors
-                if (e.message && e.message.includes('UpdateLog')) {
-                    console.log('[SafeSCORM] Ignoring UpdateLog error, continuing...');
-                    return true; // Assume success if only logging failed
-                }
-                console.warn('[SafeSCORM] SetValue error for', element, ':', e.message);
-                return false;
-            }
+            return window.UniversalSCORM ? window.UniversalSCORM.setValue(element, value) : false;
         },
         
-        // Safe wrapper for LMSCommit
         commit: function() {
-            if (!this.api) return false;
-            
-            try {
-                const result = this.api.LMSCommit('');
-                return result === 'true' || result === true;
-            } catch (e) {
-                if (e.message && e.message.includes('UpdateLog')) {
-                    console.log('[SafeSCORM] Ignoring UpdateLog error on commit');
-                    return true;
-                }
-                console.warn('[SafeSCORM] Commit error:', e.message);
-                return false;
-            }
+            return window.UniversalSCORM ? window.UniversalSCORM.commit() : false;
         },
         
-        // Safe wrapper for LMSFinish
         finish: function() {
-            if (!this.api) return false;
-            
-            try {
-                const result = this.api.LMSFinish('');
-                this.initialized = false;
-                return result === 'true' || result === true;
-            } catch (e) {
-                if (e.message && e.message.includes('UpdateLog')) {
-                    console.log('[SafeSCORM] Ignoring UpdateLog error on finish');
-                    return true;
-                }
-                console.warn('[SafeSCORM] Finish error:', e.message);
-                return false;
-            }
+            return window.UniversalSCORM ? window.UniversalSCORM.finish() : false;
         },
         
-        // Get last error code
         getLastError: function() {
-            if (!this.available) return '0';
-            
-            try {
-                return this.api.LMSGetLastError() || '0';
-            } catch (e) {
-                return '0';
-            }
-        },
-        
-        // Get error string
-        getErrorString: function(errorCode) {
-            if (!this.available) return '';
-            
-            try {
-                return this.api.LMSGetErrorString(errorCode) || '';
-            } catch (e) {
-                return '';
-            }
-        },
-        
-        // Set score with full error handling
-        setScore: function(score) {
-            console.log('[SafeSCORM] Setting score:', score);
-            
-            let success = false;
+            return window.UniversalSCORM ? window.UniversalSCORM.getLastError() : '0';
+        }
+    };
+    
+    // Initialize SCORM when navigation system loads
+    function waitForSCORM() {
+        if (initializeSCORM()) {
+            console.log('[Navigation] SCORM initialization successful');
+            startNavigation();
+        } else {
+            // Retry after a short delay
+            setTimeout(waitForSCORM, 100);
+        }
+    }
+    
+    // Start the navigation system
+    function startNavigation() {
             
             // Try multiple approaches for maximum compatibility
             const approaches = [

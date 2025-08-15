@@ -244,7 +244,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       // Update the form's initial values to prevent unsaved changes warnings
       updateInitialValues(newValues)
     }
-  }, [initialData, updateInitialValues, courseTitle, template, difficulty, customTopics])
+  }, [initialData, updateInitialValues])
   
   // Track if we've mounted to prevent initial save
   const hasMountedRef = useRef(false)

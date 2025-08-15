@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process')
-const fs = require('fs')
-const path = require('path')
+import { execSync } from 'child_process'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 console.log('🏗️  Building for production...\n')
 
@@ -15,11 +18,31 @@ const requiredEnvVars = [
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName])
 
-if (missingVars.length > 0) {
-  console.error('❌ Missing required environment variables:')
-  missingVars.forEach(varName => console.error(`   - ${varName}`))
-  console.error('\nPlease set these in your .env.local file or environment')
-  process.exit(1)
+// Allow skipping API key validation with environment variable or command line flag
+const skipApiValidation = process.env.VITE_SKIP_API_VALIDATION === 'true' || 
+                          process.argv.includes('--skip-api-check') ||
+                          process.env.VITE_OFFLINE_MODE === 'true'
+
+if (missingVars.length > 0 && !skipApiValidation) {
+  console.warn('⚠️  Missing API keys (features will be limited):')
+  missingVars.forEach(varName => console.warn(`   - ${varName}`))
+  console.warn('\n📝 To fix this:')
+  console.warn('   1. Copy .env.example to .env.local')
+  console.warn('   2. Add your API keys to .env.local')
+  console.warn('   3. Or use --skip-api-check flag to build anyway')
+  console.warn('   4. Or set VITE_OFFLINE_MODE=true for offline builds\n')
+  
+  // Only exit if this is a CI environment or strict mode
+  if (process.env.CI === 'true') {
+    console.error('❌ API keys required in CI environment')
+    process.exit(1)
+  }
+  
+  console.log('🔄 Continuing build with limited functionality...\n')
+} else if (missingVars.length === 0) {
+  console.log('✅ All API keys found\n')
+} else {
+  console.log('🔄 Skipping API key validation (offline mode)\n')
 }
 
 // Clean previous build
@@ -32,7 +55,7 @@ if (fs.existsSync(distPath)) {
 // Run TypeScript check
 console.log('📝 Running TypeScript checks...')
 try {
-  execSync('npm run type-check', { stdio: 'inherit' })
+  execSync('npm run typecheck', { stdio: 'inherit' })
 } catch (error) {
   console.error('❌ TypeScript errors found. Please fix them before building.')
   process.exit(1)

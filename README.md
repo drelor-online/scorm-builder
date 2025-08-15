@@ -235,21 +235,60 @@ The application uses a custom design system with:
 
 ## 🔧 Configuration
 
-### API Keys
-To enable media search functionality, add your API keys:
+### API Keys Setup
+The application requires Google API keys for enhanced media search functionality:
 
-1. Go to Settings in the app
-2. Add your Google Image Search API key and CSE ID
-3. Add your YouTube API key
+#### Required API Keys
+- **Google Image Search API Key**: Enables image search in Media Enhancement Wizard
+- **Google Custom Search Engine ID**: Required for filtering Google Image searches
+- **YouTube API Key**: Enables YouTube video search and embedding
 
-### Environment Variables
-Create a `.env` file in the root directory:
+#### Quick Setup
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env.local
+   ```
 
-```env
-VITE_GOOGLE_IMAGE_API_KEY=your_key_here
-VITE_GOOGLE_CSE_ID=your_cse_id_here
-VITE_YOUTUBE_API_KEY=your_key_here
+2. Edit `.env.local` and add your API keys:
+   ```env
+   VITE_GOOGLE_IMAGE_API_KEY=your_google_api_key_here
+   VITE_GOOGLE_CSE_ID=your_custom_search_engine_id_here
+   VITE_YOUTUBE_API_KEY=your_youtube_api_key_here
+   ```
+
+#### Obtaining API Keys
+
+**Google Image Search API Key:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the "Custom Search JSON API"
+4. Create credentials (API Key)
+5. Restrict the key to the Custom Search JSON API
+
+**Google Custom Search Engine ID:**
+1. Go to [Google Custom Search Engine](https://cse.google.com/)
+2. Create a new search engine
+3. Set "Sites to search" to "Search the entire web"
+4. Copy the Search Engine ID
+
+**YouTube API Key:**
+1. In Google Cloud Console, enable the "YouTube Data API v3"
+2. Use the same API key or create a new one
+3. Restrict to YouTube Data API v3
+
+#### Offline Mode
+If you don't have API keys, you can run in offline mode with limited functionality:
+
+```bash
+# Set offline mode in .env.local
+VITE_OFFLINE_MODE=true
+
+# Or build with offline mode
+npm run build -- --skip-api-check
 ```
+
+#### Build Configuration
+For CI/CD environments, set `VITE_SKIP_API_VALIDATION=true` to build without API keys.
 
 ### Security Configuration
 The application includes:

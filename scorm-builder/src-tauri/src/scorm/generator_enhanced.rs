@@ -72,6 +72,7 @@ pub struct GenerateScormRequest {
     pub pass_mark: u32,
     pub navigation_mode: String,
     pub allow_retake: bool,
+    pub enable_csp: Option<bool>,
 }
 
 impl Default for GenerateScormRequest {
@@ -86,6 +87,7 @@ impl Default for GenerateScormRequest {
             pass_mark: 80,
             navigation_mode: "linear".to_string(),
             allow_retake: true,
+            enable_csp: Some(false), // Default to false for better LMS compatibility
         }
     }
 }
@@ -150,6 +152,13 @@ impl EnhancedScormGenerator {
             let mut zip = ZipWriter::new(std::io::Cursor::new(&mut zip_buffer));
             let options =
                 FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+            // Generate scorm-api.js first (loads before navigation.js)
+            let scorm_api_js = self.html_generator.generate_scorm_api_js(&request)?;
+            zip.start_file("scripts/scorm-api.js", options)
+                .map_err(|e| format!("Failed to create scorm-api.js: {e}"))?;
+            zip.write_all(scorm_api_js.as_bytes())
+                .map_err(|e| format!("Failed to write scorm-api.js: {e}"))?;
 
             // Generate navigation.js
             let navigation_js = self.navigation_generator.generate_navigation_js(&request)?;
@@ -253,6 +262,7 @@ impl EnhancedScormGenerator {
         resources.push_str(r#"        <resource identifier="main" type="webcontent" adlcp:scormType="sco" href="index.html">
             <file href="index.html"/>
             <file href="styles/main.css"/>
+            <file href="scripts/scorm-api.js"/>
             <file href="scripts/navigation.js"/>
 "#);
 

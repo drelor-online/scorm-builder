@@ -1,0 +1,271 @@
+/*!
+ * Universal SCORM API Wrapper
+ * Provides compatibility with multiple LMS platforms including VelocityEHS, Moodle, and others
+ */
+
+(function() {
+    'use strict';
+    
+    // Global SCORM API wrapper - available to all other scripts
+    window.UniversalSCORM = {
+        api: null,
+        initialized: false,
+        available: false,
+        version: null, // "1.2" or "2004"
+        
+        /**
+         * Initialize SCORM API connection
+         * This should be called as early as possible in the page lifecycle
+         */
+        init: function() {
+            console.log('[UniversalSCORM] Starting API discovery...');
+            
+            try {
+                // Try to find the API
+                this.api = this.findAPI(window);
+                this.available = !!this.api;
+                
+                if (this.available) {
+                    // Determine SCORM version
+                    this.version = this.api.LMSInitialize ? "1.2" : "2004";
+                    console.log('[UniversalSCORM] Found SCORM API version:', this.version);
+                    
+                    // Try to initialize
+                    const success = this.initialize();
+                    if (success) {
+                        console.log('[UniversalSCORM] Successfully initialized');
+                        // Set some basic tracking data
+                        this.setValue('cmi.core.lesson_status', 'incomplete');
+                        this.commit();
+                    } else {
+                        console.warn('[UniversalSCORM] Initialization failed but API is available');
+                        // Still mark as available - some LMS platforms work without explicit init
+                        this.available = true;
+                    }
+                } else {
+                    console.warn('[UniversalSCORM] No SCORM API found - running in standalone mode');
+                }
+            } catch (error) {
+                console.error('[UniversalSCORM] Error during initialization:', error);
+                this.available = false;
+            }
+            
+            // Always return the initialization status
+            return this.available;
+        },
+        
+        /**
+         * Find SCORM API in window hierarchy
+         * Searches through multiple window levels and both API naming conventions
+         */
+        findAPI: function(win) {
+            let currentWindow = win;
+            let attempts = 0;
+            const maxAttempts = 10; // Search more levels for complex LMS setups
+            
+            while (attempts < maxAttempts) {
+                console.log(`[UniversalSCORM] Searching window level ${attempts}...`);
+                
+                // Check for SCORM 1.2 API
+                if (currentWindow.API) {
+                    console.log('[UniversalSCORM] Found SCORM 1.2 API at level', attempts);
+                    return currentWindow.API;
+                }
+                
+                // Check for SCORM 2004 API
+                if (currentWindow.API_1484_11) {
+                    console.log('[UniversalSCORM] Found SCORM 2004 API at level', attempts);
+                    return currentWindow.API_1484_11;
+                }
+                
+                // Check opener window (for popups)
+                if (attempts === 0 && currentWindow.opener) {
+                    const openerAPI = this.findAPI(currentWindow.opener);
+                    if (openerAPI) {
+                        console.log('[UniversalSCORM] Found API in opener window');
+                        return openerAPI;
+                    }
+                }
+                
+                // Move to parent window
+                if (currentWindow.parent && currentWindow.parent !== currentWindow) {
+                    currentWindow = currentWindow.parent;
+                } else {
+                    break; // Reached the top
+                }
+                
+                attempts++;
+            }
+            
+            // Last resort - check top window directly
+            if (win.top && win.top !== win) {
+                console.log('[UniversalSCORM] Checking top window as last resort...');
+                if (win.top.API) return win.top.API;
+                if (win.top.API_1484_11) return win.top.API_1484_11;
+            }
+            
+            return null;
+        },
+        
+        /**
+         * Initialize the SCORM API
+         */
+        initialize: function() {
+            if (!this.api) return false;
+            
+            try {
+                let result;
+                if (this.version === "1.2") {
+                    result = this.api.LMSInitialize('');
+                } else {
+                    result = this.api.Initialize('');
+                }
+                
+                this.initialized = (result === 'true' || result === true);
+                return this.initialized;
+            } catch (error) {
+                console.warn('[UniversalSCORM] Initialize error (may be normal):', error.message);
+                // Some LMS platforms throw errors but still work
+                this.initialized = true;
+                return true;
+            }
+        },
+        
+        /**
+         * Get a value from the SCORM API
+         */
+        getValue: function(element) {
+            if (!this.api) return '';
+            
+            try {
+                if (this.version === "1.2") {
+                    return this.api.LMSGetValue(element) || '';
+                } else {
+                    return this.api.GetValue(element) || '';
+                }
+            } catch (error) {
+                console.warn('[UniversalSCORM] GetValue error for', element, ':', error.message);
+                return '';
+            }
+        },
+        
+        /**
+         * Set a value in the SCORM API
+         */
+        setValue: function(element, value) {
+            if (!this.api) return false;
+            
+            try {
+                // Convert value to string for consistency
+                const stringValue = String(value);
+                
+                let result;
+                if (this.version === "1.2") {
+                    result = this.api.LMSSetValue(element, stringValue);
+                } else {
+                    result = this.api.SetValue(element, stringValue);
+                }
+                
+                return result === 'true' || result === true;
+            } catch (error) {
+                // Handle specific VelocityEHS errors
+                if (error.message && error.message.includes('UpdateLog')) {
+                    console.log('[UniversalSCORM] UpdateLog error (normal for some LMS):', element);
+                    return true; // Treat as success
+                }
+                console.warn('[UniversalSCORM] SetValue error for', element, ':', error.message);
+                return false;
+            }
+        },
+        
+        /**
+         * Commit/save data to the SCORM API
+         */
+        commit: function() {
+            if (!this.api) return false;
+            
+            try {
+                let result;
+                if (this.version === "1.2") {
+                    result = this.api.LMSCommit('');
+                } else {
+                    result = this.api.Commit('');
+                }
+                
+                return result === 'true' || result === true;
+            } catch (error) {
+                console.warn('[UniversalSCORM] Commit error:', error.message);
+                return false;
+            }
+        },
+        
+        /**
+         * Finish/terminate the SCORM session
+         */
+        finish: function() {
+            if (!this.api) return false;
+            
+            try {
+                let result;
+                if (this.version === "1.2") {
+                    result = this.api.LMSFinish('');
+                } else {
+                    result = this.api.Terminate('');
+                }
+                
+                return result === 'true' || result === true;
+            } catch (error) {
+                console.warn('[UniversalSCORM] Finish error:', error.message);
+                return false;
+            }
+        },
+        
+        /**
+         * Get the last error from the SCORM API
+         */
+        getLastError: function() {
+            if (!this.api) return '0';
+            
+            try {
+                if (this.version === "1.2") {
+                    return this.api.LMSGetLastError() || '0';
+                } else {
+                    return this.api.GetLastError() || '0';
+                }
+            } catch (error) {
+                return '0';
+            }
+        }
+    };
+    
+    // Auto-initialize when the script loads
+    // This ensures the API is available as soon as possible
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('[UniversalSCORM] DOM loaded, initializing...');
+        window.UniversalSCORM.init();
+    });
+    
+    // Also try to initialize immediately in case DOMContentLoaded already fired
+    if (document.readyState === 'loading') {
+        // DOMContentLoaded will fire later
+    } else {
+        // DOMContentLoaded has already fired or document is complete
+        setTimeout(function() {
+            if (!window.UniversalSCORM.available) {
+                console.log('[UniversalSCORM] Late initialization attempt...');
+                window.UniversalSCORM.init();
+            }
+        }, 100);
+    }
+    
+    // Handle page unload
+    window.addEventListener('beforeunload', function() {
+        if (window.UniversalSCORM.available) {
+            console.log('[UniversalSCORM] Page unloading, finishing session...');
+            window.UniversalSCORM.setValue('cmi.core.lesson_status', 'completed');
+            window.UniversalSCORM.commit();
+            window.UniversalSCORM.finish();
+        }
+    });
+    
+})();

@@ -365,16 +365,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Use hasLoadedProjectRef to prevent duplicate loads
     if (hasLoadedProjectRef.current === storage.currentProjectId) {
       debugLogger.info('App.loadProject', 'Skipping load - already loaded this project', {
-        projectId: storage.currentProjectId,
-        hasCourseSeedData: !!courseSeedData
+        projectId: storage.currentProjectId
       })
-      return
-    }
-
-    // Additional guard: if we already have course seed data, skip loading unless project changed
-    if (courseSeedData && courseSeedData.courseTitle) {
-      debugLogger.info('App.loadProject', 'Skipping load - already have seed data for current project')
-      hasLoadedProjectRef.current = storage.currentProjectId // Mark as loaded
       return
     }
 
