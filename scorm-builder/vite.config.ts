@@ -5,6 +5,8 @@ import path from 'path'
 import { compression } from 'vite-plugin-compression2'
 
 export default defineConfig({
+  // Set base path for portable builds
+  base: './',
   // Disable caching to ensure fresh builds
   cacheDir: '.vite-temp',
   server: {
@@ -46,6 +48,10 @@ export default defineConfig({
     target: 'es2018', // Modern browsers for smaller output
     rollupOptions: {
       output: {
+        // Ensure all assets use relative paths with consistent naming
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
         manualChunks: (id) => {
           // Vendor chunks
           if (id.includes('node_modules')) {
@@ -75,14 +81,6 @@ export default defineConfig({
           if (id.includes('src/hooks')) {
             return 'hooks'
           }
-        },
-        // Optimize chunk naming
-        chunkFileNames: (chunkInfo) => {
-          const facadeModuleId = chunkInfo.facadeModuleId ? chunkInfo.facadeModuleId.split('/').pop() : ''
-          if (facadeModuleId && facadeModuleId.includes('.')) {
-            return `assets/${facadeModuleId.split('.')[0]}-[hash].js`
-          }
-          return 'assets/[name]-[hash].js'
         }
       },
       // Tree shaking optimization
@@ -143,12 +141,5 @@ export default defineConfig({
       '@/constants': path.resolve(__dirname, './src/constants')
     }
   },
-  clearScreen: false,
-  // Enable experimental features for better performance
-  experimental: {
-    renderBuiltUrl(filename: string) {
-      // Use relative paths for better caching
-      return `./${filename}`
-    }
-  }
+  clearScreen: false
 })

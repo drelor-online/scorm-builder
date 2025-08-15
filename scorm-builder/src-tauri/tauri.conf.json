@@ -27,7 +27,7 @@
         "alwaysOnTop": false,
         "skipTaskbar": false,
         "titleBarStyle": "Visible",
-        "devtools": false
+        "devtools": true
       }
     ],
     "security": {
