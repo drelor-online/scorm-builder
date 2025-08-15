@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { CourseContentUnion, Media, Topic } from '../types/aiPrompt'
 
-// Extended Media type to include caption type used in this component
-type ExtendedMedia = Media & { type: 'image' | 'video' | 'audio' | 'caption' }
+// Extended Media type to include caption type and MediaItem properties used in this component
+type ExtendedMedia = Media & { 
+  type: 'image' | 'video' | 'audio' | 'caption'
+  pageId?: string
+  metadata?: any
+  storageId?: string
+}
 import { CourseSeedData } from '../types/course'
 import JSZip from 'jszip'
 import { PageLayout } from './PageLayout'
@@ -136,9 +141,10 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
   if (content.topics && Array.isArray(content.topics)) {
     content.topics.forEach(topic => {
       if (topic.narration) {
+        const narrationText = typeof topic.narration === 'string' ? topic.narration : ''
         blocks.push({
           id: `${topic.id}-narration`,
-          text: topic.narration,
+          text: narrationText,
           blockNumber: String(blockCounter++).padStart(4, '0'),
           pageId: topic.id,
           pageTitle: topic.title
@@ -226,8 +232,10 @@ export function AudioNarrationWizard({
   interface CachedMediaData {
     mediaData: unknown;
     url?: string;
+    fileName?: string;
+    file?: File;
   }
-  const mediaCache = useRef<Map<string, CachedMediaData | string>>(new Map())
+  const mediaCache = useRef<Map<string, CachedMediaData | string | CaptionFile>>(new Map())
   
   // Track when we last loaded data to prevent excessive reloads
   const lastLoadTime = useRef<number>(0)
@@ -699,7 +707,7 @@ export function AudioNarrationWizard({
         const welcomeAudio = courseContent.welcomePage.media?.find(m => m.type === 'audio')
         audioIdsInContent.push(welcomeAudio?.id || null)
         // Look for captions in media array too
-        const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
+        const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => (m as any).type === 'caption')
         captionIdsInContent.push(welcomeCaption?.id || null)
       }
       
@@ -708,17 +716,17 @@ export function AudioNarrationWizard({
         const objAudio = courseContent.learningObjectivesPage.media?.find(m => m.type === 'audio')
         audioIdsInContent.push(objAudio?.id || null)
         // Look for captions in media array too
-        const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
+        const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => (m as any).type === 'caption')
         captionIdsInContent.push(objCaption?.id || null)
       }
       
       // Check topics - push null if no media to maintain index alignment
       if ('topics' in courseContent && Array.isArray(courseContent.topics)) {
-        courseContent.topics.forEach((topic: Topic) => {
+        courseContent.topics.forEach((topic: any) => {
           const topicAudio = topic.media?.find((m: Media) => m.type === 'audio')
           audioIdsInContent.push(topicAudio?.id || null)
           // Look for captions in media array too
-          const topicCaption = topic.media?.find((m: Media) => (m as ExtendedMedia).type === 'caption')
+          const topicCaption = topic.media?.find((m: Media) => (m as any).type === 'caption')
           captionIdsInContent.push(topicCaption?.id || null)
         })
       }
@@ -758,7 +766,7 @@ export function AudioNarrationWizard({
             const cachedData = mediaCache.current.get(cacheKey)
             
             // If we have cached media data, use it
-            if (cachedData?.mediaData || cachedData?.url) {
+            if (typeof cachedData === 'object' && cachedData && 'mediaData' in cachedData && (cachedData.mediaData || cachedData.url)) {
               const playableUrl = cachedData.url
               
               logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
@@ -771,7 +779,7 @@ export function AudioNarrationWizard({
               
               const audioFile: AudioFile = {
                 blockNumber: block.blockNumber,
-                file: cachedData.file || new File([], cachedData.fileName || `${block.blockNumber}-Block.mp3`),
+                file: (cachedData as any).file || new File([], (cachedData as any).fileName || `${block.blockNumber}-Block.mp3`),
                 url: playableUrl || undefined,
                 mediaId: audioId
               }
@@ -957,19 +965,19 @@ export function AudioNarrationWizard({
               if (!content) {
                 // Check the corresponding page in courseContent for embedded caption content
                 if (index === 0 && 'welcomePage' in courseContent) {
-                  const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
-                  if (welcomeCaption?.content) {
-                    content = welcomeCaption.content
+                  const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                  if ((welcomeCaption as any)?.content) {
+                    content = (welcomeCaption as any).content
                   }
                 } else if (index === 1 && 'learningObjectivesPage' in courseContent) {
-                  const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
-                  if (objCaption?.content) {
-                    content = objCaption.content
+                  const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                  if ((objCaption as any)?.content) {
+                    content = (objCaption as any).content
                   }
                 } else if ('topics' in courseContent && courseContent.topics[index - 2]) {
-                  const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as ExtendedMedia).type === 'caption')
-                  if (topicCaption?.content) {
-                    content = topicCaption.content
+                  const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                  if ((topicCaption as any)?.content) {
+                    content = (topicCaption as any).content
                   }
                 }
               }
@@ -1004,7 +1012,9 @@ export function AudioNarrationWizard({
         
         // Wait for all captions to load in parallel and filter out nulls
         const captionResults = await Promise.all(captionLoadPromises)
-        const newCaptionFiles = captionResults.filter((file): file is CaptionFile => file !== null)
+        const newCaptionFiles = captionResults.filter((file): file is CaptionFile => 
+          file !== null && typeof file === 'object' && 'blockNumber' in file && 'content' in file
+        )
         
         // Only update if we successfully loaded some data
         // Don't replace existing files with incomplete data during save cycles
@@ -1071,14 +1081,14 @@ export function AudioNarrationWizard({
       }
       
       // Always check getAllMedia as a fallback to catch media not in course content  
-      let allMediaItems: Media[] = []
+      let allMediaItems: ExtendedMedia[] = []
       
       try {
         const mediaResult = getAllMedia ? getAllMedia() : []
         
         // Ensure allMediaItems is an array
         if (Array.isArray(mediaResult)) {
-          allMediaItems = mediaResult
+          allMediaItems = mediaResult as ExtendedMedia[]
           logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
           allMediaItems.forEach(item => {
             logger.log('[AudioNarrationWizard] Media item:', item.id, item.type, item.pageId)
@@ -1093,7 +1103,7 @@ export function AudioNarrationWizard({
       }
       
       let allAudioItems = allMediaItems.filter(item => item && item.type === 'audio')
-      let allCaptionItems = allMediaItems.filter(item => item && item.type === 'caption')
+      let allCaptionItems = allMediaItems.filter(item => item && (item as any).type === 'caption')
       
       logger.log('[AudioNarrationWizard] Found media items:', allAudioItems.length, 'audio,', allCaptionItems.length, 'caption')
       
@@ -1101,7 +1111,7 @@ export function AudioNarrationWizard({
       const loadedAudioFiles: AudioFile[] = []
       for (const item of allAudioItems) {
         // Find the corresponding narration block
-        const normalizedPageId = normalizePageId(item.pageId)
+        const normalizedPageId = normalizePageId(item.pageId || '')
         const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
         if (block) {
           // Use createBlobUrl for proper blob URL management
@@ -1161,7 +1171,7 @@ export function AudioNarrationWizard({
       const loadedCaptionFiles: CaptionFile[] = []
       for (const item of allCaptionItems) {
         // Find the corresponding narration block
-        const normalizedPageId = normalizePageId(item.pageId)
+        const normalizedPageId = normalizePageId(item.pageId || '')
         const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
         if (block) {
           const mediaData = await getMedia(item.id)
@@ -1246,9 +1256,9 @@ export function AudioNarrationWizard({
           courseContent.topics?.some(t => t.media?.some((m: Media) => m.type === 'audio')) || false
         
         hasCaptionInContent =
-          courseContent.welcomePage?.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption') ||
-          courseContent.learningObjectivesPage?.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption') ||
-          courseContent.topics?.some(t => t.media?.some((m: Media) => (m as ExtendedMedia).type === 'caption')) || false
+          courseContent.welcomePage?.media?.some((m: Media) => (m as any).type === 'caption') ||
+          courseContent.learningObjectivesPage?.media?.some((m: Media) => (m as any).type === 'caption') ||
+          courseContent.topics?.some(t => t.media?.some((m: Media) => (m as any).type === 'caption')) || false
       }
       
       // If we have media in content but no files loaded yet, trigger load
@@ -1385,8 +1395,9 @@ export function AudioNarrationWizard({
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
           logger.log('[AudioNarrationWizard] Added welcome audio to media array:', audioFile.mediaId)
         }
         if (captionFile?.mediaId) {
@@ -1395,15 +1406,16 @@ export function AudioNarrationWizard({
             contentWithAudio.welcomePage.media = []
           }
           // Remove any existing caption from media array
-          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: Media) => m.type !== 'caption')
+          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: any) => m.type !== 'caption')
           // Add the new caption
           contentWithAudio.welcomePage.media.push({
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
       }
     }
@@ -1442,8 +1454,9 @@ export function AudioNarrationWizard({
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
         if (captionFile?.mediaId) {
           // ONLY add captions to media array (no captionId field)
@@ -1451,15 +1464,16 @@ export function AudioNarrationWizard({
             contentWithAudio.learningObjectivesPage.media = []
           }
           // Remove any existing caption from media array
-          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: Media) => m.type !== 'caption')
+          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: any) => m.type !== 'caption')
           // Add the new caption
           contentWithAudio.learningObjectivesPage.media.push({
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
       }
     }
@@ -1476,7 +1490,7 @@ export function AudioNarrationWizard({
         
         // CRITICAL FIX: Sync caption text to course content during autosave
         if (captionFile) {
-          topic.caption = captionFile.content
+          (topic as any).caption = captionFile.content
         }
         
         if (audioFile?.mediaId) {
@@ -1491,8 +1505,9 @@ export function AudioNarrationWizard({
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
         if (captionFile?.mediaId) {
           // ONLY add captions to media array (no captionId field)
@@ -1500,15 +1515,16 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: Media) => m.type !== 'caption')
+          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
       }
     })
@@ -1644,7 +1660,7 @@ export function AudioNarrationWizard({
         
         // CRITICAL FIX: Sync caption text to course content
         if (captionFile) {
-          topic.caption = captionFile.content
+          (topic as any).caption = captionFile.content
         }
         
         if (audioFile?.mediaId) {
@@ -1659,8 +1675,9 @@ export function AudioNarrationWizard({
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
         if (captionFile?.mediaId) {
           // ONLY add captions to media array (no captionId field)
@@ -1668,15 +1685,16 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: Media) => m.type !== 'caption')
+          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
-            title: '' // Required by Rust SCORM generator
-          })
+            title: '', // Required by Rust SCORM generator
+            url: '' // Required by Media interface
+          } as unknown as ExtendedMedia)
         }
       }
     })
@@ -3459,8 +3477,8 @@ export function AudioNarrationWizard({
               clearedContent.topics.forEach((topic: Topic) => {
                 topic.media = []
                 // Also clear the deprecated audioId and captionId fields
-                delete topic.audioId
-                delete topic.captionId
+                delete (topic as any).audioId
+                delete (topic as any).captionId
               })
             }
             

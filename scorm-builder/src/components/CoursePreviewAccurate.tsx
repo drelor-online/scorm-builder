@@ -121,11 +121,11 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     // Load welcome page media
     if (content.welcome?.media) {
       for (const media of content.welcome.media) {
-        if (media.storageId && !media.url) {
+        if ((media as any).storageId && !media.url) {
           try {
-            const mediaData = await storage.getMedia(media.storageId)
+            const mediaData = await storage.getMedia((media as any).storageId)
             if (mediaData?.blob) {
-              const url = blobUrlManager.getOrCreateUrl(`preview-${media.storageId}`, mediaData.blob)
+              const url = blobUrlManager.getOrCreateUrl(`preview-${(media as any).storageId}`, mediaData.blob)
               media.url = url
             }
           } catch (error) {
@@ -138,11 +138,11 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     // Load objectives page media
     if (content.objectivesPage?.media) {
       for (const media of content.objectivesPage.media) {
-        if (media.storageId && !media.url) {
+        if ((media as any).storageId && !media.url) {
           try {
-            const mediaData = await storage.getMedia(media.storageId)
+            const mediaData = await storage.getMedia((media as any).storageId)
             if (mediaData?.blob) {
-              const url = blobUrlManager.getOrCreateUrl(`preview-${media.storageId}`, mediaData.blob)
+              const url = blobUrlManager.getOrCreateUrl(`preview-${(media as any).storageId}`, mediaData.blob)
               media.url = url
             }
           } catch (error) {
@@ -157,11 +157,11 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
       for (const topic of content.topics) {
         if (topic.media) {
           for (const media of topic.media) {
-            if (media.storageId && !media.url) {
+            if ((media as any).storageId && !media.url) {
               try {
-                const mediaData = await storage.getMedia(media.storageId)
+                const mediaData = await storage.getMedia((media as any).storageId)
                 if (mediaData?.blob) {
-                  const url = blobUrlManager.getOrCreateUrl(`preview-${media.storageId}`, mediaData.blob)
+                  const url = blobUrlManager.getOrCreateUrl(`preview-${(media as any).storageId}`, mediaData.blob)
                   media.url = url
                 }
               } catch (error) {
@@ -178,27 +178,27 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
     if (!storage || !storage.isInitialized) return
     
     // Helper to load audio and caption for a section
-    const loadSectionAudio = async (section: { audioFile?: string; audioId?: string; audioBlob?: Blob; captionFile?: string; captionId?: string; captionBlob?: Blob }, prefix: string) => {
+    const loadSectionAudio = async (section: { audioFile?: string; audioId?: string; audioBlob?: Blob; captionFile?: string; captionId?: string; captionBlob?: Blob; audioUrl?: string; captionUrl?: string } & Record<string, any>, prefix: string) => {
       if (section.audioFile && !section.audioUrl) {
         try {
           // For audio, we need to get media by ID pattern
           // Audio files are named like 0000-welcome.mp3, and stored as audio-0, audio-1, etc.
-          let audioId: string | null = null
+          let audioMediaId: string | null = null
           
           if (prefix === 'welcome') {
-            audioId = 'audio-0'
+            audioMediaId = 'audio-0'
           } else if (prefix === 'objectives') {
-            audioId = 'audio-1'
+            audioMediaId = 'audio-1'
           } else if (prefix.startsWith('topic-')) {
             const topicIndex = parseInt(prefix.replace('topic-', ''))
-            audioId = `audio-${topicIndex + 2}` // Topics start at audio-2
+            audioMediaId = `audio-${topicIndex + 2}` // Topics start at audio-2
           }
           
-          if (audioId) {
-            const audioMedia = await storage.getMedia(audioId)
+          if (audioMediaId) {
+            const audioMedia = await storage.getMedia(audioMediaId)
             if (audioMedia?.blob) {
-              const url = blobUrlManager.getOrCreateUrl(`preview-${audioId}`, audioMedia.blob)
-              section.audioUrl = url
+              const audioUrl = blobUrlManager.getOrCreateUrl(`preview-${audioMediaId}`, audioMedia.blob)
+              section.audioUrl = audioUrl
             }
           }
         } catch (error) {
@@ -210,22 +210,22 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
         try {
           // For captions, we need to get media by ID pattern
           // Caption files are named like 0000-welcome.vtt, and stored as caption-0, caption-1, etc.
-          let captionId: string | null = null
+          let captionMediaId: string | null = null
           
           if (prefix === 'welcome') {
-            captionId = 'caption-0'
+            captionMediaId = 'caption-0'
           } else if (prefix === 'objectives') {
-            captionId = 'caption-1'
+            captionMediaId = 'caption-1'
           } else if (prefix.startsWith('topic-')) {
             const topicIndex = parseInt(prefix.replace('topic-', ''))
-            captionId = `caption-${topicIndex + 2}` // Topics start at caption-2
+            captionMediaId = `caption-${topicIndex + 2}` // Topics start at caption-2
           }
           
-          if (captionId) {
-            const captionMedia = await storage.getMedia(captionId)
+          if (captionMediaId) {
+            const captionMedia = await storage.getMedia(captionMediaId)
             if (captionMedia?.blob) {
-              const url = blobUrlManager.getOrCreateUrl(`preview-${captionId}`, captionMedia.blob)
-              section.captionUrl = url
+              const captionUrl = blobUrlManager.getOrCreateUrl(`preview-${captionMediaId}`, captionMedia.blob)
+              section.captionUrl = captionUrl
             }
           }
         } catch (error) {

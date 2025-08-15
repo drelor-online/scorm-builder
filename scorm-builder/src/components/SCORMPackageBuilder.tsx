@@ -170,7 +170,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             })
             return blob
           } catch (fetchError: unknown) {
-            if (fetchError.name === 'AbortError') {
+            if (fetchError instanceof Error && fetchError.name === 'AbortError') {
               console.warn(`[SCORMPackageBuilder] Blob fetch timed out for: ${mediaId}`)
             } else {
               console.error('[SCORMPackageBuilder] Failed to fetch blob URL:', fetchError)
@@ -538,7 +538,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         passMark: 80
       }
       const enhancedContent = await convertToEnhancedCourseContent(courseContent, metadata)
-      performanceMetrics.conversionDuration = Date.now() - performanceMetrics.conversionStart
+      performanceMetrics.conversionDuration = Date.now() - (typeof performanceMetrics.conversionStart === 'number' ? performanceMetrics.conversionStart : Date.now())
       console.log('[SCORMPackageBuilder] Enhanced content ready:', enhancedContent)
       
       // Debug: Log the enhanced content to check audio/caption fields
@@ -626,7 +626,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }])
         info(warningMsg)
       }
-      performanceMetrics.mediaLoadDuration = Date.now() - performanceMetrics.mediaLoadStart
+      performanceMetrics.mediaLoadDuration = Date.now() - (typeof performanceMetrics.mediaLoadStart === 'number' ? performanceMetrics.mediaLoadStart : Date.now())
       
       setIsLoadingMedia(false)
       
@@ -683,7 +683,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           }
         }
       )
-      performanceMetrics.rustGenerationDuration = Date.now() - performanceMetrics.rustGenerationStart
+      performanceMetrics.rustGenerationDuration = Date.now() - (typeof performanceMetrics.rustGenerationStart === 'number' ? performanceMetrics.rustGenerationStart : Date.now())
       console.log('[SCORMPackageBuilder] === RUST GENERATION PHASE COMPLETE ===')
       
       if (!result) {
@@ -696,7 +696,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       const newPackage = {
         data: result instanceof Uint8Array ? result.buffer as ArrayBuffer : result,
-        metadata: metadata
+        metadata: metadata as unknown as Record<string, unknown>
       }
       
       setGeneratedPackage(newPackage)
@@ -768,7 +768,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       try {
         // FIX: Sanitize filename to avoid Windows reserved characters
-        const sanitizedFileName = sanitizeScormFileName(pkg.metadata.title || courseSeedData?.courseTitle)
+        const sanitizedFileName = sanitizeScormFileName(
+          (typeof pkg.metadata.title === 'string' ? pkg.metadata.title : undefined) || 
+          courseSeedData?.courseTitle
+        )
         console.log('[SCORMPackageBuilder] Calling save dialog with sanitized filename:', sanitizedFileName)
         filePath = await save({
           defaultPath: sanitizedFileName,
@@ -787,7 +790,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.log('[SCORMPackageBuilder] Attempting alternative save method...')
         try {
           // FIX: Use sanitized filename for fallback too
-          const fileName = sanitizeScormFileName(pkg.metadata.title || courseSeedData?.courseTitle)
+          const fileName = sanitizeScormFileName(
+            (typeof pkg.metadata.title === 'string' ? pkg.metadata.title : undefined) || 
+            courseSeedData?.courseTitle
+          )
           const projectDir = await invoke<string>('get_projects_dir')
           filePath = `${projectDir}/${fileName}`
           console.log('[SCORMPackageBuilder] Using fallback path:', filePath)
@@ -824,11 +830,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     } catch (error: unknown) {
       console.error('[SCORMPackageBuilder] Error saving SCORM package:', error)
       console.error('[SCORMPackageBuilder] Error details:', {
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack,
+        name: error instanceof Error ? error.name : undefined,
+        message: error instanceof Error ? error.message : undefined,
+        stack: error instanceof Error ? error.stack : undefined,
         type: typeof error,
-        constructor: error?.constructor?.name
+        constructor: error && typeof error === 'object' && 'constructor' in error ? (error.constructor as any)?.name : undefined
       })
       const errorMsg = `Error saving SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
       setMessages(prev => [...prev, {

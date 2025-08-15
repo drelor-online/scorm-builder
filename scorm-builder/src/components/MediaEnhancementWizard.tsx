@@ -444,7 +444,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         newMediaItem = {
           id: storedItem.id,
           type: 'video',
-          title: storedItem.metadata?.title || storedItem.fileName || result.title || 'Video',
+          title: (typeof storedItem.metadata?.title === 'string' ? storedItem.metadata.title : undefined) || storedItem.fileName || result.title || 'Video',
           url: storedItem.metadata?.youtubeUrl || result.url || '',
           embedUrl: storedItem.metadata?.embedUrl || result.embedUrl || '',
           isYouTube: true,
@@ -480,7 +480,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         newMediaItem = {
           id: storedItem.id,
           type: 'image',
-          title: storedItem.metadata?.title || storedItem.fileName || result.title || 'Image',
+          title: (typeof storedItem.metadata?.title === 'string' ? storedItem.metadata.title : undefined) || storedItem.fileName || result.title || 'Image',
           url: blobUrl || `media-error://${storedItem.id}`,
           storageId: storedItem.id,
           mimeType: storedItem.metadata?.mimeType || 'image/jpeg'
@@ -605,7 +605,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     try {
       const result = getMediaForPage(pageId)
       // Handle both promise and direct return
-      pageMediaItems = Array.isArray(result) ? result : await result
+      pageMediaItems = Array.isArray(result) ? result as unknown as Media[] : await result as unknown as Media[]
       // Ensure it's always an array
       if (!Array.isArray(pageMediaItems)) {
         console.warn('[MediaEnhancement] getMediaForPage did not return an array:', pageMediaItems)
@@ -632,11 +632,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const newBlobUrls = new Map<string, string>() // Collect blob URLs to batch update
       
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
-        let url = item.metadata.youtubeUrl || item.metadata.embedUrl
+        let url = (item as any).metadata.youtubeUrl || (item as any).metadata.embedUrl
         
         // For all non-YouTube media (including images with asset:// URLs), ALWAYS create fresh blob URLs
         // Don't trust any stored blob: URLs as they're session-specific
-        if (!item.metadata.youtubeUrl && !item.metadata.embedUrl) {
+        if (!(item as any).metadata.youtubeUrl && !(item as any).metadata.embedUrl) {
           // Always regenerate blob URLs, ignoring any stored blob: URLs
           const blobUrl = await createBlobUrl(item.id)
           url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
@@ -650,13 +650,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         const mediaItem = {
           id: item.id,
           type: item.type as 'image' | 'video',
-          title: item.metadata.title || item.fileName,
-          thumbnail: item.metadata.thumbnail,
-          url: item.metadata.youtubeUrl || url || '',
-          embedUrl: item.metadata.embedUrl,
-          isYouTube: item.metadata.isYouTube || !!item.metadata.youtubeUrl,
+          title: (item as any).metadata.title || item.fileName,
+          thumbnail: (item as any).metadata.thumbnail,
+          url: (item as any).metadata.youtubeUrl || url || '',
+          embedUrl: (item as any).metadata.embedUrl,
+          isYouTube: (item as any).metadata.isYouTube || !!(item as any).metadata.youtubeUrl,
           storageId: item.id,
-          mimeType: item.metadata.mimeType || 'video/mp4'
+          mimeType: (item as any).metadata.mimeType || 'video/mp4'
         }
         
         // Update progress
