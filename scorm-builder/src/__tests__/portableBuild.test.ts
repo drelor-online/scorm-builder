@@ -1,5 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { JSDOM } from 'jsdom'
+import * as fs from 'fs'
+import * as path from 'path'
 
 describe('Portable Build Configuration', () => {
   
@@ -9,8 +11,6 @@ describe('Portable Build Configuration', () => {
     global.fetch = mockFetch
     
     // Parse the built index.html to check for external dependencies
-    const fs = require('fs')
-    const path = require('path')
     const indexPath = path.join(__dirname, '../../dist/index.html')
     
     // This should fail if dist/index.html doesn't exist (build issue)
@@ -28,8 +28,6 @@ describe('Portable Build Configuration', () => {
   })
 
   test('should use relative paths for all assets', () => {
-    const fs = require('fs')
-    const path = require('path')
     const indexPath = path.join(__dirname, '../../dist/index.html')
     
     const indexContent = fs.readFileSync(indexPath, 'utf-8')
@@ -59,8 +57,6 @@ describe('Portable Build Configuration', () => {
   })
 
   test('should have all referenced assets exist in dist folder', () => {
-    const fs = require('fs')
-    const path = require('path')
     const indexPath = path.join(__dirname, '../../dist/index.html')
     const distPath = path.join(__dirname, '../../dist')
     
@@ -90,8 +86,6 @@ describe('Portable Build Configuration', () => {
   })
 
   test('should include local font fallbacks', () => {
-    const fs = require('fs')
-    const path = require('path')
     const indexPath = path.join(__dirname, '../../dist/index.html')
     
     const indexContent = fs.readFileSync(indexPath, 'utf-8')
@@ -126,8 +120,6 @@ describe('Portable Build Configuration', () => {
   })
 
   test('should not depend on development-only features', () => {
-    const fs = require('fs')
-    const path = require('path')
     
     // Check that HMR and other dev features are not in production build
     const indexPath = path.join(__dirname, '../../dist/index.html')
