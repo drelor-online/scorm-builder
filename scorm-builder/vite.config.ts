@@ -71,15 +71,13 @@ export default defineConfig({
             return 'vendor'
           }
           
-          // Application chunks
+          // Application chunks - Keep core modules together to avoid circular deps
           if (id.includes('src/components/DesignSystem')) {
             return 'design-system'
           }
-          if (id.includes('src/services')) {
-            return 'services'
-          }
-          if (id.includes('src/hooks')) {
-            return 'hooks'
+          if (id.includes('src/services') || id.includes('src/hooks') || id.includes('src/contexts')) {
+            // Keep services, hooks, and contexts in same chunk to prevent circular dependencies
+            return 'app-core'
           }
         }
       },

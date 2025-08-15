@@ -3,10 +3,14 @@ import { MockFileStorage } from '../services/MockFileStorage';
 import { FileStorage } from '../services/FileStorage';
 import { isTauriEnvironment } from '../config/environment';
 
-// Use real FileStorage in Tauri environment, MockFileStorage for browser
-const fileStorage = isTauriEnvironment() ? new FileStorage() : new MockFileStorage() as any as FileStorage;
-
 export function usePersistentStorage() {
+  // Use lazy initialization inside the hook to avoid circular dependency issues
+  const [fileStorage] = useState<FileStorage>(() => {
+    return isTauriEnvironment() 
+      ? new FileStorage() 
+      : new MockFileStorage() as any as FileStorage;
+  });
+  
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
