@@ -42,6 +42,28 @@ interface Message {
   text: string
 }
 
+interface LoadingDetails {
+  currentFile: string
+  filesLoaded: number
+  totalFiles: number
+}
+
+interface GeneratedPackage {
+  data: ArrayBuffer
+  metadata: CourseMetadata
+}
+
+interface PerformanceMetrics {
+  conversionStart?: number
+  conversionDuration?: number
+  mediaLoadStart?: number
+  mediaLoadDuration?: number
+  rustGenerationStart?: number
+  rustGenerationDuration?: number
+  totalDuration?: number
+  [key: string]: unknown
+}
+
 // Media files map will be created inside component to avoid memory leaks
 
 const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
@@ -60,16 +82,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
-  const [generatedPackage, setGeneratedPackage] = useState<{
-    data: ArrayBuffer
-    metadata: CourseMetadata
-  } | null>(null)
+  const [generatedPackage, setGeneratedPackage] = useState<GeneratedPackage | null>(null)
   const [loadingMessage, setLoadingMessage] = useState('Preparing SCORM package...')
   // Autoplay is always enabled
   const audioAutoplay = true
   const [isLoadingMedia, setIsLoadingMedia] = useState(false)
   const [mediaLoadProgress, setMediaLoadProgress] = useState(0)
-  const [loadingDetails, setLoadingDetails] = useState({
+  const [loadingDetails, setLoadingDetails] = useState<LoadingDetails>({
     currentFile: '',
     filesLoaded: 0,
     totalFiles: 0
@@ -81,14 +100,15 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     getMedia,
     getAllMedia,
     getMediaForPage,
-    createBlobUrl
+    createBlobUrl,
+    storeMedia
   } = useUnifiedMedia()
   const { success, error: notifyError, info, progress, warning } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
     componentName: 'SCORMPackageBuilder',
     trackRenders: true
   })
-  const [performanceData, setPerformanceData] = useState<any>(null)
+  const [performanceData, setPerformanceData] = useState<PerformanceMetrics | null>(null)
 
   // Cleanup media files map when component unmounts to prevent memory leaks
   useEffect(() => {
@@ -204,7 +224,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
     
     // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
-    const createMediaTrackingKey = (id: string, type?: string) => {
+    const createMediaTrackingKey = (id: string, type?: string): string => {
       return type ? `${id}:${type}` : id
     }
     
@@ -239,12 +259,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         const response = await fetch(url)
         const blob = await response.blob()
         
-        // Store the remote media locally - NOT IMPLEMENTED YET
-        // Need to use storeMedia from useUnifiedMedia but it's a hook
-        // For now, just return null
-        console.log('[SCORMPackageBuilder] Remote media storage not implemented yet')
-        const mediaItem = { id: null } // Temporary placeholder
-        return null
+        // Store the remote media locally using UnifiedMediaContext
+        const mediaItem = await storeMedia(blob, pageId, mediaType, {
+          originalUrl: url,
+          originalName: url.split('/').pop() || 'remote-media',
+          source: 'remote',
+          mimeType: blob.type
+        })
         
         console.log('[SCORMPackageBuilder] Stored remote media with ID:', mediaItem.id)
         return mediaItem.id
@@ -519,7 +540,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     try {
       const startTime = Date.now()
-      const performanceMetrics: Record<string, unknown> = {}
+      const performanceMetrics: PerformanceMetrics = {}
       
       // Enhanced course content for Rust
       performanceMetrics.conversionStart = Date.now()
@@ -702,7 +723,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       setPerformanceData(performanceMetrics)
       console.log('[SCORMPackageBuilder] Performance metrics:', performanceMetrics)
       
-      const newPackage = {
+      const newPackage: GeneratedPackage = {
         data: result instanceof Uint8Array ? result.buffer as ArrayBuffer : result,
         metadata: metadata as CourseMetadata
       }
@@ -755,7 +776,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     }
   }
 
-  const downloadPackage = async (packageToDownload?: typeof generatedPackage) => {
+  const downloadPackage = async (packageToDownload?: GeneratedPackage | null) => {
     console.log('[SCORMPackageBuilder] downloadPackage called')
     const pkg = packageToDownload || generatedPackage
     if (!pkg) {
