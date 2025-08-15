@@ -34,8 +34,8 @@ export function createMockAudioFile(
 }
 
 export function createMockMediaService(): MockMediaService {
-  const audioDataCache = new Map()
-  const blobUrlCache = new Map()
+  const audioDataCache = new Map<string, { data: Uint8Array; metadata: any }>()
+  const blobUrlCache = new Map<string, string>()
   
   return {
     storeMedia: vi.fn().mockResolvedValue({

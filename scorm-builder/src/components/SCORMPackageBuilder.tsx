@@ -62,7 +62,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const [messages, setMessages] = useState<Message[]>([])
   const [generatedPackage, setGeneratedPackage] = useState<{
     data: ArrayBuffer
-    metadata: Record<string, unknown> // SCORMMetadata type not defined
+    metadata: CourseMetadata
   } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState('Preparing SCORM package...')
   // Autoplay is always enabled
@@ -696,7 +696,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       const newPackage = {
         data: result instanceof Uint8Array ? result.buffer as ArrayBuffer : result,
-        metadata: metadata as unknown as Record<string, unknown>
+        metadata: metadata as CourseMetadata
       }
       
       setGeneratedPackage(newPackage)

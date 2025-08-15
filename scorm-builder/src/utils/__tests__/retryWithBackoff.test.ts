@@ -190,11 +190,11 @@ describe('retryWithBackoff', () => {
         delays.push(delay)
       })
       
-      // Run through all attempts
+      // Run through all attempts by advancing time more generously
       await vi.advanceTimersByTimeAsync(0) // First attempt
-      await vi.advanceTimersByTimeAsync(110) // ~100ms + jitter
-      await vi.advanceTimersByTimeAsync(210) // ~200ms + jitter
-      await vi.advanceTimersByTimeAsync(410) // ~400ms + jitter
+      await vi.advanceTimersByTimeAsync(500) // More than enough for first retry (~100ms + jitter)
+      await vi.advanceTimersByTimeAsync(500) // More than enough for second retry (~200ms + jitter)
+      await vi.advanceTimersByTimeAsync(1000) // More than enough for third retry (~400ms + jitter)
       
       await expect(resultPromise).rejects.toThrow()
       

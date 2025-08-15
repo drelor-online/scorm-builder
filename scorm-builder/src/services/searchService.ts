@@ -297,7 +297,7 @@ export const searchYouTubeVideos = async (
           }
           
           const detailsData = detailsResponse.ok ? await detailsResponse.json() as YouTubeDetailsResponse : { items: [] }
-          const detailsMap = new Map(
+          const detailsMap = new Map<string, YouTubeVideoDetails>(
             detailsData.items?.map((item) => [item.id, item]) || []
           )
           

@@ -132,5 +132,6 @@ export interface GeneratorResult {
   buffer: Uint8Array
 }
 
+
 // Re-export CourseContent type for compatibility
 export type { CourseContent } from './course'
