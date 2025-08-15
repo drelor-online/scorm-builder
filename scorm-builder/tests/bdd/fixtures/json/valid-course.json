@@ -1,0 +1,28 @@
+{
+  "title": "Test Course",
+  "description": "This is a test course for BDD testing",
+  "topics": [
+    {
+      "title": "Topic 1",
+      "content": "Content for topic 1"
+    },
+    {
+      "title": "Topic 2",
+      "content": "Content for topic 2"
+    }
+  ],
+  "assessment": {
+    "questions": [
+      {
+        "type": "multiple-choice",
+        "question": "Test question?",
+        "options": [
+          "Option A",
+          "Option B",
+          "Option C"
+        ],
+        "correct": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-08-07T23:37:40.212Z",
+  "summary": {
+    "totalFeatures": 0,
+    "totalStepDefinitions": 0,
+    "ambiguousSteps": 0,
+    "missingSteps": 0
+  },
+  "ambiguousSteps": [],
+  "missingSteps": [],
+  "features": [],
+  "stepDefinitions": []
+}
