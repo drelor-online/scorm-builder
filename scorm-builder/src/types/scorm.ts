@@ -120,8 +120,9 @@ export interface EnhancedCourseContent {
     questions: Array<{
       id: string
       question: string
+      blank?: string // For fill-in-the-blank questions
       options: string[]
-      correctAnswer: number
+      correctAnswer: number | string // number for MC/TF, string for fill-in-blank
     }>
   }
   audioDurations?: Record<string, number> // Map of audio file names to their durations in seconds

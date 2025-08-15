@@ -222,16 +222,28 @@ function convertNewFormat(
         }
 
         if (q.type === 'true-false') {
+          // Add defensive check for correctAnswer
+          const answer = q.correctAnswer && typeof q.correctAnswer === 'string' 
+            ? q.correctAnswer.toLowerCase() === 'true' ? 0 : 1
+            : 0; // default to first option (False) if invalid
           return {
             ...baseQuestion,
             options: ['True', 'False'],
-            correctAnswer: q.correctAnswer.toLowerCase() === 'true' ? 0 : 1
+            correctAnswer: answer
           }
         } else if (q.type === 'multiple-choice' && q.options) {
           return {
             ...baseQuestion,
             options: q.options,
             correctAnswer: q.options.indexOf(q.correctAnswer)
+          }
+        } else if (q.type === 'fill-in-the-blank') {
+          // Handle fill-in-the-blank questions specifically
+          return {
+            ...baseQuestion,
+            blank: (q as any).blank || q.question, // Use blank field if available, fallback to question
+            correctAnswer: q.correctAnswer || '', // Keep as string for fill-in-the-blank
+            options: [] // No options for fill-in-the-blank
           }
         }
         // Default fallback
