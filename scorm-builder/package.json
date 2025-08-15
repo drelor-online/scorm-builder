@@ -19,7 +19,7 @@
     "coverage:check": "node scripts/check-coverage-threshold.js",
     "lint": "eslint src/ --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "prepare": "cd .. && husky scorm-builder/.husky",
+    "prepare": "husky install .husky",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:bdd": "node --import tsx node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.config.mjs",

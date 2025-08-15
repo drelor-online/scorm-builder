@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { CourseContent, Media } from '../types/aiPrompt'
 import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
@@ -89,6 +89,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     trackRenders: true
   })
   const [performanceData, setPerformanceData] = useState<any>(null)
+
+  // Cleanup media files map when component unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      console.log('[SCORMPackageBuilder] Cleaning up media files cache on unmount')
+      mediaFilesRef.current.clear()
+    }
+  }, [])
 
   // Helper function to get media blob from UnifiedMedia with timeout
   const getMediaBlobFromRegistry = async (mediaId: string): Promise<Blob | null> => {

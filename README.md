@@ -386,8 +386,12 @@ The built files in `dist/` can be served from any static host:
 
 ## 🏆 Recent Improvements
 
-- Fixed TypeScript strict typing issues (Record, Map, Promise generics)
-- Resolved test timeout issues in Toast, AIPromptGenerator, and retryWithBackoff
+- **Fixed all remaining TypeScript strict typing issues** (Record, Map, Promise generics)
+- **Added memory cleanup for media cache** to prevent memory leaks in long sessions
+- **Fixed Husky git hooks configuration** for reliable pre-commit checks
+- **Enhanced metadata typing** with additional SCORM-specific fields
+- **Resolved test timeout issues** in Toast, AIPromptGenerator, and retryWithBackoff
+- **Comprehensive BDD test coverage** with step definitions for all major features
 - Reduced failing tests from 246 to 0-4 (99.7%+ improvement)
 - Added comprehensive test coverage for SCORM generators
 - Improved UI spacing and layout
