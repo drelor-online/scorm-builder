@@ -8,28 +8,7 @@ import { CourseSeedInputPage } from '../pages/CourseSeedInputPage'
 let appPage: AppPage
 let courseSeedInputPage: CourseSeedInputPage
 
-Given('I have a clean project state', async function () {
-  appPage = new AppPage(this.page)
-  
-  // Clear all storage
-  await this.page.evaluate(() => {
-    localStorage.clear()
-    sessionStorage.clear()
-    // Clear IndexedDB
-    return indexedDB.deleteDatabase('ScormBuilder')
-  })
-})
 
-Given('I have valid API keys configured', async function () {
-  // Set up API keys in localStorage
-  await this.page.evaluate(() => {
-    localStorage.setItem('elevenlabs_api_key', 'test-api-key')
-    localStorage.setItem('settings', JSON.stringify({
-      elevenlabsApiKey: 'test-api-key',
-      defaultVoice: 'test-voice'
-    }))
-  })
-})
 
 Given('I start creating a new course', async function () {
   await appPage.navigate()
@@ -75,9 +54,6 @@ When('I proceed to the next step', async function () {
 //   await appPage.waitForStep(stepId)
 // })
 
-When('I select the {string} template', async function (templateName: string) {
-  await this.page.click(`[data-template="${templateName.toLowerCase()}"]`)
-})
 
 When('I enable {string}', async function (option: string) {
   const checkboxMap: Record<string, string> = {

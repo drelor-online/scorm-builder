@@ -12,6 +12,3 @@ When('I wait for {int}ms', async function (milliseconds: number) {
   await this.page.waitForTimeout(milliseconds)
 })
 
-Then('I wait for {int}ms', async function (milliseconds: number) {
-  await this.page.waitForTimeout(milliseconds)
-})
