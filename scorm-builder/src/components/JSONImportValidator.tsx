@@ -224,7 +224,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         setToast({ 
-          message: 'JSON automatically fixed and validated successfully!', 
+          message: '✅ Valid JSON detected! Course structure loaded successfully.', 
           type: 'success' 
         })
         setIsLocked(true)
@@ -245,7 +245,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         setToast({ 
-          message: 'JSON automatically fixed unescaped quotes and validated successfully!', 
+          message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
           type: 'success' 
         })
         setIsLocked(true)
@@ -1162,6 +1162,20 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                       validateJSON()
                     }, delayTime)
                   }
+                }
+              }}
+              onPaste={() => {
+                // Handle paste event - validate immediately
+                if (!isLocked && jsonInput && jsonInput.trim().length > 50) {
+                  // Clear any existing timeout
+                  if ((window as any).validationTimeout) {
+                    clearTimeout((window as any).validationTimeout)
+                  }
+                  
+                  // Validate immediately on paste
+                  setTimeout(() => {
+                    validateJSON()
+                  }, 50) // Very short delay to ensure pasted content is processed
                 }
               }}
               onValidate={(isValid, errors) => {

@@ -9,6 +9,7 @@ interface SimpleJSONEditorProps {
   value: string
   onChange: (value: string) => void
   onValidate?: (isValid: boolean, errors?: any[]) => void
+  onPaste?: () => void
   height?: string
   readOnly?: boolean
   schema?: any
@@ -26,6 +27,7 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
   value,
   onChange,
   onValidate,
+  onPaste,
   height = '500px',
   readOnly = false,
   schema,
@@ -220,6 +222,19 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
     }
   }
 
+  // Handle paste events
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!readOnly && onPaste) {
+      // Reset the session flag so dialog shows for each paste
+      setHasShownDialogForSession(false)
+      
+      // Call the parent's paste handler
+      setTimeout(() => {
+        onPaste()
+      }, 0) // Use setTimeout to ensure the pasted content is in the textarea first
+    }
+  }
+
   // Reset auto-fix flag when content changes
   useEffect(() => {
     setAutoFixApplied(false)
@@ -250,6 +265,7 @@ export const SimpleJSONEditor: React.FC<SimpleJSONEditorProps> = ({
             onChange={(e) => onChange(e.target.value)}
             onScroll={handleScroll}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             readOnly={readOnly}
             spellCheck={false}
             autoComplete="off"
