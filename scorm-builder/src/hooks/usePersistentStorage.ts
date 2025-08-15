@@ -57,8 +57,10 @@ export function usePersistentStorage() {
         message: 'Loading media files...'
       });
       
-      // Small delay to show media loading progress
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Small delay to show media loading progress (skip in tests)
+      if (process.env.NODE_ENV !== 'test') {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       
       // Report content loading phase
       onProgress?.({ phase: 'content', percent: 75, message: 'Loading course structure...' });
@@ -81,8 +83,10 @@ export function usePersistentStorage() {
       
       setCurrentProjectId(projectId);
       
-      // Small delay to ensure smooth transition
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Small delay to ensure smooth transition (skip in tests)
+      if (process.env.NODE_ENV !== 'test') {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
       
       // Complete
       onProgress?.({ phase: 'finalizing', percent: 100, message: 'Project ready!' });

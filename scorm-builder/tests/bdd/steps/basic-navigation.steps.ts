@@ -124,3 +124,29 @@ When('I click {string} in the dialog', { timeout: 10000 }, async function (butto
 })
 
 // Removed duplicate - this is defined in course-seed-input.steps.ts
+
+// Common missing steps
+Given('I have a clean project state', async function () {
+  // Reset application state
+  await this.page.evaluate(() => {
+    // Clear localStorage
+    localStorage.clear()
+    // Clear sessionStorage
+    sessionStorage.clear()
+  })
+  
+  // Navigate to fresh application
+  const url = this.baseUrl || 'http://localhost:1420'
+  await this.page.goto(url, { timeout: 10000 })
+  await this.page.waitForLoadState('domcontentloaded')
+  await this.page.waitForTimeout(1000)
+})
+
+Given('I have valid API keys configured', async function () {
+  // Set up test API keys in localStorage or environment
+  await this.page.evaluate(() => {
+    localStorage.setItem('VITE_GOOGLE_IMAGE_API_KEY', 'test_api_key')
+    localStorage.setItem('VITE_GOOGLE_CSE_ID', 'test_cse_id')
+    localStorage.setItem('VITE_YOUTUBE_API_KEY', 'test_youtube_key')
+  })
+})

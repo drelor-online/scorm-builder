@@ -290,6 +290,23 @@ npm run build -- --skip-api-check
 #### Build Configuration
 For CI/CD environments, set `VITE_SKIP_API_VALIDATION=true` to build without API keys.
 
+#### Feature-Specific API Usage
+- **Media Enhancement Wizard**:
+  - `VITE_GOOGLE_IMAGE_API_KEY` + `VITE_GOOGLE_CSE_ID`: Enables image search and selection
+  - `VITE_YOUTUBE_API_KEY`: Enables YouTube video search and embedding
+  - Without keys: Manual image/video URL entry only
+
+- **Course Content**:
+  - All core functionality works without API keys
+  - Local file uploads always available
+  - Manual media URL entry supported
+
+- **Offline Limitations**:
+  - No image search from Google
+  - No YouTube video search  
+  - No automatic video thumbnails
+  - Manual media workflows still fully functional
+
 ### Security Configuration
 The application includes:
 - Content Security Policy (CSP)
@@ -371,6 +388,29 @@ The built files in `dist/` can be served from any static host:
 
 - SCORM 2004 support not yet implemented (removed from UI)
 - Media search requires API keys
+
+## ⚙️ Dependencies & Compatibility
+
+### Core Dependencies
+This project uses current stable versions of major frameworks:
+
+- **React 19.1.1** - Latest stable React with concurrent features
+- **React Router 7.2.0** - Modern routing with data loading
+- **Vite 6.0.7** - Fast build tool with optimized bundling
+- **TypeScript 5.x** - Strict type checking enabled
+- **Tauri 2.x** - Desktop app framework
+
+### Version Strategy
+- **Current Stable**: All dependencies use stable, published versions (not beta/RC)
+- **LTS Support**: For enterprise environments requiring LTS, consider using:
+  - React 18.x (LTS)
+  - React Router 6.x (stable)
+  - Vite 5.x (stable)
+
+### Compatibility Notes
+- **Node.js**: Requires Node 18+ (for React 19 support)
+- **npm**: Version 9+ recommended
+- **Browser Support**: Modern browsers (ES2022+ features used)
 
 ## 🎯 Roadmap
 
