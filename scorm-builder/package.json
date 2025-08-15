@@ -97,7 +97,7 @@
     "prettier": "^3.4.2",
     "rollup-plugin-visualizer": "^6.0.3",
     "tailwindcss": "^4.1.11",
-    "tdd-guard": "^0.6.0",
+    "tdd-guard": "^0.9.1",
     "terser": "^5.43.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
