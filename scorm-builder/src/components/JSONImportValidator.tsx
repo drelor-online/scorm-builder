@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { CourseContent } from '../types/aiPrompt'
 import { PageLayout } from './PageLayout'
 import { 
@@ -60,6 +60,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
+  const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Load persisted JSON import data on mount
   useEffect(() => {
@@ -120,6 +121,29 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     persistValidationState()
   }, [jsonInput, validationResult, isLocked, storage?.isInitialized])
   
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current)
+      }
+    }
+  }, [])
+  
+  // State validation synchronization effect - ensures tree view shows when validation completes
+  useEffect(() => {
+    // Verify that when all conditions are met, the component will show the tree view
+    if (isLocked && validationResult?.isValid && validationResult.data && !isValidating) {
+      // Force a re-render to ensure the tree view shows
+      // This is a safety mechanism for production builds where state batching might cause issues
+      const timer = setTimeout(() => {
+        // Trigger a minimal state update to ensure render cycle completes
+        setValidationResult((prev: any) => prev ? { ...prev } : null)
+      }, 10)
+      return () => clearTimeout(timer)
+    }
+  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating])
+  
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
   // JSON input state is tracked but not auto-saved to localStorage anymore
@@ -137,6 +161,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!processedInput.trim()) {
         // Don't show error for empty input, just silently return
         setValidationResult(null)
+        setIsValidating(false)
         return
       }
       
@@ -228,6 +253,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           type: 'success' 
         })
         setIsLocked(true)
+        setIsValidating(false)
         return
       }
       
@@ -249,6 +275,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           type: 'success' 
         })
         setIsLocked(true)
+        setIsValidating(false)
         return
       } catch (e) {
         console.log("Smart auto-fix didn't fully resolve issues, continuing with other fixes...")
@@ -503,44 +530,52 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Check for old format indicators
       if ('activities' in parsedData || 'quiz' in parsedData) {
         setValidationResult({ isValid: false, error: 'Invalid format: This appears to be the old JSON format. Please use the new format with welcomePage, learningObjectivesPage, and assessment.' })
+        setIsValidating(false)
         return
       }
 
       // Validate welcomePage
       if (!parsedData.welcomePage) {
         setValidationResult({ isValid: false, error: 'Missing required field: welcomePage' })
+        setIsValidating(false)
         return
       }
       if (!parsedData.welcomePage.id || !parsedData.welcomePage.title || !parsedData.welcomePage.content || !parsedData.welcomePage.narration) {
         setValidationResult({ isValid: false, error: 'Missing required fields in welcomePage' })
+        setIsValidating(false)
         return
       }
 
       // Validate learningObjectivesPage
       if (!parsedData.learningObjectivesPage) {
         setValidationResult({ isValid: false, error: 'Missing required field: learningObjectivesPage' })
+        setIsValidating(false)
         return
       }
       if (!parsedData.learningObjectivesPage.id || !parsedData.learningObjectivesPage.title || 
           !parsedData.learningObjectivesPage.content || !parsedData.learningObjectivesPage.narration) {
         setValidationResult({ isValid: false, error: 'Missing required fields in learningObjectivesPage' })
+        setIsValidating(false)
         return
       }
 
       // Validate topics
       if (!parsedData.topics || !Array.isArray(parsedData.topics)) {
         setValidationResult({ isValid: false, error: 'Missing required field: topics' })
+        setIsValidating(false)
         return
       }
 
       for (const topic of parsedData.topics) {
         if (!topic.id || !topic.title || !topic.content || topic.narration === undefined) {
           setValidationResult({ isValid: false, error: 'Missing required fields in topic' })
+          setIsValidating(false)
           return
         }
         // Check for old format
         if ('bulletPoints' in topic || Array.isArray(topic.narration)) {
           setValidationResult({ isValid: false, error: 'Invalid format: Topics should have single narration string, not array or bulletPoints' })
+          setIsValidating(false)
           return
         }
       }
@@ -548,6 +583,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Validate assessment
       if (!parsedData.assessment || !parsedData.assessment.questions || !Array.isArray(parsedData.assessment.questions)) {
         setValidationResult({ isValid: false, error: 'Missing required field: assessment' })
+        setIsValidating(false)
         return
       }
 
@@ -579,6 +615,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       
       // Lock the input after successful validation
       setIsLocked(true)
+      setIsValidating(false)
       
       // Show success message
       setToast({ 
@@ -647,15 +684,15 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           markDirty('courseContent') // Mark dirty when auto-fixing content
           setToast({ message: 'Applied auto-fixes, validating...', type: 'info' })
           // Try validation again with fixed JSON
-          setTimeout(() => {
+          validationTimeoutRef.current = setTimeout(() => {
             validateJSON()
           }, 100)
+          setIsValidating(false)
           return
         }
       }
       
       setValidationResult({ isValid: false, error: errorMessage })
-    } finally {
       setIsValidating(false)
     }
   }
@@ -1152,13 +1189,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   // Auto-validate after user stops typing (debounced) or immediately for paste
                   if (value && value.trim().length > 100) { // Only if there's substantial content
                     // Clear any existing timeout
-                    if ((window as any).validationTimeout) {
-                      clearTimeout((window as any).validationTimeout)
+                    if (validationTimeoutRef.current) {
+                      clearTimeout(validationTimeoutRef.current)
                     }
                     
                     // Set timeout based on whether it's a paste or typing
                     const delayTime: number = isProbablyPaste ? 100 : 1500;
-                    (window as any).validationTimeout = setTimeout(() => {
+                    validationTimeoutRef.current = setTimeout(() => {
                       validateJSON()
                     }, delayTime)
                   }
@@ -1168,12 +1205,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 // Handle paste event - validate immediately
                 if (!isLocked && jsonInput && jsonInput.trim().length > 50) {
                   // Clear any existing timeout
-                  if ((window as any).validationTimeout) {
-                    clearTimeout((window as any).validationTimeout)
+                  if (validationTimeoutRef.current) {
+                    clearTimeout(validationTimeoutRef.current)
                   }
                   
                   // Validate immediately on paste
-                  setTimeout(() => {
+                  validationTimeoutRef.current = setTimeout(() => {
                     validateJSON()
                   }, 50) // Very short delay to ensure pasted content is processed
                 }
@@ -1187,7 +1224,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 // If JSON is syntactically valid, automatically trigger full validation
                 if (isValid && jsonInput.trim().length > 0) {
                   // Use a short delay to ensure the JSON content is fully processed
-                  setTimeout(() => {
+                  validationTimeoutRef.current = setTimeout(() => {
                     validateJSON()
                   }, 50)
                   return

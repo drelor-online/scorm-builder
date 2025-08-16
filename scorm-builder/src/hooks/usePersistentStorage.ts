@@ -58,7 +58,7 @@ export function usePersistentStorage() {
       });
       
       // Small delay to show media loading progress (skip in tests)
-      if (process.env.NODE_ENV !== 'test') {
+      if (!import.meta.env.VITEST) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
@@ -84,7 +84,7 @@ export function usePersistentStorage() {
       setCurrentProjectId(projectId);
       
       // Small delay to ensure smooth transition (skip in tests)
-      if (process.env.NODE_ENV !== 'test') {
+      if (!import.meta.env.VITEST) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
       

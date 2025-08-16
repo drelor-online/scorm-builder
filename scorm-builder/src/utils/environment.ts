@@ -36,22 +36,22 @@ export function isNodeEnvironment(): boolean {
  * Check if we're running in a test environment
  */
 export function isTestEnvironment(): boolean {
-  return typeof process !== 'undefined' && 
-    (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined)
+  return import.meta.env.VITEST === true || 
+    (typeof process !== 'undefined' && process.env.JEST_WORKER_ID !== undefined)
 }
 
 /**
  * Check if we're running in development mode
  */
 export function isDevelopment(): boolean {
-  return typeof process !== 'undefined' && process.env.NODE_ENV === 'development'
+  return import.meta.env.DEV === true
 }
 
 /**
  * Check if we're running in production mode
  */
 export function isProduction(): boolean {
-  return typeof process !== 'undefined' && process.env.NODE_ENV === 'production'
+  return import.meta.env.PROD === true
 }
 
 /**

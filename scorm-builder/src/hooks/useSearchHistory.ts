@@ -49,7 +49,7 @@ export function useSearchHistory(
     } catch (error) {
       // Silently fail to avoid console spam when storage is blocked
       // Only log in development
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.debug('Search history unavailable:', error)
       }
     }
@@ -67,7 +67,7 @@ export function useSearchHistory(
       localStorage.setItem(storageKey, JSON.stringify(newHistory))
     } catch (error) {
       // Silently fail to avoid console spam
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.debug('Could not save search history:', error)
       }
     }
@@ -113,7 +113,7 @@ export function useSearchHistory(
       localStorage.removeItem(storageKey)
     } catch (error) {
       // Silently fail
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.debug('Could not clear search history:', error)
       }
     }

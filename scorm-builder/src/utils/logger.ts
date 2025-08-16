@@ -4,8 +4,14 @@
  * Supports category filtering to reduce noise from specific components
  */
 
-const isDevelopment = () => process.env.NODE_ENV === 'development'
-const isDebugEnabled = () => isDevelopment() || localStorage.getItem('debugMode') === 'true'
+const isDevelopment = () => import.meta.env.DEV
+const isDebugEnabled = () => {
+  try {
+    return isDevelopment() || localStorage.getItem('debugMode') === 'true'
+  } catch {
+    return isDevelopment()
+  }
+}
 
 // Category filtering support
 const disabledCategories = new Set<string>()

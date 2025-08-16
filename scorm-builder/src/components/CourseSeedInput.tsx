@@ -127,81 +127,27 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   }, [storage?.isInitialized])
   const [showDraftLoaded] = useState(false)
   
-  // Load project data including course seed data
+  // Get project name for new projects (only when no initialData is provided)
   useEffect(() => {
-    const loadProjectData = async () => {
-      if (storage && storage.currentProjectId && storage.isInitialized) {
+    const loadProjectName = async () => {
+      if (storage && storage.currentProjectId && storage.isInitialized && !initialData?.courseTitle && !courseTitle) {
         try {
-          // Load saved course seed data using the new helper method
-          const savedSeedData = await storage.getCourseSeedData()
-          
-          debugLogger.info('CourseSeedInput', 'Loading project data', {
-            hasSavedData: !!savedSeedData,
-            savedTitle: savedSeedData?.courseTitle,
-            savedTemplate: savedSeedData?.template,
-            savedDifficulty: savedSeedData?.difficulty,
-            savedTopicsCount: savedSeedData?.customTopics?.length || 0,
-            hasInitialData: !!initialData?.courseTitle,
-            currentTitle: courseTitle
-          });
-          
-          // If we have saved seed data, restore all fields
-          if (savedSeedData) {
-            const newValues = {
-              courseTitle: courseTitle,
-              difficulty: difficulty,
-              template: template,
-              customTopics: customTopics
-            };
-            
-            // Only update fields that are currently empty/default to avoid overriding user changes
-            if (!courseTitle && savedSeedData.courseTitle) {
-              setCourseTitle(savedSeedData.courseTitle);
-              newValues.courseTitle = savedSeedData.courseTitle;
-            }
-            
-            if (template === 'None' && savedSeedData.template) {
-              setTemplate(savedSeedData.template);
-              newValues.template = savedSeedData.template;
-            }
-            
-            if (difficulty === 3 && savedSeedData.difficulty) {
-              setDifficulty(savedSeedData.difficulty);
-              newValues.difficulty = savedSeedData.difficulty;
-            }
-            
-            if (!customTopics && savedSeedData.customTopics?.length) {
-              const topicsStr = savedSeedData.customTopics.join('\n');
-              setCustomTopics(topicsStr);
-              newValues.customTopics = topicsStr;
-            }
-            
-            // Update the form's initial values to prevent unsaved changes warnings
-            updateInitialValues(newValues);
-            
-            // Lock the title since we have saved data
-            setIsTitleLocked(true);
-            
-          } else if (!initialData?.courseTitle && !courseTitle) {
-            // No saved data - try to get the project name as fallback
-            const projects = await storage.listProjects()
-            const currentProject = projects.find(p => p.id === storage.currentProjectId)
-            if (currentProject?.name) {
-              debugLogger.info('CourseSeedInput', 'Loading title from project name (no saved data)', {
-                projectName: currentProject.name
-              });
-              setCourseTitle(currentProject.name);
-              // Don't lock the title for new projects
-            }
+          const projects = await storage.listProjects()
+          const currentProject = projects.find(p => p.id === storage.currentProjectId)
+          if (currentProject?.name) {
+            debugLogger.info('CourseSeedInput', 'Loading title from project name (new project)', {
+              projectName: currentProject.name
+            });
+            setCourseTitle(currentProject.name);
           }
         } catch (error) {
-          console.error('Failed to load project data:', error)
+          console.error('Failed to load project name:', error)
         }
       }
     }
     
-    loadProjectData()
-  }, [storage, storage?.currentProjectId, storage?.isInitialized, initialData])
+    loadProjectName()
+  }, [storage, storage?.currentProjectId, storage?.isInitialized, initialData?.courseTitle, courseTitle])
   
   // Navigation guard hook
   const {
@@ -232,14 +178,15 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   // Sync state when initialData changes (for when component receives data after mounting)
   // Only update fields that are currently empty to avoid overriding user selections
   useEffect(() => {
-    if (initialData) {
+    if (initialData && hasMountedRef.current) {
       debugLogger.info('CourseSeedInput', 'Syncing state with initialData', {
         hasTitle: !!initialData.courseTitle,
         hasDifficulty: !!initialData.difficulty,
         hasTemplate: !!initialData.template,
         hasCustomTopics: !!initialData.customTopics?.length,
         currentTemplate: template,
-        currentTitle: courseTitle
+        currentTitle: courseTitle,
+        hasMounted: hasMountedRef.current
       });
       
       const newValues = {
@@ -250,12 +197,16 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
       
       // Only update fields that are currently empty/default to avoid overriding user selections
+      // Don't sync if user has already made changes (check against initial defaults)
+      const userHasChangedTemplate = template !== 'None' && template !== initialData.template
+      const userHasChangedTopics = customTopics.trim().length > 0 && !initialData.customTopics?.length
+      
       if (!courseTitle && initialData.courseTitle) {
         setCourseTitle(initialData.courseTitle)
         newValues.courseTitle = initialData.courseTitle
       }
       
-      if (template === 'None' && initialData.template) {
+      if (template === 'None' && initialData.template && !userHasChangedTemplate) {
         setTemplate(initialData.template)
         newValues.template = initialData.template
       }
@@ -265,7 +216,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         newValues.difficulty = initialData.difficulty
       }
       
-      if (!customTopics && initialData.customTopics?.length) {
+      if (!customTopics && initialData.customTopics?.length && !userHasChangedTopics) {
         const topicsStr = initialData.customTopics.join('\n')
         setCustomTopics(topicsStr)
         newValues.customTopics = topicsStr
@@ -343,10 +294,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           // Save using the new dedicated method that handles both courseSeedData and metadata
           await storage.saveCourseSeedData(seedData)
           
-          // Also trigger onSave callback for silent save
-          if (onSave) {
-            onSave(seedData)
-          }
+          // Don't trigger onSave callback for autosave to prevent race conditions
+          // The onSave callback is only for manual saves
         } catch (error) {
           console.error('Failed to save course seed data:', error)
         }
@@ -356,7 +305,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     // Debounce the save
     const timer = setTimeout(saveMetadata, 1000)
     return () => clearTimeout(timer)
-  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized, onSave])
+  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized])
   
   // Wrapped navigation handlers
   const handleStepClick = (stepIndex: number) => {

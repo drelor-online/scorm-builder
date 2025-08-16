@@ -149,7 +149,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               storage.fileStorage.cancelAllPendingSaves();
             }
 
-            // 2. Export debug logs (but don't await - too slow)
+            // 2. Save current course seed data before closing
+            if (storage?.saveCourseSeedData && courseSeedData) {
+              debugLogger.info('App v2.0.3', 'Flushing course seed data...');
+              try {
+                await storage.saveCourseSeedData(courseSeedData);
+                debugLogger.info('App v2.0.3', 'Course seed data saved successfully');
+              } catch (error) {
+                debugLogger.error('App v2.0.3', 'Failed to save seed data on close', error);
+              }
+            }
+
+            // 3. Export debug logs (but don't await - too slow)
             debugLogger.info('App v2.0.3', 'Triggering debug log export...');
             const report = debugLogger.createBugReport();
             if (report) {
@@ -163,14 +174,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               });
             }
             
-            // 3. CRITICAL: Unlisten to prevent infinite loop when we call close()
+            // 4. CRITICAL: Unlisten to prevent infinite loop when we call close()
             debugLogger.info('App v2.0.3', 'Removing close handler to prevent recursion...');
             if (unlistenTauri) {
               unlistenTauri();
               unlistenTauri = undefined; // Clear reference
             }
             
-            // 4. Close the window after a short delay to ensure cleanup
+            // 5. Close the window after a short delay to ensure cleanup
             debugLogger.info('App v2.0.3', 'Cleanup complete, closing window...');
             console.log('[App v2.0.3] Closing window now');
             
@@ -385,15 +396,24 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         let loadedStep = 'seed'
 
         await measureAsync('loadProjectData', async () => {
-          // First, always try to load the courseSeedData
+          // First, always try to load the courseSeedData using the helper method
           setLoadingProgress({ current: 1, total: 5, phase: 'Loading course metadata...' })
           debugLogger.info('App.loadProject', 'Loading courseSeedData from storage')
-          const seedData = await storage.getContent('courseSeedData')
+          const seedData = await storage.getCourseSeedData()
           if (seedData) {
             debugLogger.info('App.loadProject', 'Loaded courseSeedData', seedData)
-            loadedCourseSeedData = seedData as CourseSeedData
+            
+            // Handle both wrapped and unwrapped data formats
+            // Sometimes data comes back wrapped with cache metadata: {data: {...}, key: "...", retryCount: 0, timestamp: ...}
+            if (seedData && typeof seedData === 'object' && 'data' in seedData && typeof seedData.data === 'object') {
+              debugLogger.info('App.loadProject', 'Unwrapping cached courseSeedData')
+              loadedCourseSeedData = seedData.data as CourseSeedData
+            } else {
+              // Direct format
+              loadedCourseSeedData = seedData as CourseSeedData
+            }
           } else {
-            debugLogger.warn('App.loadProject', 'No courseSeedData found in project, will try to reconstruct')
+            debugLogger.warn('App.loadProject', 'No courseSeedData found in project')
           }
           
           // Try to load course-content directly (for projects that saved complete content)
@@ -568,20 +588,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           // Get metadata (which now handles unified data model internally)
           const metadata = await storage.getCourseMetadata()
           debugLogger.info('App.loadProject', 'Loaded metadata', metadata)
-          
-          // If we don't have seedData but have metadata, reconstruct it
-          if (!loadedCourseSeedData && metadata) {
-            debugLogger.info('App.loadProject', 'Reconstructing courseSeedData from metadata')
-            debugLogger.debug('App.loadProject', `Title from metadata: ${metadata.title} or courseTitle: ${metadata.courseTitle}`)
-            loadedCourseSeedData = {
-              courseTitle: metadata.title || metadata.courseTitle || '',
-              difficulty: metadata.difficulty || 3,
-              customTopics: metadata.topics || [],
-              template: metadata.template || 'None',
-              templateTopics: []
-            }
-            debugLogger.info('App.loadProject', 'Reconstructed courseSeedData', loadedCourseSeedData)
-          }
 
           // Only try reconstruction if we didn't load course content directly
           if (!loadedCourseContent && metadata && metadata.topics && metadata.topics.length > 0) {
@@ -723,6 +729,20 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         setCourseContent(loadedCourseContent)
         setCourseSeedData(loadedCourseSeedData)
         setCurrentStep(loadedStep)
+        
+        // Update autosave ref immediately with loaded data
+        if (loadedCourseSeedData) {
+          const seedData = loadedCourseSeedData as CourseSeedData;
+          autoSaveDataRef.current = {
+            courseTitle: seedData.courseTitle || '',
+            courseSeedData: seedData,
+            courseContent: loadedCourseContent || undefined,
+            currentStep: loadedStep,
+            lastModified: lastSavedTimeRef.current || new Date().toISOString(),
+            mediaFiles: EMPTY_MEDIA_FILES,
+            audioFiles: EMPTY_AUDIO_FILES
+          }
+        }
         debugLogger.info('App.loadProject', 'State updated', { 
           step: loadedStep, 
           hasSeedData: !!loadedCourseSeedData, 
@@ -816,7 +836,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       // Save all data from all pages
       if (dataToSave.courseSeedData) {
-        debugLogger.info('App.handleSave', 'Saving course metadata', dataToSave.courseSeedData)
+        debugLogger.info('App.handleSave', 'Saving course seed data', dataToSave.courseSeedData)
         
         // Test for circular references
         try {
@@ -825,8 +845,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           debugLogger.error('App.handleSave', 'Circular reference in courseSeedData', { error: e, keys: Object.keys(dataToSave.courseSeedData) })
         }
         
-        await storage.saveCourseMetadata(dataToSave.courseSeedData)
-        await storage.saveContent('courseSeedData', dataToSave.courseSeedData)
+        await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
         await storage.saveContent('course-content', dataToSave.courseContent)
@@ -863,8 +882,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       // Save all data from all pages (same as manual save)
       if (dataToSave.courseSeedData) {
-        await storage.saveCourseMetadata(dataToSave.courseSeedData)
-        await storage.saveContent('courseSeedData', dataToSave.courseSeedData)
+        await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
         await storage.saveContent('course-content', dataToSave.courseContent)
@@ -1705,6 +1723,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onSave={(content?: CourseSeedData) => {
                   if (content) {
                     setCourseSeedData(content);
+                    // Save with the new data immediately
                     handleManualSave(content);
                   } else {
                     handleManualSave();
