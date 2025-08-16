@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { CourseContent, Media } from '../types/aiPrompt'
 import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
@@ -18,6 +18,7 @@ import {
   Card, 
   Button, 
   LoadingSpinner,
+  ProgressBar,
   Icon
 } from './DesignSystem'
 import { Package, Download, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react'
@@ -95,6 +96,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   })
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [generationProgress, setGenerationProgress] = useState(0)
+  const [isCancellable, setIsCancellable] = useState(false)
+  const [isGenerationCancelled, setIsGenerationCancelled] = useState(false)
+  const generationAbortController = useRef<AbortController | null>(null)
   const storage = useStorage()
   const { 
     getMedia,
@@ -551,8 +556,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     setGeneratedPackage(null)
     setIsGenerating(true)
     setIsLoadingMedia(true)
+    setIsCancellable(true)
+    setIsGenerationCancelled(false)
+    setGenerationProgress(0)
     setLoadingMessage('Preparing course content...')
     setGenerationStartTime(Date.now())
+    
+    // Create abort controller for cancellation
+    generationAbortController.current = new AbortController()
     
     // Start elapsed time counter
     const intervalId = setInterval(() => {
@@ -561,6 +572,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     // Store interval ID to clear later
     const clearElapsedTimer = () => clearInterval(intervalId)
+    
+    // Helper function to yield to UI thread
+    const yieldToUI = () => new Promise<void>(resolve => setTimeout(resolve, 50))
     
     try {
       const startTime = Date.now()
@@ -582,6 +596,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         firstTopicMediaTypes: courseContent.topics?.[0]?.media?.map((m: Media) => ({ id: m.id, type: m.type }))
       })
       
+      // Check for cancellation
+      if (generationAbortController.current?.signal.aborted) {
+        throw new Error('Generation cancelled by user')
+      }
+      
+      setGenerationProgress(5)
+      await yieldToUI()
+      
       const metadata: CourseMetadata = {
         title: courseSeedData?.courseTitle || 'Untitled Course',
         identifier: storage.currentProjectId || 'default-project',
@@ -590,9 +612,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         duration: 0,
         passMark: 80
       }
+      
+      setGenerationProgress(10)
+      setLoadingMessage('Converting course content to enhanced format...')
+      await yieldToUI()
+      
       const enhancedContent = await convertToEnhancedCourseContent(courseContent, metadata)
       performanceMetrics.conversionDuration = Date.now() - (typeof performanceMetrics.conversionStart === 'number' ? performanceMetrics.conversionStart : Date.now())
       console.log('[SCORMPackageBuilder] Enhanced content ready:', enhancedContent)
+      
+      setGenerationProgress(15)
+      await yieldToUI()
       
       // Debug: Log the enhanced content to check audio/caption fields
       console.log('[SCORMPackageBuilder] DEBUG - Enhanced content audio/caption fields:', {
@@ -610,7 +640,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         firstTopicCaptionId: enhancedContent.topics?.[0]?.captionId
       })
       
+      // Check for cancellation before media loading
+      if (generationAbortController.current?.signal.aborted) {
+        throw new Error('Generation cancelled by user')
+      }
+      
+      setGenerationProgress(20)
       setLoadingMessage('Loading media files...')
+      await yieldToUI()
       
       // Load media from MediaRegistry and collect blobs for SCORM generation
       performanceMetrics.mediaLoadStart = Date.now()
@@ -620,6 +657,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         failedMedia = await loadMediaFromRegistry(enhancedContent)
         console.log('[SCORMPackageBuilder] === MEDIA LOAD PHASE COMPLETE ===')
         console.log('[SCORMPackageBuilder] Media files ready for packaging:', mediaFilesRef.current.size)
+        
+        setGenerationProgress(40)
+        await yieldToUI()
         
         // Add blob references to enhanced content for Rust generator
         // The Rust generator needs these blobs to include media in the package
@@ -709,8 +749,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         })
       }
       
+      // Check for cancellation before Rust generation
+      if (generationAbortController.current?.signal.aborted) {
+        throw new Error('Generation cancelled by user')
+      }
+      
       const estimatedSeconds = Math.round(60 + (mediaCount * 2)) // Reduced base time and per-file time
+      setGenerationProgress(45)
       setLoadingMessage(`Generating SCORM package (${mediaCount} media files, ${mediaFilesRef.current.size} loaded)...`)
+      await yieldToUI()
+      
       console.log('[SCORMPackageBuilder] === STARTING RUST GENERATION PHASE ===')
       console.log(`[SCORMPackageBuilder] Media count: ${mediaCount}, Loaded files: ${mediaFilesRef.current.size}`)
       
@@ -725,7 +773,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               storage.currentProjectId || 'default-project',
               (message, progress) => {
                 setLoadingMessage(message)
-                // Could also update a progress bar here if we had one
+                // Map Rust progress (0-100) to our progress range (45-95)
+                const mappedProgress = 45 + (progress * 0.5)
+                setGenerationProgress(mappedProgress)
                 console.log('[SCORMPackageBuilder] Progress:', progress, message)
               },
               mediaFilesRef.current // Pass the pre-loaded media files
@@ -743,6 +793,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         throw new Error('Failed to generate SCORM package - no data returned')
       }
       
+      setGenerationProgress(95)
+      setLoadingMessage('Finalizing SCORM package...')
+      await yieldToUI()
+      
       performanceMetrics.totalDuration = Date.now() - startTime
       setPerformanceData(performanceMetrics)
       console.log('[SCORMPackageBuilder] Performance metrics:', performanceMetrics)
@@ -753,15 +807,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       setGeneratedPackage(newPackage)
-      
-      // Don't add success message - the UI card handles this
-      // setMessages(prev => [...prev, {
-      //   id: `success-${Date.now()}`,
-      //   type: 'success',
-      //   text: `✅ SCORM package generated successfully! Size: ${(result.buffer.byteLength / 1024 / 1024).toFixed(2)} MB, Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`
-      // }])
-      
-      setLoadingMessage('')
+      setGenerationProgress(100)
+      setLoadingMessage('SCORM package generated successfully!')
+      await yieldToUI()
       
       // Clear the elapsed time interval
       clearElapsedTimer()
@@ -789,14 +837,26 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     } finally {
       setIsGenerating(false)
       setIsLoadingMedia(false)
+      setIsCancellable(false)
       setGenerationStartTime(null)
       setElapsedTime(0)
       // Clear interval if it exists
       if (typeof clearElapsedTimer !== 'undefined') {
         clearElapsedTimer()
       }
+      // Clear abort controller
+      generationAbortController.current = null
       // Don't clear media files immediately - keep for display
       // mediaFilesRef.current.clear()
+    }
+  }
+
+  const cancelGeneration = () => {
+    if (generationAbortController.current) {
+      generationAbortController.current.abort()
+      setIsGenerationCancelled(true)
+      setLoadingMessage('Cancelling generation...')
+      console.log('[SCORMPackageBuilder] Generation cancelled by user')
     }
   }
 
@@ -1020,36 +1080,90 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           <Card className="mb-6 border-blue-200">
             <div className="p-8">
               <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                  <LoadingSpinner size="medium" />
+                {/* Circular Progress Indicator */}
+                <div className="relative inline-flex items-center justify-center w-24 h-24 mb-6">
+                  {/* Background circle */}
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 24 24">
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      fill="none"
+                      className="text-gray-200"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      fill="none"
+                      strokeLinecap="round"
+                      className="text-blue-600 transition-all duration-300"
+                      style={{
+                        strokeDasharray: '62.83',
+                        strokeDashoffset: `${62.83 - (generationProgress / 100) * 62.83}`
+                      }}
+                    />
+                  </svg>
+                  {/* Progress percentage */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-lg font-bold text-blue-600">
+                      {Math.round(generationProgress)}%
+                    </span>
+                  </div>
                 </div>
+                
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Generating SCORM Package
                 </h3>
                 <p className="text-gray-600 mb-4">{loadingMessage}</p>
                 
-                {generationStartTime && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-sm text-blue-700">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                    {elapsedTime.toFixed(1)}s elapsed
-                  </div>
-                )}
+                {/* Linear Progress Bar */}
+                <div className="max-w-md mx-auto mb-4">
+                  <ProgressBar
+                    value={generationProgress}
+                    max={100}
+                    label={`${Math.round(generationProgress)}% complete`}
+                    showTimeRemaining={true}
+                    startTime={generationStartTime || undefined}
+                    className="mb-2"
+                  />
+                </div>
                 
+                {/* Time and Control Section */}
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  {generationStartTime && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-sm text-blue-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                      {elapsedTime.toFixed(1)}s elapsed
+                    </div>
+                  )}
+                  
+                  {isCancellable && !isGenerationCancelled && (
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={cancelGeneration}
+                      className="text-gray-600 hover:text-red-600"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Media Loading Details */}
                 {isLoadingMedia && loadingDetails.totalFiles > 0 && (
-                  <div className="mt-6 max-w-md mx-auto">
+                  <div className="mt-4 max-w-md mx-auto p-3 bg-gray-50 rounded-lg">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>Loading media files</span>
                       <span className="font-medium">{loadingDetails.filesLoaded}/{loadingDetails.totalFiles}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${mediaLoadProgress}%` }}
-                      />
-                    </div>
                     {loadingDetails.currentFile && (
-                      <p className="text-xs text-gray-500 mt-2 truncate">
-                        {loadingDetails.currentFile}
+                      <p className="text-xs text-gray-500 truncate">
+                        Current: {loadingDetails.currentFile}
                       </p>
                     )}
                   </div>

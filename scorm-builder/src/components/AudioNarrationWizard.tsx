@@ -228,6 +228,15 @@ export function AudioNarrationWizard({
     percent: number
   } | null>(null)
   
+  // Bulk upload progress tracking
+  const [bulkUploadProgress, setBulkUploadProgress] = useState<{
+    current: number
+    total: number
+    fileName: string
+    overallPercent: number
+    phase: 'processing' | 'uploading' | 'complete'
+  } | null>(null)
+  
   // Media loading cache to prevent redundant reads
   interface CachedMediaData {
     mediaData: unknown;
@@ -2392,16 +2401,32 @@ export function AudioNarrationWizard({
       const maxFiles = 50
       let processedCount = 0
       
-      // Process each file in the ZIP
-      for (const [filename, zipEntry] of Object.entries(contents.files)) {
-        if (zipEntry.dir) continue // Skip directories
-        
-        // Check if it's an audio file
-        if (!/\.(mp3|wav|m4a|ogg)$/i.test(filename)) {
-          debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', `Skipping non-audio file: ${filename}`)
-          logger.log(`[AudioNarrationWizard] Skipping non-audio file: ${filename}`)
-          continue
-        }
+      // Filter and count audio files first for progress tracking
+      const audioEntries = Object.entries(contents.files).filter(([filename, zipEntry]) => 
+        !zipEntry.dir && /\.(mp3|wav|m4a|ogg)$/i.test(filename)
+      )
+      
+      const totalAudioFiles = Math.min(audioEntries.length, maxFiles)
+      
+      // Initialize bulk progress
+      setBulkUploadProgress({
+        current: 0,
+        total: totalAudioFiles,
+        fileName: '',
+        overallPercent: 0,
+        phase: 'processing'
+      })
+      
+      // Process each audio file in the ZIP
+      for (const [filename, zipEntry] of audioEntries) {
+        // Update bulk progress
+        setBulkUploadProgress(prev => prev ? {
+          ...prev,
+          current: processedCount,
+          fileName: filename,
+          overallPercent: Math.round((processedCount / totalAudioFiles) * 100),
+          phase: 'processing'
+        } : null)
         
         // Extract block number (expecting format like 0001-Block.mp3)
         const blockNumber = filename.match(/(\d{4})/)?.[1]
@@ -2436,15 +2461,29 @@ export function AudioNarrationWizard({
           const blob = new Blob([arrayBuffer], { type: 'audio/*' })
           const audioFile = new File([blob], filename, { type: 'audio/*' })
           
+          // Update phase to uploading
+          setBulkUploadProgress(prev => prev ? {
+            ...prev,
+            phase: 'uploading'
+          } : null)
+          
           // Register with MediaRegistry
           const storedItem = await storeMedia(audioFile, block.pageId, 'audio', {
             originalName: filename,
             blockNumber: blockNumber
           }, (progress) => {
+            // Update individual file progress
             setUploadProgress({
               fileName: filename,
               percent: progress.percent
             })
+            
+            // Update bulk progress with file upload progress
+            setBulkUploadProgress(prev => prev ? {
+              ...prev,
+              overallPercent: Math.round(((processedCount + (progress.percent / 100)) / totalAudioFiles) * 100),
+              phase: 'uploading'
+            } : null)
           })
           
           debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'Audio stored successfully', {
@@ -2563,6 +2602,15 @@ export function AudioNarrationWizard({
         })
       }
       
+      // Complete bulk progress
+      setBulkUploadProgress(prev => prev ? {
+        ...prev,
+        current: totalAudioFiles,
+        overallPercent: 100,
+        phase: 'complete',
+        fileName: `${newAudioFiles.length} files uploaded`
+      } : null)
+      
       // Provide detailed user feedback
       if (newAudioFiles.length === 0 && skippedFiles.length > 0) {
         const sampleReasons = skippedFiles.slice(0, 3).map(f => `  • ${f.filename}: ${f.reason}`).join('\n')
@@ -2588,6 +2636,12 @@ export function AudioNarrationWizard({
       setIsBulkAudioUploading(false) // Clear the audio upload flag
       setIsBulkOperationActive(false) // Clear bulk operation flag
       setUploadProgress(null)
+      
+      // Clear bulk progress after a delay to show completion
+      setTimeout(() => {
+        setBulkUploadProgress(null)
+      }, 2000)
+      
       debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'Upload operation finished')
       
       // End the operation which will trigger save if no other operations are active
@@ -3106,18 +3160,59 @@ export function AudioNarrationWizard({
                       </>
                     )}
                     
-                    {isUploading && uploadProgress && (
+                    {isUploading && (bulkUploadProgress || uploadProgress) && (
                       <div className={styles.uploadingContainer}>
                         <div className={styles.spinner} />
-                        <p className={styles.uploadingText}>
-                          Uploading {uploadProgress.fileName}
-                        </p>
-                        <ProgressBar 
-                          value={uploadProgress.percent} 
-                          max={100}
-                          label={`${uploadProgress.percent}%`}
-                          className={styles.uploadProgress}
-                        />
+                        
+                        {bulkUploadProgress ? (
+                          <>
+                            <p className={styles.uploadingText}>
+                              {bulkUploadProgress.phase === 'processing' && `Processing ${bulkUploadProgress.fileName}...`}
+                              {bulkUploadProgress.phase === 'uploading' && `Uploading ${bulkUploadProgress.fileName}...`}
+                              {bulkUploadProgress.phase === 'complete' && bulkUploadProgress.fileName}
+                            </p>
+                            
+                            {/* Overall progress */}
+                            <div className={styles.progressSection}>
+                              <div className={styles.progressLabel}>
+                                Overall Progress ({bulkUploadProgress.current}/{bulkUploadProgress.total} files)
+                              </div>
+                              <ProgressBar 
+                                value={bulkUploadProgress.overallPercent} 
+                                max={100}
+                                label={`${bulkUploadProgress.overallPercent}%`}
+                                className={styles.uploadProgress}
+                              />
+                            </div>
+                            
+                            {/* Individual file progress (when uploading) */}
+                            {bulkUploadProgress.phase === 'uploading' && uploadProgress && (
+                              <div className={styles.progressSection}>
+                                <div className={styles.progressLabel}>
+                                  Current File Progress
+                                </div>
+                                <ProgressBar 
+                                  value={uploadProgress.percent} 
+                                  max={100}
+                                  label={`${uploadProgress.percent}%`}
+                                  className={styles.uploadProgress}
+                                />
+                              </div>
+                            )}
+                          </>
+                        ) : uploadProgress && (
+                          <>
+                            <p className={styles.uploadingText}>
+                              Uploading {uploadProgress.fileName}
+                            </p>
+                            <ProgressBar 
+                              value={uploadProgress.percent} 
+                              max={100}
+                              label={`${uploadProgress.percent}%`}
+                              className={styles.uploadProgress}
+                            />
+                          </>
+                        )}
                       </div>
                     )}
                     
