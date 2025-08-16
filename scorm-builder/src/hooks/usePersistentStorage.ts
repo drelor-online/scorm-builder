@@ -220,6 +220,14 @@ export function usePersistentStorage() {
     return fileStorage.getCourseSeedData();
   }, []);
 
+  const saveCourseContent = useCallback(async (content: any) => {
+    return fileStorage.saveCourseContent(content);
+  }, []);
+
+  const getCourseContent = useCallback(async () => {
+    return fileStorage.getCourseContent();
+  }, []);
+
   const saveAiPrompt = useCallback(async (prompt: string) => {
     await fileStorage.saveContent('aiPrompt', prompt);
   }, []);
@@ -267,6 +275,8 @@ export function usePersistentStorage() {
     getCourseMetadata,
     saveCourseSeedData,
     getCourseSeedData,
+    saveCourseContent,
+    getCourseContent,
     saveAiPrompt,
     getAiPrompt,
     saveAudioSettings,

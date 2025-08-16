@@ -418,7 +418,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           
           // Try to load course-content directly (for projects that saved complete content)
           setLoadingProgress({ current: 2, total: 5, phase: 'Loading course content...' })
-          const directCourseContent = await storage.getContent('course-content')
+          const directCourseContent = await storage.getCourseContent()
           if (directCourseContent) {
             debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
             loadedCourseContent = directCourseContent as CourseContent
@@ -795,10 +795,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // DISABLED: This was causing re-render loops by setting hasUnsavedChanges on every state change
   // Track unsaved changes - NOW ONLY SET ON USER ACTIONS
-  // useEffect(() => {
-  //   // Set unsaved changes if we have course data
-  //   setHasUnsavedChanges(!!courseSeedData?.courseTitle)
-  // }, [courseSeedData, courseContent, currentStep])
+  // Re-enable unsaved changes tracking with debouncing to prevent render loops
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      // Only set unsaved changes if we have actual data and aren't currently loading
+      if (!isLoadingProject && (courseSeedData?.courseTitle || courseContent?.topics?.length)) {
+        debugLogger.debug('App.unsavedChanges', 'Marking project as dirty', {
+          hasSeedData: !!courseSeedData?.courseTitle,
+          hasContent: !!courseContent?.topics?.length,
+          currentStep
+        })
+        // Note: This will be handled by the UnsavedChangesContext
+      }
+    }, 200) // Debounce by 200ms to prevent loops
+    
+    return () => clearTimeout(handler)
+  }, [courseSeedData, courseContent, isLoadingProject, currentStep])
 
   // DEBUG: Track state changes to identify what's triggering re-renders
   useEffect(() => {
@@ -848,8 +860,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
-        await storage.saveContent('course-content', dataToSave.courseContent)
+        await storage.saveCourseContent(dataToSave.courseContent)
       }
+      
+      // Save current step
+      await storage.saveContent('currentStep', { step: dataToSave.currentStep })
       
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
@@ -885,8 +900,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
-        await storage.saveContent('course-content', dataToSave.courseContent)
+        await storage.saveCourseContent(dataToSave.courseContent)
       }
+      
+      // Save current step
+      await storage.saveContent('currentStep', { step: dataToSave.currentStep })
       
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
@@ -1009,7 +1027,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       try {
         await measureAsync('saveJSONContent', async () => {
         await storage.saveContent('currentStep', { step: 'media' })
-        await storage.saveContent('course-content', data)
+        await storage.saveCourseContent(data)
         
         // Save course metadata
         await storage.saveCourseMetadata({
@@ -1870,7 +1888,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       // For silent saves, just save to storage without toast
                       logger.log('[App] Silent save from AudioNarrationWizard')
                       if (storage.currentProjectId) {
-                        await storage.saveContent('course-content', content);
+                        await storage.saveCourseContent(content);
                       }
                     }
                   } else if (!silent) {

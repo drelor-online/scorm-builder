@@ -1147,7 +1147,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (!courseContent || !onUpdateContent) return
     
     const content = courseContent as CourseContent
-    const updatedContent = { ...content }
+    const updatedContent = structuredClone(content)
     
     // Ensure each Media object has a proper URL for display and preserves all flags
     const mediaWithUrls = media.map(item => ({
@@ -1298,7 +1298,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     })
     
     const updatedPage = { ...currentPage, content: sanitizedContent }
-    const updatedContent = { ...courseContent } as CourseContent
+    const updatedContent = structuredClone(courseContent) as CourseContent
     
     if (currentPageIndex === 0) {
       updatedContent.welcomePage = updatedPage as Page

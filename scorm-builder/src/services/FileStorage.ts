@@ -1768,6 +1768,45 @@ export class FileStorage {
       return null;
     }
   }
+
+  // Course Content Methods
+  async saveCourseContent(content: import('../types/aiPrompt').CourseContent): Promise<void> {
+    debugLogger.info('FileStorage.saveCourseContent', 'Saving course content', {
+      hasWelcomePage: !!content.welcomePage,
+      hasObjectives: !!content.learningObjectivesPage,
+      topicsCount: content.topics?.length || 0,
+      hasAssessment: !!content.assessment
+    });
+
+    await this.saveContent('course-content', {
+      ...content,
+      lastModified: new Date().toISOString()
+    });
+  }
+
+  async getCourseContent(): Promise<import('../types/aiPrompt').CourseContent | null> {
+    try {
+      debugLogger.info('FileStorage.getCourseContent', 'Loading course content');
+      
+      // Load from course-content field
+      const courseContent = await this.getContent('course-content');
+      if (courseContent) {
+        debugLogger.info('FileStorage.getCourseContent', 'Found saved course content', {
+          hasWelcomePage: !!courseContent.welcomePage,
+          hasObjectives: !!courseContent.learningObjectivesPage,
+          topicsCount: courseContent.topics?.length || 0,
+          hasAssessment: !!courseContent.assessment
+        });
+        return courseContent;
+      }
+      
+      debugLogger.info('FileStorage.getCourseContent', 'No course content found');
+      return null;
+    } catch (error) {
+      debugLogger.error('FileStorage.getCourseContent', 'Failed to get course content', error);
+      return null;
+    }
+  }
 }
 
 // Export a singleton instance

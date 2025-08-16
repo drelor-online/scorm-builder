@@ -247,14 +247,23 @@ const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
         {editedQuestion.type === 'multiple-choice' && editedQuestion.options && (
           <>
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{
-                display: 'block',
-                color: '#a1a1aa',
-                marginBottom: '0.5rem',
-                fontSize: '0.875rem'
-              }}>
-                Answer Options
-              </label>
+              <div 
+                role="group" 
+                aria-labelledby="answer-options-label"
+                style={{ marginBottom: '0.5rem' }}
+              >
+                <span 
+                  id="answer-options-label"
+                  style={{
+                    display: 'block',
+                    color: '#a1a1aa',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  Answer Options
+                </span>
+              </div>
               {editedQuestion.options.map((option, idx) => (
                 <div key={idx} style={{ marginBottom: '0.5rem' }}>
                   <Input
@@ -303,38 +312,40 @@ const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
         {/* True/False options */}
         {editedQuestion.type === 'true-false' && (
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{
-              display: 'block',
-              color: '#a1a1aa',
-              marginBottom: '0.5rem',
-              fontSize: '0.875rem'
-            }}>
-              Correct Answer
-            </label>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input
-                  type="radio"
-                  name="trueFalse"
-                  value="True"
-                  checked={editedQuestion.correctAnswer?.toLowerCase() === 'true'}
-                  onChange={(e) => updateQuestion({ correctAnswer: e.target.value })}
-                  aria-label="True"
-                />
-                <span style={{ color: '#e4e4e7' }}>True</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input
-                  type="radio"
-                  name="trueFalse"
-                  value="False"
-                  checked={editedQuestion.correctAnswer?.toLowerCase() === 'false'}
-                  onChange={(e) => updateQuestion({ correctAnswer: e.target.value })}
-                  aria-label="False"
-                />
-                <span style={{ color: '#e4e4e7' }}>False</span>
-              </label>
-            </div>
+            <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+              <legend style={{
+                display: 'block',
+                color: '#a1a1aa',
+                marginBottom: '0.5rem',
+                fontSize: '0.875rem'
+              }}>
+                Correct Answer
+              </legend>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <label htmlFor="true-false-true" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    id="true-false-true"
+                    type="radio"
+                    name="trueFalse"
+                    value="True"
+                    checked={editedQuestion.correctAnswer?.toLowerCase() === 'true'}
+                    onChange={(e) => updateQuestion({ correctAnswer: e.target.value })}
+                  />
+                  <span style={{ color: '#e4e4e7' }}>True</span>
+                </label>
+                <label htmlFor="true-false-false" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    id="true-false-false"
+                    type="radio"
+                    name="trueFalse"
+                    value="False"
+                    checked={editedQuestion.correctAnswer?.toLowerCase() === 'false'}
+                    onChange={(e) => updateQuestion({ correctAnswer: e.target.value })}
+                  />
+                  <span style={{ color: '#e4e4e7' }}>False</span>
+                </label>
+              </div>
+            </fieldset>
           </div>
         )}
         
