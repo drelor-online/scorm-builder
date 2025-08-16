@@ -13,11 +13,17 @@ const DEFAULT_DISABLED_CATEGORIES = [
 
 // Initialize disabled categories
 export function initializeLoggerConfig() {
-  DEFAULT_DISABLED_CATEGORIES.forEach(category => {
-    disableCategory(category)
-  })
+  // Only disable categories if not in debug mode
+  const isDebugMode = import.meta.env.VITE_DEBUG_LOGS === 'true';
   
-  console.log('[LoggerConfig] Disabled noisy log categories:', DEFAULT_DISABLED_CATEGORIES)
+  if (!isDebugMode) {
+    DEFAULT_DISABLED_CATEGORIES.forEach(category => {
+      disableCategory(category)
+    })
+    console.log('[LoggerConfig] Disabled noisy log categories:', DEFAULT_DISABLED_CATEGORIES)
+  } else {
+    console.log('[LoggerConfig] Debug mode enabled - all log categories active')
+  }
 }
 
 // Allow runtime configuration via localStorage

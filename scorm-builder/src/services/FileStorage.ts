@@ -1771,36 +1771,73 @@ export class FileStorage {
 
   // Course Content Methods
   async saveCourseContent(content: import('../types/aiPrompt').CourseContent): Promise<void> {
-    debugLogger.info('FileStorage.saveCourseContent', 'Saving course content', {
+    debugLogger.info('FileStorage.saveCourseContent', 'Saving course content to root-level field', {
       hasWelcomePage: !!content.welcomePage,
       hasObjectives: !!content.learningObjectivesPage,
       topicsCount: content.topics?.length || 0,
       hasAssessment: !!content.assessment
     });
 
-    await this.saveContent('course-content', {
-      ...content,
-      lastModified: new Date().toISOString()
-    });
+    try {
+      // Load current project
+      const projectFile = await invoke<TauriProjectFile>('load_project', { 
+        filePath: this._currentProjectPath 
+      });
+      
+      // Update course_content at root level (not nested in course_content[key])
+      projectFile.course_content = {
+        ...content,
+        lastModified: new Date().toISOString()
+      };
+      
+      debugLogger.debug('FileStorage.saveCourseContent', 'Updated project file with course content');
+      
+      // Save updated project
+      await invoke('save_project', {
+        filePath: this._currentProjectPath,
+        projectData: projectFile
+      });
+      
+      debugLogger.info('FileStorage.saveCourseContent', 'Course content saved successfully to root-level field');
+    } catch (error) {
+      debugLogger.error('FileStorage.saveCourseContent', 'Failed to save course content', error);
+      throw error;
+    }
   }
 
   async getCourseContent(): Promise<import('../types/aiPrompt').CourseContent | null> {
     try {
-      debugLogger.info('FileStorage.getCourseContent', 'Loading course content');
+      debugLogger.info('FileStorage.getCourseContent', 'Loading course content from root-level field');
       
-      // Load from course-content field
-      const courseContent = await this.getContent('course-content');
-      if (courseContent) {
-        debugLogger.info('FileStorage.getCourseContent', 'Found saved course content', {
-          hasWelcomePage: !!courseContent.welcomePage,
-          hasObjectives: !!courseContent.learningObjectivesPage,
-          topicsCount: courseContent.topics?.length || 0,
-          hasAssessment: !!courseContent.assessment
-        });
-        return courseContent;
+      // Load current project directly to access root-level course_content
+      const projectFile = await invoke<TauriProjectFile>('load_project', { 
+        filePath: this._currentProjectPath 
+      });
+      
+      // Read from root-level course_content field
+      if (projectFile.course_content && typeof projectFile.course_content === 'object') {
+        // Check if it's the full course content (has required fields)
+        const content = projectFile.course_content as any;
+        if ('welcomePage' in content && 'topics' in content) {
+          debugLogger.info('FileStorage.getCourseContent', 'Found complete course content in root field', {
+            hasWelcomePage: !!content.welcomePage,
+            hasObjectives: !!content.learningObjectivesPage,
+            topicsCount: content.topics?.length || 0,
+            hasAssessment: !!content.assessment
+          });
+          return content as import('../types/aiPrompt').CourseContent;
+        } else {
+          // This might be the old nested format - try to get from course-content key
+          debugLogger.warn('FileStorage.getCourseContent', 'Root course_content does not have full structure, trying legacy format');
+          const legacyContent = await this.getContent('course-content');
+          if (legacyContent) {
+            debugLogger.info('FileStorage.getCourseContent', 'Found course content in legacy format');
+            return legacyContent;
+          }
+        }
       }
       
-      debugLogger.info('FileStorage.getCourseContent', 'No course content found');
+      debugLogger.info('FileStorage.getCourseContent', 'No course content found in either format');
       return null;
     } catch (error) {
       debugLogger.error('FileStorage.getCourseContent', 'Failed to get course content', error);

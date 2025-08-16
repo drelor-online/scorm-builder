@@ -111,7 +111,7 @@ let loadProjectCallCount = 0
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
   const storage = useStorage()
   const navigation = useStepNavigation()
-  const { hasUnsavedChanges, resetAll: resetAllUnsavedChanges } = useUnsavedChanges()
+  const { hasUnsavedChanges, resetAll: resetAllUnsavedChanges, markDirty } = useUnsavedChanges()
   const {
     activeDialog,
     projectToDelete,
@@ -805,12 +805,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           hasContent: !!courseContent?.topics?.length,
           currentStep
         })
-        // Note: This will be handled by the UnsavedChangesContext
+        
+        // Mark appropriate sections as dirty based on what data we have
+        if (courseSeedData?.courseTitle) {
+          markDirty('courseSeed')
+        }
+        if (courseContent?.topics?.length) {
+          markDirty('courseContent')
+        }
       }
     }, 200) // Debounce by 200ms to prevent loops
     
     return () => clearTimeout(handler)
-  }, [courseSeedData, courseContent, isLoadingProject, currentStep])
+  }, [courseSeedData, courseContent, isLoadingProject, currentStep, markDirty])
 
   // DEBUG: Track state changes to identify what's triggering re-renders
   useEffect(() => {

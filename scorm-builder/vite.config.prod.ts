@@ -4,6 +4,9 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import path from 'path'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Check if debug logs should be preserved in production build
+const isDebugBuild = process.env.VITE_DEBUG_LOGS === 'true';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -69,9 +72,9 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace']
+        drop_console: !isDebugBuild,
+        drop_debugger: !isDebugBuild,
+        pure_funcs: isDebugBuild ? [] : ['console.log', 'console.info', 'console.debug', 'console.trace']
       }
     },
     sourcemap: false,
