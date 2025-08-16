@@ -5,7 +5,7 @@
  * a single comprehensive test suite using the successful ActivitiesEditor/MediaEnhancementWizard pattern.
  */
 
-import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
+import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AudioNarrationWizard } from '../AudioNarrationWizard'
 import { UnsavedChangesProvider, useUnsavedChanges } from '../../contexts/UnsavedChangesContext'

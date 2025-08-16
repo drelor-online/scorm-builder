@@ -2,6 +2,7 @@
   "name": "scorm-builder",
   "version": "1.0.0",
   "type": "module",
+  "description": "Modern SCORM package builder with React 19, Vite 6, and Tauri. See DEPENDENCY_STRATEGY.md for version rationale.",
   "scripts": {
     "dev": "vite",
     "dev:bdd": "vite --config vite.config.bdd.ts",
@@ -15,6 +16,10 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --run --coverage",
+    "test:fast": "vitest --run --reporter=dot",
+    "test:smoke": "vitest --run --reporter=dot \"src/**/*{.smoke,.critical}*.test.{ts,tsx}\"",
+    "test:unit": "vitest --run --reporter=verbose --exclude=\"**/*{integration,behavior,e2e}*\"",
+    "test:integration": "vitest --run --reporter=verbose \"**/*integration*.test.{ts,tsx}\"",
     "coverage:report": "node scripts/analyze-coverage.js",
     "coverage:check": "node scripts/check-coverage-threshold.js",
     "lint": "eslint src/ --max-warnings 0",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from './../test/testProviders';
+import { render, screen } from '../../test/testProviders';
 import App from '../App';
 import { CourseSeedInput } from '../components/CourseSeedInput';
 import { AIPromptGenerator } from '../components/AIPromptGenerator';

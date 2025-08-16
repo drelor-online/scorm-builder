@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '../test/testProviders'
+import { render } from '../../test/testProviders'
 import App from '../App'
 
 describe('Dark Professional Theme', () => {

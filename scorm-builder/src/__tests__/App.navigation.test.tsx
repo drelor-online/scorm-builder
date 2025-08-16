@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent , waitFor } from './../test/testProviders'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
 import App from '../App'
 // Mock PageLayout to test navigation props
 vi.mock('../components/PageLayout', () => ({

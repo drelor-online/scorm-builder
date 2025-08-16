@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen , waitFor } from './../test/testProviders'
+import { render, screen , waitFor } from '../../test/testProviders'
 import App from '../App.lazy'
 
 // Mock the lazy loaded components

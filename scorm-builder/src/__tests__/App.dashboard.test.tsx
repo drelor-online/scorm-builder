@@ -1,7 +1,7 @@
 // Remove unused import
 // import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent , waitFor } from './../test/testProviders'
+import { render, screen, fireEvent , waitFor } from '../../test/testProviders'
 import userEvent from '@testing-library/user-event'
 import { AppWithDashboard } from '../App.dashboard'
 

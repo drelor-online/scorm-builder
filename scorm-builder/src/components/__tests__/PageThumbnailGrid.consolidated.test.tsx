@@ -5,7 +5,7 @@
  * a single comprehensive test suite using the successful pattern from previous consolidations.
  */
 
-import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
+import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PageThumbnailGrid } from '../PageThumbnailGrid'
 import { UnsavedChangesProvider, useUnsavedChanges } from '../../contexts/UnsavedChangesContext'

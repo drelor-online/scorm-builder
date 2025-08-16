@@ -91,20 +91,66 @@ Object.defineProperty(window, '__TAURI__', {
   },
 }
 
-// Suppress console errors in tests
-const originalError = console.error
+// Suppress console noise in tests for performance
+const originalConsole = {
+  log: console.log,
+  warn: console.warn,
+  error: console.error,
+  debug: console.debug,
+  info: console.info
+}
+
 beforeAll(() => {
-  console.error = (...args: any[]) => {
+  // Suppress verbose MediaService and BlobURLCache logging
+  console.log = (...args: any[]) => {
+    const message = String(args[0])
     if (
-      typeof args[0] === 'string' &&
-      args[0].includes('Warning: ReactDOM.render')
+      message.includes('[MediaService') ||
+      message.includes('[BlobURLCache]') ||
+      message.includes('[FileStorage') ||
+      message.includes('[DEBUG]') ||
+      message.includes('MediaService v2.0.5') ||
+      message.includes('LOGGER] UltraSimpleLogger') ||
+      message.includes('STARTUP] Page loaded')
     ) {
-      return
+      return // Suppress noisy test logs
     }
-    originalError.call(console, ...args)
+    originalConsole.log.call(console, ...args)
   }
+
+  console.warn = (...args: any[]) => {
+    const message = String(args[0])
+    if (
+      message.includes('extractNumericProjectId') ||
+      message.includes('No project open') ||
+      message.includes('PromiseRejectionHandledWarning')
+    ) {
+      return // Suppress expected warnings in tests
+    }
+    originalConsole.warn.call(console, ...args)
+  }
+
+  console.error = (...args: any[]) => {
+    const message = String(args[0])
+    if (
+      message.includes('Warning: ReactDOM.render') ||
+      message.includes('Warning: An update to') ||
+      message.includes('wrapped in act(...)') 
+    ) {
+      return // Suppress React testing warnings
+    }
+    originalConsole.error.call(console, ...args)
+  }
+
+  // Suppress debug and info entirely in tests
+  console.debug = () => {}
+  console.info = () => {}
 })
 
 afterAll(() => {
-  console.error = originalError
+  console.log = originalConsole.log
+  console.warn = originalConsole.warn
+  console.error = originalConsole.error
+  console.debug = originalConsole.debug
+  console.info = originalConsole.info
 })

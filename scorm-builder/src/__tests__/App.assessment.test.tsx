@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, waitFor } from '../test/testProviders'
+import { render, screen, waitFor } from '../../test/testProviders'
 import { vi } from 'vitest'
 import App from '../App'
 // Mock storage with assessment data

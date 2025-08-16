@@ -5,7 +5,7 @@
  * a single comprehensive test suite using the successful ActivitiesEditor pattern.
  */
 
-import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
+import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MediaEnhancementWizard } from '../MediaEnhancementWizard'
 import { UnsavedChangesProvider, useUnsavedChanges } from '../../contexts/UnsavedChangesContext'

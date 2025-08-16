@@ -238,8 +238,26 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     const allMediaItems = getAllMedia()
     console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items in storage')
     
+    // Helper function to detect media type from URL
+    const detectMediaType = (url: string): 'image' | 'video' | 'audio' => {
+      const urlLower = url.toLowerCase()
+      
+      // Audio file extensions
+      if (urlLower.match(/\.(mp3|wav|ogg|aac|flac|m4a)(\?|$)/)) {
+        return 'audio'
+      }
+      
+      // Video file extensions
+      if (urlLower.match(/\.(mp4|webm|avi|mov|wmv|flv|mkv)(\?|$)/)) {
+        return 'video'
+      }
+      
+      // Image file extensions (default)
+      return 'image'
+    }
+
     // Helper function to handle remote media - only downloads if not already stored
-    const handleRemoteMedia = async (url: string, mediaType: 'image' | 'video', pageId: string): Promise<string | null> => {
+    const handleRemoteMedia = async (url: string, mediaType: 'image' | 'video' | 'audio', pageId: string): Promise<string | null> => {
       if (!url || !url.startsWith('http')) return null
       
       // Check if this remote URL has already been stored
@@ -348,12 +366,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           console.log(`[SCORMPackageBuilder] Skipping duplicate welcome media: ${mediaItem.id} (${mediaItem.type})`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
-          const newId = await handleRemoteMedia(mediaItem.url, 'image', 'welcome')
+          const detectedType = detectMediaType(mediaItem.url)
+          const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'welcome')
           if (newId) {
             mediaItem.id = newId // Update the media reference with the new ID
             const mediaBlob = await getMediaBlobFromRegistry(newId)
             if (mediaBlob) {
-              mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
+              const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
+              mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded remote media with new ID:', newId)
             }
           }
@@ -414,12 +434,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           console.log(`[SCORMPackageBuilder] Skipping duplicate objectives media: ${mediaItem.id} (${mediaItem.type})`)
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
           // Handle remote media
-          const newId = await handleRemoteMedia(mediaItem.url, 'image', 'objectives')
+          const detectedType = detectMediaType(mediaItem.url)
+          const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'objectives')
           if (newId) {
             mediaItem.id = newId
             const mediaBlob = await getMediaBlobFromRegistry(newId)
             if (mediaBlob) {
-              mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
+              const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
+              mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
               console.log('[SCORMPackageBuilder] Loaded remote objectives media with new ID:', newId)
             }
           }
@@ -495,12 +517,14 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id} (${mediaItem.type})`)
           } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
             // Handle remote media
-            const newId = await handleRemoteMedia(mediaItem.url, 'image', `topic-${topicIndex}`)
+            const detectedType = detectMediaType(mediaItem.url)
+            const newId = await handleRemoteMedia(mediaItem.url, detectedType, `topic-${topicIndex}`)
             if (newId) {
               mediaItem.id = newId
               const mediaBlob = await getMediaBlobFromRegistry(newId)
               if (mediaBlob) {
-                mediaFilesRef.current.set(`remote-${Date.now()}.jpg`, mediaBlob)
+                const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
+                mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
                 console.log('[SCORMPackageBuilder] Loaded remote topic media with new ID:', newId)
               }
             }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent } from '../../../test/testProviders'
+import { render, screen, fireEvent } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom'
 

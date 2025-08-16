@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen , waitFor } from '../test/testProviders'
+import { render, screen , waitFor } from '../../test/testProviders'
 import App from '../App'
 // Mock heavy components to test lazy loading
 vi.mock('../components/MediaEnhancementWizard', () => ({

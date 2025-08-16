@@ -122,8 +122,8 @@ describe('Full Workflow Integration Tests', () => {
       }
       await fileStorage.saveContent('courseSeedData', seedData)
       
-      // Wait for debounce
-      await new Promise(resolve => setTimeout(resolve, 600))
+      // Wait for debounce (reduced for test performance)
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Step 3: Add media
       const imageBlob = new Blob(['image data'], { type: 'image/png' })
@@ -162,8 +162,8 @@ describe('Full Workflow Integration Tests', () => {
       
       await fileStorage.saveContent('course-content', courseContent)
       
-      // Wait for save
-      await new Promise(resolve => setTimeout(resolve, 600))
+      // Wait for save (reduced for test performance)
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Step 6: Generate SCORM package
       const scormPackage = await generateRustSCORM(courseContent, project.id)
@@ -214,7 +214,7 @@ describe('Full Workflow Integration Tests', () => {
         topics: ['Topic A']
       }
       await fileStorage.saveContent('initial', initialData)
-      await new Promise(resolve => setTimeout(resolve, 600))
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Update data
       const updatedData = {
@@ -222,7 +222,7 @@ describe('Full Workflow Integration Tests', () => {
         topics: ['Topic A', 'Topic B']
       }
       await fileStorage.saveContent('initial', updatedData)
-      await new Promise(resolve => setTimeout(resolve, 600))
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Retrieve and verify
       const retrieved = await fileStorage.getContent('initial')
@@ -248,7 +248,7 @@ describe('Full Workflow Integration Tests', () => {
       })
       
       // Wait for all saves to complete
-      await new Promise(resolve => setTimeout(resolve, 1200))
+      await new Promise(resolve => setTimeout(resolve, 200))
       
       // Verify data integrity
       const content1 = await fileStorage.getContent('content1')
@@ -325,7 +325,7 @@ describe('Full Workflow Integration Tests', () => {
       
       // Save partial data
       await fileStorage.saveContent('partial', { step: 1, data: 'initial' })
-      await new Promise(resolve => setTimeout(resolve, 600))
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Simulate interruption (error during next save)
       const originalImpl = mockInvoke.getMockImplementation()
@@ -339,7 +339,7 @@ describe('Full Workflow Integration Tests', () => {
       // Try to save more data (will fail)
       try {
         await fileStorage.saveContent('partial', { step: 2, data: 'updated' })
-        await new Promise(resolve => setTimeout(resolve, 600))
+        await new Promise(resolve => setTimeout(resolve, 100))
       } catch (error) {
         // Expected failure
       }
@@ -378,7 +378,7 @@ describe('Full Workflow Integration Tests', () => {
       }
       
       // Wait for debouncing to complete
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 250))
       
       const endTime = Date.now()
       

@@ -5,7 +5,7 @@
  * from the existing test files to ensure compatibility and reduce duplication.
  */
 
-import { render, screen, fireEvent, waitFor } from './../../test/testProviders'
+import { render, screen, fireEvent, waitFor } from '../../test/testProviders'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ActivitiesEditor } from '../ActivitiesEditor'
 import { UnsavedChangesProvider, useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
