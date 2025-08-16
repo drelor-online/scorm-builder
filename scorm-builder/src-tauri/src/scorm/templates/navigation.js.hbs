@@ -61,22 +61,15 @@
         
         getLastError: function() {
             return window.UniversalSCORM ? window.UniversalSCORM.getLastError() : '0';
-        }
-    };
-    
-    // Initialize SCORM when navigation system loads
-    function waitForSCORM() {
-        if (initializeSCORM()) {
-            console.log('[Navigation] SCORM initialization successful');
-            startNavigation();
-        } else {
-            // Retry after a short delay
-            setTimeout(waitForSCORM, 100);
-        }
-    }
-    
-    // Start the navigation system
-    function startNavigation() {
+        },
+        
+        setScore: function(score) {
+            if (!window.UniversalSCORM || !window.UniversalSCORM.available) {
+                console.warn('[SafeSCORM] SCORM not available for score setting');
+                return false;
+            }
+            
+            let success = false;
             
             // Try multiple approaches for maximum compatibility
             const approaches = [
@@ -103,7 +96,7 @@
             
             for (let i = 0; i < approaches.length; i++) {
                 try {
-                    approaches[i]();
+                    approaches[i].call(this);
                     const errorCode = this.getLastError();
                     if (errorCode === '0' || errorCode === 0) {
                         console.log('[SafeSCORM] Score set successfully using approach', i + 1);
@@ -118,6 +111,23 @@
             return success;
         }
     };
+    
+    // Initialize SCORM when navigation system loads
+    function waitForSCORM() {
+        if (initializeSCORM()) {
+            console.log('[Navigation] SCORM initialization successful');
+            startNavigation();
+        } else {
+            // Retry after a short delay
+            setTimeout(waitForSCORM, 100);
+        }
+    }
+    
+    // Start the navigation system
+    function startNavigation() {
+        console.log('[Navigation] Starting navigation system...');
+        // Navigation system is now ready - the actual initialization will happen in initializeNavigation()
+    }
     
     // Initialize SafeSCORM
     SafeSCORM.init();

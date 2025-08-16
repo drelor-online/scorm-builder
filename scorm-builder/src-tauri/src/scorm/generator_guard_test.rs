@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::scorm::generator::{generate_scorm_package, GenerateScormRequest, GeneratedFile, MediaFile};
-    use crate::scorm::CourseMetadata;
+    use crate::scorm::generator::CourseMetadata;
     use serde_json::json;
 
     #[tokio::test]
