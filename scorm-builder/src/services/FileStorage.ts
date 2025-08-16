@@ -1769,6 +1769,16 @@ export class FileStorage {
     }
   }
 
+  /*
+   * UNIFIED SAVE ARCHITECTURE - Course Content Methods
+   * 
+   * These methods implement the unified save architecture where:
+   * - saveCourseContent() saves the complete course structure to the root-level course_content field
+   * - This replaces individual page saves for better performance and consistency
+   * - All course data (welcome, objectives, topics, assessment) is saved atomically
+   * - Legacy individual saves are removed from step handlers to eliminate redundancy
+   */
+  
   // Course Content Methods
   async saveCourseContent(content: import('../types/aiPrompt').CourseContent): Promise<void> {
     debugLogger.info('FileStorage.saveCourseContent', 'Saving course content to root-level field', {

@@ -11,6 +11,7 @@ import { apiKeyStorage } from '@/services/ApiKeyStorage'
 import { logger } from '@/utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { initializeLoggerConfig } from '@/config/loggerConfig'
+import { createMutationSafeContent, validateImmutableUpdate } from '@/utils/mutationSafety'
 
 // Initialize logger configuration to reduce console noise
 initializeLoggerConfig()
@@ -927,6 +928,36 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [storage])
   
+  /*
+   * SAVE ARCHITECTURE EXPLANATION:
+   * 
+   * This application uses a unified save architecture with the following components:
+   * 
+   * 1. UNIFIED SAVE METHODS (FileStorage.ts):
+   *    - saveCourseContent(): Saves complete course structure to root-level course_content field
+   *    - saveCourseSeedData(): Saves seed data and updates metadata for backward compatibility  
+   *    - saveCourseMetadata(): Updates legacy metadata fields (kept for backward compatibility)
+   * 
+   * 2. SAVE TRIGGERS:
+   *    - handleSave(): Manual save (Ctrl+S) - saves both seed data and course content
+   *    - handleAutosave(): Automatic save - same as manual but without notifications
+   *    - Step handlers (handleJSONNext, handleMediaNext, etc.): Save on navigation between steps
+   * 
+   * 3. UNSAVED CHANGES TRACKING:
+   *    - UnsavedChangesContext tracks dirty state across all sections
+   *    - Components call markDirty() when user makes changes
+   *    - Auto-save only triggers when hasUnsavedChanges is true
+   * 
+   * 4. LEGACY COMPATIBILITY:
+   *    - Individual saveCourseMetadata() calls maintain backward compatibility
+   *    - Old projects can still be loaded through legacy format fallbacks
+   *    - New projects use unified course_content structure for better performance
+   * 
+   * 5. MUTATION SAFETY (Development):
+   *    - courseContent is frozen in development to catch accidental mutations
+   *    - validateImmutableUpdate() warns if same object reference is reused
+   */
+  
   // Re-enabled autosave with proper safeguards to prevent infinite loops
   const autoSaveState = useAutoSave({
     data: autoSaveDataRef.current,
@@ -1027,7 +1058,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'media' })
         await storage.saveCourseContent(data)
         
-        // Save course metadata
+        // Save course metadata for backward compatibility
         await storage.saveCourseMetadata({
           courseTitle: courseSeedData?.courseTitle || '',
           difficulty: courseSeedData?.difficulty || 3,
@@ -1037,32 +1068,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
-        // Save welcome page if it exists (new format)
-        if ('welcomePage' in data && data.welcomePage) {
-          await storage.saveContent('welcome', data.welcomePage)
-        }
-        
-        // Save learning objectives page if it exists (new format)
-        if ('learningObjectivesPage' in data && data.learningObjectivesPage) {
-          await storage.saveContent('objectives', data.learningObjectivesPage)
-        }
-        
-        // Save each topic content with numeric IDs
-        for (let i = 0; i < data.topics.length; i++) {
-          const topic = data.topics[i]
-          const numericContentId = `content-${2 + i}` // Topics start at content-2
-          await storage.saveContent(numericContentId, {
-            title: topic.title,
-            content: topic.content,
-            narration: topic.narration || '',
-            imageKeywords: topic.imageKeywords || [],
-            imagePrompts: topic.imagePrompts || [],
-            videoSearchTerms: topic.videoSearchTerms || [],
-            duration: topic.duration || 5,
-            knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media
-          })
-        }
+        // NOTE: Individual page saves removed - saveCourseContent() above already saves 
+        // the complete course structure including welcomePage, learningObjectivesPage, and all topics
         }) // End of measureAsync
       } catch (error) {
         console.error('Failed to save course content:', error)
@@ -1097,7 +1104,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'audio' })
         
         const courseData = data as CourseContent
-        // Update course metadata with media info
+        // Save complete course content using unified method
+        await storage.saveCourseContent(courseData)
+        
+        // Update course metadata with media info for backward compatibility
         await storage.saveCourseMetadata({
           courseTitle: courseSeedData?.courseTitle || '',
           difficulty: courseSeedData?.difficulty || 3,
@@ -1107,50 +1117,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
-        // Save welcome and objectives pages with media
-        if (courseData.welcomePage) {
-          await storage.saveContent('welcome', {
-            ...courseData.welcomePage,
-            media: courseData.welcomePage.media || []
-          })
-        }
-        
-        if (courseData.learningObjectivesPage) {
-          await storage.saveContent('objectives', {
-            ...courseData.learningObjectivesPage,
-            media: courseData.learningObjectivesPage.media || []
-          })
-        }
-        
-        // Update each topic with media using numeric IDs
-        for (let i = 0; i < courseData.topics.length; i++) {
-          const topic = courseData.topics[i]
-          const numericContentId = `content-${2 + i}` // Topics start at content-2
-          await storage.saveContent(numericContentId, {
-            title: topic.title,
-            content: topic.content,
-            narration: topic.narration || '',
-            imageKeywords: topic.imageKeywords || [],
-            imagePrompts: topic.imagePrompts || [],
-            videoSearchTerms: topic.videoSearchTerms || [],
-            duration: topic.duration || 5,
-            knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media || []
-          })
-          
-          // Store media files if they exist
-          if (topic.media) {
-            for (const media of topic.media) {
-              // Store media metadata association
-              await storage.saveContent(`media_${media.id}`, {
-                topicId: topic.id,
-                mediaType: media.type,
-                url: media.url,
-                title: media.title
-              })
-            }
-          }
-        }
+        // NOTE: Individual page saves removed - saveCourseContent() above already saves 
+        // the complete course structure including all media associations
       } catch (error) {
         console.error('Failed to save media-enhanced content:', error)
         showError('Failed to save data')
@@ -1184,7 +1152,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'activities' })
         
         const courseData = data as CourseContent
-        // Update course metadata
+        // Save complete course content using unified method
+        await storage.saveCourseContent(courseData)
+        
+        // Update course metadata for backward compatibility
         await storage.saveCourseMetadata({
           courseTitle: courseSeedData?.courseTitle || '',
           difficulty: courseSeedData?.difficulty || 3,
@@ -1194,37 +1165,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
-        // Save welcome and objectives pages with audio/media
-        if (courseData.welcomePage) {
-          await storage.saveContent('welcome', {
-            ...courseData.welcomePage,
-            media: courseData.welcomePage.media || []
-          })
-        }
-        
-        if (courseData.learningObjectivesPage) {
-          await storage.saveContent('objectives', {
-            ...courseData.learningObjectivesPage,
-            media: courseData.learningObjectivesPage.media || []
-          })
-        }
-        
-        // Update each topic with audio using numeric IDs
-        for (let i = 0; i < courseData.topics.length; i++) {
-          const topic = courseData.topics[i]
-          const numericContentId = `content-${2 + i}` // Topics start at content-2
-          await storage.saveContent(numericContentId, {
-            title: topic.title,
-            content: topic.content,
-            narration: topic.narration || '',
-            imageKeywords: topic.imageKeywords || [],
-            imagePrompts: topic.imagePrompts || [],
-            videoSearchTerms: topic.videoSearchTerms || [],
-            duration: topic.duration || 5,
-            knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media || []
-          })
-        }
+        // NOTE: Individual page saves removed - saveCourseContent() above already saves 
+        // the complete course structure including all audio/media
       } catch (error) {
         console.error('Failed to save audio-enhanced content:', error)
         showError('Failed to save data')
@@ -1258,7 +1200,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'scorm' })
         
         const courseData = data as CourseContent
-        // Update course metadata
+        // Save complete course content using unified method
+        await storage.saveCourseContent(courseData)
+        
+        // Update course metadata for backward compatibility
         await storage.saveCourseMetadata({
           courseTitle: courseSeedData?.courseTitle || '',
           difficulty: courseSeedData?.difficulty || 3,
@@ -1268,35 +1213,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           lastModified: new Date().toISOString()
         })
         
-        // Save assessment if it exists (new format)
-        if ('assessment' in courseData && courseData.assessment) {
-          await storage.saveContent('assessment', courseData.assessment)
-        }
-        
-        // Save activities and quiz if they exist (legacy format)
-        if ('activities' in courseData && courseData.activities) {
-          await storage.saveContent('activities', courseData.activities)
-        }
-        if ('quiz' in courseData && courseData.quiz) {
-          await storage.saveContent('quiz', courseData.quiz)
-        }
-        
-        // Update each topic using numeric IDs
-        for (let i = 0; i < courseData.topics.length; i++) {
-          const topic = courseData.topics[i]
-          const numericContentId = `content-${2 + i}` // Topics start at content-2
-          await storage.saveContent(numericContentId, {
-            title: topic.title,
-            content: topic.content,
-            narration: topic.narration || '',
-            imageKeywords: topic.imageKeywords || [],
-            imagePrompts: topic.imagePrompts || [],
-            videoSearchTerms: topic.videoSearchTerms || [],
-            duration: topic.duration || 5,
-            knowledgeCheck: topic.knowledgeCheck,
-            media: topic.media
-          })
-        }
+        // NOTE: Individual content saves removed - saveCourseContent() above already saves 
+        // the complete course structure including assessment, activities, quiz, and all topics
       } catch (error) {
         console.error('Failed to save activities-enhanced content:', error)
         showError('Failed to save data')
@@ -1802,12 +1720,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               <Suspense fallback={<LoadingComponent />}>
                 {courseContent && courseSeedData ? (
                   <MediaEnhancementWizard
-                    courseContent={courseContent}
+                    courseContent={createMutationSafeContent(courseContent)}
                     courseSeedData={courseSeedData}
                     onUpdateContent={(content) => {
                       debugLogger.info('App.MediaEnhancement', 'Updating courseContent with media');
                       // Type guard to ensure we have CourseContent, not LegacyCourseContent
                       if ('welcomePage' in content) {
+                        validateImmutableUpdate(courseContent, content, 'MediaEnhancementWizard.onUpdateContent');
                         setCourseContent(content as CourseContent);
                         // onUpdateContent should only update state, not trigger saves
                         // Saves are handled by the onSave callback below
@@ -1857,11 +1776,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             {currentStep === 'audio' && courseContent && courseSeedData && (
               <Suspense fallback={<LoadingComponent />}>
                 <AudioNarrationWizard
-                  courseContent={courseContent}
+                  courseContent={createMutationSafeContent(courseContent)}
                   courseSeedData={courseSeedData}
                   onNext={handleAudioNext}
                   onBack={handleAudioBack}
                   onUpdateContent={(content: CourseContentUnion) => {
+                    validateImmutableUpdate(courseContent, content, 'AudioNarrationWizard.onUpdateContent');
                     setCourseContent(content as CourseContent)
                   }}
                   onSettingsClick={() => showDialog('settings')}
@@ -1903,11 +1823,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             {currentStep === 'activities' && courseContent && courseSeedData && (
               <Suspense fallback={<LoadingComponent />}>
                 <ActivitiesEditor
-                  courseContent={courseContent}
+                  courseContent={createMutationSafeContent(courseContent)}
                   courseSeedData={courseSeedData}
                   onNext={handleActivitiesNext}
                   onBack={handleActivitiesBack}
                   onUpdateContent={(content: CourseContentUnion) => {
+                    validateImmutableUpdate(courseContent, content, 'ActivitiesEditor.onUpdateContent');
                     setCourseContent(content as CourseContent)
                   }}
                   onSettingsClick={() => showDialog('settings')}
@@ -1946,7 +1867,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   
                   return (
                     <SCORMPackageBuilder
-                      courseContent={courseContent}
+                      courseContent={createMutationSafeContent(courseContent)}
                       courseSeedData={courseSeedData}
                       onNext={handleSCORMNext}
                   onBack={handleSCORMBack}
