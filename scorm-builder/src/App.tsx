@@ -895,7 +895,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       debugLogger.debug('App.autoSave', 'Save completed, resetting all dirty flags')
       resetAllUnsavedChanges()
     },
-    minSaveInterval: 5000 // Minimum 5 seconds between saves as safety layer
+    minSaveInterval: 5000, // Minimum 5 seconds between saves as safety layer
+    showNotifications: false // Disable notifications for auto-saves since manual saves handle their own
   })
   
   // Notification wrapper for backwards compatibility
@@ -1692,6 +1693,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             isSaving={autoSaveState.isSaving || isSaving}
             lastSaved={autoSaveState.lastSaved}
             hasUnsavedChanges={hasUnsavedChanges}
+            isManualSave={isSaving}
           >
             {currentStep === 'seed' && (
               <CourseSeedInput 

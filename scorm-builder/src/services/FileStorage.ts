@@ -1691,6 +1691,83 @@ export class FileStorage {
     const content = await this.getContent('aiPrompt');
     return content?.prompt || null;
   }
+
+  // Course Seed Data Methods
+  async saveCourseSeedData(seedData: import('../types/course').CourseSeedData): Promise<void> {
+    debugLogger.info('FileStorage.saveCourseSeedData', 'Saving course seed data', {
+      courseTitle: seedData.courseTitle,
+      difficulty: seedData.difficulty,
+      template: seedData.template,
+      customTopicsCount: seedData.customTopics?.length || 0
+    });
+
+    await this.saveContent('courseSeedData', {
+      ...seedData,
+      lastModified: new Date().toISOString()
+    });
+
+    // Also update course_data for backward compatibility
+    if (seedData.courseTitle || seedData.difficulty || seedData.customTopics?.length) {
+      await this.saveCourseMetadata({
+        courseTitle: seedData.courseTitle,
+        difficulty: seedData.difficulty,
+        topics: seedData.customTopics,
+        template: seedData.template,
+        lastModified: new Date().toISOString()
+      });
+    }
+  }
+
+  async getCourseSeedData(): Promise<import('../types/course').CourseSeedData | null> {
+    try {
+      debugLogger.info('FileStorage.getCourseSeedData', 'Loading course seed data');
+      
+      // First try to load from courseSeedData
+      const seedData = await this.getContent('courseSeedData');
+      if (seedData) {
+        debugLogger.info('FileStorage.getCourseSeedData', 'Found saved course seed data', {
+          courseTitle: seedData.courseTitle,
+          template: seedData.template,
+          customTopicsCount: seedData.customTopics?.length || 0
+        });
+        return seedData;
+      }
+      
+      debugLogger.info('FileStorage.getCourseSeedData', 'No courseSeedData found, checking metadata');
+      
+      // Fallback: try to reconstruct from metadata for existing projects
+      const metadata = await this.getCourseMetadata();
+      if (metadata && (metadata.courseTitle || metadata.title)) {
+        const reconstructedData = {
+          courseTitle: metadata.courseTitle || metadata.title || '',
+          difficulty: metadata.difficulty || 3,
+          customTopics: metadata.topics || [],
+          template: metadata.template || 'None' as import('../types/course').CourseTemplate,
+          templateTopics: []
+        };
+        
+        debugLogger.info('FileStorage.getCourseSeedData', 'Reconstructed seed data from metadata', {
+          courseTitle: reconstructedData.courseTitle,
+          template: reconstructedData.template,
+          customTopicsCount: reconstructedData.customTopics?.length || 0
+        });
+        
+        // Save the reconstructed data for future use (migration)
+        await this.saveContent('courseSeedData', {
+          ...reconstructedData,
+          lastModified: new Date().toISOString()
+        });
+        
+        return reconstructedData;
+      }
+      
+      debugLogger.info('FileStorage.getCourseSeedData', 'No seed data or metadata found');
+      return null;
+    } catch (error) {
+      debugLogger.error('FileStorage.getCourseSeedData', 'Failed to get course seed data', error);
+      return null;
+    }
+  }
 }
 
 // Export a singleton instance

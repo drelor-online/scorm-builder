@@ -4,11 +4,10 @@ import styles from './AutoSaveBadge.module.css'
 
 interface AutoSaveBadgeProps {
   className?: string
-  isManualSaving?: boolean
 }
 
-export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className, isManualSaving }) => {
-  const { isSaving, hasUnsavedChanges, lastSaved } = useAutoSaveState()
+export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
+  const { isSaving, hasUnsavedChanges, lastSaved, isManualSave } = useAutoSaveState()
 
   // Don't show badge if no unsaved changes and not saving
   if (!hasUnsavedChanges && !isSaving) {
@@ -17,7 +16,7 @@ export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className, isManua
 
   const getBadgeText = () => {
     if (isSaving) {
-      return isManualSaving ? 'Saving...' : 'Auto-saving...'
+      return 'Saving...'
     }
     if (hasUnsavedChanges) {
       return 'Unsaved changes'

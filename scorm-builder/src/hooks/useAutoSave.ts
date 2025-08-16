@@ -11,6 +11,7 @@ interface UseAutoSaveOptions<T> {
   isDirty: boolean
   onSaveComplete?: () => void
   minSaveInterval?: number // Minimum milliseconds between saves (default 5000)
+  showNotifications?: boolean // Whether to show auto-save notifications (default true)
 }
 
 interface UseAutoSaveResult {
@@ -28,7 +29,8 @@ export function useAutoSave<T>({
   disabled = false,
   isDirty,
   onSaveComplete,
-  minSaveInterval = 5000 // Default 5 seconds minimum between saves
+  minSaveInterval = 5000, // Default 5 seconds minimum between saves
+  showNotifications = true // Default to showing notifications
 }: UseAutoSaveOptions<T>): UseAutoSaveResult {
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -54,8 +56,10 @@ export function useAutoSave<T>({
     try {
       setIsSaving(true)
       
-      // Show autosave start notification
-      currentNotificationRef.current = notifications.autoSaveStart()
+      // Show autosave start notification only if enabled
+      if (showNotifications) {
+        currentNotificationRef.current = notifications.autoSaveStart()
+      }
       
       await onSave(dataToSave)
       
@@ -64,8 +68,10 @@ export function useAutoSave<T>({
         setLastSaved(saveTime)
         lastSaveTimeRef.current = saveTime.getTime()
         
-        // Show success notification
-        notifications.autoSaveSuccess()
+        // Show success notification only if enabled
+        if (showNotifications) {
+          notifications.autoSaveSuccess()
+        }
         
         // Call onSaveComplete to reset dirty flag
         onSaveComplete?.()
@@ -98,7 +104,7 @@ export function useAutoSave<T>({
         currentNotificationRef.current = null
       }
     }
-  }, [onSave, onError, onConflict, disabled, minSaveInterval, notifications])
+  }, [onSave, onError, onConflict, disabled, minSaveInterval, notifications, showNotifications])
 
   // Force save immediately (bypasses debouncing)
   const forceSave = useCallback(async () => {

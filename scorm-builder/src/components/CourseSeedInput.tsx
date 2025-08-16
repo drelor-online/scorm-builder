@@ -127,42 +127,72 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   }, [storage?.isInitialized])
   const [showDraftLoaded] = useState(false)
   
-  // Load project name as course title and check if it should be locked
+  // Load project data including course seed data
   useEffect(() => {
     const loadProjectData = async () => {
       if (storage && storage.currentProjectId && storage.isInitialized) {
         try {
-          // Check if we have saved course data
-          const savedData = await storage.getContent('courseSeedData')
+          // Load saved course seed data using the new helper method
+          const savedSeedData = await storage.getCourseSeedData()
           
-          // If we don't have a title from initial data, load from project name or saved data
-          if (!initialData?.courseTitle && !courseTitle) {
-            // First check if we have saved course data with a title
-            if (savedData?.courseTitle) {
-              debugLogger.info('CourseSeedInput', 'Loading title from saved course data', {
-                title: savedData.courseTitle
-              });
-              setCourseTitle(savedData.courseTitle);
-              setIsTitleLocked(true);
-            } else {
-              // Otherwise, try to get the project name
-              const projects = await storage.listProjects()
-              const currentProject = projects.find(p => p.id === storage.currentProjectId)
-              if (currentProject?.name) {
-                debugLogger.info('CourseSeedInput', 'Loading title from project name', {
-                  projectName: currentProject.name,
-                  isNewProject: !savedData
-                });
-                setCourseTitle(currentProject.name);
-                // Lock the title if we have saved data (not a new project)
-                if (savedData) {
-                  setIsTitleLocked(true)
-                }
-              }
+          debugLogger.info('CourseSeedInput', 'Loading project data', {
+            hasSavedData: !!savedSeedData,
+            savedTitle: savedSeedData?.courseTitle,
+            savedTemplate: savedSeedData?.template,
+            savedDifficulty: savedSeedData?.difficulty,
+            savedTopicsCount: savedSeedData?.customTopics?.length || 0,
+            hasInitialData: !!initialData?.courseTitle,
+            currentTitle: courseTitle
+          });
+          
+          // If we have saved seed data, restore all fields
+          if (savedSeedData) {
+            const newValues = {
+              courseTitle: courseTitle,
+              difficulty: difficulty,
+              template: template,
+              customTopics: customTopics
+            };
+            
+            // Only update fields that are currently empty/default to avoid overriding user changes
+            if (!courseTitle && savedSeedData.courseTitle) {
+              setCourseTitle(savedSeedData.courseTitle);
+              newValues.courseTitle = savedSeedData.courseTitle;
             }
-          } else if (savedData) {
-            // If we already have a title but also have saved data, lock it
-            setIsTitleLocked(true)
+            
+            if (template === 'None' && savedSeedData.template) {
+              setTemplate(savedSeedData.template);
+              newValues.template = savedSeedData.template;
+            }
+            
+            if (difficulty === 3 && savedSeedData.difficulty) {
+              setDifficulty(savedSeedData.difficulty);
+              newValues.difficulty = savedSeedData.difficulty;
+            }
+            
+            if (!customTopics && savedSeedData.customTopics?.length) {
+              const topicsStr = savedSeedData.customTopics.join('\n');
+              setCustomTopics(topicsStr);
+              newValues.customTopics = topicsStr;
+            }
+            
+            // Update the form's initial values to prevent unsaved changes warnings
+            updateInitialValues(newValues);
+            
+            // Lock the title since we have saved data
+            setIsTitleLocked(true);
+            
+          } else if (!initialData?.courseTitle && !courseTitle) {
+            // No saved data - try to get the project name as fallback
+            const projects = await storage.listProjects()
+            const currentProject = projects.find(p => p.id === storage.currentProjectId)
+            if (currentProject?.name) {
+              debugLogger.info('CourseSeedInput', 'Loading title from project name (no saved data)', {
+                projectName: currentProject.name
+              });
+              setCourseTitle(currentProject.name);
+              // Don't lock the title for new projects
+            }
           }
         } catch (error) {
           console.error('Failed to load project data:', error)
@@ -302,26 +332,23 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
             .map(topic => topic.trim())
             .filter(topic => topic.length > 0)
           
-          await storage.saveCourseMetadata({
+          const seedData: CourseSeedData = {
             courseTitle,
             difficulty,
-            topics: topicsArray,
-            lastModified: new Date().toISOString()
-          })
+            customTopics: topicsArray,
+            template,
+            templateTopics: []
+          }
+          
+          // Save using the new dedicated method that handles both courseSeedData and metadata
+          await storage.saveCourseSeedData(seedData)
           
           // Also trigger onSave callback for silent save
           if (onSave) {
-            const data: CourseSeedData = {
-              courseTitle,
-              difficulty,
-              customTopics: topicsArray,
-              template,
-              templateTopics: []
-            }
-            onSave(data)
+            onSave(seedData)
           }
         } catch (error) {
-          console.error('Failed to save course metadata:', error)
+          console.error('Failed to save course seed data:', error)
         }
       }
     }

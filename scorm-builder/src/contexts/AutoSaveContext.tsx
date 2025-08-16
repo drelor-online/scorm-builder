@@ -4,6 +4,7 @@ interface AutoSaveContextValue {
   isSaving: boolean
   lastSaved: Date | null
   hasUnsavedChanges: boolean
+  isManualSave: boolean
 }
 
 const AutoSaveContext = createContext<AutoSaveContextValue | null>(null)
@@ -12,15 +13,17 @@ export function AutoSaveProvider({
   children, 
   isSaving, 
   lastSaved,
-  hasUnsavedChanges 
+  hasUnsavedChanges,
+  isManualSave = false
 }: { 
   children: ReactNode
   isSaving: boolean
   lastSaved: Date | null
   hasUnsavedChanges: boolean
+  isManualSave?: boolean
 }) {
   return (
-    <AutoSaveContext.Provider value={{ isSaving, lastSaved, hasUnsavedChanges }}>
+    <AutoSaveContext.Provider value={{ isSaving, lastSaved, hasUnsavedChanges, isManualSave }}>
       {children}
     </AutoSaveContext.Provider>
   )
@@ -33,7 +36,8 @@ export function useAutoSaveState() {
     return {
       isSaving: false,
       lastSaved: null,
-      hasUnsavedChanges: false
+      hasUnsavedChanges: false,
+      isManualSave: false
     }
   }
   return context

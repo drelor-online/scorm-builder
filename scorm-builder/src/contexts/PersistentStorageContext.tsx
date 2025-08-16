@@ -23,6 +23,8 @@ interface PersistentStorageContextValue {
   getContent: (id: string) => Promise<any>
   saveCourseMetadata: (metadata: any) => Promise<void>
   getCourseMetadata: () => Promise<any>
+  saveCourseSeedData: (seedData: any) => Promise<void>
+  getCourseSeedData: () => Promise<any>
   saveAiPrompt: (prompt: string) => Promise<void>
   getAiPrompt: () => Promise<string | null>
   saveAudioSettings: (settings: any) => Promise<void>
