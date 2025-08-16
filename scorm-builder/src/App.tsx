@@ -819,18 +819,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     return () => clearTimeout(handler)
   }, [courseSeedData, courseContent, isLoadingProject, currentStep, markDirty])
 
-  // DEBUG: Track state changes to identify what's triggering re-renders
-  useEffect(() => {
-    console.log('[DEBUG] State Change Detected:', {
-      courseSeedDataTitle: courseSeedData?.courseTitle,
-      hasCourseContent: !!courseContent,
-      currentStep,
-      hasUnsavedChanges,
-      isLoadingProject,
-      timestamp: new Date().toISOString(),
-      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
-    })
-  }) // No dependencies - runs on every render to catch all changes
+  // DEBUG: Track state changes to identify what's triggering re-renders (DISABLED to reduce console noise)
+  // useEffect(() => {
+  //   console.log('[DEBUG] State Change Detected:', {
+  //     courseSeedDataTitle: courseSeedData?.courseTitle,
+  //     hasCourseContent: !!courseContent,
+  //     currentStep,
+  //     hasUnsavedChanges,
+  //     isLoadingProject,
+  //     timestamp: new Date().toISOString(),
+  //     stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+  //   })
+  // }) // No dependencies - runs on every render to catch all changes
   
   // DEBUG: Track hasUnsavedChanges flag changes for autosave monitoring
   useEffect(() => {
@@ -967,18 +967,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           })
         }
       
-        // Now save the COMPLETE course seed data - not just metadata
-        await storage.saveContent('courseSeedData', data)
+        // Now save the COMPLETE course seed data (includes metadata for backward compatibility)
+        await storage.saveCourseSeedData(data)
         await storage.saveContent('currentStep', { step: 'prompt' })
-        
-        // Also save to metadata for backward compatibility
-        await storage.saveCourseMetadata({
-          courseTitle: data.courseTitle,
-          difficulty: data.difficulty,
-          topics: data.customTopics,
-          template: data.template,
-          lastModified: new Date().toISOString()
-        })
         
         // Only update state and navigate after everything is saved successfully
         setCourseSeedData(data)
