@@ -1544,11 +1544,7 @@ export function AudioNarrationWizard({
     // Store in context and trigger save callback
     // Wrap save operations in try-finally to ensure isSaving is reset
     try {
-      if (storage && storage.currentProjectId) {
-        storage.saveContent('audioNarration', contentWithAudio)
-        
-        // NOTE: Audio narration status is tracked in the course content itself, no separate metadata needed
-      }
+      // NOTE: Individual saveContent('audioNarration') removed - parent App.tsx handles unified save via saveCourseContent()
       if (onSave) {
         // Pass the updated content to parent so it updates its state
         onSave(contentWithAudio, true) // Pass silent=true to avoid double save
@@ -3572,12 +3568,7 @@ export function AudioNarrationWizard({
               })
             }
             
-            // Save the cleared content directly
-            if (storage && storage.currentProjectId) {
-              storage.saveContent('audioNarration', clearedContent)
-              
-              // NOTE: Audio narration status is tracked in the course content itself, no separate metadata needed
-            }
+            // NOTE: Individual saveContent('audioNarration') removed - parent App.tsx handles unified save via saveCourseContent()
             
             // Pass cleared content to parent
             if (onSave) {

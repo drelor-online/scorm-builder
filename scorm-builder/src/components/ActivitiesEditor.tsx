@@ -147,7 +147,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
       }
       
       try {
-        await storage.saveContent('activities', content)
+        // NOTE: Individual saveContent('activities') removed - parent App.tsx handles unified save via saveCourseContent()
         // Trigger the onSave callback with silent=true to prevent infinite loops
         if (onSave) {
           onSave(content, true) // Pass content and silent=true for auto-save
@@ -288,14 +288,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
         // FIX: Use ref to get latest content and avoid stale closure
         const latestContent = contentRef.current
         
-        // Save final state before navigating
-        if (storage && storage.isInitialized && storage.currentProjectId) {
-          try {
-            await storage.saveContent('activities', latestContent)
-          } catch (error) {
-            console.error('Error saving activities data before navigation:', error)
-          }
-        }
+        // NOTE: Individual saveContent('activities') removed - parent App.tsx handleActivitiesNext handles unified save
         try {
           await onNext(latestContent)
           // Reset activities dirty flag only on successful next
