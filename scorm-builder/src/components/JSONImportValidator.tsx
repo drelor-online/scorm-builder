@@ -243,15 +243,19 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!originalError) {
         // The JSON is valid after pre-processing
         const parsedData = JSON.parse(processedInput) as CourseContent
+        
+        // Update validation state (separate from console.log to prevent minification issues)
         setValidationResult({
           isValid: true,
           data: parsedData,
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
+        
         setToast({ 
           message: '✅ Valid JSON detected! Course structure loaded successfully.', 
           type: 'success' 
         })
+        
         setIsLocked(true)
         setIsValidating(false)
         return
@@ -265,15 +269,19 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       try {
         const parsedData = JSON.parse(fixedJson) as CourseContent
         console.log("Smart auto-fix successful!")
+        
+        // Update validation state (separate from console.log to prevent minification issues)
         setValidationResult({
           isValid: true,
           data: parsedData,
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
+        
         setToast({ 
           message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
           type: 'success' 
         })
+        
         setIsLocked(true)
         setIsValidating(false)
         return
