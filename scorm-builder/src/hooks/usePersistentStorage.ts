@@ -207,10 +207,6 @@ export function usePersistentStorage() {
     return fileStorage.getMediaUrl(id);
   }, []);
 
-  const saveCourseMetadata = useCallback(async (metadata: any) => {
-    // Update course data with new metadata
-    fileStorage.updateCourseData(metadata);
-  }, []);
 
   const saveCourseSeedData = useCallback(async (seedData: any) => {
     return fileStorage.saveCourseSeedData(seedData);
@@ -271,7 +267,6 @@ export function usePersistentStorage() {
     getMediaForTopic,
     saveContent,
     getContent,
-    saveCourseMetadata,
     getCourseMetadata,
     saveCourseSeedData,
     getCourseSeedData,

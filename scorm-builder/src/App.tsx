@@ -929,14 +929,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [storage])
   
   /*
-   * SAVE ARCHITECTURE EXPLANATION:
+   * UNIFIED SAVE ARCHITECTURE:
    * 
-   * This application uses a unified save architecture with the following components:
+   * This application uses a simple, unified save architecture:
    * 
    * 1. UNIFIED SAVE METHODS (FileStorage.ts):
    *    - saveCourseContent(): Saves complete course structure to root-level course_content field
-   *    - saveCourseSeedData(): Saves seed data and updates metadata for backward compatibility  
-   *    - saveCourseMetadata(): Updates legacy metadata fields (kept for backward compatibility)
+   *    - saveCourseSeedData(): Saves seed data to courseSeedData field
+   *    - All data is stored in the unified project file format
    * 
    * 2. SAVE TRIGGERS:
    *    - handleSave(): Manual save (Ctrl+S) - saves both seed data and course content
@@ -948,14 +948,14 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
    *    - Components call markDirty() when user makes changes
    *    - Auto-save only triggers when hasUnsavedChanges is true
    * 
-   * 4. LEGACY COMPATIBILITY:
-   *    - Individual saveCourseMetadata() calls maintain backward compatibility
-   *    - Old projects can still be loaded through legacy format fallbacks
-   *    - New projects use unified course_content structure for better performance
-   * 
-   * 5. MUTATION SAFETY (Development):
+   * 4. MUTATION SAFETY (Development):
    *    - courseContent is frozen in development to catch accidental mutations
    *    - validateImmutableUpdate() warns if same object reference is reused
+   * 
+   * 5. PERFORMANCE BENEFITS:
+   *    - Single atomic save operation per step navigation
+   *    - No redundant metadata saves or individual page saves
+   *    - Consistent data structure across all course components
    */
   
   // Re-enabled autosave with proper safeguards to prevent infinite loops
@@ -1058,15 +1058,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'media' })
         await storage.saveCourseContent(data)
         
-        // Save course metadata for backward compatibility
-        await storage.saveCourseMetadata({
-          courseTitle: courseSeedData?.courseTitle || '',
-          difficulty: courseSeedData?.difficulty || 3,
-          objectives: data.objectives || [],
-          welcomeContent: data.welcomePage?.content || '',
-          topics: data.topics.map((_, i) => `topic-${i}`), // Always use numeric topic IDs
-          lastModified: new Date().toISOString()
-        })
         
         // NOTE: Individual page saves removed - saveCourseContent() above already saves 
         // the complete course structure including welcomePage, learningObjectivesPage, and all topics
@@ -1107,15 +1098,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // Save complete course content using unified method
         await storage.saveCourseContent(courseData)
         
-        // Update course metadata with media info for backward compatibility
-        await storage.saveCourseMetadata({
-          courseTitle: courseSeedData?.courseTitle || '',
-          difficulty: courseSeedData?.difficulty || 3,
-          objectives: courseData.objectives || [],
-          welcomeContent: courseData.welcomePage?.content || '',
-          topics: courseData.topics.map((_, i) => `topic-${i}`), // Always use numeric topic IDs
-          lastModified: new Date().toISOString()
-        })
         
         // NOTE: Individual page saves removed - saveCourseContent() above already saves 
         // the complete course structure including all media associations
@@ -1155,16 +1137,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // Save complete course content using unified method
         await storage.saveCourseContent(courseData)
         
-        // Update course metadata for backward compatibility
-        await storage.saveCourseMetadata({
-          courseTitle: courseSeedData?.courseTitle || '',
-          difficulty: courseSeedData?.difficulty || 3,
-          objectives: courseData.objectives || [],
-          welcomeContent: courseData.welcomePage?.content || '',
-          topics: courseData.topics.map((_, i) => `topic-${i}`), // Always use numeric topic IDs
-          lastModified: new Date().toISOString()
-        })
-        
         // NOTE: Individual page saves removed - saveCourseContent() above already saves 
         // the complete course structure including all audio/media
       } catch (error) {
@@ -1203,16 +1175,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // Save complete course content using unified method
         await storage.saveCourseContent(courseData)
         
-        // Update course metadata for backward compatibility
-        await storage.saveCourseMetadata({
-          courseTitle: courseSeedData?.courseTitle || '',
-          difficulty: courseSeedData?.difficulty || 3,
-          objectives: courseData.objectives || [],
-          welcomeContent: courseData.welcomePage?.content || '',
-          topics: courseData.topics.map((_, i) => `topic-${i}`), // Always use numeric topic IDs
-          lastModified: new Date().toISOString()
-        })
-        
         // NOTE: Individual content saves removed - saveCourseContent() above already saves 
         // the complete course structure including assessment, activities, quiz, and all topics
       } catch (error) {
@@ -1244,15 +1206,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (storage.currentProjectId) {
       try {
         await storage.saveContent('currentStep', { step: 'scorm' })
-        await storage.saveCourseMetadata({
-          courseTitle: courseSeedData?.courseTitle || '',
-          difficulty: courseSeedData?.difficulty || 3,
-          objectives: courseContent?.objectives || [],
-          welcomeContent: courseContent?.welcomePage?.content || '',
-          topics: courseContent?.topics.map((_, i) => `topic-${i}`) || [], // Always use numeric topic IDs
-          lastModified: new Date().toISOString(),
-          completed: true
-        })
+        // NOTE: Completion state is tracked in the course content, no separate metadata needed
       } catch (error) {
         console.error('Failed to save completion state:', error)
       }

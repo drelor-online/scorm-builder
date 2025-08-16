@@ -68,9 +68,6 @@ export class MockFileStorage {
     return this.currentProjectId
   }
 
-  async saveCourseMetadata(metadata: any): Promise<void> {
-    return this.saveContent('metadata', metadata)
-  }
 
   async getCourseMetadata(): Promise<any> {
     return this.getContent('metadata')
@@ -203,13 +200,6 @@ export class MockFileStorage {
     return this.mockData[this.currentProjectId]?.content?.metadata || null
   }
 
-  updateCourseData(metadata: any): void {
-    if (!this.currentProjectId) return
-    if (!this.mockData[this.currentProjectId].content) {
-      this.mockData[this.currentProjectId].content = {}
-    }
-    this.mockData[this.currentProjectId].content.metadata = metadata
-  }
   
   // SCORM and Settings Methods
   async saveScormConfig(config: any): Promise<void> {

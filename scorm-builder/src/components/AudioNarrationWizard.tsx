@@ -1547,12 +1547,7 @@ export function AudioNarrationWizard({
       if (storage && storage.currentProjectId) {
         storage.saveContent('audioNarration', contentWithAudio)
         
-        // Update metadata flag to indicate we have audio narration
-        const metadata = await storage.getCourseMetadata() || {}
-        await storage.saveCourseMetadata({
-          ...metadata,
-          hasAudioNarration: true
-        })
+        // NOTE: Audio narration status is tracked in the course content itself, no separate metadata needed
       }
       if (onSave) {
         // Pass the updated content to parent so it updates its state
@@ -3581,12 +3576,7 @@ export function AudioNarrationWizard({
             if (storage && storage.currentProjectId) {
               storage.saveContent('audioNarration', clearedContent)
               
-              // Update metadata to indicate no audio narration
-              const metadata = await storage.getCourseMetadata() || {}
-              await storage.saveCourseMetadata({
-                ...metadata,
-                hasAudioNarration: false
-              })
+              // NOTE: Audio narration status is tracked in the course content itself, no separate metadata needed
             }
             
             // Pass cleared content to parent

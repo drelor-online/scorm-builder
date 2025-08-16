@@ -21,7 +21,6 @@ interface PersistentStorageContextValue {
   getMediaForTopic: (topicId: string) => Promise<any[]>
   saveContent: (id: string, content: any) => Promise<void>
   getContent: (id: string) => Promise<any>
-  saveCourseMetadata: (metadata: any) => Promise<void>
   getCourseMetadata: () => Promise<any>
   saveCourseSeedData: (seedData: any) => Promise<void>
   getCourseSeedData: () => Promise<any>

@@ -670,9 +670,6 @@ export class FileStorage {
     return this.currentProjectId;
   }
 
-  async saveCourseMetadata(metadata: any): Promise<void> {
-    await this.saveContent('metadata', metadata);
-  }
 
   async getCourseMetadata(): Promise<any> {
     // For testing, we can return metadata without requiring a project path
@@ -1654,17 +1651,6 @@ export class FileStorage {
     return null;
   }
 
-  updateCourseData(metadata: any): void {
-    debugLogger.debug('FileStorage.updateCourseData', 'Updating course data', {
-      title: metadata?.title,
-      hasTopics: !!metadata?.topics
-    });
-    
-    // Queue the update to be saved
-    this.saveCourseMetadata(metadata).catch(error => {
-      debugLogger.error('FileStorage.updateCourseData', 'Failed to update course data', error);
-    });
-  }
   
   // SCORM and Settings Methods
   async saveScormConfig(config: any): Promise<void> {
@@ -1705,17 +1691,6 @@ export class FileStorage {
       ...seedData,
       lastModified: new Date().toISOString()
     });
-
-    // Also update course_data for backward compatibility
-    if (seedData.courseTitle || seedData.difficulty || seedData.customTopics?.length) {
-      await this.saveCourseMetadata({
-        courseTitle: seedData.courseTitle,
-        difficulty: seedData.difficulty,
-        topics: seedData.customTopics,
-        template: seedData.template,
-        lastModified: new Date().toISOString()
-      });
-    }
   }
 
   async getCourseSeedData(): Promise<import('../types/course').CourseSeedData | null> {
@@ -1772,11 +1747,11 @@ export class FileStorage {
   /*
    * UNIFIED SAVE ARCHITECTURE - Course Content Methods
    * 
-   * These methods implement the unified save architecture where:
+   * Simple, unified save architecture:
    * - saveCourseContent() saves the complete course structure to the root-level course_content field
-   * - This replaces individual page saves for better performance and consistency
-   * - All course data (welcome, objectives, topics, assessment) is saved atomically
-   * - Legacy individual saves are removed from step handlers to eliminate redundancy
+   * - All course data (welcome, objectives, topics, assessment) is saved atomically in one operation
+   * - No redundant individual page saves or metadata calls
+   * - Provides consistent, performant data persistence across all course components
    */
   
   // Course Content Methods
