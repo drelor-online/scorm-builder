@@ -294,8 +294,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           // Save using the new dedicated method that handles both courseSeedData and metadata
           await storage.saveCourseSeedData(seedData)
           
-          // Don't trigger onSave callback for autosave to prevent race conditions
-          // The onSave callback is only for manual saves
+          // Mark section as dirty to enable manual save button
+          markDirty('courseSeed')
+          
+          // Call onSave callback to update parent state with auto-saved data
+          // This ensures App.tsx state stays synchronized with storage
+          if (onSave) {
+            onSave(seedData)
+          }
         } catch (error) {
           console.error('Failed to save course seed data:', error)
         }
