@@ -95,6 +95,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   
   const storage = useStorage()
   const formRef = useRef<HTMLFormElement>(null)
+  const hasMountedRef = useRef(false)
   const [template, setTemplate] = useState<CourseTemplate>(initialData?.template || 'None')
   const [customTopics, setCustomTopics] = useState(initialData?.customTopics?.join('\n') || '')
   const [courseTitle, setCourseTitle] = useState(initialData?.courseTitle || '')
@@ -228,7 +229,6 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   }, [initialData, updateInitialValues])
   
   // Track if we've mounted to prevent initial save
-  const hasMountedRef = useRef(false)
   const isSubmittingRef = useRef(false)
   const previousValuesRef = useRef({
     courseTitle,
@@ -277,6 +277,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
       
       if (courseTitle && storage?.currentProjectId && storage?.isInitialized) {
+        let savedSuccessfully = false
         try {
           const topicsArray = customTopics
             .split('\n')
@@ -291,19 +292,43 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
             templateTopics: []
           }
           
-          // Save using the new dedicated method that handles both courseSeedData and metadata
-          await storage.saveCourseSeedData(seedData)
-          
           // Mark section as dirty to enable manual save button
           markDirty('courseSeed')
           
-          // Call onSave callback to update parent state with auto-saved data
-          // This ensures App.tsx state stays synchronized with storage
+          // Call onSave callback to trigger unified save through App.tsx
+          // This ensures both App state synchronization AND storage persistence
+          // The parent's handleManualSave will handle the actual storage operation
           if (onSave) {
             onSave(seedData)
+            savedSuccessfully = true
+          } else {
+            // Fallback: if no parent callback, save directly to storage
+            // This maintains backward compatibility for standalone usage
+            await storage.saveCourseSeedData(seedData)
+            savedSuccessfully = true
           }
         } catch (error) {
-          console.error('Failed to save course seed data:', error)
+          // Enhanced error logging with context
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          console.error('Auto-save failed for course seed data:', {
+            error: errorMessage,
+            courseTitle,
+            projectId: storage?.currentProjectId,
+            hasTopics: customTopics.trim().length > 0
+          })
+          
+          // Could potentially show a non-intrusive error notification here
+          // but auto-save failures should generally be silent to avoid disrupting UX
+        } finally {
+          // Ensure proper cleanup regardless of save success/failure
+          // Auto-save doesn't maintain loading state, so no state cleanup needed
+          // But we could add telemetry/analytics here if needed
+          if (savedSuccessfully) {
+            debugLogger.info('CourseSeedInput', 'Auto-save completed successfully', {
+              courseTitle,
+              projectId: storage?.currentProjectId
+            })
+          }
         }
       }
     }
@@ -311,7 +336,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     // Debounce the save
     const timer = setTimeout(saveMetadata, 1000)
     return () => clearTimeout(timer)
-  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized])
+  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized, onSave, markDirty])
   
   // Wrapped navigation handlers
   const handleStepClick = (stepIndex: number) => {
@@ -486,6 +511,29 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     return hasTitle && hasTopics
   }
   
+  // Handle manual save button clicks
+  const handleManualSave = async () => {
+    if (onSave && courseTitle) {
+      try {
+        const topicsArray = customTopics
+          .split('\n')
+          .map(topic => topic.trim())
+          .filter(topic => topic.length > 0)
+        
+        const seedData = {
+          courseTitle,
+          difficulty,
+          customTopics: topicsArray,
+          template,
+          templateTopics: []
+        }
+        
+        await onSave(seedData)
+      } catch (error) {
+        console.error('Manual save failed:', error)
+      }
+    }
+  }
 
   return (
     <>
@@ -539,6 +587,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       onHelp={onHelp}
       onOpen={onOpen}
       onStepClick={handleStepClick}
+      onSave={onSave ? handleManualSave : undefined}
     >
       <form ref={formRef} aria-label="Course Seed Input" data-testid="course-seed-input-form" onSubmit={handleSubmit}>
         {/* Error announcement region for screen readers */}

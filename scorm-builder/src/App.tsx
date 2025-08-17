@@ -1630,13 +1630,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onHelp={() => showDialog('help')}
                 onOpen={handleOpen}
                 isSaving={isSaving}
-                onSave={(content?: CourseSeedData) => {
+                onSave={async (content?: CourseSeedData) => {
                   if (content) {
                     setCourseSeedData(content);
-                    // Save with the new data immediately
-                    handleManualSave(content);
+                    // Auto-save: use silent save without notifications
+                    const updatedProjectData: ProjectData = {
+                      ...projectData,
+                      courseSeedData: content
+                    };
+                    await handleAutosave(updatedProjectData);
                   } else {
-                    handleManualSave();
+                    // Manual save: use current state
+                    await handleAutosave(projectData);
                   }
                 }}
                 onSubmit={handleCourseSeedSubmit}
