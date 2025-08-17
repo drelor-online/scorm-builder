@@ -14,7 +14,7 @@ import {
 } from './DesignSystem'
 import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
-import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Target, FileQuestion, Award, Edit2, Check, X, Wand2 } from 'lucide-react'
+import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Target, FileQuestion, Award, Edit2, Check, X, Wand2, Eye } from 'lucide-react'
 // import { useUndoRedo } from '../hooks/useUndoRedo' // Removed undo/redo functionality
 import { AutoSaveBadge } from './AutoSaveBadge'
 import './DesignSystem/designSystem.css'
@@ -59,16 +59,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [jsonInput, setJsonInput] = useState('')
   
   const [validationResult, setValidationResult] = useState<any>(null)
+  const [isTreeVisible, setIsTreeVisible] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [isLocked, setIsLocked] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
-  const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousProjectIdRef = useRef<string | null>(null)
-  const rerenderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const rerenderTriggeredRef = useRef<boolean>(false)
   
   // Load persisted JSON import data on mount and when project changes
   useEffect(() => {
@@ -88,6 +86,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           setJsonInput('')
           setValidationResult(null)
           setIsLocked(false)
+          setIsTreeVisible(false)
           
           // Update the ref to track current project
           previousProjectIdRef.current = storage.currentProjectId
@@ -174,42 +173,10 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current)
       }
-      if (rerenderTimeoutRef.current) {
-        clearTimeout(rerenderTimeoutRef.current)
-      }
     }
   }, [])
   
-  // Removed redundant useEffect hooks for re-rendering - relying on immediate triggers after validation instead
-  // This eliminates race conditions between multiple timers and simplifies the code
-  
-  // Helper function to trigger re-render safely with cleanup and StrictMode protection
-  const triggerTreeViewRerender = useCallback(() => {
-    // StrictMode protection - only trigger once per validation
-    if (rerenderTriggeredRef.current) {
-      logger.info('JSONValidator', 'Re-render already triggered for this validation - skipping')
-      return
-    }
-    
-    // Clear any existing rerender timeout
-    if (rerenderTimeoutRef.current) {
-      clearTimeout(rerenderTimeoutRef.current)
-    }
-    
-    // Mark as triggered to prevent double execution in StrictMode
-    rerenderTriggeredRef.current = true
-    
-    // Schedule immediate re-render to ensure tree view appears
-    rerenderTimeoutRef.current = setTimeout(() => {
-      setForceUpdateCounter(prev => {
-        logger.info('JSONValidator', 'Triggered tree view re-render', { 
-          forceUpdateCounter: prev + 1 
-        })
-        return prev + 1
-      })
-      rerenderTimeoutRef.current = null // Clear ref after execution
-    }, 0)
-  }, [logger])
+  // Race condition eliminated by using user-controlled toggle view instead of timing-based logic
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
@@ -219,9 +186,6 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     // Clear previous validation result
     setValidationResult(null)
     setIsValidating(true)
-    
-    // Reset re-render trigger flag for new validation
-    rerenderTriggeredRef.current = false
     
     let processedInput = jsonInput
     let wasAutoFixed = false
@@ -336,9 +300,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         
         setIsLocked(true)
         setIsValidating(false)
-        
-        // Force immediate re-render to show tree view
-        triggerTreeViewRerender()
+        setIsTreeVisible(true) // Auto-switch to tree view
         
         logger.info('JSONValidator', 'State updated after validation', {
           isLocked: true,
@@ -402,9 +364,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         
         setIsLocked(true)
         setIsValidating(false)
-        
-        // Force immediate re-render to show tree view
-        triggerTreeViewRerender()
+        setIsTreeVisible(true) // Auto-switch to tree view
         
         logger.info('JSONValidator', 'State updated after smart auto-fix', {
           isLocked: true,
@@ -786,9 +746,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Lock the input after successful validation
       setIsLocked(true)
       setIsValidating(false)
-      
-      // Force immediate re-render to show tree view
-      triggerTreeViewRerender()
+      setIsTreeVisible(true) // Auto-switch to tree view
       
       logger.info('JSONValidator', 'State updated after full validation', {
         isLocked: true,
@@ -989,6 +947,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     markDirty('courseContent') // Mark dirty when clearing content
     setValidationResult(null)
     setIsLocked(false)
+    setIsTreeVisible(false) // Reset to JSON editor view
     setToast({ message: 'JSON cleared. Data on following pages has been reset.', type: 'info' })
     
     // Clear persisted validation state (both old and new formats)
@@ -1395,18 +1354,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       </div>
 
       <Section>
-        {/* Show tree view when locked, editor when unlocked */}
-        {(() => {
-          const shouldShowTree = isLocked && validationResult?.isValid && validationResult.data
-          logger.info('JSONValidator', 'Render decision', {
-            isLocked,
-            isValid: validationResult?.isValid,
-            hasData: !!validationResult?.data,
-            shouldShowTree,
-            forceUpdateCounter
-          })
-          return shouldShowTree
-        })() ? (
+        {/* Show tree view when user chooses to, editor otherwise */}
+        {isTreeVisible && validationResult?.isValid && validationResult?.data ? (
             <>
               {/* Course Structure */}
               <div className={styles.sectionWrapper}>
@@ -1538,6 +1487,19 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                     <Icon icon={Clipboard} size="sm" />
                     Paste from Clipboard
                   </Button>
+                  
+                  {validationResult?.isValid && validationResult?.data && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsTreeVisible(prev => !prev)}
+                      disabled={!validationResult?.isValid || !validationResult?.data}
+                      data-testid="toggle-view-button"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <Icon icon={Eye} size="sm" />
+                      {isTreeVisible ? 'Show JSON Editor' : 'Show Course Tree'}
+                    </Button>
+                  )}
                   
                   {/* Show validation status */}
                   {isValidating && (
