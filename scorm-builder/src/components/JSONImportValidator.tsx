@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { CourseContent } from '../types/aiPrompt'
 import { PageLayout } from './PageLayout'
 import { 
@@ -67,6 +67,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousProjectIdRef = useRef<string | null>(null)
+  const rerenderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const rerenderTriggeredRef = useRef<boolean>(false)
   
   // Load persisted JSON import data on mount and when project changes
   useEffect(() => {
@@ -166,65 +168,48 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     persistValidationState()
   }, [jsonInput, validationResult, isLocked, storage?.isInitialized])
   
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current)
       }
+      if (rerenderTimeoutRef.current) {
+        clearTimeout(rerenderTimeoutRef.current)
+      }
     }
   }, [])
   
-  // State validation synchronization effect - ensures tree view shows when validation completes
-  useEffect(() => {
-    // Verify that when all conditions are met, the component will show the tree view
-    if (isLocked && validationResult?.isValid && !!validationResult?.data && !isValidating) {
-      logger.info('JSONValidator', 'Tree view conditions met', {
-        isLocked,
-        isValid: validationResult?.isValid,
-        hasData: !!validationResult?.data,
-        isValidating,
-        topicsCount: validationResult?.data?.topics?.length || 0
-      })
-      
-      // Force a re-render to ensure the tree view shows
-      // This is a safety mechanism for production builds where state batching might cause issues
-      const timer = setTimeout(() => {
-        // Use force update counter to trigger a guaranteed re-render
-        setForceUpdateCounter(prev => {
-          logger.info('JSONValidator', 'Forced tree view re-render', { forceUpdateCounter: prev + 1 })
-          return prev + 1
-        })
-      }, 10)
-      return () => clearTimeout(timer)
-    }
-  }, [isLocked, validationResult?.isValid, !!validationResult?.data, isValidating])
+  // Removed redundant useEffect hooks for re-rendering - relying on immediate triggers after validation instead
+  // This eliminates race conditions between multiple timers and simplifies the code
   
-  // Fallback mechanism to ensure tree view shows in production
-  useEffect(() => {
-    if (isLocked && validationResult?.isValid && !!validationResult?.data && !isValidating) {
-      // Give React time to render, then check if tree view is showing
-      const fallbackTimer = setTimeout(() => {
-        logger.info('JSONValidator', 'Fallback check - ensuring tree view is visible', {
-          isLocked,
-          isValid: validationResult?.isValid,
-          hasData: !!validationResult?.data,
-          isValidating
-        })
-        
-        // Force a final re-render by incrementing counter if needed
-        setForceUpdateCounter(prev => {
-          logger.info('JSONValidator', 'Fallback re-render triggered', { 
-            previousCounter: prev,
-            newCounter: prev + 1 
-          })
-          return prev + 1
-        })
-      }, 100) // Wait 100ms for normal render to complete
-      
-      return () => clearTimeout(fallbackTimer)
+  // Helper function to trigger re-render safely with cleanup and StrictMode protection
+  const triggerTreeViewRerender = useCallback(() => {
+    // StrictMode protection - only trigger once per validation
+    if (rerenderTriggeredRef.current) {
+      logger.info('JSONValidator', 'Re-render already triggered for this validation - skipping')
+      return
     }
-  }, [isLocked, validationResult?.isValid, !!validationResult?.data, isValidating])
+    
+    // Clear any existing rerender timeout
+    if (rerenderTimeoutRef.current) {
+      clearTimeout(rerenderTimeoutRef.current)
+    }
+    
+    // Mark as triggered to prevent double execution in StrictMode
+    rerenderTriggeredRef.current = true
+    
+    // Schedule immediate re-render to ensure tree view appears
+    rerenderTimeoutRef.current = setTimeout(() => {
+      setForceUpdateCounter(prev => {
+        logger.info('JSONValidator', 'Triggered tree view re-render', { 
+          forceUpdateCounter: prev + 1 
+        })
+        return prev + 1
+      })
+      rerenderTimeoutRef.current = null // Clear ref after execution
+    }, 0)
+  }, [logger])
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
@@ -234,6 +219,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     // Clear previous validation result
     setValidationResult(null)
     setIsValidating(true)
+    
+    // Reset re-render trigger flag for new validation
+    rerenderTriggeredRef.current = false
     
     let processedInput = jsonInput
     let wasAutoFixed = false
@@ -350,7 +338,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         setIsValidating(false)
         
         // Force immediate re-render to show tree view
-        setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
+        triggerTreeViewRerender()
         
         logger.info('JSONValidator', 'State updated after validation', {
           isLocked: true,
@@ -416,7 +404,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         setIsValidating(false)
         
         // Force immediate re-render to show tree view
-        setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
+        triggerTreeViewRerender()
         
         logger.info('JSONValidator', 'State updated after smart auto-fix', {
           isLocked: true,
@@ -800,7 +788,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       setIsValidating(false)
       
       // Force immediate re-render to show tree view
-      setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
+      triggerTreeViewRerender()
       
       logger.info('JSONValidator', 'State updated after full validation', {
         isLocked: true,
@@ -933,8 +921,29 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   }
 
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (validationResult?.isValid && validationResult.data) {
+      // Explicitly save JSON state before navigation
+      try {
+        if (storage?.currentProjectId) {
+          const jsonImportData = {
+            rawJson: jsonInput,
+            validationResult: validationResult,
+            isLocked: isLocked
+          }
+          await storage.saveContent('json-import-data', jsonImportData)
+          logger.info('JSONValidator', 'Explicit save before navigation', {
+            projectId: storage.currentProjectId,
+            hasRawJson: !!jsonImportData.rawJson,
+            isLocked: jsonImportData.isLocked
+          })
+        }
+      } catch (error) {
+        logger.error('JSONValidator', 'Failed to save before navigation', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+      
       // Unlock all subsequent steps when JSON is validated successfully
       // Steps: 0=Seed, 1=Prompt, 2=JSON, 3=Media, 4=Audio, 5=Activities, 6=SCORM
       navigation.unlockSteps([3, 4, 5, 6])
@@ -942,6 +951,31 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       onNext(validationResult.data)
     }
     // Don't show alert - the disabled Next button provides sufficient feedback
+  }
+
+  const handleBack = async () => {
+    // Explicitly save JSON state before navigation
+    try {
+      if (storage?.currentProjectId && (jsonInput || validationResult)) {
+        const jsonImportData = {
+          rawJson: jsonInput,
+          validationResult: validationResult,
+          isLocked: isLocked
+        }
+        await storage.saveContent('json-import-data', jsonImportData)
+        logger.info('JSONValidator', 'Explicit save before back navigation', {
+          projectId: storage.currentProjectId,
+          hasRawJson: !!jsonImportData.rawJson,
+          isLocked: jsonImportData.isLocked
+        })
+      }
+    } catch (error) {
+      logger.error('JSONValidator', 'Failed to save before back navigation', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+    
+    onBack()
   }
 
   // Removed keyboard shortcuts for undo/redo
@@ -1338,7 +1372,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       autoSaveIndicator={autoSaveIndicator}
       onSettingsClick={onSettingsClick}
       onSave={onSave}
-      onBack={onBack}
+      onBack={handleBack}
       onNext={handleNext}
       nextDisabled={!validationResult?.isValid}
       onOpen={onOpen}
