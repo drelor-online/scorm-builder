@@ -61,6 +61,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [validationResult, setValidationResult] = useState<any>(null)
   const [isTreeVisible, setIsTreeVisible] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('')
   
   // Refs for focus and scroll management
   const treeViewRef = useRef<HTMLDivElement>(null)
@@ -184,6 +185,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   useEffect(() => {
     if (isTreeVisible && treeViewRef.current) {
       // When switching to tree view
+      setScreenReaderAnnouncement('Switched to course tree view. Use Tab to navigate through course structure.')
       setTimeout(() => {
         // Scroll tree view into view
         treeViewRef.current?.scrollIntoView({ 
@@ -203,6 +205,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       }, 100) // Small delay to ensure DOM is updated
     } else if (!isTreeVisible && jsonEditorRef.current) {
       // When switching back to JSON editor
+      setScreenReaderAnnouncement('Switched to JSON editor view. You can edit the course content here.')
       setTimeout(() => {
         // Scroll editor into view
         jsonEditorRef.current?.scrollIntoView({ 
@@ -220,7 +223,15 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         }
       }, 100)
     }
-  }, [isTreeVisible])
+    
+    // Clear screen reader announcement after a delay
+    if (screenReaderAnnouncement) {
+      const timeout = setTimeout(() => {
+        setScreenReaderAnnouncement('')
+      }, 3000) // Clear after 3 seconds
+      return () => clearTimeout(timeout)
+    }
+  }, [isTreeVisible, screenReaderAnnouncement])
   
   // Race condition eliminated by using user-controlled toggle view instead of timing-based logic
   
@@ -1384,6 +1395,26 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       onHelp={onHelp}
       onStepClick={onStepClick}
     >
+      {/* Screen reader announcements */}
+      <div 
+        aria-live="polite" 
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          padding: '0',
+          margin: '-1px',
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: '0'
+        }}
+        role="status"
+      >
+        {screenReaderAnnouncement}
+      </div>
+      
       {/* Instructions */}
       <div className={styles.sectionWrapper}>
         <h2 className={styles.sectionTitle}>Instructions</h2>
@@ -1402,7 +1433,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       <Section>
         {/* Show tree view when user chooses to, editor otherwise */}
         {isTreeVisible && validationResult?.isValid && validationResult?.data ? (
-            <div ref={treeViewRef} tabIndex={-1}>
+            <div 
+              ref={treeViewRef} 
+              tabIndex={0}
+              role="region"
+              aria-label="Course structure tree view"
+            >
               {/* Course Structure */}
               <div className={styles.sectionWrapper}>
                 <h2 className={styles.sectionTitle}>Course Structure</h2>
@@ -1432,7 +1468,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
                     Chatbot Response
                   </h3>
-                  <div ref={jsonEditorRef} tabIndex={-1}>
+                  <div 
+                    ref={jsonEditorRef} 
+                    tabIndex={0}
+                    role="region"
+                    aria-label="JSON editor"
+                  >
                     <SimpleJSONEditor
               value={jsonInput}
               onChange={(value) => {

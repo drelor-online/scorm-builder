@@ -1197,6 +1197,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                     label={`${Math.round(generationProgress)}% complete`}
                     showTimeRemaining={true}
                     startTime={generationStartTime || undefined}
+                    size="medium"
+                    variant="primary"
                     className="mb-2"
                   />
                 </div>

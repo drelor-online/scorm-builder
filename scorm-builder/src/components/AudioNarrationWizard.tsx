@@ -238,6 +238,13 @@ export function AudioNarrationWizard({
     phase: 'processing' | 'uploading' | 'complete'
   } | null>(null)
   
+  // Caption upload progress tracking
+  const [captionProgress, setCaptionProgress] = useState<{
+    current: number
+    total: number
+    overallPercent: number
+  } | null>(null)
+  
   // Media loading cache to prevent redundant reads
   interface CachedMediaData {
     mediaData: unknown;
@@ -255,6 +262,17 @@ export function AudioNarrationWizard({
   const [isLoadingPersistedData, setIsLoadingPersistedData] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
   const [error, setError] = useState<string | null>(null)
+  
+  // Upload summaries for bulk operations
+  const [audioUploadSummary, setAudioUploadSummary] = useState<{
+    successful: string[]
+    failed: { file: string; error: string }[]
+  } | null>(null)
+  
+  const [captionUploadSummary, setCaptionUploadSummary] = useState<{
+    successful: string[]
+    failed: { file: string; error: string }[]
+  } | null>(null)
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [_editingText, setEditingText] = useState('')
   const [showPreview, setShowPreview] = useState(false)
@@ -2324,8 +2342,10 @@ export function AudioNarrationWizard({
       blobUrlsRef.current = []
     }
     
-    // Declare newAudioFiles outside try block so it's accessible in finally
+    // Declare variables outside try block so they're accessible in finally
     let newAudioFiles: AudioFile[] = []
+    const successfulFiles: string[] = []
+    const failedFiles: { file: string; error: string }[] = []
     
     debugLogger.info('AudioNarrationWizard.handleAudioZipUpload', 'File selected', {
       fileName: file.name,
@@ -2357,6 +2377,9 @@ export function AudioNarrationWizard({
       event.target.value = '' // Reset file input
       return
     }
+    
+    // Clear previous upload summary
+    setAudioUploadSummary(null)
     
     // Start operation tracking
     const operationId = `bulk-audio-upload-${Date.now()}`
@@ -2535,6 +2558,9 @@ export function AudioNarrationWizard({
             mediaId: storedItem.id
           })
           
+          // Track successful file
+          successfulFiles.push(filename)
+          
           processedCount++
         } catch (fileError) {
           debugLogger.error('AudioNarrationWizard.handleAudioZipUpload', `Error processing file ${filename}`, {
@@ -2543,6 +2569,11 @@ export function AudioNarrationWizard({
             error: fileError
           })
           logger.error(`[AudioNarrationWizard] Error processing file ${filename}:`, fileError)
+          
+          // Track failed file
+          const errorMessage = fileError instanceof Error ? fileError.message : String(fileError)
+          failedFiles.push({ file: filename, error: errorMessage })
+          
           skippedFiles.push({ filename, reason: `Processing error: ${fileError}` })
           // Continue with next file
         }
@@ -2615,6 +2646,12 @@ export function AudioNarrationWizard({
         logger.warn(`[AudioNarrationWizard] Some files were skipped:`, skippedFiles)
       }
       
+      // Set audio upload summary
+      setAudioUploadSummary({
+        successful: successfulFiles,
+        failed: failedFiles
+      })
+      
       event.target.value = '' // Reset file input
     } catch (error) {
       debugLogger.error('AudioNarrationWizard.handleAudioZipUpload', 'Failed to process ZIP', {
@@ -2661,8 +2698,10 @@ export function AudioNarrationWizard({
       return
     }
     
-    // Declare newCaptionFiles outside try block so it's accessible in finally
+    // Declare variables outside try block so they're accessible in finally
     let newCaptionFiles: CaptionFile[] = []
+    const captionSuccessfulFiles: string[] = []
+    const captionFailedFiles: { file: string; error: string }[] = []
     
     debugLogger.info('AudioNarrationWizard.handleCaptionZipUpload', 'File selected', {
       fileName: file.name,
@@ -2692,6 +2731,9 @@ export function AudioNarrationWizard({
       event.target.value = '' // Reset file input
       return
     }
+    
+    // Clear previous upload summary
+    setCaptionUploadSummary(null)
     
     // Start operation tracking
     const operationId = `bulk-caption-upload-${Date.now()}`
@@ -2731,6 +2773,13 @@ export function AudioNarrationWizard({
       
       debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Processing caption files', {
         validFileCount: fileCount
+      })
+      
+      // Initialize caption progress
+      setCaptionProgress({
+        current: 0,
+        total: fileCount,
+        overallPercent: 0
       })
       
       let processedCount = 0
@@ -2779,7 +2828,18 @@ export function AudioNarrationWizard({
                   content: captionContent,
                   mediaId: storedItem.id
                 })
+                
+                // Track successful caption file
+                captionSuccessfulFiles.push(filename)
+                
                 processedCount++
+                
+                // Update caption progress
+                setCaptionProgress({
+                  current: processedCount,
+                  total: fileCount,
+                  overallPercent: Math.round((processedCount / fileCount) * 100)
+                })
                 
                 debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Caption stored', {
                   blockNumber,
@@ -2795,6 +2855,10 @@ export function AudioNarrationWizard({
                 error
               })
               logger.error(`[AudioNarrationWizard] Error processing caption file ${filename}:`, error)
+              
+              // Track failed caption file
+              const errorMessage = error instanceof Error ? error.message : String(error)
+              captionFailedFiles.push({ file: filename, error: errorMessage })
             }
           }
         }
@@ -2839,6 +2903,12 @@ export function AudioNarrationWizard({
         })
       }
       
+      // Set caption upload summary
+      setCaptionUploadSummary({
+        successful: captionSuccessfulFiles,
+        failed: captionFailedFiles
+      })
+      
       event.target.value = '' // Reset file input
     } catch (error) {
       debugLogger.error('AudioNarrationWizard.handleCaptionZipUpload', 'Failed to process caption ZIP', {
@@ -2851,6 +2921,7 @@ export function AudioNarrationWizard({
       setIsUploading(false)
       setIsBulkOperationActive(false) // Clear bulk operation flag
       setCurrentProcessingFile(null) // Clear current processing file
+      setCaptionProgress(null) // Clear caption progress
       debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Caption upload operation finished')
       
       // End the operation which will trigger save if no other operations are active
@@ -3177,6 +3248,8 @@ export function AudioNarrationWizard({
                                 value={bulkUploadProgress.overallPercent} 
                                 max={100}
                                 label={`${bulkUploadProgress.overallPercent}%`}
+                                size="medium"
+                                variant="primary"
                                 className={styles.uploadProgress}
                               />
                             </div>
@@ -3191,6 +3264,8 @@ export function AudioNarrationWizard({
                                   value={uploadProgress.percent} 
                                   max={100}
                                   label={`${uploadProgress.percent}%`}
+                                  size="medium"
+                                  variant="primary"
                                   className={styles.uploadProgress}
                                 />
                               </div>
@@ -3205,6 +3280,8 @@ export function AudioNarrationWizard({
                               value={uploadProgress.percent} 
                               max={100}
                               label={`${uploadProgress.percent}%`}
+                              size="medium"
+                              variant="primary"
                               className={styles.uploadProgress}
                             />
                           </>
@@ -3218,6 +3295,40 @@ export function AudioNarrationWizard({
                         <p className={styles.successText}>
                           {audioFiles.length} audio files uploaded
                         </p>
+                        
+                        {/* Audio Upload Summary */}
+                        {audioUploadSummary && (audioUploadSummary.successful.length > 0 || audioUploadSummary.failed.length > 0) && (
+                          <details className={styles.uploadSummary}>
+                            <summary className={styles.summaryHeader}>
+                              View upload details ({audioUploadSummary.successful.length} successful, {audioUploadSummary.failed.length} failed)
+                            </summary>
+                            <div className={styles.summaryContent}>
+                              {audioUploadSummary.successful.length > 0 && (
+                                <div className={styles.successfulFiles}>
+                                  <h4>✅ Successfully processed:</h4>
+                                  <ul>
+                                    {audioUploadSummary.successful.map((file, index) => (
+                                      <li key={index}>{file}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {audioUploadSummary.failed.length > 0 && (
+                                <div className={styles.failedFiles}>
+                                  <h4>❌ Failed to process:</h4>
+                                  <ul>
+                                    {audioUploadSummary.failed.map((item, index) => (
+                                      <li key={index}>
+                                        <strong>{item.file}</strong>: {item.error}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                        
                         <Button
                           size="small"
                           variant="secondary"
@@ -3263,11 +3374,26 @@ export function AudioNarrationWizard({
                       </>
                     )}
                     
-                    {isUploading && currentProcessingFile && (
+                    {isUploading && captionProgress && (
                       <div className={styles.uploadingContainer}>
-                        <p className={styles.uploadingText}>
-                          Processing: {currentProcessingFile}
-                        </p>
+                        <div className={styles.progressSection}>
+                          <div className={styles.progressLabel}>
+                            Processing captions ({captionProgress.current}/{captionProgress.total})
+                          </div>
+                          <ProgressBar 
+                            value={captionProgress.overallPercent} 
+                            max={100}
+                            size="medium"
+                            variant="primary"
+                            showPercentage={true}
+                            data-testid="caption-progress"
+                          />
+                        </div>
+                        {currentProcessingFile && (
+                          <p className={styles.uploadingText}>
+                            Processing: {currentProcessingFile}
+                          </p>
+                        )}
                       </div>
                     )}
                     
@@ -3277,6 +3403,40 @@ export function AudioNarrationWizard({
                         <p className={styles.successText}>
                           {captionFiles.length} caption files uploaded
                         </p>
+                        
+                        {/* Caption Upload Summary */}
+                        {captionUploadSummary && (captionUploadSummary.successful.length > 0 || captionUploadSummary.failed.length > 0) && (
+                          <details className={styles.uploadSummary}>
+                            <summary className={styles.summaryHeader}>
+                              View upload details ({captionUploadSummary.successful.length} successful, {captionUploadSummary.failed.length} failed)
+                            </summary>
+                            <div className={styles.summaryContent}>
+                              {captionUploadSummary.successful.length > 0 && (
+                                <div className={styles.successfulFiles}>
+                                  <h4>✅ Successfully processed:</h4>
+                                  <ul>
+                                    {captionUploadSummary.successful.map((file, index) => (
+                                      <li key={index}>{file}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {captionUploadSummary.failed.length > 0 && (
+                                <div className={styles.failedFiles}>
+                                  <h4>❌ Failed to process:</h4>
+                                  <ul>
+                                    {captionUploadSummary.failed.map((item, index) => (
+                                      <li key={index}>
+                                        <strong>{item.file}</strong>: {item.error}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                        
                         <Button
                           size="small"
                           variant="secondary"
