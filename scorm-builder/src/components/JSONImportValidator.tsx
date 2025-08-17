@@ -61,6 +61,10 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [validationResult, setValidationResult] = useState<any>(null)
   const [isTreeVisible, setIsTreeVisible] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  
+  // Refs for focus and scroll management
+  const treeViewRef = useRef<HTMLDivElement>(null)
+  const jsonEditorRef = useRef<HTMLDivElement>(null)
   const [isLocked, setIsLocked] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
@@ -175,6 +179,48 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       }
     }
   }, [])
+  
+  // Handle focus and scroll when toggling between tree view and JSON editor
+  useEffect(() => {
+    if (isTreeVisible && treeViewRef.current) {
+      // When switching to tree view
+      setTimeout(() => {
+        // Scroll tree view into view
+        treeViewRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start',
+          inline: 'nearest'
+        })
+        
+        // Focus on the first interactive element in tree view
+        const firstButton = treeViewRef.current?.querySelector('button, [tabindex]:not([tabindex="-1"])')
+        if (firstButton) {
+          (firstButton as HTMLElement).focus()
+        } else {
+          // Fallback: focus the tree view container itself
+          treeViewRef.current?.focus()
+        }
+      }, 100) // Small delay to ensure DOM is updated
+    } else if (!isTreeVisible && jsonEditorRef.current) {
+      // When switching back to JSON editor
+      setTimeout(() => {
+        // Scroll editor into view
+        jsonEditorRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start',
+          inline: 'nearest'
+        })
+        
+        // Focus the textarea inside SimpleJSONEditor
+        const textarea = jsonEditorRef.current?.querySelector('textarea')
+        if (textarea) {
+          textarea.focus()
+        } else {
+          jsonEditorRef.current?.focus()
+        }
+      }, 100)
+    }
+  }, [isTreeVisible])
   
   // Race condition eliminated by using user-controlled toggle view instead of timing-based logic
   
@@ -1356,7 +1402,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       <Section>
         {/* Show tree view when user chooses to, editor otherwise */}
         {isTreeVisible && validationResult?.isValid && validationResult?.data ? (
-            <>
+            <div ref={treeViewRef} tabIndex={-1}>
               {/* Course Structure */}
               <div className={styles.sectionWrapper}>
                 <h2 className={styles.sectionTitle}>Course Structure</h2>
@@ -1377,7 +1423,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   Clear Course Structure
                 </Button>
               </div>
-            </>
+            </div>
           ) : (
             <>
               {/* Content Input */}
@@ -1386,7 +1432,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
                     Chatbot Response
                   </h3>
-                  <SimpleJSONEditor
+                  <div ref={jsonEditorRef} tabIndex={-1}>
+                    <SimpleJSONEditor
               value={jsonInput}
               onChange={(value) => {
                 if (!isLocked) {
@@ -1473,6 +1520,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
               schema={courseContentSchema}
               theme="light"
             />
+                  </div>
           </div>
 
                 {/* Action Buttons */}

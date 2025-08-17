@@ -273,14 +273,24 @@
 /* Button States */
 .btn:disabled,
 .btn-disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none !important;
+  filter: grayscale(0.7);
+  pointer-events: none;
+  background-color: #6b7280 !important;
+  border-color: #9ca3af !important;
+  color: #d1d5db !important;
+  transition: none !important;
 }
 
-.btn:disabled:hover {
+.btn:disabled:hover,
+.btn-disabled:hover {
   transform: none;
   box-shadow: none;
+  background-color: #6b7280 !important;
+  border-color: #9ca3af !important;
+  color: #d1d5db !important;
 }
 
 .btn-full-width {
@@ -440,8 +450,36 @@
 
 .input:disabled,
 .textarea:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  filter: grayscale(0.5);
+  background-color: #f3f4f6 !important;
+  color: #6b7280 !important;
+  border-color: #d1d5db !important;
+}
+
+/* Dark mode disabled states */
+@media (prefers-color-scheme: dark) {
+  .btn:disabled,
+  .btn-disabled {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #9ca3af !important;
+  }
+  
+  .btn:disabled:hover,
+  .btn-disabled:hover {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #9ca3af !important;
+  }
+  
+  .input:disabled,
+  .textarea:disabled {
+    background-color: #1f2937 !important;
+    color: #9ca3af !important;
+    border-color: #374151 !important;
+  }
 }
 
 /* Button Group Component */

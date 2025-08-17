@@ -207,6 +207,7 @@ export function AudioNarrationWizard({
   const [captionFiles, setCaptionFiles] = useState<CaptionFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [currentProcessingFile, setCurrentProcessingFile] = useState<string | null>(null)
   
   // Use refs to persist state across renders and prevent race conditions
   const audioFilesRef = useRef<AudioFile[]>([])
@@ -2739,6 +2740,9 @@ export function AudioNarrationWizard({
           const blockNumber = filename.match(/(\d{4})/)?.[1]
           if (blockNumber) {
             try {
+              // Update the current processing file name
+              setCurrentProcessingFile(filename)
+              
               debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Processing caption file', {
                 filename,
                 blockNumber
@@ -2846,6 +2850,7 @@ export function AudioNarrationWizard({
     } finally {
       setIsUploading(false)
       setIsBulkOperationActive(false) // Clear bulk operation flag
+      setCurrentProcessingFile(null) // Clear current processing file
       debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Caption upload operation finished')
       
       // End the operation which will trigger save if no other operations are active
@@ -3250,12 +3255,20 @@ export function AudioNarrationWizard({
                       data-testid="captions-zip-input"
                     />
                     
-                    {!captionsUploaded && (
+                    {!captionsUploaded && !isUploading && (
                       <>
                         <Upload size={32} className={styles.dropZoneIcon} />
                         <p className={styles.dropZoneText}>Click to upload captions ZIP</p>
                         <p className={styles.dropZoneHint}>or drag and drop</p>
                       </>
+                    )}
+                    
+                    {isUploading && currentProcessingFile && (
+                      <div className={styles.uploadingContainer}>
+                        <p className={styles.uploadingText}>
+                          Processing: {currentProcessingFile}
+                        </p>
+                      </div>
                     )}
                     
                     {captionsUploaded && (
