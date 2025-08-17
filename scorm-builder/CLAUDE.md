@@ -66,6 +66,40 @@ RESOLVED ISSUES (Confirmed fixed in Phase 2):
 
 For each current issue above, create a behavior test that reproduces the issue BEFORE fixing it.
 
+UNIFIED SAVE ARCHITECTURE (Fixed in commit d9855f3):
+The application now uses a unified save system to prevent data loss and state inconsistencies:
+
+1. ARCHITECTURE OVERVIEW:
+   - App.tsx manages the master project state (courseSeedData + courseContent)
+   - All saves flow through App.tsx's handleSave() (manual) or handleAutosave() (silent)
+   - Child components trigger saves via onSave callbacks, not direct storage calls
+   - Single source of truth for all project data
+
+2. COURSESEEDINPUT INTEGRATION:
+   - Auto-save: Calls onSave() callback → App.handleAutosave() → unified storage
+   - Manual save: Calls onSave() callback → App.handleAutosave() → unified storage  
+   - No direct storage.saveCourseSeedData() calls (prevents double-save)
+   - Fallback: Direct storage save if no onSave callback (standalone usage)
+
+3. SAVE FLOW:
+   ```
+   User changes → CourseSeedInput detects change → Debounced auto-save (1s) →
+   onSave(seedData) → App.setCourseSeedData() + App.handleAutosave() →
+   storage.saveCourseSeedData() + storage.saveProject() → State synchronized
+   ```
+
+4. BENEFITS:
+   - ✅ No data loss when navigating between components
+   - ✅ App state always synchronized with storage
+   - ✅ No duplicate save operations
+   - ✅ Consistent error handling across all saves
+   - ✅ Silent auto-save vs user-visible manual save
+
+5. KEY FILES:
+   - App.tsx: handleSave(), handleAutosave(), onSave callback (lines 1633-1646)
+   - CourseSeedInput.tsx: Auto-save useEffect (lines 241-339), onSave integration
+   - Tests: CourseSeedInput.isSavingState.test.tsx, CourseSeedInput.unifiedSave.*.test.tsx
+
 MUTATION SAFETY (CRITICAL FOR PRODUCTION):
 - Deep freezing is DISABLED in production for performance
 - ALL object mutations MUST use cloning utilities or immutable patterns

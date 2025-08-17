@@ -80,6 +80,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
 }) => {
   // Create media files map inside component to avoid persistence issues
   const mediaFilesRef = React.useRef(new Map<string, Blob>())
+  // AbortController to handle component unmounting and race conditions
+  const abortControllerRef = React.useRef<AbortController | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -119,34 +121,84 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   useEffect(() => {
     return () => {
       console.log('[SCORMPackageBuilder] Cleaning up media files cache on unmount')
+      
+      // Abort any ongoing operations
+      if (abortControllerRef.current) {
+        console.log('[SCORMPackageBuilder] Aborting ongoing media operations')
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+      
       mediaFilesRef.current.clear()
     }
   }, [])
 
-  // Helper function to get media blob from UnifiedMedia with timeout
-  const getMediaBlobFromRegistry = async (mediaId: string): Promise<Blob | null> => {
+  // Helper function to get media blob from UnifiedMedia with proper cancellation
+  const getMediaBlobFromRegistry = async (mediaId: string, signal?: AbortSignal): Promise<Blob | null> => {
     console.log('[SCORMPackageBuilder] Loading media:', mediaId)
     
     try {
-      // Add timeout to prevent hanging
-      let timeoutId: NodeJS.Timeout | null = null
-      const timeoutPromise = new Promise<null>((resolve) => {
-        timeoutId = setTimeout(() => {
-          console.warn(`[SCORMPackageBuilder] Timeout loading media: ${mediaId}`)
-          resolve(null)
-        }, 5000) // 5 second timeout per media file
-      })
-      
-      const mediaDataPromise = getMedia(mediaId)
-      const mediaData = await Promise.race([mediaDataPromise, timeoutPromise])
-      
-      // Clear the timeout if we got data successfully
-      if (timeoutId) {
-        clearTimeout(timeoutId)
+      // Check if already aborted
+      if (signal?.aborted) {
+        console.log(`[SCORMPackageBuilder] Media loading aborted before start: ${mediaId}`)
+        return null
       }
       
-      if (!mediaData) {
-        console.warn(`[SCORMPackageBuilder] Media not found or timed out: ${mediaId}`)
+      // Create timeout with proper cleanup
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        console.warn(`[SCORMPackageBuilder] Timeout loading media: ${mediaId}`)
+        controller.abort()
+      }, 5000) // 5 second timeout per media file
+      
+      // Combine signals - abort if either parent signal or timeout signal fires
+      // Use AbortSignal.any if available (newer browsers), otherwise listen to parent signal manually
+      let combinedSignal = controller.signal
+      
+      if (signal) {
+        if (typeof AbortSignal.any === 'function') {
+          combinedSignal = AbortSignal.any([signal, controller.signal])
+        } else {
+          // Fallback for older browsers - manually listen to parent signal
+          const abortHandler = () => controller.abort()
+          signal.addEventListener('abort', abortHandler, { once: true })
+          
+          // Clean up listener when our controller is aborted
+          controller.signal.addEventListener('abort', () => {
+            signal.removeEventListener('abort', abortHandler)
+          }, { once: true })
+        }
+      }
+      
+      let mediaData
+      try {
+        // Pass the combined signal to getMedia if it supports it
+        mediaData = await getMedia(mediaId)
+        
+        // Clear timeout on successful completion
+        clearTimeout(timeoutId)
+        
+        // Check if we were aborted during the operation
+        if (combinedSignal.aborted) {
+          console.log(`[SCORMPackageBuilder] Media loading was aborted: ${mediaId}`)
+          return null
+        }
+        
+        if (!mediaData) {
+          console.warn(`[SCORMPackageBuilder] Media not found: ${mediaId}`)
+          return null
+        }
+      } catch (error) {
+        // Clear timeout on error
+        clearTimeout(timeoutId)
+        
+        // Check if this was an abort error
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log(`[SCORMPackageBuilder] Media loading aborted: ${mediaId}`)
+          return null
+        }
+        
+        console.error(`[SCORMPackageBuilder] Error loading media ${mediaId}:`, error)
         return null
       }
       console.log('[SCORMPackageBuilder] Media data retrieved:', {
@@ -188,14 +240,22 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (mediaData.url && mediaData.url.startsWith('blob:')) {
           console.log('[SCORMPackageBuilder] Fetching from blob URL for:', mediaId)
           try {
-            // Add timeout to blob fetch
-            const controller = new AbortController()
-            const fetchTimeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
+            // Check if already aborted before starting fetch
+            if (combinedSignal.aborted) {
+              console.log(`[SCORMPackageBuilder] Blob fetch aborted before start: ${mediaId}`)
+              return null
+            }
             
-            const response = await fetch(mediaData.url, { signal: controller.signal })
-            clearTimeout(fetchTimeoutId)
-            
+            // Use the same combined signal for fetch
+            const response = await fetch(mediaData.url, { signal: combinedSignal })
             const blob = await response.blob()
+            
+            // Check if aborted after fetch
+            if (combinedSignal.aborted) {
+              console.log(`[SCORMPackageBuilder] Blob processing aborted: ${mediaId}`)
+              return null
+            }
+            
             console.log('[SCORMPackageBuilder] Successfully fetched blob:', {
               mediaId,
               size: blob.size,
@@ -204,10 +264,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             return blob
           } catch (fetchError: unknown) {
             if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-              console.warn(`[SCORMPackageBuilder] Blob fetch timed out for: ${mediaId}`)
+              console.log(`[SCORMPackageBuilder] Blob fetch aborted for: ${mediaId}`)
             } else {
               console.error('[SCORMPackageBuilder] Failed to fetch blob URL:', fetchError)
             }
+            return null
           }
         }
         
@@ -225,7 +286,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     return null
   }
 
-  const loadMediaFromRegistry = async (enhancedContent: EnhancedCourseContent): Promise<string[]> => {
+  const loadMediaFromRegistry = async (enhancedContent: EnhancedCourseContent, signal?: AbortSignal): Promise<string[]> => {
     console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
     
     // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
@@ -323,7 +384,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(welcomeAudioId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading welcome audio (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeAudioId}`)
-        const audioBlob = await getMediaBlobFromRegistry(welcomeAudioId)
+        const audioBlob = await getMediaBlobFromRegistry(welcomeAudioId, signal)
         if (audioBlob) {
           mediaFilesRef.current.set(`${welcomeAudioId}.mp3`, audioBlob)
           loadedCount++
@@ -338,7 +399,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(welcomeCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading welcome caption (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeCaptionId}`)
-        const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId)
+        const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId, signal)
         if (captionBlob) {
           mediaFilesRef.current.set(`${welcomeCaptionId}.vtt`, captionBlob)
           loadedCount++
@@ -355,7 +416,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           loadedMediaIds.add(trackingKey)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id} (${mediaItem.type})`)
-          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
+          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
           if (mediaBlob) {
             const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
             // Generate unique filename by including type to prevent overwrites
@@ -375,7 +436,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'welcome')
           if (newId) {
             mediaItem.id = newId // Update the media reference with the new ID
-            const mediaBlob = await getMediaBlobFromRegistry(newId)
+            const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
             if (mediaBlob) {
               const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
               mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
@@ -397,7 +458,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(objectivesAudioId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading objectives audio (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesAudioId}`)
-        const audioBlob = await getMediaBlobFromRegistry(objectivesAudioId)
+        const audioBlob = await getMediaBlobFromRegistry(objectivesAudioId, signal)
         if (audioBlob) {
           mediaFilesRef.current.set(`${objectivesAudioId}.mp3`, audioBlob)
           loadedCount++
@@ -412,7 +473,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(objectivesCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading objectives caption (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesCaptionId}`)
-        const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId)
+        const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId, signal)
         if (captionBlob) {
           mediaFilesRef.current.set(`${objectivesCaptionId}.vtt`, captionBlob)
           loadedCount++
@@ -427,7 +488,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
         if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
           loadedMediaIds.add(trackingKey)
-          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
+          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
           if (mediaBlob) {
             const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
             // Generate unique filename by including type to prevent overwrites
@@ -443,7 +504,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'objectives')
           if (newId) {
             mediaItem.id = newId
-            const mediaBlob = await getMediaBlobFromRegistry(newId)
+            const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
             if (mediaBlob) {
               const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
               mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
@@ -480,7 +541,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           loadedMediaIds.add(topicAudioId)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} audio (${loadedCount + 1}/${totalMediaToLoad}): ${topicAudioId}`)
-          const audioBlob = await getMediaBlobFromRegistry(topicAudioId)
+          const audioBlob = await getMediaBlobFromRegistry(topicAudioId, signal)
           if (audioBlob) {
             mediaFilesRef.current.set(`${topicAudioId}.mp3`, audioBlob)
             loadedCount++
@@ -495,7 +556,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           loadedMediaIds.add(topicCaptionId)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} caption (${loadedCount + 1}/${totalMediaToLoad}): ${topicCaptionId}`)
-          const captionBlob = await getMediaBlobFromRegistry(topicCaptionId)
+          const captionBlob = await getMediaBlobFromRegistry(topicCaptionId, signal)
           if (captionBlob) {
             mediaFilesRef.current.set(`${topicCaptionId}.vtt`, captionBlob)
             loadedCount++
@@ -510,7 +571,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
           if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
             loadedMediaIds.add(trackingKey)
-            const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id)
+            const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
             if (mediaBlob) {
               const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
               // Generate unique filename by including type to prevent overwrites
@@ -526,7 +587,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             const newId = await handleRemoteMedia(mediaItem.url, detectedType, `topic-${topicIndex}`)
             if (newId) {
               mediaItem.id = newId
-              const mediaBlob = await getMediaBlobFromRegistry(newId)
+              const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
               if (mediaBlob) {
                 const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
                 mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
@@ -560,10 +621,17 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     setIsGenerationCancelled(false)
     setGenerationProgress(0)
     setLoadingMessage('Preparing course content...')
-    setGenerationStartTime(Date.now())
     
-    // Create abort controller for cancellation
-    generationAbortController.current = new AbortController()
+    // Create new AbortController for this generation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort() // Cancel any previous operation
+    }
+    abortControllerRef.current = new AbortController()
+    const { signal } = abortControllerRef.current
+    
+    // Use the same controller for generation cancellation
+    generationAbortController.current = abortControllerRef.current
+    setGenerationStartTime(Date.now())
     
     // Start elapsed time counter
     const intervalId = setInterval(() => {
@@ -654,7 +722,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       let failedMedia: string[] = []
       try {
         console.log('[SCORMPackageBuilder] === STARTING MEDIA LOAD PHASE ===')
-        failedMedia = await loadMediaFromRegistry(enhancedContent)
+        failedMedia = await loadMediaFromRegistry(enhancedContent, signal)
         console.log('[SCORMPackageBuilder] === MEDIA LOAD PHASE COMPLETE ===')
         console.log('[SCORMPackageBuilder] Media files ready for packaging:', mediaFilesRef.current.size)
         

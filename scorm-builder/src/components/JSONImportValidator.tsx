@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, startTransition } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { CourseContent } from '../types/aiPrompt'
 import { PageLayout } from './PageLayout'
 import { 
@@ -318,54 +318,51 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           hasAssessment: !!parsedData.assessment
         })
         
-        // Batch all state updates to prevent render issues in production
-        startTransition(() => {
-          setValidationResult({
-            isValid: true,
-            data: parsedData,
-            summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
-          })
-          
-          setToast({ 
-            message: '✅ Valid JSON detected! Course structure loaded successfully.', 
-            type: 'success' 
-          })
-          
-          setIsLocked(true)
-          setIsValidating(false)
-          
-          logger.info('JSONValidator', 'State updated after validation', {
-            isLocked: true,
-            isValidating: false,
-            hasValidationResult: true
-          })
+        // Update state synchronously to prevent race condition
+        setValidationResult({
+          isValid: true,
+          data: parsedData,
+          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         
-        // Save the validated JSON data to storage for persistence  
+        setToast({ 
+          message: '✅ Valid JSON detected! Course structure loaded successfully.', 
+          type: 'success' 
+        })
+        
+        setIsLocked(true)
+        setIsValidating(false)
+        
+        logger.info('JSONValidator', 'State updated after validation', {
+          isLocked: true,
+          isValidating: false,
+          hasValidationResult: true
+        })
+        
+        // Save the validated JSON data to storage after state updates
         if (storage && storage.isInitialized) {
-          try {
-            const jsonImportData = {
-              rawJson: jsonInput,
-              validationResult: {
-                isValid: true,
-                data: parsedData,
-                summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
-              },
-              isLocked: true
-            }
-            
-            await storage.saveContent('json-import-data', jsonImportData)
-            
+          const jsonImportData = {
+            rawJson: jsonInput,
+            validationResult: {
+              isValid: true,
+              data: parsedData,
+              summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+            },
+            isLocked: true
+          }
+          
+          // Use a promise to handle async storage operation
+          storage.saveContent('json-import-data', jsonImportData).then(() => {
             logger.info('JSONValidator', 'Saved JSON state to storage (pre-processing)', {
               projectId: storage.currentProjectId,
               hasRawJson: !!jsonImportData.rawJson,
               isLocked: jsonImportData.isLocked
             })
-          } catch (error) {
+          }).catch((error) => {
             logger.error('JSONValidator', 'Failed to save JSON state to storage (pre-processing)', {
               error: error instanceof Error ? error.message : String(error)
             })
-          }
+          })
         }
         return
       }
@@ -384,54 +381,51 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           hasAssessment: !!parsedData.assessment
         })
         
-        // Batch all state updates to prevent render issues in production
-        startTransition(() => {
-          setValidationResult({
-            isValid: true,
-            data: parsedData,
-            summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
-          })
-          
-          setToast({ 
-            message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
-            type: 'success' 
-          })
-          
-          setIsLocked(true)
-          setIsValidating(false)
-          
-          logger.info('JSONValidator', 'State updated after smart auto-fix', {
-            isLocked: true,
-            isValidating: false,
-            hasValidationResult: true
-          })
+        // Update state synchronously to prevent race condition
+        setValidationResult({
+          isValid: true,
+          data: parsedData,
+          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         
-        // Save the validated JSON data to storage for persistence  
-        if (storage && storage.isInitialized) {
-          try {
-            const jsonImportData = {
-              rawJson: jsonInput,
-              validationResult: {
-                isValid: true,
-                data: parsedData,
-                summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
-              },
-              isLocked: true
-            }
-            
-            await storage.saveContent('json-import-data', jsonImportData)
-            
+        setToast({ 
+          message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
+          type: 'success' 
+        })
+        
+        setIsLocked(true)
+        setIsValidating(false)
+        
+        logger.info('JSONValidator', 'State updated after smart auto-fix', {
+          isLocked: true,
+          isValidating: false,
+          hasValidationResult: true
+        })
+        
+        // Persist validation state to storage after updating UI state
+        if (storage?.currentProjectId) {
+          const jsonImportData = {
+            rawJson: fixedJson,
+            validationResult: {
+              isValid: true,
+              data: parsedData,
+              summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+            },
+            isLocked: true
+          }
+          
+          // Use a promise to handle async storage operation
+          storage.saveContent('json-import-data', jsonImportData).then(() => {
             logger.info('JSONValidator', 'Saved JSON state to storage (smart auto-fix)', {
               projectId: storage.currentProjectId,
               hasRawJson: !!jsonImportData.rawJson,
               isLocked: jsonImportData.isLocked
             })
-          } catch (error) {
+          }).catch((error) => {
             logger.error('JSONValidator', 'Failed to save JSON state to storage (smart auto-fix)', {
               error: error instanceof Error ? error.message : String(error)
             })
-          }
+          })
         }
         return
       } catch (e) {
@@ -772,50 +766,47 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         hasObjectivesPage: !!parsedData.learningObjectivesPage
       })
 
-      // Batch all state updates to prevent render issues in production
-      startTransition(() => {
-        setValidationResult({
-          isValid: true,
-          data: parsedData,
-          summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
-        })
-        
-        // Lock the input after successful validation
-        setIsLocked(true)
-        setIsValidating(false)
-        
-        logger.info('JSONValidator', 'State updated after full validation', {
-          isLocked: true,
-          isValidating: false,
-          hasValidationResult: true
-        })
+      // Update state synchronously to prevent race condition
+      setValidationResult({
+        isValid: true,
+        data: parsedData,
+        summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
       })
       
-      // Save the validated JSON data to storage for persistence
-      if (storage && storage.isInitialized) {
-        try {
-          const jsonImportData = {
-            rawJson: jsonInput,
-            validationResult: {
-              isValid: true,
-              data: parsedData,
-              summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
-            },
-            isLocked: true
-          }
-          
-          await storage.saveContent('json-import-data', jsonImportData)
-          
+      // Lock the input after successful validation
+      setIsLocked(true)
+      setIsValidating(false)
+      
+      logger.info('JSONValidator', 'State updated after full validation', {
+        isLocked: true,
+        isValidating: false,
+        hasValidationResult: true
+      })
+      
+      // Persist validation state to storage after updating UI state
+      if (storage?.currentProjectId) {
+        const jsonImportData = {
+          rawJson: jsonInput,
+          validationResult: {
+            isValid: true,
+            data: parsedData,
+            summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
+          },
+          isLocked: true
+        }
+        
+        // Use a promise to handle async storage operation
+        storage.saveContent('json-import-data', jsonImportData).then(() => {
           logger.info('JSONValidator', 'Saved JSON state to storage', {
             projectId: storage.currentProjectId,
             hasRawJson: !!jsonImportData.rawJson,
             isLocked: jsonImportData.isLocked
           })
-        } catch (error) {
+        }).catch((error) => {
           logger.error('JSONValidator', 'Failed to save JSON state to storage', {
             error: error instanceof Error ? error.message : String(error)
           })
-        }
+        })
       }
       
       // Show success message

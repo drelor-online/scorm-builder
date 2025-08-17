@@ -190,6 +190,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const fileInputIdRef = useRef<string>('media-upload')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isFileProcessing, setIsFileProcessing] = useState(false)
+  // AbortController to handle concurrent uploads and component unmounting
+  const uploadAbortControllerRef = useRef<AbortController | null>(null)
   const [isLoadingMedia, setIsLoadingMedia] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
   
@@ -777,9 +779,31 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setVideoPromptSuggestions(videoSuggestions.filter(Boolean))
   }, [currentPageIndex, courseContent])
   
+  // Cleanup upload operations on unmount
+  useEffect(() => {
+    return () => {
+      // Abort any ongoing upload when component unmounts
+      if (uploadAbortControllerRef.current) {
+        console.log('[MediaEnhancement] Aborting upload on unmount')
+        uploadAbortControllerRef.current.abort()
+        uploadAbortControllerRef.current = null
+      }
+    }
+  }, [])
+  
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files || files.length === 0) return
+    
+    // Prevent concurrent uploads - cancel any ongoing upload
+    if (uploadAbortControllerRef.current) {
+      console.log('[MediaEnhancement] Cancelling previous upload to start new one')
+      uploadAbortControllerRef.current.abort()
+    }
+    
+    // Create new AbortController for this upload
+    uploadAbortControllerRef.current = new AbortController()
+    const { signal } = uploadAbortControllerRef.current
     
     // FIX: Enforce single file selection even if browser allows multiple
     if (files.length > 1) {
@@ -787,6 +811,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setSearchError('Only one media file per page is allowed. Please select a single file.')
       setTimeout(() => setSearchError(null), 3000)
       event.target.value = '' // Clear the input
+      return
+    }
+    
+    // Check if already aborted (e.g., if component unmounted)
+    if (signal.aborted) {
+      console.log('[MediaEnhancement] Upload aborted before processing started')
       return
     }
     
@@ -798,8 +828,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       percent: 0
     })
     
-    const results: SearchResult[] = []
-    const newlyUploaded = new Set<string>()
+    try {
+      const results: SearchResult[] = []
+      const newlyUploaded = new Set<string>()
     
     // Process only the first file
     const file = files[0]
@@ -850,11 +881,45 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setIsLightboxOpen(true)
     }
     
+    // Final abort check before completing
+    if (signal.aborted) {
+      console.log('[MediaEnhancement] Upload was aborted during processing')
+      setIsFileProcessing(false)
+      setUploadProgress(null)
+      event.target.value = ''
+      return
+    }
+    
     setRecentlyUploadedIds(prev => new Set([...prev, ...newlyUploaded]))
     
     setIsFileProcessing(false)
     setUploadProgress(null)
     event.target.value = ''
+    
+      // Clear the AbortController reference on successful completion
+      if (uploadAbortControllerRef.current?.signal === signal) {
+        uploadAbortControllerRef.current = null
+      }
+    } catch (error) {
+      // Handle upload errors and cleanup
+      console.error('[MediaEnhancement] Upload error:', error)
+      
+      // Clean up on error
+      setIsFileProcessing(false)
+      setUploadProgress(null)
+      event.target.value = ''
+      
+      // Clear the AbortController reference
+      if (uploadAbortControllerRef.current?.signal === signal) {
+        uploadAbortControllerRef.current = null
+      }
+      
+      // Show error message if not aborted
+      if (error instanceof Error && error.name !== 'AbortError') {
+        setSearchError('Upload failed. Please try again.')
+        setTimeout(() => setSearchError(null), 3000)
+      }
+    }
   }
   
   // FIX: Validate and extract YouTube video ID with security checks
