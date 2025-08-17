@@ -66,22 +66,36 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const previousProjectIdRef = useRef<string | null>(null)
   
   // Load persisted JSON import data on mount and when project changes
   useEffect(() => {
     const loadPersistedValidationState = async () => {
       if (storage && storage.isInitialized && storage.currentProjectId) {
-        // Log project change
-        logger.info('JSONValidator', 'Loading JSON for project', { 
-          projectId: storage.currentProjectId 
-        })
+        // Only clear state if project actually changed
+        const isProjectChange = previousProjectIdRef.current !== storage.currentProjectId
         
-        try {
-          // Clear state first when switching projects to prevent stale data
+        if (isProjectChange) {
+          // Log project change
+          logger.info('JSONValidator', 'Loading JSON for new project', { 
+            previousProjectId: previousProjectIdRef.current,
+            newProjectId: storage.currentProjectId
+          })
+          
+          // Clear state when switching projects to prevent stale data
           setJsonInput('')
           setValidationResult(null)
           setIsLocked(false)
           
+          // Update the ref to track current project
+          previousProjectIdRef.current = storage.currentProjectId
+        } else {
+          logger.info('JSONValidator', 'Refreshing same project - preserving state', { 
+            projectId: storage.currentProjectId 
+          })
+        }
+        
+        try {
           // Try to load the complete JSON import data
           const jsonImportData = await storage.getContent('json-import-data')
           if (jsonImportData) {
@@ -164,7 +178,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   // State validation synchronization effect - ensures tree view shows when validation completes
   useEffect(() => {
     // Verify that when all conditions are met, the component will show the tree view
-    if (isLocked && validationResult?.isValid && validationResult.data && !isValidating) {
+    if (isLocked && validationResult?.isValid && !!validationResult?.data && !isValidating) {
       logger.info('JSONValidator', 'Tree view conditions met', {
         isLocked,
         isValid: validationResult?.isValid,
@@ -177,16 +191,18 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // This is a safety mechanism for production builds where state batching might cause issues
       const timer = setTimeout(() => {
         // Use force update counter to trigger a guaranteed re-render
-        setForceUpdateCounter(prev => prev + 1)
-        logger.info('JSONValidator', 'Forced tree view re-render', { forceUpdateCounter })
+        setForceUpdateCounter(prev => {
+          logger.info('JSONValidator', 'Forced tree view re-render', { forceUpdateCounter: prev + 1 })
+          return prev + 1
+        })
       }, 10)
       return () => clearTimeout(timer)
     }
-  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating, logger, forceUpdateCounter])
+  }, [isLocked, validationResult?.isValid, !!validationResult?.data, isValidating])
   
   // Fallback mechanism to ensure tree view shows in production
   useEffect(() => {
-    if (isLocked && validationResult?.isValid && validationResult?.data && !isValidating) {
+    if (isLocked && validationResult?.isValid && !!validationResult?.data && !isValidating) {
       // Give React time to render, then check if tree view is showing
       const fallbackTimer = setTimeout(() => {
         logger.info('JSONValidator', 'Fallback check - ensuring tree view is visible', {
@@ -208,7 +224,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       
       return () => clearTimeout(fallbackTimer)
     }
-  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating, logger])
+  }, [isLocked, validationResult?.isValid, !!validationResult?.data, isValidating])
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
@@ -333,6 +349,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         setIsLocked(true)
         setIsValidating(false)
         
+        // Force immediate re-render to show tree view
+        setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
+        
         logger.info('JSONValidator', 'State updated after validation', {
           isLocked: true,
           isValidating: false,
@@ -395,6 +414,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         
         setIsLocked(true)
         setIsValidating(false)
+        
+        // Force immediate re-render to show tree view
+        setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
         
         logger.info('JSONValidator', 'State updated after smart auto-fix', {
           isLocked: true,
@@ -776,6 +798,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Lock the input after successful validation
       setIsLocked(true)
       setIsValidating(false)
+      
+      // Force immediate re-render to show tree view
+      setTimeout(() => setForceUpdateCounter(prev => prev + 1), 0)
       
       logger.info('JSONValidator', 'State updated after full validation', {
         isLocked: true,
