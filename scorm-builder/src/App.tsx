@@ -122,6 +122,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
+  
+  // Focus management for modals
+  const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
+  
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
@@ -1541,6 +1546,37 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeDialog, handleManualSave, handleOpen, showDialog, hideDialog])
 
+  // Focus management for modal dialogs
+  useEffect(() => {
+    if (activeDialog) {
+      // Store the previously focused element when any dialog opens
+      if (!previousFocusRef.current) {
+        previousFocusRef.current = document.activeElement
+      }
+      
+      // Focus specific elements based on dialog type
+      if (activeDialog === 'settings') {
+        setTimeout(() => {
+          settingsCloseButtonRef.current?.focus()
+        }, 100)
+      } else if (activeDialog === 'help') {
+        // For HelpPage, focus will be managed by the component itself
+        // The HelpPage component should handle its own focus management
+        setTimeout(() => {
+          // Try to focus the first focusable element in the help page
+          const helpPage = document.querySelector('[data-component="help-page"]')
+          const firstFocusable = helpPage?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+          ;(firstFocusable as HTMLElement)?.focus?.()
+        }, 100)
+      }
+    } else if (previousFocusRef.current) {
+      // Return focus to the previously focused element when modal closes
+      setTimeout(() => {
+        (previousFocusRef.current as HTMLElement)?.focus?.()
+        previousFocusRef.current = null
+      }, 100)
+    }
+  }, [activeDialog])
 
   return (
     <ErrorBoundary>
@@ -1601,6 +1637,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               overflowY: 'auto'
             }}>
               <button
+                ref={settingsCloseButtonRef}
                 onClick={hideDialog}
                 className="close-button"
                 style={{

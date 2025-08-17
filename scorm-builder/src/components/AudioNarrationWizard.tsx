@@ -3353,6 +3353,8 @@ export function AudioNarrationWizard({
                             setAudioUploaded(false)
                             document.getElementById('audio-zip-input')?.click()
                           }}
+                          title="Upload a new ZIP file to replace these audio files"
+                          aria-label="Upload a new ZIP file to replace these audio files"
                         >
                           Replace Files
                         </Button>
@@ -3399,6 +3401,7 @@ export function AudioNarrationWizard({
                           <ProgressBar 
                             value={captionProgress.overallPercent} 
                             max={100}
+                            label="Caption processing"
                             size="medium"
                             variant="primary"
                             showPercentage={true}
@@ -3461,6 +3464,8 @@ export function AudioNarrationWizard({
                             setCaptionsUploaded(false)
                             document.getElementById('captions-zip-input')?.click()
                           }}
+                          title="Upload a new ZIP file to replace these caption files"
+                          aria-label="Upload a new ZIP file to replace these caption files"
                         >
                           Replace Files
                         </Button>
