@@ -87,11 +87,16 @@
   background-color: var(--bg-primary);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
+  min-width: 0; /* Allow flex items to shrink below their content size */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .folderLabel {
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0; /* Prevent label from shrinking */
 }
 
 .folderPath {
@@ -103,10 +108,12 @@
   background-color: var(--bg-secondary);
   border-radius: var(--radius-sm);
   flex: 1;
+  min-width: 0; /* Allow shrinking below content size */
   max-width: 500px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  word-break: break-all; /* Break extremely long words */
 }
 
 .folderPathEmpty {
@@ -115,12 +122,53 @@
   padding: var(--space-xs) var(--space-sm);
   background-color: var(--bg-secondary);
   border-radius: var(--radius-sm);
+  flex: 1;
+  min-width: 0; /* Allow shrinking below content size */
+  max-width: 500px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: break-all; /* Break extremely long words */
 }
 
 .folderActions {
   display: flex;
   gap: var(--space-sm);
   margin-left: auto;
+  flex-shrink: 0; /* Prevent action buttons from shrinking */
+}
+
+/* Responsive behavior for small desktop windows */
+@media (max-width: 1024px) {
+  .folderInfo {
+    gap: var(--space-md);
+  }
+  
+  .folderPath, .folderPathEmpty {
+    max-width: 400px; /* Smaller max-width for narrow desktop windows */
+  }
+  
+  .folderActions {
+    flex-wrap: wrap; /* Allow buttons to wrap if needed */
+  }
+}
+
+/* Very narrow desktop windows (minimum Tauri window size) */
+@media (max-width: 800px) {
+  .folderInfo {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+  
+  .folderPath, .folderPathEmpty {
+    max-width: none; /* Remove max-width constraint for stacked layout */
+  }
+  
+  .folderActions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 
 /* Project Card Animation */
@@ -227,6 +275,17 @@
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
   margin-bottom: var(--space-lg);
+}
+
+.projectNameInput::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.projectNameInput:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 /* Main Content */

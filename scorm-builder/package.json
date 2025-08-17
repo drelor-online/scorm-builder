@@ -40,7 +40,14 @@
     "validate-scorm": "tsx src/utils/validateScormCLI.ts",
     "test:bdd:e2e": "npm run test:bdd:browser -- --tags @e2e",
     "test:bdd:working": "npm run test:bdd:browser -- --tags @working",
-    "test:bdd:course-seed": "npm run test:bdd:browser -- --tags @course-seed"
+    "test:bdd:course-seed": "npm run test:bdd:browser -- --tags @course-seed",
+    "test:ai-ui": "playwright test ai-ui-analysis.spec.ts --reporter=list,json",
+    "test:ai-ui:headed": "playwright test ai-ui-analysis.spec.ts --headed --reporter=list",
+    "report:ai": "node scripts/generate-ai-report.js",
+    "analyze:ui": "npm run test:ai-ui && npm run report:ai",
+    "analyze:ui:quick": "playwright test ai-ui-analysis.spec.ts --grep=\"Complete workflow\" && npm run report:ai",
+    "test:ai-working": "playwright test working-ai-analysis.spec.ts --reporter=list",
+    "test:ai-working:headed": "playwright test working-ai-analysis.spec.ts --headed --reporter=list"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

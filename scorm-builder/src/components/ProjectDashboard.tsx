@@ -726,6 +726,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                 }
               }}
               className={styles.sessionButton}
+              aria-label="Clear cache to fix stuck projects"
+              title="Clear cache to fix stuck or problematic projects"
             >
               <Icon icon={RefreshCw} size="sm" className={loading ? 'animate-spin' : ''} />
             </Button>
@@ -1041,7 +1043,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
         <div className="new-project-form">
           <input
             type="text"
-            placeholder="Enter project name"
+            placeholder="Enter project name (Press Enter to create)"
             value={newProjectName}
             onChange={(e) => setNewProjectName(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleCreateProject()}
@@ -1098,6 +1100,22 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
           </ButtonGroup>
         </div>
       </Modal>
+      
+      {/* Keyboard shortcut hint */}
+      <div style={{
+        position: 'fixed',
+        bottom: '1rem',
+        right: '1rem',
+        fontSize: '0.75rem',
+        color: 'var(--text-tertiary)',
+        background: 'var(--bg-secondary)',
+        padding: '0.5rem',
+        borderRadius: '0.25rem',
+        border: '1px solid var(--border-default)',
+        zIndex: 100
+      }}>
+        Press <kbd style={{background: 'var(--bg-tertiary)', padding: '0.125rem 0.25rem', borderRadius: '0.125rem', fontFamily: 'monospace'}}>Ctrl+/</kbd> for shortcuts
+      </div>
     </div>
   )
 }

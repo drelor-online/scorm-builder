@@ -6,6 +6,7 @@ import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import { handleFileAssociation } from './utils/fileAssociation'
+import { isErrorDismissed, dismissError } from './utils/errorDismissal'
 import { DebugInfo } from './components/DebugInfo'
 import { DebugPanel } from './components/DebugPanel'
 import { ErrorNotification, showError, showInfo } from './components/ErrorNotification'
@@ -79,9 +80,12 @@ function DashboardContent() {
         await handleProjectSelected(projectId)
       },
       onError: (errorMessage) => {
-        setError(errorMessage)
-        // Clear error after 5 seconds
-        setTimeout(() => setError(null), 5000)
+        // Only show error if it hasn't been dismissed before
+        if (!isErrorDismissed(errorMessage)) {
+          setError(errorMessage)
+          // Clear error after 5 seconds (but don't mark as dismissed)
+          setTimeout(() => setError(null), 5000)
+        }
       },
       onUnsavedChanges: (filePath) => {
         // Store the pending file path to open after saving/discarding
@@ -302,9 +306,37 @@ function DashboardContent() {
           borderRadius: '0.375rem',
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
           zIndex: 1000,
-          maxWidth: '24rem'
+          maxWidth: '24rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.5rem'
         }}>
-          {error}
+          <span>{error}</span>
+          <button
+            onClick={() => {
+              if (error) {
+                dismissError(error)
+              }
+              setError(null)
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '1.25rem',
+              lineHeight: '1',
+              padding: '0',
+              opacity: 0.8
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+            aria-label="Dismiss error"
+            title="Dismiss error"
+          >
+            ×
+          </button>
         </div>
       )}
       {showDashboard ? (

@@ -1,6 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
+ * Playwright configuration for Tauri desktop application testing
+ * 
+ * This configuration is specifically designed for testing a Tauri desktop app, which uses
+ * platform-specific webviews rather than standalone browsers:
+ * - Windows: WebView2 (Chromium-based)
+ * - macOS: WKWebView (WebKit-based) 
+ * - Linux: WebKitGTK (WebKit-based)
+ * 
+ * Mobile testing is excluded as this is a desktop-only application.
+ * See docs/TAURI_TESTING.md for detailed testing strategy.
+ * 
  * @see https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -29,8 +40,8 @@ export default defineConfig({
     /* Visual regression testing options */
     video: 'retain-on-failure',
     
-    /* Viewport for consistency */
-    viewport: { width: 1280, height: 720 },
+    /* Default viewport for Tauri desktop testing */
+    viewport: { width: 1280, height: 720 }, // Standard Tauri window size
     
     /* Ignore HTTPS errors */
     ignoreHTTPSErrors: true,
@@ -42,31 +53,47 @@ export default defineConfig({
     animations: 'allow',
   },
 
-  /* Configure projects for major browsers */
+  /* Configure projects for Tauri desktop environments */
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'Windows-WebView2',
+      use: { 
+        ...devices['Desktop Chrome'], // WebView2 is Chromium-based
+        viewport: { width: 1280, height: 720 }, // Standard desktop size
+      },
     },
 
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      name: 'macOS-WKWebView',
+      use: { 
+        ...devices['Desktop Safari'], // WKWebView is WebKit-based
+        viewport: { width: 1280, height: 720 },
+      },
     },
 
     {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      name: 'Linux-WebKitGTK',
+      use: { 
+        ...devices['Desktop Safari'], // WebKitGTK is also WebKit-based
+        viewport: { width: 1280, height: 720 },
+      },
     },
 
-    /* Test against mobile viewports. */
+    // Additional common desktop window sizes for responsive testing
     {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      name: 'Desktop-Large',
+      use: { 
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1920, height: 1080 },
+      },
     },
+
     {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      name: 'Desktop-Small',
+      use: { 
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1024, height: 768 },
+      },
     },
   ],
 
