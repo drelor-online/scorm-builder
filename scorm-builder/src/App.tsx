@@ -868,6 +868,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
+        debugLogger.info('App.handleSave', 'Saving course content', {
+          hasWelcomePage: !!(dataToSave.courseContent as any).welcomePage,
+          hasObjectivesPage: !!(dataToSave.courseContent as any).learningObjectivesPage,
+          topicsCount: dataToSave.courseContent.topics?.length || 0,
+          assessmentQuestionsCount: (dataToSave.courseContent as any).assessment?.questions?.length || 0
+        })
         await storage.saveCourseContent(dataToSave.courseContent)
       }
       
@@ -878,6 +884,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // No need to check localStorage anymore
       
       await storage.saveProject()
+      debugLogger.info('App.handleSave', 'Manual save completed successfully', {
+        projectId: storage.currentProjectId,
+        timestamp: new Date().toISOString()
+      })
       success('Project saved successfully')
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
@@ -905,9 +915,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       // Save all data from all pages (same as manual save)
       if (dataToSave.courseSeedData) {
+        debugLogger.info('App.handleAutosave', 'Auto-saving course seed data')
         await storage.saveCourseSeedData(dataToSave.courseSeedData)
       }
       if (dataToSave.courseContent) {
+        debugLogger.info('App.handleAutosave', 'Auto-saving course content', {
+          hasWelcomePage: !!(dataToSave.courseContent as any).welcomePage,
+          hasObjectivesPage: !!(dataToSave.courseContent as any).learningObjectivesPage,
+          topicsCount: dataToSave.courseContent.topics?.length || 0,
+          assessmentQuestionsCount: (dataToSave.courseContent as any).assessment?.questions?.length || 0
+        })
         await storage.saveCourseContent(dataToSave.courseContent)
       }
       
@@ -918,6 +935,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // No need to check localStorage anymore
       
       await storage.saveProject()
+      debugLogger.info('App.handleAutosave', 'Auto-save completed successfully', {
+        projectId: storage.currentProjectId,
+        timestamp: new Date().toISOString()
+      })
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
@@ -1092,6 +1113,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Save to PersistentStorage
     if (storage.currentProjectId) {
       try {
+        debugLogger.info('App.handleMediaNext', 'Saving step navigation', { step: 'audio' })
         await storage.saveContent('currentStep', { step: 'audio' })
         
         const courseData = data as CourseContent

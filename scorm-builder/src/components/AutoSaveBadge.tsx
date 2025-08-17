@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAutoSaveState } from '../contexts/AutoSaveContext'
 import styles from './AutoSaveBadge.module.css'
 
@@ -8,9 +8,24 @@ interface AutoSaveBadgeProps {
 
 export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
   const { isSaving, hasUnsavedChanges, lastSaved, isManualSave } = useAutoSaveState()
+  const [, forceRender] = useState(0)
 
-  // Don't show badge if no unsaved changes and not saving
-  if (!hasUnsavedChanges && !isSaving) {
+  // Show "All changes saved" briefly after saving completes
+  const showSavedMessage = !hasUnsavedChanges && !isSaving && lastSaved && 
+    (new Date().getTime() - lastSaved.getTime()) < 3000 // Show for 3 seconds after save
+
+  // Force re-render to hide saved message after timeout
+  useEffect(() => {
+    if (showSavedMessage) {
+      const timeout = setTimeout(() => {
+        forceRender(prev => prev + 1)
+      }, 3000)
+      return () => clearTimeout(timeout)
+    }
+  }, [showSavedMessage])
+
+  // Don't show badge if no unsaved changes, not saving, and not showing saved message
+  if (!hasUnsavedChanges && !isSaving && !showSavedMessage) {
     return null
   }
 
@@ -21,6 +36,9 @@ export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
     if (hasUnsavedChanges) {
       return 'Unsaved changes'
     }
+    if (showSavedMessage) {
+      return 'All changes saved'
+    }
     return null
   }
 
@@ -30,6 +48,9 @@ export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
     }
     if (hasUnsavedChanges) {
       return 'unsaved'
+    }
+    if (showSavedMessage) {
+      return 'saved'
     }
     return 'saved'
   }
