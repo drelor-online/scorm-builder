@@ -65,3 +65,11 @@ RESOLVED ISSUES (Confirmed fixed in Phase 2):
 - Knowledge check undefined variables - FALSE (radioInput/textInput only in old comments)
 
 For each current issue above, create a behavior test that reproduces the issue BEFORE fixing it.
+
+MUTATION SAFETY (CRITICAL FOR PRODUCTION):
+- Deep freezing is DISABLED in production for performance
+- ALL object mutations MUST use cloning utilities or immutable patterns
+- See MUTATION_SAFETY.md for detailed guidelines
+- Use utils/productionSafeClone.ts for safe cloning patterns
+- NEVER mutate objects directly - always clone first
+- Pattern: `setState(prev => ({ ...prev, newProperty: value }))`

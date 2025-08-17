@@ -19,8 +19,8 @@ function resolveMediaUrl(media: Media | undefined, _projectId?: string): string 
   if (!media) return undefined
   
   // If we have a storageId, use that
-  if ((media as any).storageId) {
-    return (media as any).storageId
+  if (media.storageId) {
+    return media.storageId
   }
   
   // If it's an external URL, keep it (will be downloaded during SCORM generation)
@@ -74,17 +74,17 @@ function convertNewFormat(
       narration: courseContent.welcomePage.narration,
       startButtonText: 'Start Course',
       // Use storageId or id from image media for imageUrl
-      imageUrl: welcomeImageMedia ? (welcomeImageMedia as any).storageId || welcomeImageMedia.id : undefined,
+      imageUrl: welcomeImageMedia ? welcomeImageMedia.storageId || welcomeImageMedia.id : undefined,
       // FIXED: Use the audio media's ID or storageId if available
-      audioFile: welcomeAudioMedia ? (welcomeAudioMedia as any).storageId || welcomeAudioMedia.id : 
-                 (courseContent.welcomePage as any).audioId || courseContent.welcomePage.audioFile,
-      audioId: welcomeAudioMedia?.id || (courseContent.welcomePage as any).audioId,
-      audioBlob: (courseContent.welcomePage as any).audioBlob,
+      audioFile: welcomeAudioMedia ? welcomeAudioMedia.storageId || welcomeAudioMedia.id : 
+                 courseContent.welcomePage.audioId || courseContent.welcomePage.audioFile,
+      audioId: welcomeAudioMedia?.id || courseContent.welcomePage.audioId,
+      audioBlob: courseContent.welcomePage.audioBlob,
       // FIXED: Use the caption media's ID or storageId if available
-      captionFile: welcomeCaptionMedia ? (welcomeCaptionMedia as any).storageId || welcomeCaptionMedia.id :
-                   (courseContent.welcomePage as any).captionId || courseContent.welcomePage.captionFile,
-      captionId: welcomeCaptionMedia?.id || (courseContent.welcomePage as any).captionId,
-      captionBlob: (courseContent.welcomePage as any).captionBlob,
+      captionFile: welcomeCaptionMedia ? welcomeCaptionMedia.storageId || welcomeCaptionMedia.id :
+                   courseContent.welcomePage.captionId || courseContent.welcomePage.captionFile,
+      captionId: welcomeCaptionMedia?.id || courseContent.welcomePage.captionId,
+      captionBlob: courseContent.welcomePage.captionBlob,
       embedUrl: welcomeVideoMedia?.embedUrl,
       media: welcomeMedia.map(m => ({
         id: m.id,
@@ -92,10 +92,10 @@ function convertNewFormat(
         title: m.title,
         type: m.type,
         embedUrl: m.embedUrl,
-        blob: (m as any).blob,
-        captionUrl: (m as any).captionUrl,
-        captionBlob: (m as any).captionBlob,
-        storageId: (m as any).storageId
+        blob: m.blob,
+        captionUrl: m.captionUrl,
+        captionBlob: m.captionBlob,
+        storageId: m.storageId
       }))
     }
     
@@ -120,17 +120,17 @@ function convertNewFormat(
     const objectivesPage = {
       narration: courseContent.learningObjectivesPage.narration,
       // Use storageId or id from image media for imageUrl
-      imageUrl: objectivesImageMedia ? (objectivesImageMedia as any).storageId || objectivesImageMedia.id : undefined,
+      imageUrl: objectivesImageMedia ? objectivesImageMedia.storageId || objectivesImageMedia.id : undefined,
       // FIXED: Use the audio media's ID or storageId if available
-      audioFile: objectivesAudioMedia ? (objectivesAudioMedia as any).storageId || objectivesAudioMedia.id :
-                 (courseContent.learningObjectivesPage as any).audioId || courseContent.learningObjectivesPage.audioFile,
-      audioId: objectivesAudioMedia?.id || (courseContent.learningObjectivesPage as any).audioId,
-      audioBlob: (courseContent.learningObjectivesPage as any).audioBlob,
+      audioFile: objectivesAudioMedia ? objectivesAudioMedia.storageId || objectivesAudioMedia.id :
+                 courseContent.learningObjectivesPage.audioId || courseContent.learningObjectivesPage.audioFile,
+      audioId: objectivesAudioMedia?.id || courseContent.learningObjectivesPage.audioId,
+      audioBlob: courseContent.learningObjectivesPage.audioBlob,
       // FIXED: Use the caption media's ID or storageId if available
-      captionFile: objectivesCaptionMedia ? (objectivesCaptionMedia as any).storageId || objectivesCaptionMedia.id :
-                   (courseContent.learningObjectivesPage as any).captionId || courseContent.learningObjectivesPage.captionFile,
-      captionId: objectivesCaptionMedia?.id || (courseContent.learningObjectivesPage as any).captionId,
-      captionBlob: (courseContent.learningObjectivesPage as any).captionBlob,
+      captionFile: objectivesCaptionMedia ? objectivesCaptionMedia.storageId || objectivesCaptionMedia.id :
+                   courseContent.learningObjectivesPage.captionId || courseContent.learningObjectivesPage.captionFile,
+      captionId: objectivesCaptionMedia?.id || courseContent.learningObjectivesPage.captionId,
+      captionBlob: courseContent.learningObjectivesPage.captionBlob,
       embedUrl: objectivesVideoMedia?.embedUrl,
       media: objectivesMedia.map(m => ({
         id: m.id,
@@ -138,10 +138,10 @@ function convertNewFormat(
         title: m.title,
         type: m.type,
         embedUrl: m.embedUrl,
-        blob: (m as any).blob,
-        captionUrl: (m as any).captionUrl,
-        captionBlob: (m as any).captionBlob,
-        storageId: (m as any).storageId
+        blob: m.blob,
+        captionUrl: m.captionUrl,
+        captionBlob: m.captionBlob,
+        storageId: m.storageId
       }))
     }
     
@@ -168,16 +168,16 @@ function convertNewFormat(
       
       // Check for audio/caption in media array first
       const topicAudioMedia = topic.media?.find(m => m.type === 'audio')
-      const topicCaptionMedia = topic.media?.find((m: any) => m.type === 'caption')
+      const topicCaptionMedia = topic.media?.find(m => m.type === 'caption')
       
       // FIXED: Use the media's storageId or id if available
-      const audioFile = topicAudioMedia ? (topicAudioMedia as any).storageId || topicAudioMedia.id :
-                        (topic as any).audioId || topic.audioFile
-      const captionFile = topicCaptionMedia ? (topicCaptionMedia as any).storageId || topicCaptionMedia.id :
-                          (topic as any).captionId || topic.captionFile
+      const audioFile = topicAudioMedia ? topicAudioMedia.storageId || topicAudioMedia.id :
+                        topic.audioId || topic.audioFile
+      const captionFile = topicCaptionMedia ? topicCaptionMedia.storageId || topicCaptionMedia.id :
+                          topic.captionId || topic.captionFile
       
       // Use storageId or id from image media for imageUrl
-      const imageUrl = imageMedia ? (imageMedia as any).storageId || imageMedia.id : undefined
+      const imageUrl = imageMedia ? imageMedia.storageId || imageMedia.id : undefined
       
       const embedUrl = videoMedia?.embedUrl
       
@@ -188,11 +188,11 @@ function convertNewFormat(
         narration: topic.narration,
         imageUrl,
         audioFile,
-        audioId: (topic as any).audioId,
-        audioBlob: (topic as any).audioBlob,
+        audioId: topic.audioId,
+        audioBlob: topic.audioBlob,
         captionFile,
-        captionId: (topic as any).captionId,
-        captionBlob: (topic as any).captionBlob,
+        captionId: topic.captionId,
+        captionBlob: topic.captionBlob,
         embedUrl,
         knowledgeCheck,
         media: topicMedia.map(m => ({
@@ -241,7 +241,7 @@ function convertNewFormat(
           // Handle fill-in-the-blank questions specifically
           return {
             ...baseQuestion,
-            blank: (q as any).blank || q.question, // Use blank field if available, fallback to question
+            blank: q.blank || q.question, // Use blank field if available, fallback to question
             correctAnswer: q.correctAnswer || '', // Keep as string for fill-in-the-blank
             options: [] // No options for fill-in-the-blank
           }
@@ -488,8 +488,8 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
     if (firstQuestion.type === 'fill-in-the-blank') {
       return {
         type: 'fill-in-the-blank' as const,
-        blank: (firstQuestion as any).blank || firstQuestion.question, // Use blank property if it exists
-        question: (firstQuestion as any).blank || firstQuestion.question, // Use blank for question too
+        blank: firstQuestion.blank || firstQuestion.question, // Use blank property if it exists
+        question: firstQuestion.blank || firstQuestion.question, // Use blank for question too
         correctAnswer: firstQuestion.correctAnswer,
         explanation: firstQuestion.feedback?.correct || firstQuestion.feedback?.incorrect || firstQuestion.explanation,
         feedback: firstQuestion.feedback // Preserve the feedback object
@@ -530,8 +530,8 @@ function convertKnowledgeCheck(knowledgeCheck?: { questions: KnowledgeCheckQuest
       } else if (q.type === 'fill-in-the-blank') {
         return {
           ...q,
-          question: (q as any).blank || q.question, // Use blank property if it exists
-          blank: (q as any).blank || q.question, // Use blank property if it exists
+          question: q.blank || q.question, // Use blank property if it exists
+          blank: q.blank || q.question, // Use blank property if it exists
           correctAnswer: q.correctAnswer,
           explanation: q.feedback?.correct || q.feedback?.incorrect || q.explanation
         }

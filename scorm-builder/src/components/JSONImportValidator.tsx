@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, startTransition } from 'react'
 import { CourseContent } from '../types/aiPrompt'
 import { PageLayout } from './PageLayout'
 import { 
@@ -24,6 +24,7 @@ import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
+import { debugLogger } from '../utils/ultraSimpleLogger'
 import styles from './JSONImportValidator.module.css'
 
 interface JSONImportValidatorProps {
@@ -51,6 +52,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const navigation = useStepNavigation()
   const { markDirty, resetDirty } = useUnsavedChanges()
   
+  // Logger for production-safe debugging
+  const logger = debugLogger
+  
   // Always start with empty JSON input - users should paste their own content
   const [jsonInput, setJsonInput] = useState('')
   
@@ -60,6 +64,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Load persisted JSON import data on mount
@@ -134,15 +139,50 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   useEffect(() => {
     // Verify that when all conditions are met, the component will show the tree view
     if (isLocked && validationResult?.isValid && validationResult.data && !isValidating) {
+      logger.info('JSONValidator', 'Tree view conditions met', {
+        isLocked,
+        isValid: validationResult?.isValid,
+        hasData: !!validationResult?.data,
+        isValidating,
+        topicsCount: validationResult?.data?.topics?.length || 0
+      })
+      
       // Force a re-render to ensure the tree view shows
       // This is a safety mechanism for production builds where state batching might cause issues
       const timer = setTimeout(() => {
-        // Trigger a minimal state update to ensure render cycle completes
-        setValidationResult((prev: any) => prev ? { ...prev } : null)
+        // Use force update counter to trigger a guaranteed re-render
+        setForceUpdateCounter(prev => prev + 1)
+        logger.info('JSONValidator', 'Forced tree view re-render', { forceUpdateCounter })
       }, 10)
       return () => clearTimeout(timer)
     }
-  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating])
+  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating, logger, forceUpdateCounter])
+  
+  // Fallback mechanism to ensure tree view shows in production
+  useEffect(() => {
+    if (isLocked && validationResult?.isValid && validationResult?.data && !isValidating) {
+      // Give React time to render, then check if tree view is showing
+      const fallbackTimer = setTimeout(() => {
+        logger.info('JSONValidator', 'Fallback check - ensuring tree view is visible', {
+          isLocked,
+          isValid: validationResult?.isValid,
+          hasData: !!validationResult?.data,
+          isValidating
+        })
+        
+        // Force a final re-render by incrementing counter if needed
+        setForceUpdateCounter(prev => {
+          logger.info('JSONValidator', 'Fallback re-render triggered', { 
+            previousCounter: prev,
+            newCounter: prev + 1 
+          })
+          return prev + 1
+        })
+      }, 100) // Wait 100ms for normal render to complete
+      
+      return () => clearTimeout(fallbackTimer)
+    }
+  }, [isLocked, validationResult?.isValid, validationResult?.data, isValidating, logger])
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content
   
@@ -244,20 +284,36 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         // The JSON is valid after pre-processing
         const parsedData = JSON.parse(processedInput) as CourseContent
         
-        // Update validation state (separate from console.log to prevent minification issues)
-        setValidationResult({
-          isValid: true,
-          data: parsedData,
-          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+        // Update validation state with production-safe logging
+        logger.info('JSONValidator', 'JSON validation successful (pre-processing)', {
+          topicsCount: parsedData.topics?.length || 0,
+          hasWelcomePage: !!parsedData.welcomePage,
+          hasObjectivesPage: !!parsedData.learningObjectivesPage,
+          hasAssessment: !!parsedData.assessment
         })
         
-        setToast({ 
-          message: '✅ Valid JSON detected! Course structure loaded successfully.', 
-          type: 'success' 
+        // Batch all state updates to prevent render issues in production
+        startTransition(() => {
+          setValidationResult({
+            isValid: true,
+            data: parsedData,
+            summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+          })
+          
+          setToast({ 
+            message: '✅ Valid JSON detected! Course structure loaded successfully.', 
+            type: 'success' 
+          })
+          
+          setIsLocked(true)
+          setIsValidating(false)
+          
+          logger.info('JSONValidator', 'State updated after validation', {
+            isLocked: true,
+            isValidating: false,
+            hasValidationResult: true
+          })
         })
-        
-        setIsLocked(true)
-        setIsValidating(false)
         return
       }
       
@@ -268,22 +324,35 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Try to parse after smart fix
       try {
         const parsedData = JSON.parse(fixedJson) as CourseContent
-        console.log("Smart auto-fix successful!")
-        
-        // Update validation state (separate from console.log to prevent minification issues)
-        setValidationResult({
-          isValid: true,
-          data: parsedData,
-          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+        logger.info('JSONValidator', 'JSON validation successful (smart auto-fix)', {
+          topicsCount: parsedData.topics?.length || 0,
+          hasWelcomePage: !!parsedData.welcomePage,
+          hasObjectivesPage: !!parsedData.learningObjectivesPage,
+          hasAssessment: !!parsedData.assessment
         })
         
-        setToast({ 
-          message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
-          type: 'success' 
+        // Batch all state updates to prevent render issues in production
+        startTransition(() => {
+          setValidationResult({
+            isValid: true,
+            data: parsedData,
+            summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+          })
+          
+          setToast({ 
+            message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
+            type: 'success' 
+          })
+          
+          setIsLocked(true)
+          setIsValidating(false)
+          
+          logger.info('JSONValidator', 'State updated after smart auto-fix', {
+            isLocked: true,
+            isValidating: false,
+            hasValidationResult: true
+          })
         })
-        
-        setIsLocked(true)
-        setIsValidating(false)
         return
       } catch (e) {
         console.log("Smart auto-fix didn't fully resolve issues, continuing with other fixes...")
@@ -615,15 +684,32 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         })
       }
 
-      setValidationResult({
-        isValid: true,
-        data: parsedData,
-        summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
+      logger.info('JSONValidator', 'JSON validation successful (full validation)', {
+        topicsCount: parsedData.topics.length,
+        knowledgeCheckCount,
+        assessmentQuestions: parsedData.assessment.questions.length,
+        hasWelcomePage: !!parsedData.welcomePage,
+        hasObjectivesPage: !!parsedData.learningObjectivesPage
       })
-      
-      // Lock the input after successful validation
-      setIsLocked(true)
-      setIsValidating(false)
+
+      // Batch all state updates to prevent render issues in production
+      startTransition(() => {
+        setValidationResult({
+          isValid: true,
+          data: parsedData,
+          summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
+        })
+        
+        // Lock the input after successful validation
+        setIsLocked(true)
+        setIsValidating(false)
+        
+        logger.info('JSONValidator', 'State updated after full validation', {
+          isLocked: true,
+          isValidating: false,
+          hasValidationResult: true
+        })
+      })
       
       // Show success message
       setToast({ 
@@ -1146,7 +1232,17 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
       <Section>
         {/* Show tree view when locked, editor when unlocked */}
-        {isLocked && validationResult?.isValid && validationResult.data ? (
+        {(() => {
+          const shouldShowTree = isLocked && validationResult?.isValid && validationResult.data
+          logger.info('JSONValidator', 'Render decision', {
+            isLocked,
+            isValid: validationResult?.isValid,
+            hasData: !!validationResult?.data,
+            shouldShowTree,
+            forceUpdateCounter
+          })
+          return shouldShowTree
+        })() ? (
             <>
               {/* Course Structure */}
               <div className={styles.sectionWrapper}>

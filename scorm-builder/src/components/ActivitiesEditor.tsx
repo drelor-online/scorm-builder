@@ -174,6 +174,8 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     hasUserInteracted.current = true // Mark as user interaction
     setContent(prev => {
       if (!isOldFormat(prev)) return prev;
+      // MUTATION SAFETY: Always clone objects before modifying to prevent bugs in production
+      // where deep freezing is disabled. Use spread operators for shallow cloning.
       return { ...prev, activities: [...prev.activities, newActivity] };
     });
   }, [])

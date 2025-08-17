@@ -29,6 +29,11 @@ export interface Page {
   media?: Media[]
   audioFile?: string
   captionFile?: string
+  // Legacy properties for backward compatibility
+  audioId?: string
+  audioBlob?: Blob
+  captionId?: string
+  captionBlob?: Blob
 }
 
 export interface Topic extends Page {
@@ -57,7 +62,7 @@ export interface Media {
   id: string
   url: string
   title: string
-  type: 'image' | 'video' | 'audio'
+  type: 'image' | 'video' | 'audio' | 'caption'
   thumbnail?: string
   embedUrl?: string
   photographer?: string
@@ -88,6 +93,7 @@ export interface AssessmentQuestion {
   question: string
   options?: string[] // for multiple choice
   correctAnswer: string
+  blank?: string // for fill-in-the-blank only (legacy compatibility)
   feedback: {
     correct: string
     incorrect: string
