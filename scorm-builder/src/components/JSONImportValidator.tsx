@@ -67,11 +67,21 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
-  // Load persisted JSON import data on mount
+  // Load persisted JSON import data on mount and when project changes
   useEffect(() => {
     const loadPersistedValidationState = async () => {
-      if (storage && storage.isInitialized) {
+      if (storage && storage.isInitialized && storage.currentProjectId) {
+        // Log project change
+        logger.info('JSONValidator', 'Loading JSON for project', { 
+          projectId: storage.currentProjectId 
+        })
+        
         try {
+          // Clear state first when switching projects to prevent stale data
+          setJsonInput('')
+          setValidationResult(null)
+          setIsLocked(false)
+          
           // Try to load the complete JSON import data
           const jsonImportData = await storage.getContent('json-import-data')
           if (jsonImportData) {
@@ -85,6 +95,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             if (jsonImportData.isLocked !== undefined) {
               setIsLocked(jsonImportData.isLocked)
             }
+            
+            logger.info('JSONValidator', 'Loaded saved JSON state', {
+              hasJson: !!jsonImportData.rawJson,
+              isLocked: jsonImportData.isLocked,
+              hasValidation: !!jsonImportData.validationResult
+            })
           } else {
             // Fallback to old format for backward compatibility
             const persistedValidation = await storage.getContent('json-validation-state')
@@ -94,16 +110,26 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
               if (persistedValidation.isValid) {
                 setIsLocked(true)
               }
+              
+              logger.info('JSONValidator', 'Loaded legacy JSON validation state', {
+                hasValidation: !!persistedValidation,
+                isValid: persistedValidation.isValid
+              })
+            } else {
+              logger.info('JSONValidator', 'No saved JSON state found for project', {
+                projectId: storage.currentProjectId
+              })
             }
           }
         } catch (error) {
+          logger.error('JSONValidator', 'Error loading persisted validation state', { error: error instanceof Error ? error.message : String(error) })
           console.error('Error loading persisted validation state:', error)
         }
       }
     }
     
     loadPersistedValidationState()
-  }, [storage?.isInitialized])
+  }, [storage?.isInitialized, storage?.currentProjectId, logger])
   
   // Persist validation state AND raw JSON when it changes
   useEffect(() => {
@@ -314,6 +340,33 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             hasValidationResult: true
           })
         })
+        
+        // Save the validated JSON data to storage for persistence  
+        if (storage && storage.isInitialized) {
+          try {
+            const jsonImportData = {
+              rawJson: jsonInput,
+              validationResult: {
+                isValid: true,
+                data: parsedData,
+                summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+              },
+              isLocked: true
+            }
+            
+            await storage.saveContent('json-import-data', jsonImportData)
+            
+            logger.info('JSONValidator', 'Saved JSON state to storage (pre-processing)', {
+              projectId: storage.currentProjectId,
+              hasRawJson: !!jsonImportData.rawJson,
+              isLocked: jsonImportData.isLocked
+            })
+          } catch (error) {
+            logger.error('JSONValidator', 'Failed to save JSON state to storage (pre-processing)', {
+              error: error instanceof Error ? error.message : String(error)
+            })
+          }
+        }
         return
       }
       
@@ -353,6 +406,33 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             hasValidationResult: true
           })
         })
+        
+        // Save the validated JSON data to storage for persistence  
+        if (storage && storage.isInitialized) {
+          try {
+            const jsonImportData = {
+              rawJson: jsonInput,
+              validationResult: {
+                isValid: true,
+                data: parsedData,
+                summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+              },
+              isLocked: true
+            }
+            
+            await storage.saveContent('json-import-data', jsonImportData)
+            
+            logger.info('JSONValidator', 'Saved JSON state to storage (smart auto-fix)', {
+              projectId: storage.currentProjectId,
+              hasRawJson: !!jsonImportData.rawJson,
+              isLocked: jsonImportData.isLocked
+            })
+          } catch (error) {
+            logger.error('JSONValidator', 'Failed to save JSON state to storage (smart auto-fix)', {
+              error: error instanceof Error ? error.message : String(error)
+            })
+          }
+        }
         return
       } catch (e) {
         console.log("Smart auto-fix didn't fully resolve issues, continuing with other fixes...")
@@ -711,6 +791,33 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         })
       })
       
+      // Save the validated JSON data to storage for persistence
+      if (storage && storage.isInitialized) {
+        try {
+          const jsonImportData = {
+            rawJson: jsonInput,
+            validationResult: {
+              isValid: true,
+              data: parsedData,
+              summary: `${parsedData.topics.length + 2} pages (including Welcome & Learning Objectives), ${knowledgeCheckCount} knowledge check questions, ${parsedData.assessment.questions.length} assessment questions`
+            },
+            isLocked: true
+          }
+          
+          await storage.saveContent('json-import-data', jsonImportData)
+          
+          logger.info('JSONValidator', 'Saved JSON state to storage', {
+            projectId: storage.currentProjectId,
+            hasRawJson: !!jsonImportData.rawJson,
+            isLocked: jsonImportData.isLocked
+          })
+        } catch (error) {
+          logger.error('JSONValidator', 'Failed to save JSON state to storage', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      }
+      
       // Show success message
       setToast({ 
         message: '✅ JSON validated successfully! Content is now locked. Click "Next" to proceed or "Clear JSON" to start over.', 
@@ -834,11 +941,18 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     setIsLocked(false)
     setToast({ message: 'JSON cleared. Data on following pages has been reset.', type: 'info' })
     
-    // Clear persisted validation state
+    // Clear persisted validation state (both old and new formats)
     if (storage && storage.isInitialized) {
       try {
+        // Clear both old and new formats to ensure complete cleanup
         await storage.saveContent('json-validation-state', null)
+        await storage.saveContent('json-import-data', null)
+        
+        logger.info('JSONValidator', 'Cleared JSON validation state', {
+          projectId: storage.currentProjectId
+        })
       } catch (error) {
+        logger.error('JSONValidator', 'Error clearing persisted validation state', { error: error instanceof Error ? error.message : String(error) })
         console.error('Error clearing persisted validation state:', error)
       }
     }
