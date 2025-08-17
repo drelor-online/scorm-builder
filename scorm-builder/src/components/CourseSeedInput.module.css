@@ -681,3 +681,8 @@
     align-items: flex-start;
   }
 }
+
+/* Drag and Drop Topic List Container */
+.dragDropContainer {
+  margin-top: var(--space-sm);
+}

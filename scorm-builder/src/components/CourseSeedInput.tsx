@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CourseSeedData, CourseTemplate, templateTopics } from '../types/course';
 import { PageLayout } from './PageLayout';
 import { TemplateEditor } from './TemplateEditor';
+import { DraggableTopicList } from './DraggableTopicList';
 import { useFormChanges } from '../hooks/useFormChanges';
 import { AutoSaveBadge } from './AutoSaveBadge';
 import { 
@@ -16,7 +17,7 @@ import {
   Alert,
   Icon
 } from './DesignSystem';
-import { Lock, Edit2, FileText, Trash2, Clock } from 'lucide-react';
+import { Lock, Edit2, FileText, Trash2, Clock, List, GripVertical } from 'lucide-react';
 import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
 import styles from './CourseSeedInput.module.css';
@@ -109,7 +110,27 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showTemplatePreview, setShowTemplatePreview] = useState(false)
   const [isTopicsEditable, setIsTopicsEditable] = useState(true)
+  const [useDragAndDrop, setUseDragAndDrop] = useState(false)
   
+  // Helper functions for topic management
+  const getTopicsArray = (): string[] => {
+    return customTopics
+      .split('\n')
+      .map(topic => topic.trim())
+      .filter(topic => topic.length > 0)
+  }
+  
+  const setTopicsFromArray = (topics: string[]) => {
+    setCustomTopics(topics.join('\n'))
+  }
+  
+  const switchToTextarea = () => {
+    setUseDragAndDrop(false)
+  }
+  
+  const switchToDragAndDrop = () => {
+    setUseDragAndDrop(true)
+  }
   
   // Load custom templates from file storage
   useEffect(() => {
@@ -785,31 +806,61 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                           Clear Topics
                         </>
                       </Button>
+                      
+                      {/* Switch between drag-and-drop and textarea */}
+                      {customTopics.trim() && (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={useDragAndDrop ? switchToTextarea : switchToDragAndDrop}
+                          type="button"
+                          aria-label={useDragAndDrop ? 'Switch to text editor' : 'Switch to drag and drop'}
+                          title={useDragAndDrop ? 'Switch to text editor' : 'Switch to drag and drop reordering'}
+                        >
+                          <>
+                            <Icon icon={useDragAndDrop ? FileText : GripVertical} size="sm" />
+                            {useDragAndDrop ? 'Edit as Text' : 'Drag & Drop'}
+                          </>
+                        </Button>
+                      )}
                     </>
                   )}
                 </ButtonGroup>
               </Flex>
-              <textarea
-                id="topics-textarea"
-                placeholder={`List your course topics (one per line):\n\n• Introduction to workplace safety\n• Hazard identification techniques\n• Personal protective equipment\n• Emergency response procedures\n• Incident reporting protocols`}
-                value={customTopics}
-                onChange={(e) => {
-                  if (isTopicsEditable) {
-                    const value = e.target.value
-                    // Just set the value as-is - topics are only separated by newlines
-                    setCustomTopics(value)
+              {/* Conditional rendering: DraggableTopicList or textarea */}
+              {useDragAndDrop && customTopics.trim() ? (
+                <DraggableTopicList
+                  topics={getTopicsArray()}
+                  onChange={(newTopics) => {
+                    setTopicsFromArray(newTopics)
                     markDirty('courseSeed')
-                  }
-                }}
-                data-testid="topics-textarea"
-                required
-                className={styles.textareaField}
-                readOnly={!isTopicsEditable}
-                style={{ 
-                  backgroundColor: isTopicsEditable ? 'white' : '#f5f5f5',
-                  cursor: isTopicsEditable ? 'text' : 'not-allowed'
-                }}
-              />
+                  }}
+                  onSwitchToTextarea={switchToTextarea}
+                  className={styles.dragDropContainer}
+                />
+              ) : (
+                <textarea
+                  id="topics-textarea"
+                  placeholder={`List your course topics (one per line):\n\n• Introduction to workplace safety\n• Hazard identification techniques\n• Personal protective equipment\n• Emergency response procedures\n• Incident reporting protocols`}
+                  value={customTopics}
+                  onChange={(e) => {
+                    if (isTopicsEditable) {
+                      const value = e.target.value
+                      // Just set the value as-is - topics are only separated by newlines
+                      setCustomTopics(value)
+                      markDirty('courseSeed')
+                    }
+                  }}
+                  data-testid="topics-textarea"
+                  required
+                  className={styles.textareaField}
+                  readOnly={!isTopicsEditable}
+                  style={{ 
+                    backgroundColor: isTopicsEditable ? 'white' : '#f5f5f5',
+                    cursor: isTopicsEditable ? 'text' : 'not-allowed'
+                  }}
+                />
+              )}
             </div>
             <Flex gap="large" className={styles.tipText}>
               <span className={styles.tipItem}>

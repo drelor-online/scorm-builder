@@ -63,7 +63,10 @@ export const ProjectLoadingDialog: React.FC<ProjectLoadingDialogProps> = ({
         <div style={{ marginBottom: '1rem' }}>
           <ProgressBar 
             value={progress.percent} 
-            label={`${progress.percent}%`}
+            label="Loading project"
+            showPercentage={true}
+            size="medium"
+            variant="primary"
           />
           <div style={{ 
             textAlign: 'center', 

@@ -467,6 +467,8 @@ export function AudioNarrationWizard({
                     e.stopPropagation()
                     onPlayAudio()
                   }}
+                  aria-label={`${isPlaying ? 'Stop' : 'Play'} audio for block ${block.blockNumber}`}
+                  title={`${isPlaying ? 'Stop' : 'Play'} audio for block ${block.blockNumber}`}
                 >
                   {isPlaying ? (<><Square size={16} /> Stop</>) : (<><Play size={16} /> Play</>)}
                 </Button>
@@ -474,6 +476,8 @@ export function AudioNarrationWizard({
                   size="small"
                   variant="secondary"
                   onClick={onReplaceAudio}
+                  aria-label={`Replace audio file for block ${block.blockNumber}`}
+                  title={`Replace audio file for block ${block.blockNumber}`}
                 >
                   <Upload size={16} /> Replace Audio
                 </Button>
@@ -481,6 +485,8 @@ export function AudioNarrationWizard({
                   size="small"
                   variant="secondary"
                   onClick={onRemoveAudio}
+                  aria-label={`Remove audio file for block ${block.blockNumber}`}
+                  title={`Remove audio file for block ${block.blockNumber}`}
                 >
                   Remove Audio
                 </Button>
@@ -497,7 +503,12 @@ export function AudioNarrationWizard({
                   tabIndex={-1}
                   aria-hidden="true"
                 />
-                <label htmlFor={`audio-upload-${block.blockNumber}`} className={styles.uploadLabel}>
+                <label 
+                  htmlFor={`audio-upload-${block.blockNumber}`} 
+                  className={styles.uploadLabel}
+                  aria-label={`Upload audio file for block ${block.blockNumber}`}
+                  title={`Upload audio file for block ${block.blockNumber}`}
+                >
                   <span className={styles.uploadLabelSpan}>
                     <Button
                       size="small"
@@ -515,6 +526,8 @@ export function AudioNarrationWizard({
                   size="small"
                   variant="secondary"
                   onClick={onToggleRecording}
+                  aria-label={`${isRecording ? 'Stop' : 'Start'} recording audio for block ${block.blockNumber}`}
+                  title={`${isRecording ? 'Stop' : 'Start'} recording audio for block ${block.blockNumber}`}
                 >
                   <Mic size={16} /> Record Audio
                 </Button>
@@ -3247,7 +3260,8 @@ export function AudioNarrationWizard({
                               <ProgressBar 
                                 value={bulkUploadProgress.overallPercent} 
                                 max={100}
-                                label={`${bulkUploadProgress.overallPercent}%`}
+                                label="Overall progress"
+                                showPercentage={true}
                                 size="medium"
                                 variant="primary"
                                 className={styles.uploadProgress}
@@ -3263,7 +3277,8 @@ export function AudioNarrationWizard({
                                 <ProgressBar 
                                   value={uploadProgress.percent} 
                                   max={100}
-                                  label={`${uploadProgress.percent}%`}
+                                  label="Current file"
+                                  showPercentage={true}
                                   size="medium"
                                   variant="primary"
                                   className={styles.uploadProgress}
@@ -3279,7 +3294,8 @@ export function AudioNarrationWizard({
                             <ProgressBar 
                               value={uploadProgress.percent} 
                               max={100}
-                              label={`${uploadProgress.percent}%`}
+                              label="Audio upload"
+                              showPercentage={true}
                               size="medium"
                               variant="primary"
                               className={styles.uploadProgress}

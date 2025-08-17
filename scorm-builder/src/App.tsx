@@ -23,6 +23,7 @@ initializeLoggerConfig()
 import { CourseSeedInput } from '@/components/CourseSeedInput'
 import { Button } from '@/components/DesignSystem'
 import { DebugPanel } from '@/components/DebugPanel'
+import { StatusPanel } from '@/components/StatusPanel'
 
 // Lazy load step components
 const AIPromptGenerator = lazy(() => 
@@ -77,6 +78,7 @@ import { useAutoSave } from '@/hooks/useAutoSave'
 import { useStorage } from './contexts/PersistentStorageContext'
 import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor'
 import { useDialogManager } from '@/hooks/useDialogManager'
+import { useStatusMessages } from '@/hooks/useStatusMessages'
 
 // Contexts
 import { StepNavigationProvider, useStepNavigation } from './contexts/StepNavigationContext'
@@ -119,6 +121,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     showDialog,
     hideDialog,
   } = useDialogManager();
+  const statusMessages = useStatusMessages();
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
@@ -889,13 +892,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         timestamp: new Date().toISOString()
       })
       success('Project saved successfully')
+      statusMessages.addSuccess('Project Saved', 'All changes have been saved successfully')
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
     } catch (error: unknown) {
       console.error('[handleSave] Save error:', error)
-      showError((error instanceof Error ? error.message : String(error)) || 'Failed to save project')
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
+      const errorMessage = (error instanceof Error ? error.message : String(error)) || 'Failed to save project'
+      showError(errorMessage)
+      statusMessages.addError('Save Failed', errorMessage)
+      return { success: false, error: errorMessage }
     } finally {
       setIsSaving(false)
     }
@@ -939,6 +945,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         projectId: storage.currentProjectId,
         timestamp: new Date().toISOString()
       })
+      statusMessages.addInfo('Auto-save', 'Project changes saved automatically')
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
       return { success: true }
@@ -1027,6 +1034,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         setCourseSeedData(data)
         setCurrentStep('prompt')
         navigation.navigateToStep(stepNumbers.prompt)
+        statusMessages.addSuccess('Course Setup Complete', `Ready to generate content for "${data.courseTitle}"`)
         // Note: Dirty state is handled automatically by components
         
         // Return success to resolve the promise
@@ -1034,7 +1042,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       }) // End of measureAsync
     } catch (error) {
       console.error('Failed to save course seed data:', error)
-      showError(error instanceof Error ? error.message : 'Failed to save data')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save data'
+      showError(errorMessage)
+      statusMessages.addError('Setup Failed', errorMessage)
     }
   }
 
@@ -1518,11 +1528,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           }
         }
       }
+      // Escape: Close active dialog
+      else if (e.key === 'Escape') {
+        e.preventDefault()
+        if (activeDialog) {
+          hideDialog()
+        }
+      }
     }
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeDialog, handleManualSave, handleOpen, showDialog])
+  }, [activeDialog, handleManualSave, handleOpen, showDialog, hideDialog])
 
 
   return (
@@ -1543,6 +1560,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         
         {/* Network status indicator */}
         <NetworkStatusIndicator />
+        
+        {/* Status Panel */}
+        <StatusPanel 
+          messages={statusMessages.messages}
+          onDismiss={statusMessages.dismissMessage}
+          onClearAll={statusMessages.clearAllMessages}
+        />
         
         {/* Notification Panel is now rendered at the app root level */}
       

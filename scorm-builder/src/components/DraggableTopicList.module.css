@@ -1,0 +1,223 @@
+/* DraggableTopicList Component Styles */
+
+.container {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.topicList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.topicItem {
+  display: flex;
+  align-items: center;
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--border-light);
+  background-color: var(--bg-secondary);
+  cursor: move;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.topicItem:last-child {
+  border-bottom: none;
+}
+
+.topicItem:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.topicItem.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+}
+
+.topicItem.dragOver {
+  background-color: var(--color-primary-50);
+  border-color: var(--color-primary);
+}
+
+.dragHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-sm);
+  cursor: grab;
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.dragHandle:hover {
+  color: var(--text-primary);
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.gripIcon {
+  pointer-events: none;
+}
+
+.topicContent {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.topicNumber {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  margin-right: var(--space-sm);
+  flex-shrink: 0;
+  min-width: 24px;
+}
+
+.topicInput {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  transition: all var(--transition-fast);
+}
+
+.topicInput:hover {
+  border-color: var(--border-medium);
+  background-color: var(--bg-primary);
+}
+
+.topicInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background-color: var(--bg-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-100);
+}
+
+.removeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-left: var(--space-sm);
+}
+
+.removeButton:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background-color: var(--color-danger-50);
+}
+
+.removeButton:focus {
+  outline: none;
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-danger-100);
+}
+
+.footer {
+  padding: var(--space-sm) var(--space-lg);
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-light);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.emptyState {
+  padding: var(--space-2xl);
+  text-align: center;
+  color: var(--text-secondary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.emptyState p {
+  margin: 0 0 var(--space-lg) 0;
+  font-size: var(--font-size-sm);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .topicItem.dragOver {
+    background-color: var(--color-primary-900);
+    border-color: var(--color-primary-400);
+  }
+  
+  .removeButton:hover {
+    background-color: var(--color-danger-900);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    gap: var(--space-sm);
+    align-items: stretch;
+  }
+  
+  .headerActions {
+    justify-content: space-between;
+  }
+  
+  .topicItem {
+    padding: var(--space-md);
+  }
+  
+  .topicNumber {
+    min-width: 20px;
+  }
+  
+  .dragHandle {
+    width: 20px;
+    height: 20px;
+  }
+}

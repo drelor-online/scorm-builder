@@ -233,6 +233,23 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     }
   }, [isTreeVisible, screenReaderAnnouncement])
   
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + T: Toggle JSON/tree view
+      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+        e.preventDefault()
+        // Only toggle if validation result is valid
+        if (validationResult?.isValid && validationResult?.data) {
+          setIsTreeVisible(prev => !prev)
+        }
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [validationResult])
+  
   // Race condition eliminated by using user-controlled toggle view instead of timing-based logic
   
   // Removed logic that would update jsonInput from initialData - users should paste their own content

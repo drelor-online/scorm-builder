@@ -1194,7 +1194,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   <ProgressBar
                     value={generationProgress}
                     max={100}
-                    label={`${Math.round(generationProgress)}% complete`}
+                    label="SCORM package generation"
+                    showPercentage={true}
                     showTimeRemaining={true}
                     startTime={generationStartTime || undefined}
                     size="medium"
@@ -1218,6 +1219,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                       size="small"
                       onClick={cancelGeneration}
                       className="text-gray-600 hover:text-red-600"
+                      aria-label="Cancel SCORM package generation"
+                      title="Cancel SCORM package generation"
                     >
                       Cancel
                     </Button>

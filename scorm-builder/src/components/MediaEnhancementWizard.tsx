@@ -1982,7 +1982,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     <ProgressBar 
                       value={uploadProgress.percent} 
                       max={100}
-                      label={`Upload progress: ${uploadProgress.percent}%`}
+                      label="Media upload"
+                      showPercentage={true}
                       size="medium"
                       variant="primary"
                     />
