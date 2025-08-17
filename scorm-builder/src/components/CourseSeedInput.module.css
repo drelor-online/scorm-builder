@@ -1,5 +1,38 @@
 /* CourseSeedInput Component Styles */
 
+/* Template Preview Tooltip */
+.templatePreviewTooltip {
+  position: absolute;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-width: 300px;
+  margin-top: var(--space-sm);
+}
+
+.templatePreviewTooltip h4 {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.templatePreviewTooltip ul {
+  margin: 0;
+  padding-left: var(--space-md);
+  list-style-type: disc;
+}
+
+.templatePreviewTooltip li {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+  line-height: 1.4;
+}
+
 /* Main Container */
 .container {
   padding: var(--space-xl);

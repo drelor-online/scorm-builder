@@ -1481,6 +1481,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                     variant="secondary"
                     onClick={handlePasteFromClipboard}
                     data-testid="paste-clipboard-button"
+                    aria-label="Paste JSON content from clipboard"
                     disabled={isValidating}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                   >
@@ -1494,6 +1495,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                       onClick={() => setIsTreeVisible(prev => !prev)}
                       disabled={!validationResult?.isValid || !validationResult?.data}
                       data-testid="toggle-view-button"
+                      aria-label={isTreeVisible ? 'Switch to JSON editor view' : 'Switch to course tree view'}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                     >
                       <Icon icon={Eye} size="sm" />
@@ -1503,7 +1505,11 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                   
                   {/* Show validation status */}
                   {isValidating && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                    <div 
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}
+                      role="status"
+                      aria-live="polite"
+                    >
                       <Icon icon={Wand2} size="sm" className={styles.animatePulse} />
                       <span>Validating and fixing content...</span>
                     </div>

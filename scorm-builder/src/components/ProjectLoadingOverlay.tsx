@@ -36,7 +36,11 @@ export const ProjectLoadingOverlay: React.FC<ProjectLoadingOverlayProps> = ({
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <p className={styles.progressText}>
+              <p 
+                className={styles.progressText}
+                role="status"
+                aria-live="polite"
+              >
                 {loadingProgress.phase} ({loadingProgress.current}/{loadingProgress.total})
               </p>
             </div>

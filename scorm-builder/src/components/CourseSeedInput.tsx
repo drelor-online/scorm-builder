@@ -107,6 +107,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [customTemplates, setCustomTemplates] = useState<Record<string, any>>({})
   const [isTitleLocked, setIsTitleLocked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false)
   const [isTopicsEditable, setIsTopicsEditable] = useState(true)
   
   
@@ -634,6 +635,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     }
                   }}
                   required
+                  aria-required="true"
                   readOnly={isTitleLocked}
                   data-testid="course-title-input"
                   className={isTitleLocked ? styles.inputFieldLocked : styles.inputFieldNormal}
@@ -686,12 +688,17 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               {/* Template */}
               <div>
                 <label htmlFor="course-template-select" className={`input-label ${styles.inputLabelOptional}`}>Course Template (Optional)</label>
-                <Select
-                  id="course-template-select"
-                  value={template}
-                  onChange={handleTemplateChange}
-                  data-testid="template-select"
+                <div 
+                  style={{ position: 'relative' }}
+                  onMouseEnter={() => template !== 'None' && setShowTemplatePreview(true)}
+                  onMouseLeave={() => setShowTemplatePreview(false)}
                 >
+                  <Select
+                    id="course-template-select"
+                    value={template}
+                    onChange={handleTemplateChange}
+                    data-testid="template-select"
+                  >
                   <option value="None">Choose a template...</option>
                   <option value="How-to Guide">How-to Guide</option>
                   <option value="Corporate">Corporate</option>
@@ -704,6 +711,26 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     <option key={templateName} value={templateName}>{templateName}</option>
                   ))}
                 </Select>
+                
+                {/* Template Preview Tooltip */}
+                {showTemplatePreview && template !== 'None' && templateTopics[template] && (
+                  <div 
+                    className={`${styles.templatePreviewTooltip} templatePreviewTooltip`}
+                    data-testid="template-preview-tooltip"
+                  >
+                    <h4>{template} Template Topics:</h4>
+                    <ul>
+                      {templateTopics[template].slice(0, 6).map((topic, index) => (
+                        <li key={index}>{topic}</li>
+                      ))}
+                      {templateTopics[template].length > 6 && (
+                        <li>...and {templateTopics[template].length - 6} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+                </div>
+                
                 {template !== 'None' && (
                   <Button
                     variant="secondary"

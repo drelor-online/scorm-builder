@@ -63,7 +63,13 @@ export const MediaLoadingOverlay: React.FC<MediaLoadingOverlayProps> = ({
               <div className={styles.progressBar}>
                 <div className={styles.progressFill} />
               </div>
-              <p className={styles.progressText}>{funnyMessage}</p>
+              <p 
+                className={styles.progressText}
+                role="status"
+                aria-live="polite"
+              >
+                {funnyMessage}
+              </p>
             </div>
           )}
         </div>

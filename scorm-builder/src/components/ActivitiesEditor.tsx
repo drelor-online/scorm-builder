@@ -518,6 +518,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
                       max="100"
                       className={styles.passMarkInput}
                       data-testid="pass-mark-input"
+                      aria-label="Passing grade percentage"
                     />
                     <span>%</span>
                     <Button
