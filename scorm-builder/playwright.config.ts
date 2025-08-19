@@ -56,7 +56,7 @@ export default defineConfig({
   /* Configure projects for Tauri desktop environments */
   projects: [
     {
-      name: 'Windows-WebView2',
+      name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'], // WebView2 is Chromium-based
         viewport: { width: 1280, height: 720 }, // Standard desktop size
@@ -64,42 +64,25 @@ export default defineConfig({
     },
 
     {
-      name: 'macOS-WKWebView',
+      name: 'firefox',
       use: { 
-        ...devices['Desktop Safari'], // WKWebView is WebKit-based
+        ...devices['Desktop Firefox'],
         viewport: { width: 1280, height: 720 },
       },
     },
 
     {
-      name: 'Linux-WebKitGTK',
+      name: 'webkit',
       use: { 
-        ...devices['Desktop Safari'], // WebKitGTK is also WebKit-based
+        ...devices['Desktop Safari'], // WebKit-based
         viewport: { width: 1280, height: 720 },
-      },
-    },
-
-    // Additional common desktop window sizes for responsive testing
-    {
-      name: 'Desktop-Large',
-      use: { 
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1920, height: 1080 },
-      },
-    },
-
-    {
-      name: 'Desktop-Small',
-      use: { 
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1024, height: 768 },
       },
     },
   ],
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run tauri:dev',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
     timeout: 180000, // 180 seconds

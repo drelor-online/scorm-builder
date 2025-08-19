@@ -156,6 +156,7 @@ export const Modal: React.FC<ModalProps> = ({
                 onClick={onClose}
                 aria-label="Close modal"
                 type="button"
+                data-testid="modal-close-button"
               >
                 <Icon icon={X} size="md" />
               </button>

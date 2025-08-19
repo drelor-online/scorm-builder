@@ -11,6 +11,9 @@
   max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
+  /* Ensure the badge appears above stepper (z-index: 40) but below header (z-index: 50) */
+  position: relative;
+  z-index: 45;
 }
 
 .badge-saving {

@@ -10,10 +10,10 @@ import {
   Modal
 } from './DesignSystem'
 import { tokens } from './DesignSystem/designTokens'
-import { Toast } from './Toast'
 import './DesignSystem/designSystem.css'
 import styles from './TemplateEditor.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
+import { useNotifications } from '../contexts/NotificationContext'
 
 interface TemplateEditorProps {
   onClose: () => void
@@ -52,6 +52,7 @@ const SAMPLE_DATA = {
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClose, onSave }) => {
   const storage = useStorage()
+  const { success, error: notifyError } = useNotifications()
   const [customTemplates, setCustomTemplates] = useState<CustomTemplates>({})
   
   const [editMode, setEditMode] = useState<'list' | 'create' | 'edit'>('list')
@@ -65,7 +66,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
     output: ''
   })
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<keyof typeof promptSections>('introduction')
   const textareaRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({})
@@ -135,7 +135,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
     delete newTemplates[templateName]
     setCustomTemplates(newTemplates)
     setShowDeleteConfirm(null)
-    setToast({ message: `Template "${templateName}" deleted`, type: 'success' })
+    success(`Template "${templateName}" deleted`)
   }
 
   const handleSave = () => {
@@ -168,10 +168,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
       [templateName]: newTemplate
     })
     
-    setToast({ 
-      message: editMode === 'create' ? 'Template created successfully' : 'Template updated successfully', 
-      type: 'success' 
-    })
+    success(editMode === 'create' ? 'Template created successfully' : 'Template updated successfully')
     
     setEditMode('list')
     if (onSave) onSave()
@@ -456,13 +453,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ onClose: _onClos
         </div>
       </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </>
   )
 }

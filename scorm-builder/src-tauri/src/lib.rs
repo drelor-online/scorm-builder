@@ -12,7 +12,8 @@ mod settings;
 // Import only non-duplicate commands from commands.rs
 use commands::{
     create_project, generate_scorm, generate_scorm_enhanced, get_app_settings, save_app_settings,
-    set_projects_dir,
+    set_projects_dir, take_screenshot, save_workflow_data, get_projects_directory, read_file_binary,
+    clean_workflow_files, export_workflow_zip, save_workflow_json,
 };
 // Import secure versions of project commands and other secure commands
 use commands_secure::{
@@ -81,7 +82,14 @@ pub fn run() {
             create_project_zip_with_progress,
             extract_project_zip,
             save_project_with_media,
-            update_imported_media_paths
+            update_imported_media_paths,
+            take_screenshot,
+            save_workflow_data,
+            get_projects_directory,
+            read_file_binary,
+            clean_workflow_files,
+            export_workflow_zip,
+            save_workflow_json
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

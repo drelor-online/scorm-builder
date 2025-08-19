@@ -1744,23 +1744,6 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem' }}>
-                      {media.type === 'video' && media.isYouTube && media.url && (
-                        <Button
-                          variant="primary"
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            // Open YouTube video in new tab for preview
-                            const videoUrl = media.url?.includes('embed') 
-                              ? media.url.replace('/embed/', '/watch?v=')
-                              : media.url
-                            window.open(videoUrl, '_blank')
-                          }}
-                          style={{ flex: 1 }}
-                        >
-                          Preview
-                        </Button>
-                      )}
                       <Button
                         variant="secondary"
                         size="small"
@@ -2361,6 +2344,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 variant="primary"
                 size="large"
                 onClick={handleLightboxConfirm}
+                data-testid="set-media-button"
               >
                 {existingPageMedia && existingPageMedia.length > 0 ? 'Replace Media' : 'Set Media'}
               </Button>

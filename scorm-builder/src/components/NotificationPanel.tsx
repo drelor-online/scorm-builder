@@ -167,6 +167,7 @@ export const NotificationPanel: React.FC = () => {
                 onClick={() => removeNotification(notification.id)}
                 aria-label="Dismiss notification"
                 tabIndex={0}
+                data-testid="notification-close-button"
               >
                 <X size={14} />
               </button>

@@ -47,7 +47,12 @@
     "analyze:ui": "npm run test:ai-ui && npm run report:ai",
     "analyze:ui:quick": "playwright test ai-ui-analysis.spec.ts --grep=\"Complete workflow\" && npm run report:ai",
     "test:ai-working": "playwright test working-ai-analysis.spec.ts --reporter=list",
-    "test:ai-working:headed": "playwright test working-ai-analysis.spec.ts --headed --reporter=list"
+    "test:ai-working:headed": "playwright test working-ai-analysis.spec.ts --headed --reporter=list",
+    "test:validation": "playwright test quick-validation.spec.ts --reporter=list",
+    "test:validation:headed": "playwright test quick-validation.spec.ts --headed --reporter=list",
+    "test:comprehensive": "playwright test comprehensive-ai-analysis.spec.ts --reporter=list,json",
+    "test:comprehensive:headed": "playwright test comprehensive-ai-analysis.spec.ts --headed --reporter=list",
+    "test:suite:all": "playwright test complete-user-journey.spec.ts performance-testing.spec.ts accessibility-and-responsive.spec.ts --reporter=list,json"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

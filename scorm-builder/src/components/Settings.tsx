@@ -4,13 +4,13 @@ import { Button } from './DesignSystem/Button'
 import { Input } from './DesignSystem/Input'
 import { Section, Grid } from './DesignSystem/Layout'
 import { Alert } from './DesignSystem/Alert'
-import { Toast } from './Toast'
 import { apiKeyStorage, ApiKeys } from '../services/ApiKeyStorage'
 import { logger, disableCategory, enableCategory, getDisabledCategories, clearDisabledCategories } from '../utils/logger'
 import { Tabs, Tab } from './DesignSystem/Tabs'
 import { Badge } from './DesignSystem/Badge'
 import { Icon } from './DesignSystem'
 import { Check, AlertTriangle, Eye, EyeOff, BookOpen } from 'lucide-react'
+import { useNotifications } from '../contexts/NotificationContext'
 
 interface SettingsProps {
   onSave?: (apiKeys: ApiKeys) => void
@@ -22,10 +22,9 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
     googleCseId: '',
     youtubeApiKey: ''
   })
-  const [showToast, setShowToast] = useState(false)
-  const [toastMessage, setToastMessage] = useState('')
   const [disabledLogCategories, setDisabledLogCategories] = useState<string[]>([])
   const [newCategory, setNewCategory] = useState('')
+  const { success, error: notifyError } = useNotifications()
   
   // Load API keys from encrypted file on mount
   useEffect(() => {
@@ -91,14 +90,10 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
       try {
         await apiKeyStorage.save(formData)
         console.log('API keys saved to encrypted file')
-        setToastMessage('API keys saved securely!')
-        setShowToast(true)
-        setTimeout(() => setShowToast(false), 3000)
+        success('API keys saved securely!')
       } catch (error) {
         console.error('Error saving API keys:', error)
-        setToastMessage('Failed to save API keys')
-        setShowToast(true)
-        setTimeout(() => setShowToast(false), 3000)
+        notifyError('Failed to save API keys')
       }
       
       onSave?.(formData)
@@ -353,13 +348,6 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
         </Tab>
       </Tabs>
       
-      {showToast && (
-        <Toast
-          message={toastMessage}
-          type={toastMessage.includes('success') ? 'success' : 'error'}
-          onClose={() => setShowToast(false)}
-        />
-      )}
     </Card>
   )
 }

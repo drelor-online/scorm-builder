@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
-import { Toast } from './Toast'
 import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveBadge } from './AutoSaveBadge'
 import { Check, Copy } from 'lucide-react'
 import { Card, Button } from './DesignSystem'
 import './DesignSystem/designSystem.css'
+import { useNotifications } from '../contexts/NotificationContext'
 import styles from './AIPromptGenerator.module.css'
 
 interface AIPromptGeneratorProps {
@@ -31,8 +31,8 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   onStepClick
 }) => {
   const [copied, setCopied] = useState(false)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false)
+  const { success, error: notifyError } = useNotifications()
   const [customPrompt, setCustomPrompt] = useState('')
   const [mounted, setMounted] = useState(false)
   // Removed history functionality per UX requirements
@@ -233,12 +233,12 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
     try {
       await navigator.clipboard.writeText(prompt)
       setCopied(true)
-      setToast({ message: 'Copied to clipboard!', type: 'success' })
+      success('Copied to clipboard!')
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       // Show user-friendly error without console.error
       setCopied(false)
-      setToast({ message: 'Failed to copy to clipboard. Please try selecting and copying manually.', type: 'error' })
+      notifyError('Failed to copy to clipboard. Please try selecting and copying manually.')
     }
   }
   
@@ -364,13 +364,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         </Card>
       </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
 
     </PageLayout>
   </>

@@ -561,3 +561,329 @@ mod tests {
         );
     }
 }
+
+// Workflow recording commands
+#[command]
+pub async fn take_screenshot(filename: String) -> Result<String, String> {
+    use screenshots::Screen;
+    
+    // Get projects directory or use temp directory
+    let projects_dir = project_storage::get_projects_directory()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    
+    let screenshots_dir = projects_dir.join("workflow-screenshots");
+    
+    // Create screenshots directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&screenshots_dir) {
+        return Err(format!("Failed to create screenshots directory: {}", e));
+    }
+    
+    let screenshot_path = screenshots_dir.join(&filename);
+    
+    // Take actual screenshot
+    match Screen::all() {
+        Ok(screens) => {
+            if let Some(screen) = screens.first() {
+                match screen.capture() {
+                    Ok(image) => {
+                        // Save image directly as PNG
+                        if let Err(e) = image.save(&screenshot_path) {
+                            return Err(format!("Failed to save screenshot: {}", e));
+                        }
+                        
+                        log_debug(&format!("Screenshot saved: {}", screenshot_path.display()));
+                        Ok(screenshot_path.to_string_lossy().to_string())
+                    }
+                    Err(e) => {
+                        log_debug(&format!("Failed to capture screenshot: {}, falling back to placeholder", e));
+                        // Fallback to placeholder file
+                        let placeholder_content = format!(
+                            "Screenshot failed: {}\nTimestamp: {}\nPath: {}",
+                            e,
+                            chrono::Utc::now().to_rfc3339(),
+                            screenshot_path.display()
+                        );
+                        
+                        if let Err(e) = std::fs::write(&screenshot_path, placeholder_content) {
+                            return Err(format!("Failed to save screenshot placeholder: {}", e));
+                        }
+                        
+                        Ok(screenshot_path.to_string_lossy().to_string())
+                    }
+                }
+            } else {
+                Err("No screens found".to_string())
+            }
+        }
+        Err(e) => {
+            Err(format!("Failed to get screens: {}", e))
+        }
+    }
+}
+
+#[command]
+pub async fn save_workflow_data(filename: String, data: String) -> Result<String, String> {
+    
+    // Get projects directory or use temp directory
+    let projects_dir = project_storage::get_projects_directory()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    
+    let workflow_dir = projects_dir.join("workflow-recordings");
+    
+    // Create workflow directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&workflow_dir) {
+        return Err(format!("Failed to create workflow directory: {}", e));
+    }
+    
+    let workflow_path = workflow_dir.join(&filename);
+    
+    if let Err(e) = std::fs::write(&workflow_path, data) {
+        return Err(format!("Failed to save workflow data: {}", e));
+    }
+    
+    log_debug(&format!("Workflow data saved: {}", workflow_path.display()));
+    Ok(workflow_path.to_string_lossy().to_string())
+}
+
+#[command]
+pub async fn get_projects_directory() -> Result<String, String> {
+    match project_storage::get_projects_directory() {
+        Ok(dir) => Ok(dir.to_string_lossy().to_string()),
+        Err(e) => Err(format!("Failed to get projects directory: {}", e))
+    }
+}
+
+#[command]
+pub async fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
+    match std::fs::read(&path) {
+        Ok(data) => Ok(data),
+        Err(e) => Err(format!("Failed to read file {}: {}", path, e))
+    }
+}
+
+#[command]
+pub async fn clean_workflow_files() -> Result<String, String> {
+    use std::fs;
+    
+    // Get projects directory or use temp directory
+    let projects_dir = project_storage::get_projects_directory()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    
+    let screenshots_dir = projects_dir.join("workflow-screenshots");
+    let recordings_dir = projects_dir.join("workflow-recordings");
+    
+    let mut deleted_count = 0;
+    let mut errors = Vec::new();
+    
+    // Clean screenshots directory
+    if screenshots_dir.exists() {
+        match fs::read_dir(&screenshots_dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_file() {
+                            match fs::remove_file(&path) {
+                                Ok(_) => {
+                                    deleted_count += 1;
+                                    log_debug(&format!("Deleted screenshot: {}", path.display()));
+                                }
+                                Err(e) => {
+                                    errors.push(format!("Failed to delete {}: {}", path.display(), e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => errors.push(format!("Failed to read screenshots directory: {}", e))
+        }
+    }
+    
+    // Clean recordings directory
+    if recordings_dir.exists() {
+        match fs::read_dir(&recordings_dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+                            match fs::remove_file(&path) {
+                                Ok(_) => {
+                                    deleted_count += 1;
+                                    log_debug(&format!("Deleted workflow: {}", path.display()));
+                                }
+                                Err(e) => {
+                                    errors.push(format!("Failed to delete {}: {}", path.display(), e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => errors.push(format!("Failed to read recordings directory: {}", e))
+        }
+    }
+    
+    let message = if errors.is_empty() {
+        format!("Successfully deleted {} workflow files", deleted_count)
+    } else {
+        format!("Deleted {} files with {} errors: {}", deleted_count, errors.len(), errors.join("; "))
+    };
+    
+    log_debug(&message);
+    Ok(message)
+}
+
+#[tauri::command]
+pub async fn export_workflow_zip(session_id: String, workflow_data: String) -> Result<String, String> {
+    use std::io::Write;
+    use zip::write::{FileOptions, ZipWriter};
+    
+    log_debug(&format!("Starting ZIP export for session: {}", session_id));
+    
+    // Get projects directory
+    let projects_dir = project_storage::get_projects_directory()?;
+    let screenshots_dir = projects_dir.join("workflow-screenshots");
+    let recordings_dir = projects_dir.join("workflow-recordings");
+    
+    // Create recordings directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&recordings_dir) {
+        return Err(format!("Failed to create recordings directory: {}", e));
+    }
+    
+    let zip_filename = format!("workflow-{}.zip", session_id);
+    let zip_path = recordings_dir.join(&zip_filename);
+    
+    // Parse workflow data to extract screenshot filenames
+    let workflow_json: serde_json::Value = serde_json::from_str(&workflow_data)
+        .map_err(|e| format!("Failed to parse workflow data: {}", e))?;
+    
+    let mut screenshot_files = Vec::new();
+    if let Some(interactions) = workflow_json["interactions"].as_array() {
+        for interaction in interactions {
+            if let Some(screenshot) = interaction["screenshot"].as_str() {
+                screenshot_files.push(screenshot.to_string());
+            }
+        }
+    }
+    
+    log_debug(&format!("Found {} screenshots to include in ZIP", screenshot_files.len()));
+    
+    // Create ZIP file
+    let zip_file = std::fs::File::create(&zip_path)
+        .map_err(|e| format!("Failed to create ZIP file: {}", e))?;
+    
+    let mut zip = ZipWriter::new(zip_file);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+    
+    // Add workflow JSON to ZIP
+    zip.start_file("workflow-data.json", options)
+        .map_err(|e| format!("Failed to start workflow JSON file in ZIP: {}", e))?;
+    zip.write_all(workflow_data.as_bytes())
+        .map_err(|e| format!("Failed to write workflow data to ZIP: {}", e))?;
+    
+    // Add README file
+    let readme_content = format!(
+        "# Workflow Recording Package\n\n\
+         Session ID: {}\n\
+         Exported: {}\n\n\
+         ## Contents\n\
+         - workflow-data.json: Complete interaction data and metadata\n\
+         - screenshots/: All screenshots captured during the session\n\n\
+         ## Usage\n\
+         This package contains a complete workflow recording that can be analyzed \
+         to understand user behavior and identify UI/UX issues.\n\n\
+         The workflow-data.json file contains:\n\
+         - All user interactions (clicks, inputs, navigation)\n\
+         - Step transitions and timestamps\n\
+         - Screenshot references\n\
+         - Browser and environment metadata\n",
+        session_id,
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    );
+    
+    zip.start_file("README.txt", options)
+        .map_err(|e| format!("Failed to start README file in ZIP: {}", e))?;
+    zip.write_all(readme_content.as_bytes())
+        .map_err(|e| format!("Failed to write README to ZIP: {}", e))?;
+    
+    // Add screenshots to ZIP
+    let mut screenshots_added = 0;
+    let mut screenshots_missing = 0;
+    
+    for screenshot_file in screenshot_files {
+        let screenshot_path = screenshots_dir.join(&screenshot_file);
+        let zip_screenshot_path = format!("screenshots/{}", screenshot_file);
+        
+        if screenshot_path.exists() {
+            match std::fs::read(&screenshot_path) {
+                Ok(screenshot_data) => {
+                    zip.start_file(&zip_screenshot_path, options)
+                        .map_err(|e| format!("Failed to start screenshot file in ZIP: {}", e))?;
+                    zip.write_all(&screenshot_data)
+                        .map_err(|e| format!("Failed to write screenshot to ZIP: {}", e))?;
+                    screenshots_added += 1;
+                    log_debug(&format!("Added screenshot to ZIP: {}", screenshot_file));
+                }
+                Err(e) => {
+                    log_debug(&format!("Failed to read screenshot {}: {}", screenshot_file, e));
+                    screenshots_missing += 1;
+                }
+            }
+        } else {
+            log_debug(&format!("Screenshot file not found: {}", screenshot_path.display()));
+            screenshots_missing += 1;
+        }
+    }
+    
+    // Finalize ZIP
+    zip.finish().map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+    
+    let summary = format!(
+        "ZIP export completed: {} (Added {} screenshots, {} missing)",
+        zip_path.display(),
+        screenshots_added,
+        screenshots_missing
+    );
+    
+    log_debug(&summary);
+    Ok(zip_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn save_workflow_json(session_id: String, workflow_data: String) -> Result<String, String> {
+    use std::io::Write;
+    
+    log_debug(&format!("Saving workflow JSON for session: {}", session_id));
+    
+    // Get projects directory
+    let projects_dir = project_storage::get_projects_directory()?;
+    let recordings_dir = projects_dir.join("workflow-recordings");
+    
+    // Create recordings directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&recordings_dir) {
+        return Err(format!("Failed to create recordings directory: {}", e));
+    }
+    
+    let json_filename = format!("workflow-{}.json", session_id);
+    let json_path = recordings_dir.join(&json_filename);
+    
+    // Write the JSON file
+    match std::fs::File::create(&json_path) {
+        Ok(mut file) => {
+            if let Err(e) = file.write_all(workflow_data.as_bytes()) {
+                return Err(format!("Failed to write workflow JSON file: {}", e));
+            }
+        }
+        Err(e) => {
+            return Err(format!("Failed to create workflow JSON file: {}", e));
+        }
+    }
+    
+    let success_message = format!("Workflow JSON saved: {}", json_filename);
+    log_debug(&success_message);
+    Ok(json_path.to_string_lossy().to_string())
+}

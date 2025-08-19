@@ -5,7 +5,7 @@ import { tokens } from './DesignSystem/designTokens'
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string
-  message: string
+  message: string | React.ReactNode
   confirmText?: string
   cancelText?: string
   variant?: 'danger' | 'warning' | 'info'
@@ -98,14 +98,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <div style={{
           padding: `${tokens.spacing['2xl']} ${tokens.spacing.xl}`
         }}>
-          <p style={{
+          <div style={{
             fontSize: tokens.typography.fontSize.base,
             lineHeight: 1.6,
             margin: 0,
             color: tokens.colors.text.primary
           }}>
             {message}
-          </p>
+          </div>
         </div>
 
         {/* Actions */}

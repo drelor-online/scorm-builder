@@ -832,22 +832,42 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       // Generate using Rust
       performanceMetrics.rustGenerationStart = Date.now()
+      
+      // Create timeout promise
+      const SCORM_GENERATION_TIMEOUT = 120000 // 2 minutes
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error(`SCORM generation timeout after ${SCORM_GENERATION_TIMEOUT / 1000} seconds. The operation may be too complex or there may be a system issue.`))
+        }, SCORM_GENERATION_TIMEOUT)
+        
+        // Clear timeout if generation completes normally
+        if (generationAbortController.current?.signal) {
+          generationAbortController.current.signal.addEventListener('abort', () => {
+            clearTimeout(timeoutId)
+          })
+        }
+      })
+      
       const result = await measureAsync(
         'scorm-generation',
         async () => {
           try {
-            return await generateRustSCORM(
-              enhancedContent,
-              storage.currentProjectId || 'default-project',
-              (message, progress) => {
-                setLoadingMessage(message)
-                // Map Rust progress (0-100) to our progress range (45-95)
-                const mappedProgress = 45 + (progress * 0.5)
-                setGenerationProgress(mappedProgress)
-                console.log('[SCORMPackageBuilder] Progress:', progress, message)
-              },
-              mediaFilesRef.current // Pass the pre-loaded media files
-            )
+            // Race between generation and timeout
+            return await Promise.race([
+              generateRustSCORM(
+                enhancedContent,
+                storage.currentProjectId || 'default-project',
+                (message, progress) => {
+                  setLoadingMessage(message)
+                  // Map Rust progress (0-100) to our progress range (45-95)
+                  const mappedProgress = 45 + (progress * 0.5)
+                  setGenerationProgress(mappedProgress)
+                  console.log('[SCORMPackageBuilder] Progress:', progress, message)
+                },
+                mediaFilesRef.current // Pass the pre-loaded media files
+              ),
+              timeoutPromise
+            ])
           } catch (rustError: unknown) {
             console.error('[SCORMPackageBuilder] Rust generation failed:', rustError)
             throw rustError
@@ -894,14 +914,29 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
     } catch (error) {
       console.error('Error generating SCORM package:', error)
-      const errorMsg = `Error generating SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
+      
+      // Handle timeout errors specifically
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const isTimeout = errorMessage.includes('timeout')
+      
+      let userMessage = errorMessage
+      if (isTimeout) {
+        userMessage = `SCORM generation timed out after 2 minutes. This may be due to:\n• Large course content or media files\n• System performance issues\n• Complex course structure\n\nTry reducing content size or check system resources.`
+        setLoadingMessage('Generation timed out - please try again')
+      } else if (errorMessage.includes('cancelled')) {
+        userMessage = 'SCORM generation was cancelled by user'
+        setLoadingMessage('Generation cancelled')
+      } else {
+        userMessage = `Error generating SCORM package: ${errorMessage}`
+        setLoadingMessage('Generation failed')
+      }
+      
       setMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
         type: 'error',
-        text: errorMsg
+        text: userMessage
       }])
-      notifyError(errorMsg)
-      setLoadingMessage('')
+      notifyError(isTimeout ? 'SCORM generation timed out' : userMessage)
     } finally {
       setIsGenerating(false)
       setIsLoadingMedia(false)
@@ -1115,6 +1150,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                 variant="primary"
                 size="large"
                 className="min-w-[250px]"
+                data-testid="generate-scorm-button"
               >
                 <Icon icon={Package} />
                 Generate SCORM Package
@@ -1148,41 +1184,6 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           <Card className="mb-6 border-blue-200">
             <div className="p-8">
               <div className="text-center">
-                {/* Circular Progress Indicator */}
-                <div className="relative inline-flex items-center justify-center w-24 h-24 mb-6">
-                  {/* Background circle */}
-                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 24 24">
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      fill="none"
-                      className="text-gray-200"
-                    />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      fill="none"
-                      strokeLinecap="round"
-                      className="text-blue-600 transition-all duration-300"
-                      style={{
-                        strokeDasharray: '62.83',
-                        strokeDashoffset: `${62.83 - (generationProgress / 100) * 62.83}`
-                      }}
-                    />
-                  </svg>
-                  {/* Progress percentage */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-lg font-bold text-blue-600">
-                      {Math.round(generationProgress)}%
-                    </span>
-                  </div>
-                </div>
                 
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Generating SCORM Package
@@ -1214,16 +1215,27 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   )}
                   
                   {isCancellable && !isGenerationCancelled && (
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={cancelGeneration}
-                      className="text-gray-600 hover:text-red-600"
-                      aria-label="Cancel SCORM package generation"
-                      title="Cancel SCORM package generation"
-                    >
-                      Cancel
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      {/* Timeout warning when approaching limit */}
+                      {elapsedTime > 90 && (
+                        <div className="flex items-center gap-1 text-orange-600 text-sm">
+                          <Icon icon={AlertCircle} size="xs" />
+                          <span>Timing out in {Math.max(0, 120 - elapsedTime).toFixed(0)}s</span>
+                        </div>
+                      )}
+                      
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={cancelGeneration}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        aria-label="Cancel SCORM package generation"
+                        title="Cancel SCORM package generation"
+                      >
+                        <Icon icon={X} size="xs" />
+                        Cancel
+                      </Button>
+                    </div>
                   )}
                 </div>
                 

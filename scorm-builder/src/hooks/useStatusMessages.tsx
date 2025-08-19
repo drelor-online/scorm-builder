@@ -9,17 +9,44 @@ export const useStatusMessages = () => {
     title: string,
     message: string
   ) => {
-    const newMessage: StatusMessage = {
-      id: `status-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      title,
-      message,
-      timestamp: Date.now()
+    const now = Date.now()
+    const DUPLICATE_THRESHOLD = 3000 // 3 seconds
+    
+    // Check for recent duplicate messages (same type, title, and message)
+    const isDuplicate = (msg: StatusMessage) => {
+      return msg.type === type && 
+             msg.title === title && 
+             msg.message === message &&
+             !msg.dismissed &&
+             (now - msg.timestamp) < DUPLICATE_THRESHOLD
     }
     
-    setMessages(prev => [newMessage, ...prev])
+    // Don't add duplicate if a recent identical message exists
+    const hasDuplicate = (prevMessages: StatusMessage[]) => {
+      return prevMessages.some(isDuplicate)
+    }
     
-    return newMessage.id
+    let messageId: string = ''
+    
+    setMessages(prev => {
+      if (hasDuplicate(prev)) {
+        // Return existing messages without adding duplicate
+        return prev
+      }
+      
+      const newMessage: StatusMessage = {
+        id: `status-${now}-${Math.random().toString(36).substr(2, 9)}`,
+        type,
+        title,
+        message,
+        timestamp: now
+      }
+      
+      messageId = newMessage.id
+      return [newMessage, ...prev]
+    })
+    
+    return messageId
   }, [])
   
   const addSuccess = useCallback((title: string, message: string) => {

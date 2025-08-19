@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
@@ -30,6 +30,7 @@ interface Project {
 
 interface ProjectDashboardProps {
   onProjectSelected: (projectId: string) => void
+  onSecretClick?: () => void // For beta feature activation
 }
 
 // Helper function to safely format dates
@@ -71,7 +72,7 @@ function formatProjectDate(project: Project): string {
   }
 }
 
-export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
+export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDashboardProps) {
   const storage = useStorage()
   const { success, error: notifyError, info } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
@@ -90,10 +91,42 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
   const [exportingProjectId, setExportingProjectId] = useState<string | null>(null)
   const [runningAutomation, setRunningAutomation] = useState(false)
   const [showAutomationMenu, setShowAutomationMenu] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+  
+  // Secret click functionality for beta features
+  const [clickCount, setClickCount] = useState(0)
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  const handleSecretClick = useCallback(() => {
+    if (!onSecretClick) return
+    
+    setClickCount(prev => {
+      const newCount = prev + 1
+      
+      // Clear existing timeout
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current)
+      }
+      
+      // Set new timeout - reset after 2 seconds of no clicks
+      clickTimeoutRef.current = setTimeout(() => {
+        setClickCount(0)
+      }, 2000)
+      
+      // Trigger secret functionality after 5 clicks
+      if (newCount >= 5) {
+        onSecretClick()
+        setClickCount(0) // Reset counter
+        if (clickTimeoutRef.current) {
+          clearTimeout(clickTimeoutRef.current)
+        }
+      }
+      
+      return newCount
+    })
+  }, [onSecretClick])
   
   useEffect(() => {
     if (storage.isInitialized) {
@@ -303,25 +336,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
     }
   }
   
-  async function handleOpenFromFile() {
-    try {
-      debugLogger.info('ProjectDashboard.handleOpenFromFile', 'Opening project from file dialog')
-      
-      await storage.openProjectFromFile()
-      const currentProjectId = storage.currentProjectId
-      
-      if (currentProjectId) {
-        debugLogger.debug('ProjectDashboard.handleOpenFromFile', 'Project opened', {
-          projectId: currentProjectId
-        })
-        onProjectSelected(currentProjectId)
-      } else {
-        debugLogger.warn('ProjectDashboard.handleOpenFromFile', 'No project ID after opening file')
-      }
-    } catch (error) {
-      debugLogger.error('ProjectDashboard.handleOpenFromFile', 'Failed to open project file', error)
-    }
-  }
   
   async function handleDeleteProject(projectId: string) {
     try {
@@ -604,7 +618,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
 
   async function handleRunAutomation() {
     // Automation features have been removed
-    info('Automation features are currently disabled')
+    // UI should handle this by hiding the automation button
   }
   
   if (loading) {
@@ -638,7 +652,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       onDrop={handleDrop}
     >
       <div className={styles.dashboardHeader}>
-        <h1 className={styles.headerTitle}>SCORM Builder Projects</h1>
+        <h1 
+          className={styles.headerTitle}
+          onClick={handleSecretClick}
+          style={{ cursor: onSecretClick ? 'pointer' : 'default' }}
+          title={onSecretClick ? `Click ${5 - clickCount} more times to activate beta features` : undefined}
+        >
+          SCORM Builder Projects
+        </h1>
         <div className={styles.folderInfo}>
           <span className={styles.folderLabel}>Default Folder:</span>
           <span 
@@ -685,32 +706,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               Create New Project
             </Button>
           </Tooltip>
-          
-          {/* Manual Recording Button - Only show in development */}
-          {envConfig.isDevelopment && (
-            <Tooltip content={isRecording ? "Stop recording your actions" : "Record your manual testing session"} position="bottom">
-              <Button
-                onClick={() => {
-                  // Recording features have been removed
-                  info('Recording features are currently disabled')
-                }}
-                variant={isRecording ? "danger" : "secondary"}
-                data-testid="manual-recording-button"
-              >
-                {isRecording ? (
-                  <>
-                    <span className={styles.recordingIndicator}>●</span>
-                    Stop Recording
-                  </>
-                ) : (
-                  <>
-                    <span className={styles.recordingIcon}>🎬</span>
-                    Record Session
-                  </>
-                )}
-              </Button>
-            </Tooltip>
-          )}
           <Tooltip content="Clear cache to fix stuck or problematic projects" position="bottom">
             <Button 
               variant="secondary"
@@ -849,6 +844,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                         onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
                         aria-label={`Delete project ${project.name}`}
                         disabled={renamingProjectId !== null}
+                        data-testid={`delete-project-${project.id}`}
                       >
                         Delete
                       </Button>
@@ -892,7 +888,8 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             </div>
           </div>
           <p className="empty-state-get-started">
-            Ready to create your first course? You can start from scratch or open an existing project.
+            Ready to create your first course? The app automatically scans your working folder for existing projects. 
+            If you don't see your existing projects listed, check that the working folder is set correctly above.
           </p>
           <div className="empty-state-actions">
             <Button 
@@ -901,13 +898,6 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
               onClick={() => setShowNewProjectDialog(true)}
             >
               Create Your First Project
-            </Button>
-            <Button 
-              variant="secondary"
-              size="large"
-              onClick={handleOpenFromFile}
-            >
-              Open Existing Project
             </Button>
           </div>
         </div>
@@ -1019,6 +1009,7 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
                     onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
                     aria-label={`Delete project ${project.name}`}
                     disabled={renamingProjectId !== null}
+                    data-testid={`delete-project-${project.id}`}
                   >
                     Delete
                   </Button>
@@ -1042,6 +1033,12 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
       >
         <div className="new-project-form">
           <input
+            ref={(input) => {
+              if (input && showNewProjectDialog) {
+                // Focus the input after the modal animation completes
+                setTimeout(() => input.focus(), 100);
+              }
+            }}
             type="text"
             placeholder="Enter project name (Press Enter to create)"
             value={newProjectName}
@@ -1088,12 +1085,14 @@ export function ProjectDashboard({ onProjectSelected }: ProjectDashboardProps) {
             <Button
               variant="secondary"
               onClick={() => setDeleteConfirm(null)}
+              data-testid="delete-cancel-button"
             >
               Cancel
             </Button>
             <Button
               variant="danger"
               onClick={() => deleteConfirm && handleDeleteProject(deleteConfirm.path || deleteConfirm.id)}
+              data-testid="delete-confirm-button"
             >
               Delete
             </Button>

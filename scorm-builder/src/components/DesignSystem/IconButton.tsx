@@ -14,6 +14,7 @@ interface IconButtonProps {
   className?: string
   ariaLabel?: string
   children?: React.ReactNode
+  'data-testid'?: string
 }
 
 const variantStyles = {
@@ -82,7 +83,8 @@ export const IconButton: React.FC<IconButtonProps> = ({
   tooltip,
   className = '',
   ariaLabel,
-  children
+  children,
+  'data-testid': dataTestId
 }) => {
   const variantStyle = variantStyles[variant]
   const sizeStyle = sizeStyles[size]
@@ -131,6 +133,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
         onBlur={handleMouseLeave}
         aria-label={ariaLabel || tooltip}
         title={tooltip}
+        data-testid={dataTestId}
       >
         <Icon icon={icon} size={sizeStyle.iconSize} />
         {children && <span>{children}</span>}

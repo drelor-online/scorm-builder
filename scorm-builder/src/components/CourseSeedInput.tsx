@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CourseSeedData, CourseTemplate, templateTopics } from '../types/course';
 import { PageLayout } from './PageLayout';
 import { TemplateEditor } from './TemplateEditor';
-import { DraggableTopicList } from './DraggableTopicList';
 import { useFormChanges } from '../hooks/useFormChanges';
 import { AutoSaveBadge } from './AutoSaveBadge';
 import { 
@@ -17,7 +16,7 @@ import {
   Alert,
   Icon
 } from './DesignSystem';
-import { Lock, Edit2, FileText, Trash2, Clock, List, GripVertical } from 'lucide-react';
+import { Lock, Edit2, FileText, Trash2, Clock, List } from 'lucide-react';
 import { tokens } from './DesignSystem/designTokens';
 import './DesignSystem/designSystem.css';
 import styles from './CourseSeedInput.module.css';
@@ -110,27 +109,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showTemplatePreview, setShowTemplatePreview] = useState(false)
   const [isTopicsEditable, setIsTopicsEditable] = useState(true)
-  const [useDragAndDrop, setUseDragAndDrop] = useState(false)
   
-  // Helper functions for topic management
-  const getTopicsArray = (): string[] => {
-    return customTopics
-      .split('\n')
-      .map(topic => topic.trim())
-      .filter(topic => topic.length > 0)
-  }
   
-  const setTopicsFromArray = (topics: string[]) => {
-    setCustomTopics(topics.join('\n'))
-  }
-  
-  const switchToTextarea = () => {
-    setUseDragAndDrop(false)
-  }
-  
-  const switchToDragAndDrop = () => {
-    setUseDragAndDrop(true)
-  }
   
   // Load custom templates from file storage
   useEffect(() => {
@@ -222,7 +202,11 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       // Only update fields that are currently empty/default to avoid overriding user selections
       // Don't sync if user has already made changes (check against initial defaults)
       const userHasChangedTemplate = template !== 'None' && template !== initialData.template
-      const userHasChangedTopics = customTopics.trim().length > 0 && !initialData.customTopics?.length
+      // Protect user-added topics: if user has topics and initialData doesn't, or if topics differ significantly
+      const userHasChangedTopics = customTopics.trim().length > 0 && (
+        !initialData.customTopics?.length || 
+        customTopics.trim() !== initialData.customTopics?.join('\n').trim()
+      )
       
       if (!courseTitle && initialData.courseTitle) {
         setCourseTitle(initialData.courseTitle)
@@ -239,7 +223,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         newValues.difficulty = initialData.difficulty
       }
       
-      if (!customTopics && initialData.customTopics?.length && !userHasChangedTopics) {
+      // Only sync topics if the user hasn't added any topics AND initialData has topics
+      // AND we're not overriding user-added template topics
+      if (!customTopics.trim() && initialData.customTopics?.length && !userHasChangedTopics) {
         const topicsStr = initialData.customTopics.join('\n')
         setCustomTopics(topicsStr)
         newValues.customTopics = topicsStr
@@ -758,6 +744,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     onClick={addTemplateTopics}
                     type="button"
                     data-testid="add-template-topics"
+                    className={styles.templateButtonSpacing}
                   >
                     + Add Template Topics
                   </Button>
@@ -783,6 +770,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         size="small"
                         onClick={() => setIsTopicsEditable(!isTopicsEditable)}
                         type="button"
+                        data-testid="edit-topics-button"
                       >
                         <>
                           <Icon icon={isTopicsEditable ? Lock : Edit2} size="sm" />
@@ -800,6 +788,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                           }
                         }}
                         type="button"
+                        data-testid="clear-topics-button"
                       >
                         <>
                           <Icon icon={Trash2} size="sm" />
@@ -807,38 +796,11 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         </>
                       </Button>
                       
-                      {/* Switch between drag-and-drop and textarea */}
-                      {customTopics.trim() && (
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={useDragAndDrop ? switchToTextarea : switchToDragAndDrop}
-                          type="button"
-                          aria-label={useDragAndDrop ? 'Switch to text editor' : 'Switch to drag and drop'}
-                          title={useDragAndDrop ? 'Switch to text editor' : 'Switch to drag and drop reordering'}
-                        >
-                          <>
-                            <Icon icon={useDragAndDrop ? FileText : GripVertical} size="sm" />
-                            {useDragAndDrop ? 'Edit as Text' : 'Drag & Drop'}
-                          </>
-                        </Button>
-                      )}
                     </>
                   )}
                 </ButtonGroup>
               </Flex>
-              {/* Conditional rendering: DraggableTopicList or textarea */}
-              {useDragAndDrop && customTopics.trim() ? (
-                <DraggableTopicList
-                  topics={getTopicsArray()}
-                  onChange={(newTopics) => {
-                    setTopicsFromArray(newTopics)
-                    markDirty('courseSeed')
-                  }}
-                  onSwitchToTextarea={switchToTextarea}
-                  className={styles.dragDropContainer}
-                />
-              ) : (
+              {/* Topics textarea */}
                 <textarea
                   id="topics-textarea"
                   placeholder={`List your course topics (one per line):\n\n• Introduction to workplace safety\n• Hazard identification techniques\n• Personal protective equipment\n• Emergency response procedures\n• Incident reporting protocols`}
@@ -860,7 +822,6 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                     cursor: isTopicsEditable ? 'text' : 'not-allowed'
                   }}
                 />
-              )}
             </div>
             <Flex gap="large" className={styles.tipText}>
               <span className={styles.tipItem}>

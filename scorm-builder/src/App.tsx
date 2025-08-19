@@ -22,7 +22,6 @@ initializeLoggerConfig()
 // Components
 import { CourseSeedInput } from '@/components/CourseSeedInput'
 import { Button } from '@/components/DesignSystem'
-import { DebugPanel } from '@/components/DebugPanel'
 import { StatusPanel } from '@/components/StatusPanel'
 
 // Lazy load step components
@@ -66,7 +65,6 @@ const HelpPage = lazy(() =>
 )
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
-import { NotificationPanel } from '@/components/NotificationPanel'
 import { NetworkStatusIndicator } from '@/components/DesignSystem'
 // LoadingComponent removed - using inline loading
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
@@ -130,6 +128,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
+  const [isStatusPanelDocked, setIsStatusPanelDocked] = useState(false)
 
   // Set up debug log export on window close
   useEffect(() => {
@@ -896,7 +895,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         projectId: storage.currentProjectId,
         timestamp: new Date().toISOString()
       })
-      success('Project saved successfully')
+      // Use only StatusPanel notifications, not the old blue popup system
       statusMessages.addSuccess('Project Saved', 'All changes have been saved successfully')
       resetAllUnsavedChanges()
       lastSavedTimeRef.current = new Date().toISOString() // Update last saved time
@@ -1077,6 +1076,26 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'seed' })
       } catch (error) {
         console.error('Failed to save current step:', error)
+      }
+    }
+  }
+
+  const handleClearCourseContent = async () => {
+    // Clear all course content when JSON is cleared
+    setCourseContent(null)
+    
+    // Navigate back to JSON step when course content is cleared
+    navigation.navigateToStep(2) // JSON step
+    
+    // Save the cleared state
+    if (storage.currentProjectId) {
+      try {
+        await storage.saveCourseContent(null)
+        await storage.saveContent('currentStep', { step: 'json' })
+        debugLogger.info('App', 'Course content cleared and subsequent pages locked')
+      } catch (error) {
+        debugLogger.error('App', 'Failed to save cleared course content state', { error })
+        console.error('Failed to save cleared course content state:', error)
       }
     }
   }
@@ -1578,6 +1597,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }, [activeDialog])
 
+  // StatusPanel handlers
+  const handleStatusPanelDock = () => {
+    setIsStatusPanelDocked(true)
+  }
+
+  const handleStatusPanelUndock = () => {
+    setIsStatusPanelDocked(false)
+  }
+
   return (
     <ErrorBoundary>
         <UnifiedMediaProvider projectId={storage.currentProjectId || ''}>
@@ -1602,6 +1630,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           messages={statusMessages.messages}
           onDismiss={statusMessages.dismissMessage}
           onClearAll={statusMessages.clearAllMessages}
+          isDocked={isStatusPanelDocked}
+          onDock={handleStatusPanelDock}
+          onUndock={handleStatusPanelUndock}
         />
         
         {/* Notification Panel is now rendered at the app root level */}
@@ -1677,7 +1708,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           </Suspense>
         )}
         
-        {!activeDialog && (
+        <div style={{ display: activeDialog ? 'none' : 'block' }}>
           <AutoSaveProvider 
             isSaving={autoSaveState.isSaving || isSaving}
             lastSaved={autoSaveState.lastSaved}
@@ -1740,6 +1771,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 <JSONImportValidator
                   onNext={handleJSONNext}
                   onBack={handleJSONBack}
+                  onClearData={handleClearCourseContent}
                   onSettingsClick={() => showDialog('settings')}
                   onHelp={() => showDialog('help')}
                   onSave={(content?: CourseContentUnion, silent?: boolean) => {
@@ -1803,21 +1835,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Loading Course Content...</h2>
+                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Media Enhancement Locked</h2>
                     <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
-                      {!courseContent ? 'Course content is not available. Please go back to the JSON Import step.' : 'Course seed data is missing.'}
+                      {!courseContent ? 'Please import JSON data first to unlock this page.' : 'Course seed data is missing.'}
                     </p>
                     <Button onClick={handleMediaBack} variant="secondary">
-                      Go Back
+                      Go Back to JSON Import
                     </Button>
                   </div>
                 )}
               </Suspense>
             )}
             
-            {currentStep === 'audio' && courseContent && courseSeedData && (
+            {currentStep === 'audio' && (
               <Suspense fallback={<LoadingComponent />}>
-                <AudioNarrationWizard
+                {courseContent && courseSeedData ? (
+                  <AudioNarrationWizard
                   courseContent={createMutationSafeContent(courseContent)}
                   courseSeedData={courseSeedData}
                   onNext={handleAudioNext}
@@ -1859,12 +1892,33 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
+                ) : (
+                  <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center',
+                    backgroundColor: COLORS.background,
+                    minHeight: '100vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Audio Narration Locked</h2>
+                    <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
+                      {!courseContent ? 'Please import JSON data first to unlock this page.' : 'Course seed data is missing.'}
+                    </p>
+                    <Button onClick={handleAudioBack} variant="secondary">
+                      Go Back to JSON Import
+                    </Button>
+                  </div>
+                )}
               </Suspense>
             )}
             
-            {currentStep === 'activities' && courseContent && courseSeedData && (
+            {currentStep === 'activities' && (
               <Suspense fallback={<LoadingComponent />}>
-                <ActivitiesEditor
+                {courseContent && courseSeedData ? (
+                  <ActivitiesEditor
                   courseContent={createMutationSafeContent(courseContent)}
                   courseSeedData={courseSeedData}
                   onNext={handleActivitiesNext}
@@ -1888,6 +1942,26 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   onOpen={handleOpen}
                   onStepClick={handleStepClick}
                 />
+                ) : (
+                  <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center',
+                    backgroundColor: COLORS.background,
+                    minHeight: '100vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Activities Editor Locked</h2>
+                    <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
+                      {!courseContent ? 'Please import JSON data first to unlock this page.' : 'Course seed data is missing.'}
+                    </p>
+                    <Button onClick={handleActivitiesBack} variant="secondary">
+                      Go Back to JSON Import
+                    </Button>
+                  </div>
+                )}
               </Suspense>
             )}
             
@@ -1898,11 +1972,23 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   
                   if (!courseContent || !courseSeedData) {
                     return (
-                      <div style={{ padding: '2rem', color: 'red' }}>
-                        <h2>Missing Required Data</h2>
-                        <p>Course Content: {courseContent ? 'Present' : 'Missing'}</p>
-                        <p>Course Seed Data: {courseSeedData ? 'Present' : 'Missing'}</p>
-                        {courseSeedData && <pre>{JSON.stringify(courseSeedData, null, 2)}</pre>}
+                      <div style={{ 
+                        padding: '2rem', 
+                        textAlign: 'center',
+                        backgroundColor: COLORS.background,
+                        minHeight: '100vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>SCORM Package Builder Locked</h2>
+                        <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
+                          {!courseContent ? 'Please import JSON data first to unlock this page.' : 'Course seed data is missing.'}
+                        </p>
+                        <Button onClick={handleSCORMBack} variant="secondary">
+                          Go Back to JSON Import
+                        </Button>
                       </div>
                     );
                   }
@@ -1933,7 +2019,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
               </Suspense>
             )}
           </AutoSaveProvider>
-        )}
+        </div>
       </main>
       
       
@@ -1957,11 +2043,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       />
       
       
-      {/* Notifications for course editing context */}
-      <NotificationPanel />
       
-      {/* Debug Panel - Always accessible */}
-      <DebugPanel />
       
       </div>
         </UnifiedMediaProvider>

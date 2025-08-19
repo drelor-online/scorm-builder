@@ -267,7 +267,9 @@ export class FileStorage {
           
           // Re-queue this save with exponential backoff
           this.saveTimeouts.set(contentId, setTimeout(() => {
-            this.saveContent(contentId, this.saveQueue.get(contentId)).then(resolve).catch(reject);
+            const queuedEntry = this.saveQueue.get(contentId);
+            const actualContent = queuedEntry?.data || queuedEntry;
+            this.saveContent(contentId, actualContent).then(resolve).catch(reject);
           }, backoffDelay));
           return;
         }
@@ -280,11 +282,14 @@ export class FileStorage {
         
         try {
           // Get the queued content
-          const queuedContent = this.saveQueue.get(contentId);
+          const queuedEntry = this.saveQueue.get(contentId);
           this.saveQueue.delete(contentId);
           
+          // Extract the actual data from the queue entry
+          const actualContent = queuedEntry?.data || queuedEntry;
+          
           // Perform the actual save
-          await this.performSave(contentId, queuedContent);
+          await this.performSave(contentId, actualContent);
           resolve();
         } catch (error) {
           debugLogger.error('FileStorage.saveContent', `Save failed for: ${contentId}`, error);

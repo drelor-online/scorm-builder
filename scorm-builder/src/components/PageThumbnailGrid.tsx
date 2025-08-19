@@ -16,8 +16,8 @@ interface PageThumbnailGridProps {
 }
 
 // Media Preview Component - Memoized for performance
-const MediaPreview: React.FC<{ page: Page | Topic }> = memo(({ page }) => {
-  const { getMediaForPage, createBlobUrl } = useUnifiedMedia()
+const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo(({ page, mediaItems }) => {
+  const { createBlobUrl } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const mediaIdRef = React.useRef<string | null>(null)
@@ -33,10 +33,8 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = memo(({ page }) => {
       // Clear previous media URL to avoid showing stale content
       setMediaUrl(null)
       
-      // Get media from context instead of expecting it on the page object
-      // This ensures it works for both new pages and pages loaded from storage
-      const pageMediaRefs = getMediaForPage(page.id) || []
-      console.log(`[PageThumbnailGrid] Page ${page.id} has ${pageMediaRefs.length} media items (retry ${retryCount}/${MAX_RETRIES}):`, pageMediaRefs)
+      // Use the media items passed as props instead of calling getMediaForPage
+      const pageMediaRefs = mediaItems
       
       // Log detailed info about each media item
       pageMediaRefs.forEach((media: any, index: number) => {
@@ -224,10 +222,9 @@ const MediaPreview: React.FC<{ page: Page | Topic }> = memo(({ page }) => {
       // Revoking them here causes images to fail loading when components re-render
       // The UnifiedMediaContext manages the blob URL cache globally
     }
-  }, [page.id, getMediaForPage, createBlobUrl, retryCount])
+  }, [page.id, mediaItems, createBlobUrl, retryCount])
   
-  // Check for video in media from context
-  const mediaItems = getMediaForPage(page.id) || []
+  // Check for video in media items passed as props
   const hasVideo = mediaItems.some(m => m.type === 'video')
   
   if (!mediaUrl) {
@@ -292,25 +289,34 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   // Get context to access media
   const { getMediaForPage } = useUnifiedMedia()
   
-  // Helper to get media count (only image/video, not audio/captions) - memoized
-  const getMediaCount = useCallback((page: Page | Topic): number => {
-    // Get media from context instead of page object
-    const mediaItems = getMediaForPage(page.id) || []
-    // Only count image and video media types for enhancement purposes
-    return mediaItems.filter(m => m.type === 'image' || m.type === 'video').length
-  }, [getMediaForPage])
-
-  // Helper to check if page has media - memoized
-  const hasMedia = useCallback((page: Page | Topic): boolean => {
-    return getMediaCount(page) > 0
-  }, [getMediaCount])
-
-  // Create array of all pages - memoized to prevent recreation
+  // Create array of all pages first - memoized to prevent recreation
   const allPages: Array<Page | Topic> = useMemo(() => [
     courseContent.welcomePage,
     (courseContent as any).objectivesPage || courseContent.learningObjectivesPage, // Handle both naming conventions
     ...(Array.isArray(courseContent.topics) ? courseContent.topics : [])
   ].filter(Boolean), [courseContent]) // Remove any undefined entries
+  
+  // Memoize media data for all pages to prevent redundant calls
+  const pageMediaMap = useMemo(() => {
+    const map = new Map<string, any[]>()
+    allPages.forEach(page => {
+      map.set(page.id, getMediaForPage(page.id) || [])
+    })
+    return map
+  }, [allPages, getMediaForPage])
+  
+  // Helper to get media count (only image/video, not audio/captions) - memoized
+  const getMediaCount = useCallback((page: Page | Topic): number => {
+    // Get media from memoized map instead of calling getMediaForPage repeatedly
+    const mediaItems = pageMediaMap.get(page.id) || []
+    // Only count image and video media types for enhancement purposes
+    return mediaItems.filter(m => m.type === 'image' || m.type === 'video').length
+  }, [pageMediaMap])
+
+  // Helper to check if page has media - memoized
+  const hasMedia = useCallback((page: Page | Topic): boolean => {
+    return getMediaCount(page) > 0
+  }, [getMediaCount])
 
   return (
     <div 
@@ -318,15 +324,6 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
       className={styles.thumbnailGrid}
     >
       {allPages.map((page, index) => {
-        // Debug logging to verify page structure
-        const mediaFromContext = getMediaForPage(page.id) || []
-        console.log(`[PageThumbnailGrid] Rendering page ${page.id}:`, {
-          hasMediaInContext: mediaFromContext.length > 0,
-          mediaCountFromContext: mediaFromContext.length,
-          mediaFromContext: mediaFromContext,
-          pageKeys: Object.keys(page)
-        })
-        
         const isWelcome = page.id === 'welcome' || page.id === 'content-0'
         const isObjectives = page.id === 'objectives' || page.id === 'learning-objectives' || page.id === 'content-1'
         const isCurrent = page.id === currentPageId
@@ -375,7 +372,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
 
             {/* Media Preview */}
             {hasMedia(page) && (
-              <MediaPreview page={page} />
+              <MediaPreview page={page} mediaItems={pageMediaMap.get(page.id) || []} />
             )}
 
             {/* Content Preview - Only show if no media */}

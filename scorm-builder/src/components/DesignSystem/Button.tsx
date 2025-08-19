@@ -9,6 +9,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   icon?: React.ReactNode
   children: React.ReactNode
   loading?: boolean
+  'data-testid'?: string
 }
 
 const ButtonComponent = React.forwardRef<HTMLButtonElement, ButtonProps>(({

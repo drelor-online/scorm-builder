@@ -224,6 +224,7 @@ export const HelpPage: React.FC<HelpPageProps> = ({
               <Button
                 variant="primary"
                 onClick={onBack}
+                data-testid="help-back-button"
               >
                 <Icon icon={ArrowLeft} />
                 Back to Course Builder

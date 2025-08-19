@@ -128,6 +128,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     size="medium"
                     aria-label="Save project"
                     disabled={isSaving || !onSave}
+                    data-testid="save-button"
                   >
                     {isSaving ? 'Saving...' : 'Save'}
                   </Button>
@@ -150,6 +151,7 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
                     variant="secondary"
                     size="medium"
                     aria-label="Help documentation"
+                    data-testid="help-button"
                   >
                     Help
                   </Button>

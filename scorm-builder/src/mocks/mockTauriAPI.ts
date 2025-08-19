@@ -98,6 +98,21 @@ const mockTauriAPI = {
         console.log('[Mock Tauri] Opening path:', args?.path);
         return true;
         
+      case 'take_screenshot':
+        // Mock screenshot functionality
+        const screenshotName = args?.filename || `screenshot-${Date.now()}.png`;
+        console.log('[Mock Tauri] Taking screenshot:', screenshotName);
+        // Return a mock path
+        return `/mock/screenshots/${screenshotName}`;
+        
+      case 'save_workflow_data':
+        // Mock workflow data saving
+        const workflowName = args?.filename || `workflow-${Date.now()}.json`;
+        console.log('[Mock Tauri] Saving workflow data:', workflowName);
+        console.log('[Mock Tauri] Workflow data length:', args?.data?.length || 0);
+        // Return a mock path
+        return `/mock/workflow-recordings/${workflowName}`;
+        
       default:
         console.warn('[Mock Tauri] Unhandled command:', cmd);
         return null;

@@ -18,7 +18,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const [editorContent, setEditorContent] = useState(content)
   const editorRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [selectedHeading, setSelectedHeading] = useState('normal')
+  const [isHtmlMode, setIsHtmlMode] = useState(false)
   const hasSetContent = useRef(false)
 
   useEffect(() => {
@@ -32,13 +34,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     if (isOpen && !hasSetContent.current) {
       // Wait for modal animation and DOM to be ready
       const initializeContent = () => {
+        const sanitizedContent = content ? DOMPurify.sanitize(content) : ''
+        setEditorContent(content || '')
+        hasSetContent.current = true
+        
         if (editorRef.current) {
-          // Set the content directly in the contentEditable div
-          // Handle both empty and populated content
-          const sanitizedContent = content ? DOMPurify.sanitize(content) : ''
           editorRef.current.innerHTML = sanitizedContent
-          setEditorContent(content || '')
-          hasSetContent.current = true
           
           // Force the browser to recognize the content change
           if (content) {
@@ -63,6 +64,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             }, 50)
           }
         }
+        
+        if (textareaRef.current) {
+          textareaRef.current.value = sanitizedContent
+        }
       }
 
       // Use requestAnimationFrame to wait for Modal animation
@@ -72,6 +77,15 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       })
     }
   }, [isOpen, content])
+
+  // Sync content when mode changes
+  useEffect(() => {
+    if (isHtmlMode && textareaRef.current) {
+      textareaRef.current.value = editorContent
+    } else if (!isHtmlMode && editorRef.current && hasSetContent.current) {
+      editorRef.current.innerHTML = DOMPurify.sanitize(editorContent)
+    }
+  }, [isHtmlMode, editorContent])
 
   const execCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value)
@@ -98,14 +112,40 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }
 
   const handleSave = () => {
-    if (editorRef.current) {
-      const cleanedContent = DOMPurify.sanitize(editorRef.current.innerHTML)
-      onSave(cleanedContent)
+    let content: string
+    if (isHtmlMode && textareaRef.current) {
+      content = DOMPurify.sanitize(textareaRef.current.value)
+    } else if (editorRef.current) {
+      content = DOMPurify.sanitize(editorRef.current.innerHTML)
+    } else {
+      content = editorContent
     }
+    onSave(content)
+  }
+
+  const handleToggleMode = () => {
+    if (isHtmlMode) {
+      // Switching from HTML to Rich Text
+      if (textareaRef.current) {
+        const htmlContent = textareaRef.current.value
+        setEditorContent(htmlContent)
+        // The content will be set in the contentEditable div when it renders
+      }
+    } else {
+      // Switching from Rich Text to HTML
+      if (editorRef.current) {
+        const richContent = editorRef.current.innerHTML
+        setEditorContent(richContent)
+        // The content will be set in the textarea when it renders
+      }
+    }
+    setIsHtmlMode(!isHtmlMode)
   }
 
   const handleInput = () => {
-    if (editorRef.current) {
+    if (isHtmlMode && textareaRef.current) {
+      setEditorContent(textareaRef.current.value)
+    } else if (editorRef.current) {
       setEditorContent(editorRef.current.innerHTML)
     }
   }
@@ -125,90 +165,129 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           marginBottom: '1rem'
         }}>
           <ButtonGroup gap="small">
-            <select
-              value={selectedHeading}
-              onChange={(e) => handleFormat(e.target.value)}
-              style={{
-                backgroundColor: tokens.colors.background.secondary,
-                color: tokens.colors.text.primary,
-                border: `1px solid ${tokens.colors.border.default}`,
-                borderRadius: '0.375rem',
-                padding: '0.375rem 0.75rem',
-                fontSize: '0.875rem'
-              }}
-            >
-              <option value="normal">Normal</option>
-              <option value="h1">Heading 1</option>
-              <option value="h2">Heading 2</option>
-              <option value="h3">Heading 3</option>
-            </select>
-            
+            {/* HTML/Rich Text Toggle */}
             <Button
-              onClick={() => handleFormat('bold')}
-              variant="secondary"
+              onClick={handleToggleMode}
+              variant={isHtmlMode ? "primary" : "secondary"}
               size="small"
-              title="Bold"
+              title={isHtmlMode ? "Switch to Rich Text mode" : "Switch to HTML mode"}
             >
-              <strong>B</strong>
+              {isHtmlMode ? "Rich Text" : "HTML"}
             </Button>
             
-            <Button
-              onClick={() => handleFormat('italic')}
-              variant="secondary"
-              size="small"
-              title="Italic"
-            >
-              <em>I</em>
-            </Button>
-            
-            <Button
-              onClick={() => handleFormat('underline')}
-              variant="secondary"
-              size="small"
-              title="Underline"
-            >
-              <u>U</u>
-            </Button>
-            
-            <Button
-              onClick={() => handleFormat('insertUnorderedList')}
-              variant="secondary"
-              size="small"
-              title="Bullet List"
-            >
-              • List
-            </Button>
-            
-            <Button
-              onClick={() => handleFormat('insertOrderedList')}
-              variant="secondary"
-              size="small"
-              title="Numbered List"
-            >
-              1. List
-            </Button>
+            {/* Formatting tools - only show in Rich Text mode */}
+            {!isHtmlMode && (
+              <>
+                <select
+                  value={selectedHeading}
+                  onChange={(e) => handleFormat(e.target.value)}
+                  style={{
+                    backgroundColor: tokens.colors.background.secondary,
+                    color: tokens.colors.text.primary,
+                    border: `1px solid ${tokens.colors.border.default}`,
+                    borderRadius: '0.375rem',
+                    padding: '0.375rem 0.75rem',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  <option value="normal">Normal</option>
+                  <option value="h1">Heading 1</option>
+                  <option value="h2">Heading 2</option>
+                  <option value="h3">Heading 3</option>
+                </select>
+                
+                <Button
+                  onClick={() => handleFormat('bold')}
+                  variant="secondary"
+                  size="small"
+                  title="Bold"
+                >
+                  <strong>B</strong>
+                </Button>
+                
+                <Button
+                  onClick={() => handleFormat('italic')}
+                  variant="secondary"
+                  size="small"
+                  title="Italic"
+                >
+                  <em>I</em>
+                </Button>
+                
+                <Button
+                  onClick={() => handleFormat('underline')}
+                  variant="secondary"
+                  size="small"
+                  title="Underline"
+                >
+                  <u>U</u>
+                </Button>
+                
+                <Button
+                  onClick={() => handleFormat('insertUnorderedList')}
+                  variant="secondary"
+                  size="small"
+                  title="Bullet List"
+                >
+                  • List
+                </Button>
+                
+                <Button
+                  onClick={() => handleFormat('insertOrderedList')}
+                  variant="secondary"
+                  size="small"
+                  title="Numbered List"
+                >
+                  1. List
+                </Button>
+              </>
+            )}
           </ButtonGroup>
         </div>
 
         {/* Editor */}
-        <div
-          ref={editorRef}
-          contentEditable
-          onInput={handleInput}
-          style={{
-            minHeight: '400px',
-            maxHeight: '700px',
-            overflowY: 'auto',
-            backgroundColor: tokens.colors.background.tertiary,
-            border: `1px solid ${tokens.colors.border.default}`,
-            borderRadius: '0.375rem',
-            padding: '1rem',
-            fontSize: '1rem',
-            lineHeight: '1.6',
-            color: tokens.colors.text.primary,
-            outline: 'none'
-          }}
-        />
+        {isHtmlMode ? (
+          <textarea
+            ref={textareaRef}
+            onChange={handleInput}
+            style={{
+              minHeight: '400px',
+              maxHeight: '700px',
+              width: '100%',
+              backgroundColor: tokens.colors.background.tertiary,
+              border: `1px solid ${tokens.colors.border.default}`,
+              borderRadius: '0.375rem',
+              padding: '1rem',
+              fontSize: '1rem',
+              lineHeight: '1.6',
+              color: tokens.colors.text.primary,
+              outline: 'none',
+              fontFamily: 'monospace',
+              resize: 'vertical'
+            }}
+            placeholder="Enter HTML content..."
+          />
+        ) : (
+          <div
+            ref={editorRef}
+            contentEditable
+            role="textbox"
+            onInput={handleInput}
+            style={{
+              minHeight: '400px',
+              maxHeight: '700px',
+              overflowY: 'auto',
+              backgroundColor: tokens.colors.background.tertiary,
+              border: `1px solid ${tokens.colors.border.default}`,
+              borderRadius: '0.375rem',
+              padding: '1rem',
+              fontSize: '1rem',
+              lineHeight: '1.6',
+              color: tokens.colors.text.primary,
+              outline: 'none'
+            }}
+          />
+        )}
 
         {/* Actions */}
         <div style={{

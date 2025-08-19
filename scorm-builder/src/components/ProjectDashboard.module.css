@@ -49,34 +49,6 @@
   flex-wrap: wrap;
 }
 
-/* Recording Indicator */
-.recordingIndicator {
-  color: var(--color-danger);
-  margin-right: var(--space-sm);
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-.recordingIcon {
-  margin-right: var(--space-sm);
-}
-
-/* Session Recording Button */
-.sessionButton {
-  padding: var(--space-sm);
-  min-width: auto;
-}
 
 /* Folder Info (now in header) */
 .folderInfo {

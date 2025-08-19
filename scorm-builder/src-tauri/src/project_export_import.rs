@@ -1,4 +1,4 @@
-use crate::media_storage::{get_media_directory, MediaData, MediaMetadata};
+use crate::media_storage::{get_media_directory, MediaData};
 use crate::project_storage::{save_project_file, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::fs;

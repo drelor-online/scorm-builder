@@ -1303,12 +1303,13 @@ export function AudioNarrationWizard({
       }
       
       // If we have media in content but no files loaded yet, trigger load
-      if ((hasAudioInContent || hasCaptionInContent) && audioFiles.length === 0 && captionFiles.length === 0) {
+      // CRITICAL FIX: Don't reload persisted data during uploads to prevent clearing manually entered captions
+      if ((hasAudioInContent || hasCaptionInContent) && audioFiles.length === 0 && captionFiles.length === 0 && !isUploading && !isBulkOperationActive) {
         logger.log('[AudioNarrationWizard] Detected media in course content, loading persisted data')
         loadPersistedData()
       }
     }
-  }, [courseContent, narrationBlocks.length, isLoadingPersistedData, audioFiles.length, captionFiles.length, loadPersistedData])
+  }, [courseContent, narrationBlocks.length, isLoadingPersistedData, audioFiles.length, captionFiles.length, loadPersistedData, isUploading, isBulkOperationActive])
 
   // Watch for changes in audioFiles map and update upload state
   // Using array conversion for proper dependency tracking in production
@@ -1988,7 +1989,6 @@ export function AudioNarrationWizard({
       if (playingBlockNumber === blockNumber) {
         logger.log('[AudioNarrationWizard] Stopping audio for block:', blockNumber)
         setPlayingBlockNumber(null)
-        info(`Stopped audio for block ${blockNumber}`)
         return
       }
       
@@ -1996,7 +1996,6 @@ export function AudioNarrationWizard({
       // This survives URL changes when audio is replaced
       logger.log('[AudioNarrationWizard] Playing audio for block:', blockNumber, 'URL:', urlWithTimestamp)
       setPlayingBlockNumber(blockNumber)
-      info(`Playing audio for block ${blockNumber}`)
       
       // Restore scroll position after state change
       requestAnimationFrame(() => {
@@ -2333,7 +2332,7 @@ export function AudioNarrationWizard({
   }
 
   const handleAudioZipUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    debugLogger.info('AudioNarrationWizard.handleAudioZipUpload', 'Starting bulk audio upload')
+    debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'Starting bulk audio upload')
     logger.log('[AudioNarrationWizard] handleAudioZipUpload called')
     const file = event.target.files?.[0]
     if (!file) {
@@ -2360,7 +2359,7 @@ export function AudioNarrationWizard({
     const successfulFiles: string[] = []
     const failedFiles: { file: string; error: string }[] = []
     
-    debugLogger.info('AudioNarrationWizard.handleAudioZipUpload', 'File selected', {
+    debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'File selected', {
       fileName: file.name,
       fileSize: file.size,
       fileSizeMB: (file.size / 1024 / 1024).toFixed(2)
@@ -2411,7 +2410,7 @@ export function AudioNarrationWizard({
       logger.log('[AudioNarrationWizard] Loading ZIP file...')
       const contents = await zip.loadAsync(file)
       
-      debugLogger.info('AudioNarrationWizard.handleAudioZipUpload', 'ZIP loaded successfully', {
+      debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'ZIP loaded successfully', {
         fileCount: Object.keys(contents.files).length
       })
       logger.log('[AudioNarrationWizard] ZIP loaded successfully')
@@ -2609,7 +2608,7 @@ export function AudioNarrationWizard({
       }
       
       // Log success for debugging
-      debugLogger.info('AudioNarrationWizard.handleAudioZipUpload', 'Bulk upload complete', {
+      debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'Bulk upload complete', {
         filesProcessed: newAudioFiles.length,
         skippedCount: skippedFiles.length,
         totalNarrationBlocks: narrationBlocks.length,
@@ -2704,7 +2703,7 @@ export function AudioNarrationWizard({
   }
 
   const handleCaptionZipUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    debugLogger.info('AudioNarrationWizard.handleCaptionZipUpload', 'Starting bulk caption upload')
+    debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Starting bulk caption upload')
     const file = event.target.files?.[0]
     if (!file) {
       debugLogger.warn('AudioNarrationWizard.handleCaptionZipUpload', 'No file selected')
@@ -2716,7 +2715,7 @@ export function AudioNarrationWizard({
     const captionSuccessfulFiles: string[] = []
     const captionFailedFiles: { file: string; error: string }[] = []
     
-    debugLogger.info('AudioNarrationWizard.handleCaptionZipUpload', 'File selected', {
+    debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'File selected', {
       fileName: file.name,
       fileSize: file.size,
       fileSizeMB: (file.size / 1024 / 1024).toFixed(2)
@@ -2761,7 +2760,7 @@ export function AudioNarrationWizard({
       const contents = await zip.loadAsync(file)
       // newCaptionFiles already declared outside try block
       
-      debugLogger.info('AudioNarrationWizard.handleCaptionZipUpload', 'ZIP loaded', {
+      debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'ZIP loaded', {
         fileCount: Object.keys(contents.files).length
       })
       
@@ -2894,7 +2893,7 @@ export function AudioNarrationWizard({
       }
       
       // Log success for debugging
-      debugLogger.info('AudioNarrationWizard.handleCaptionZipUpload', 'Bulk caption upload complete', {
+      debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Bulk caption upload complete', {
         filesProcessed: newCaptionFiles.length,
         totalBlocks: narrationBlocks.length,
         blockNumbers: newCaptionFiles.map(f => f.blockNumber)
@@ -3312,38 +3311,6 @@ export function AudioNarrationWizard({
                           {audioFiles.length} audio files uploaded
                         </p>
                         
-                        {/* Audio Upload Summary */}
-                        {audioUploadSummary && (audioUploadSummary.successful.length > 0 || audioUploadSummary.failed.length > 0) && (
-                          <details className={styles.uploadSummary}>
-                            <summary className={styles.summaryHeader}>
-                              View upload details ({audioUploadSummary.successful.length} successful, {audioUploadSummary.failed.length} failed)
-                            </summary>
-                            <div className={styles.summaryContent}>
-                              {audioUploadSummary.successful.length > 0 && (
-                                <div className={styles.successfulFiles}>
-                                  <h4>✅ Successfully processed:</h4>
-                                  <ul>
-                                    {audioUploadSummary.successful.map((file, index) => (
-                                      <li key={index}>{file}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                              {audioUploadSummary.failed.length > 0 && (
-                                <div className={styles.failedFiles}>
-                                  <h4>❌ Failed to process:</h4>
-                                  <ul>
-                                    {audioUploadSummary.failed.map((item, index) => (
-                                      <li key={index}>
-                                        <strong>{item.file}</strong>: {item.error}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          </details>
-                        )}
                         
                         <Button
                           size="small"
@@ -3423,38 +3390,6 @@ export function AudioNarrationWizard({
                           {captionFiles.length} caption files uploaded
                         </p>
                         
-                        {/* Caption Upload Summary */}
-                        {captionUploadSummary && (captionUploadSummary.successful.length > 0 || captionUploadSummary.failed.length > 0) && (
-                          <details className={styles.uploadSummary}>
-                            <summary className={styles.summaryHeader}>
-                              View upload details ({captionUploadSummary.successful.length} successful, {captionUploadSummary.failed.length} failed)
-                            </summary>
-                            <div className={styles.summaryContent}>
-                              {captionUploadSummary.successful.length > 0 && (
-                                <div className={styles.successfulFiles}>
-                                  <h4>✅ Successfully processed:</h4>
-                                  <ul>
-                                    {captionUploadSummary.successful.map((file, index) => (
-                                      <li key={index}>{file}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                              {captionUploadSummary.failed.length > 0 && (
-                                <div className={styles.failedFiles}>
-                                  <h4>❌ Failed to process:</h4>
-                                  <ul>
-                                    {captionUploadSummary.failed.map((item, index) => (
-                                      <li key={index}>
-                                        <strong>{item.file}</strong>: {item.error}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          </details>
-                        )}
                         
                         <Button
                           size="small"
@@ -3474,6 +3409,71 @@ export function AudioNarrationWizard({
                   </div>
                 </Card>
               </Grid>
+
+              {/* Upload Summaries - Moved outside the clickable upload zones */}
+              {audioUploadSummary && (audioUploadSummary.successful.length > 0 || audioUploadSummary.failed.length > 0) && (
+                <details className={styles.uploadSummary}>
+                  <summary className={styles.summaryHeader}>
+                    📊 Audio Upload Details ({audioUploadSummary.successful.length} successful, {audioUploadSummary.failed.length} failed)
+                  </summary>
+                  <div className={styles.summaryContent}>
+                    {audioUploadSummary.successful.length > 0 && (
+                      <div className={styles.successfulFiles}>
+                        <h4>✅ Successfully processed:</h4>
+                        <ul>
+                          {audioUploadSummary.successful.map((file, index) => (
+                            <li key={index}>{file}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {audioUploadSummary.failed.length > 0 && (
+                      <div className={styles.failedFiles}>
+                        <h4>❌ Failed to process:</h4>
+                        <ul>
+                          {audioUploadSummary.failed.map((item, index) => (
+                            <li key={index}>
+                              <strong>{item.file}</strong>: {item.error}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              {captionUploadSummary && (captionUploadSummary.successful.length > 0 || captionUploadSummary.failed.length > 0) && (
+                <details className={styles.uploadSummary}>
+                  <summary className={styles.summaryHeader}>
+                    📊 Caption Upload Details ({captionUploadSummary.successful.length} successful, {captionUploadSummary.failed.length} failed)
+                  </summary>
+                  <div className={styles.summaryContent}>
+                    {captionUploadSummary.successful.length > 0 && (
+                      <div className={styles.successfulFiles}>
+                        <h4>✅ Successfully processed:</h4>
+                        <ul>
+                          {captionUploadSummary.successful.map((file, index) => (
+                            <li key={index}>{file}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {captionUploadSummary.failed.length > 0 && (
+                      <div className={styles.failedFiles}>
+                        <h4>❌ Failed to process:</h4>
+                        <ul>
+                          {captionUploadSummary.failed.map((item, index) => (
+                            <li key={index}>
+                              <strong>{item.file}</strong>: {item.error}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
 
             {/* Warning */}

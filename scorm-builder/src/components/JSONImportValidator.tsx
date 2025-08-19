@@ -12,7 +12,6 @@ import {
   Alert,
   Modal
 } from './DesignSystem'
-import { Toast } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Clipboard, Trash2, CheckCircle, ChevronRight, ChevronDown, BookOpen, Target, FileQuestion, Award, Edit2, Check, X, Wand2, Eye } from 'lucide-react'
 // import { useUndoRedo } from '../hooks/useUndoRedo' // Removed undo/redo functionality
@@ -21,6 +20,7 @@ import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useStepNavigation } from '../contexts/StepNavigationContext'
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
@@ -30,6 +30,7 @@ import styles from './JSONImportValidator.module.css'
 interface JSONImportValidatorProps {
   onNext: (data: CourseContent) => void
   onBack: () => void
+  onClearData?: () => void
   onSettingsClick?: () => void
   onSave?: () => void
   onOpen?: () => void
@@ -41,7 +42,8 @@ interface JSONImportValidatorProps {
 
 export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({ 
   onNext, 
-  onBack, 
+  onBack,
+  onClearData,
   onSettingsClick, 
   onSave, 
   onOpen, 
@@ -51,6 +53,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const storage = useStorage()
   const navigation = useStepNavigation()
   const { markDirty, resetDirty } = useUnsavedChanges()
+  const { success, error: notifyError, info } = useNotifications()
   
   // Logger for production-safe debugging
   const logger = debugLogger
@@ -60,7 +63,6 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   
   const [validationResult, setValidationResult] = useState<any>(null)
   const [isTreeVisible, setIsTreeVisible] = useState(false)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('')
   
   // Refs for focus and scroll management
@@ -72,19 +74,22 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousProjectIdRef = useRef<string | null>(null)
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
   
   // Load persisted JSON import data on mount and when project changes
   useEffect(() => {
     const loadPersistedValidationState = async () => {
       if (storage && storage.isInitialized && storage.currentProjectId) {
-        // Only clear state if project actually changed
-        const isProjectChange = previousProjectIdRef.current !== storage.currentProjectId
+        // Check if this is a project change or initial mount
+        const isProjectChange = previousProjectIdRef.current !== null && previousProjectIdRef.current !== storage.currentProjectId
+        const isInitialMount = previousProjectIdRef.current === null
+        const currentProjectId = storage.currentProjectId
         
         if (isProjectChange) {
-          // Log project change
+          // Log project change and clear state
           logger.info('JSONValidator', 'Loading JSON for new project', { 
             previousProjectId: previousProjectIdRef.current,
-            newProjectId: storage.currentProjectId
+            newProjectId: currentProjectId
           })
           
           // Clear state when switching projects to prevent stale data
@@ -92,18 +97,38 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           setValidationResult(null)
           setIsLocked(false)
           setIsTreeVisible(false)
+          setHasLoadedInitialData(false) // Reset to allow loading for new project
           
           // Update the ref to track current project
-          previousProjectIdRef.current = storage.currentProjectId
+          previousProjectIdRef.current = currentProjectId
+          return // Don't try to load data for different project
+        } else if (isInitialMount) {
+          logger.info('JSONValidator', 'Initial mount - loading persisted JSON data', { 
+            projectId: currentProjectId 
+          })
         } else {
-          logger.info('JSONValidator', 'Refreshing same project - preserving state', { 
-            projectId: storage.currentProjectId 
+          // Same project - always try to load persisted state 
+          // This handles navigation within the same project
+          logger.info('JSONValidator', 'Same project navigation - loading persisted data', { 
+            projectId: currentProjectId 
           })
         }
+        
+        // Update the ref to track current project (for non-project-change cases)
+        previousProjectIdRef.current = currentProjectId
         
         try {
           // Try to load the complete JSON import data
           const jsonImportData = await storage.getContent('json-import-data')
+          logger.info('JSONValidator', 'Raw storage response for json-import-data', {
+            projectId: currentProjectId,
+            dataExists: !!jsonImportData,
+            dataType: typeof jsonImportData,
+            dataKeys: jsonImportData ? Object.keys(jsonImportData) : null,
+            rawJsonExists: jsonImportData?.rawJson ? true : false,
+            rawJsonLength: jsonImportData?.rawJson?.length || 0
+          })
+          
           if (jsonImportData) {
             // Restore all state from the saved data
             if (jsonImportData.rawJson) {
@@ -115,12 +140,21 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             if (jsonImportData.isLocked !== undefined) {
               setIsLocked(jsonImportData.isLocked)
             }
+            // Restore tree view state, or auto-switch if data is locked and valid
+            if (jsonImportData.isTreeVisible !== undefined) {
+              setIsTreeVisible(jsonImportData.isTreeVisible)
+            } else if (jsonImportData.isLocked && jsonImportData.validationResult?.isValid) {
+              setIsTreeVisible(true)
+            }
             
             logger.info('JSONValidator', 'Loaded saved JSON state', {
               hasJson: !!jsonImportData.rawJson,
               isLocked: jsonImportData.isLocked,
-              hasValidation: !!jsonImportData.validationResult
+              hasValidation: !!jsonImportData.validationResult,
+              jsonLength: jsonImportData.rawJson?.length || 0
             })
+            
+            setHasLoadedInitialData(true)
           } else {
             // Fallback to old format for backward compatibility
             const persistedValidation = await storage.getContent('json-validation-state')
@@ -140,10 +174,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 projectId: storage.currentProjectId
               })
             }
+            
+            setHasLoadedInitialData(true)
           }
         } catch (error) {
           logger.error('JSONValidator', 'Error loading persisted validation state', { error: error instanceof Error ? error.message : String(error) })
           console.error('Error loading persisted validation state:', error)
+          setHasLoadedInitialData(true)
         }
       }
     }
@@ -154,15 +191,26 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   // Persist validation state AND raw JSON when it changes
   useEffect(() => {
     const persistValidationState = async () => {
-      if (storage && storage.isInitialized) {
+      // Only save after initial data has been loaded to prevent overwriting during mount
+      if (storage && storage.isInitialized && hasLoadedInitialData) {
         try {
           // Save both the validation result and the raw JSON input
           const jsonImportData = {
             rawJson: jsonInput,
             validationResult: validationResult,
-            isLocked: isLocked
+            isLocked: isLocked,
+            isTreeVisible: isTreeVisible
           }
           await storage.saveContent('json-import-data', jsonImportData)
+          
+          // Log saves for debugging
+          if (jsonInput.trim().length > 0) {
+            logger.info('JSONValidator', 'Persisted JSON data', {
+              jsonLength: jsonInput.length,
+              isLocked: isLocked,
+              hasValidation: !!validationResult
+            })
+          }
         } catch (error) {
           console.error('Error persisting validation state:', error)
         }
@@ -170,58 +218,38 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     }
     
     persistValidationState()
-  }, [jsonInput, validationResult, isLocked, storage?.isInitialized])
+  }, [jsonInput, validationResult, isLocked, isTreeVisible, storage?.isInitialized, hasLoadedInitialData, logger])
   
-  // Cleanup timeouts on unmount
+  // Cleanup timeouts on unmount and save final state
   useEffect(() => {
     return () => {
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current)
       }
+      
+      // Save final state on unmount to ensure data isn't lost during navigation
+      if (storage && storage.isInitialized && (jsonInput.trim() || validationResult)) {
+        const jsonImportData = {
+          rawJson: jsonInput,
+          validationResult: validationResult,
+          isLocked: isLocked,
+          isTreeVisible: isTreeVisible
+        }
+        storage.saveContent('json-import-data', jsonImportData).catch((error) => {
+          console.error('Error saving JSON data on unmount:', error)
+        })
+      }
     }
-  }, [])
+  }, [jsonInput, validationResult, isLocked, isTreeVisible, storage])
   
-  // Handle focus and scroll when toggling between tree view and JSON editor
+  // Handle screen reader announcements when toggling views (focus management removed to prevent unwanted focus stealing)
   useEffect(() => {
-    if (isTreeVisible && treeViewRef.current) {
+    if (isTreeVisible) {
       // When switching to tree view
       setScreenReaderAnnouncement('Switched to course tree view. Use Tab to navigate through course structure.')
-      setTimeout(() => {
-        // Scroll tree view into view
-        treeViewRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start',
-          inline: 'nearest'
-        })
-        
-        // Focus on the first interactive element in tree view
-        const firstButton = treeViewRef.current?.querySelector('button, [tabindex]:not([tabindex="-1"])')
-        if (firstButton) {
-          (firstButton as HTMLElement).focus()
-        } else {
-          // Fallback: focus the tree view container itself
-          treeViewRef.current?.focus()
-        }
-      }, 100) // Small delay to ensure DOM is updated
-    } else if (!isTreeVisible && jsonEditorRef.current) {
+    } else {
       // When switching back to JSON editor
       setScreenReaderAnnouncement('Switched to JSON editor view. You can edit the course content here.')
-      setTimeout(() => {
-        // Scroll editor into view
-        jsonEditorRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start',
-          inline: 'nearest'
-        })
-        
-        // Focus the textarea inside SimpleJSONEditor
-        const textarea = jsonEditorRef.current?.querySelector('textarea')
-        if (textarea) {
-          textarea.focus()
-        } else {
-          jsonEditorRef.current?.focus()
-        }
-      }, 100)
     }
     
     // Clear screen reader announcement after a delay
@@ -367,10 +395,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         
-        setToast({ 
-          message: '✅ Valid JSON detected! Course structure loaded successfully.', 
-          type: 'success' 
-        })
+        success('✅ Valid JSON detected! Course structure loaded successfully.')
         
         setIsLocked(true)
         setIsValidating(false)
@@ -431,10 +456,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
         })
         
-        setToast({ 
-          message: '🔧 JSON automatically fixed and validated! Course structure loaded.', 
-          type: 'success' 
-        })
+        success('🔧 JSON automatically fixed and validated! Course structure loaded.')
         
         setIsLocked(true)
         setIsValidating(false)
@@ -796,10 +818,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         const formattedJson = JSON.stringify(parsedData, null, 2)
         setJsonInput(formattedJson)
         markDirty('courseContent') // Mark dirty when formatting content
-        setToast({ 
-          message: `✨ Automatically fixed ${fixes.length} formatting issue(s)`, 
-          type: 'success' 
-        })
+        success(`✨ Automatically fixed ${fixes.length} formatting issue(s)`)
       }
 
       logger.info('JSONValidator', 'JSON validation successful (full validation)', {
@@ -855,10 +874,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       }
       
       // Show success message
-      setToast({ 
-        message: '✅ JSON validated successfully! Content is now locked. Click "Next" to proceed or "Clear JSON" to start over.', 
-        type: 'success' 
-      })
+      success('✅ JSON validated successfully! Content is now locked. Click "Next" to proceed or "Clear JSON" to start over.')
     } catch (error) {
       let errorMessage = 'Invalid JSON syntax'
       if (error instanceof Error) {
@@ -919,7 +935,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           wasAutoFixed = true
           setJsonInput(autoFixed)
           markDirty('courseContent') // Mark dirty when auto-fixing content
-          setToast({ message: 'Applied auto-fixes, validating...', type: 'info' })
+          info('Applied auto-fixes, validating...')
           // Try validation again with fixed JSON
           validationTimeoutRef.current = setTimeout(() => {
             validateJSON()
@@ -936,7 +952,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
   const handlePasteFromClipboard = async () => {
     if (isLocked) {
-      setToast({ message: 'Please clear the current course structure before pasting new content.', type: 'info' })
+      // User should clear structure first - this is handled by the UI state
       return
     }
     
@@ -944,11 +960,11 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       const text = await navigator.clipboard.readText()
       setJsonInput(text)
       markDirty('courseContent') // Mark dirty when pasting content
-      setToast({ message: 'Content pasted from clipboard!', type: 'success' })
+      success('Content pasted from clipboard!')
       // Automatically validate immediately after pasting
       setTimeout(() => validateJSON(), 100)
     } catch (error) {
-      setToast({ message: 'Failed to read clipboard. Please paste manually.', type: 'error' })
+      notifyError('Failed to read clipboard. Please paste manually.')
     }
   }
 
@@ -1022,7 +1038,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     setValidationResult(null)
     setIsLocked(false)
     setIsTreeVisible(false) // Reset to JSON editor view
-    setToast({ message: 'JSON cleared. Data on following pages has been reset.', type: 'info' })
+    info('Course structure cleared. All pages have been reset and locked until new JSON is imported.')
     
     // Clear persisted validation state (both old and new formats)
     if (storage && storage.isInitialized) {
@@ -1038,6 +1054,11 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         logger.error('JSONValidator', 'Error clearing persisted validation state', { error: error instanceof Error ? error.message : String(error) })
         console.error('Error clearing persisted validation state:', error)
       }
+    }
+    
+    // Call the onClearData callback to clear course content in App.tsx
+    if (onClearData) {
+      onClearData()
     }
     
     setShowClearConfirm(false)
@@ -1077,18 +1098,30 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     }
   }
 
+  // Helper function to format answer display properly
+  const formatAnswerDisplay = (correctAnswer: any) => {
+    if (typeof correctAnswer === 'boolean') {
+      return correctAnswer ? 'True' : 'False'
+    }
+    if (correctAnswer === null || correctAnswer === undefined) {
+      return 'Not specified'
+    }
+    return String(correctAnswer)
+  }
+
   // Render tree view for validated content
   const renderTreeView = (data: CourseContent) => {
     const isExpanded = (nodeId: string) => expandedNodes.has(nodeId)
     
     return (
-      <div className={`${styles.treeView} ${styles.treeViewDark}`}>
+      <div className={`${styles.treeView} ${styles.treeViewDark}`} data-testid="json-tree-view">
         {/* Welcome Page */}
         <div className={styles.treeNode}>
           <div 
             className={styles.treeNodeHeader}
             onClick={() => toggleNode('welcome')}
             style={{ cursor: 'pointer' }}
+            data-testid="json-tree-node-welcome"
           >
             <Icon 
               icon={isExpanded('welcome') ? ChevronDown : ChevronRight} 
@@ -1160,6 +1193,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             className={styles.treeNodeHeader}
             onClick={() => toggleNode('objectives')}
             style={{ cursor: 'pointer' }}
+            data-testid="json-tree-node-objectives"
           >
             <Icon 
               icon={isExpanded('objectives') ? ChevronDown : ChevronRight} 
@@ -1230,6 +1264,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             className={styles.treeNodeHeader} 
             onClick={() => toggleNode('topics')}
             style={{ cursor: 'pointer' }}
+            data-testid="json-tree-node-topics"
           >
             <Icon 
               icon={isExpanded('topics') ? ChevronDown : ChevronRight} 
@@ -1247,6 +1282,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                     className={styles.treeNodeHeader}
                     onClick={() => toggleNode(`topic-${topic.id}`)}
                     style={{ cursor: 'pointer' }}
+                    data-testid={`json-tree-node-topic-${topic.id}`}
                   >
                     <Icon 
                       icon={isExpanded(`topic-${topic.id}`) ? ChevronDown : ChevronRight} 
@@ -1326,7 +1362,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                                   {q.question}
                                 </span>
                                 <span className={styles.answerText}>
-                                  Answer: {q.correctAnswer}
+                                  Answer: {formatAnswerDisplay(q.correctAnswer)}
                                 </span>
                               </div>
                             ))}
@@ -1347,6 +1383,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             className={styles.treeNodeHeader}
             onClick={() => toggleNode('assessment')}
             style={{ cursor: 'pointer' }}
+            data-testid="json-tree-node-assessment"
           >
             <Icon 
               icon={isExpanded('assessment') ? ChevronDown : ChevronRight} 
@@ -1379,7 +1416,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                         {q.question}
                       </span>
                       <span className={styles.answerText}>
-                        Answer: {q.correctAnswer}
+                        Answer: {formatAnswerDisplay(q.correctAnswer)}
                       </span>
                     </div>
                   ))}
@@ -1407,7 +1444,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       onSave={onSave}
       onBack={handleBack}
       onNext={handleNext}
-      nextDisabled={!validationResult?.isValid}
+      nextDisabled={!isLocked && !validationResult?.isValid}
       onOpen={onOpen}
       onHelp={onHelp}
       onStepClick={onStepClick}
@@ -1649,21 +1686,29 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         )}
       </Section>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
       
       {/* Clear Course Structure Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showClearConfirm}
         title="Clear Course Structure"
-        message="Warning: This will remove the current course structure and any content that hasn't been saved. Are you sure you want to continue?"
-        confirmText="Clear"
-        cancelText="Cancel"
+        message={
+          <>
+            <strong>Warning:</strong> This will remove the current course structure and <strong>all content</strong> from the following pages:
+            <ul style={{ margin: '0.75rem 0', paddingLeft: '1.5rem' }}>
+              <li>Media Enhancement</li>
+              <li>Audio Narration</li>
+              <li>Activities Editor</li>
+              <li>SCORM Package Builder</li>
+            </ul>
+            These pages will be <strong>locked</strong> until you import new JSON data.
+            <br /><br />
+            <strong>Alternative:</strong> If you just want to edit course content, you can make changes on the individual pages above instead of clearing the JSON structure.
+            <br /><br />
+            Are you sure you want to clear the course structure?
+          </>
+        }
+        confirmText="Clear Course Structure"
+        cancelText="Keep Current Structure"
         variant="warning"
         onConfirm={handleConfirmClear}
         onCancel={handleCancelClear}

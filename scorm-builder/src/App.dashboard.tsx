@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ProjectDashboard } from './components/ProjectDashboard'
 import { ProjectLoadingDialog } from './components/ProjectLoadingDialog'
 import { PersistentStorageProvider, useStorage } from './contexts/PersistentStorageContext'
@@ -8,11 +8,18 @@ import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import { handleFileAssociation } from './utils/fileAssociation'
 import { isErrorDismissed, dismissError } from './utils/errorDismissal'
 import { DebugInfo } from './components/DebugInfo'
-import { DebugPanel } from './components/DebugPanel'
 import { ErrorNotification, showError, showInfo } from './components/ErrorNotification'
+import { StatusPanel } from './components/StatusPanel'
+import { useStatusMessages } from './hooks/useStatusMessages'
+import { NotificationToStatusBridge } from './components/NotificationToStatusBridge'
+import { WorkflowRecorder } from './components/WorkflowRecorder'
 import App from './App'
 
-function DashboardContent() {
+interface DashboardContentProps {
+  onSecretClick?: () => void
+}
+
+function DashboardContent({ onSecretClick }: DashboardContentProps) {
   const storage = useStorage()
   const [showDashboard, setShowDashboard] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -340,7 +347,7 @@ function DashboardContent() {
         </div>
       )}
       {showDashboard ? (
-        <ProjectDashboard onProjectSelected={handleProjectSelected} />
+        <ProjectDashboard onProjectSelected={handleProjectSelected} onSecretClick={onSecretClick} />
       ) : storage.currentProjectId ? (
         <UnifiedMediaProvider projectId={storage.currentProjectId}>
           <App 
@@ -421,15 +428,105 @@ function DashboardContent() {
   )
 }
 
+function DashboardWithStatusPanel() {
+  const statusMessages = useStatusMessages()
+  const storage = useStorage()
+  const [showDashboard, setShowDashboard] = useState(true)
+  
+  // Workflow Recorder visibility state with multiple activation methods
+  const [showWorkflowRecorder, setShowWorkflowRecorder] = useState(() => {
+    // Check localStorage first for persistent setting
+    const stored = localStorage.getItem('workflow_recorder_enabled')
+    if (stored === 'true') return true
+    if (stored === 'false') return false
+    
+    // Check URL parameters for one-time activation
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('beta') === 'recorder' || params.get('workflow') === '1') {
+        // Enable and persist for this browser
+        localStorage.setItem('workflow_recorder_enabled', 'true')
+        return true
+      }
+    } catch (e) {
+      // URL parsing failed, ignore
+    }
+    
+    // Default: show in development, hide in production
+    return import.meta.env.DEV
+  })
+
+  // Keyboard shortcut handler for workflow recorder
+  useEffect(() => {
+    const handleWorkflowRecorderKeyPress = (e: KeyboardEvent) => {
+      // Toggle workflow recorder (Ctrl+Shift+W)
+      if (e.ctrlKey && e.shiftKey && e.key === 'W') {
+        e.preventDefault()
+        setShowWorkflowRecorder(prev => {
+          const newState = !prev
+          localStorage.setItem('workflow_recorder_enabled', String(newState))
+          console.log(`[Beta] Workflow Recorder ${newState ? 'enabled' : 'disabled'} via keyboard shortcut`)
+          return newState
+        })
+      }
+    }
+    
+    window.addEventListener('keydown', handleWorkflowRecorderKeyPress)
+    return () => window.removeEventListener('keydown', handleWorkflowRecorderKeyPress)
+  }, [])
+
+  // Check if we have a current project
+  useEffect(() => {
+    if (storage.currentProjectId) {
+      // When there's a project, hide dashboard elements (user is working on project)
+      setShowDashboard(false)
+    } else {
+      // When no project, show dashboard elements (main dashboard view)
+      setShowDashboard(true)
+    }
+  }, [storage.currentProjectId])
+
+  // Secret click handler for beta feature activation
+  const handleSecretClick = useCallback(() => {
+    setShowWorkflowRecorder(true)
+    localStorage.setItem('workflow_recorder_enabled', 'true')
+    console.log('[Beta] Workflow Recorder enabled via secret click (5 clicks on title)')
+  }, [])
+
+  return (
+    <>
+      <DashboardContent onSecretClick={handleSecretClick} />
+      <DebugInfo />
+      <ErrorNotification />
+      <NotificationToStatusBridge onAddStatusMessage={statusMessages.addMessage} />
+      {/* StatusPanel is handled by App.tsx - do not show on dashboard to avoid duplication */}
+      {false && (
+        <StatusPanel 
+          messages={statusMessages.messages}
+          onDismiss={statusMessages.dismissMessage}
+          onClearAll={statusMessages.clearAllMessages}
+        />
+      )}
+      {/* Workflow Recorder - available for beta testers */}
+      {showWorkflowRecorder && (
+        <WorkflowRecorder 
+          onClose={() => {
+            setShowWorkflowRecorder(false)
+            localStorage.setItem('workflow_recorder_enabled', 'false')
+            console.log('[Beta] Workflow Recorder disabled via close button')
+          }}
+        />
+      )}
+    </>
+  )
+}
+
 export function AppWithDashboard() {
   return (
     <PersistentStorageProvider>
       <NotificationProvider>
         <UnsavedChangesProvider>
-          <DashboardContent />
-          <DebugInfo />
-          <DebugPanel />
-          <ErrorNotification />
+          <DashboardWithStatusPanel />
         </UnsavedChangesProvider>
       </NotificationProvider>
     </PersistentStorageProvider>

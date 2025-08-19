@@ -113,13 +113,31 @@ export async function downloadExternalImage(url: string): Promise<Blob> {
           }
         }
         
-        // All proxy attempts failed
-        throw new Error(`All download methods failed. Last error: ${lastError?.message || 'Unknown error'}`)
+        // All proxy attempts failed - provide user-friendly error message
+        if (lastError?.message?.includes('CORS') || lastError?.message?.includes('blocked')) {
+          throw new Error('Unable to download this external image due to security restrictions. Please save the image to your computer and upload it locally instead.')
+        } else if (lastError?.message?.includes('Network') || lastError?.message?.includes('network')) {
+          throw new Error('Network connection issue prevented downloading the image. Please check your internet connection and try again.')
+        } else {
+          throw new Error('Unable to download this external image. Please save the image to your computer and upload it locally instead.')
+        }
       }
     }
   } catch (error) {
     console.error('[ExternalImageDownloader] Failed to download image:', error)
-    throw new Error(`Failed to download image: ${error}`)
+    
+    // Provide user-friendly error messages instead of technical details
+    const errorMessage = (error as Error).message
+    if (errorMessage.includes('CORS') || errorMessage.includes('blocked')) {
+      throw new Error('Unable to download this external image due to security restrictions. Please save the image to your computer and upload it locally instead.')
+    } else if (errorMessage.includes('Network') || errorMessage.includes('network')) {
+      throw new Error('Network connection issue prevented downloading the image. Please check your internet connection and try again.')
+    } else if (errorMessage.includes('Unable to download')) {
+      // Already user-friendly, re-throw as-is
+      throw error
+    } else {
+      throw new Error('Unable to download this external image. Please save the image to your computer and upload it locally instead.')
+    }
   }
 }
 
@@ -144,6 +162,7 @@ export function isKnownCorsRestrictedDomain(url: string): boolean {
     'stock.adobe.com',
     '123rf.com',
     'dreamstime.com',
+    'aga.org', // Added from workflow recording CORS error
     'depositphotos.com',
     'vectorstock.com',
     'pond5.com',

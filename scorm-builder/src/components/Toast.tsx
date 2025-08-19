@@ -46,6 +46,7 @@ export const Toast: React.FC<ToastProps> = ({
           size="sm"
           ariaLabel="Dismiss notification"
           className="icon-button"
+          data-testid="toast-close-button"
         />
       </div>
     </div>
