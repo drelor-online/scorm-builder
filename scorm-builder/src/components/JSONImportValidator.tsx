@@ -25,6 +25,8 @@ import { smartAutoFixJSON } from '../utils/jsonAutoFixer'
 import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
 import { debugLogger } from '../utils/ultraSimpleLogger'
+import { cleanupOrphanedMediaReferences, MediaExistsChecker } from '../utils/orphanedMediaCleaner'
+import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import styles from './JSONImportValidator.module.css'
 
 interface JSONImportValidatorProps {
@@ -54,9 +56,175 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const navigation = useStepNavigation()
   const { markDirty, resetDirty } = useUnsavedChanges()
   const { success, error: notifyError, info } = useNotifications()
+  const { getMedia } = useUnifiedMedia()
   
   // Logger for production-safe debugging
   const logger = debugLogger
+  
+  // Media existence checker for orphaned media cleanup
+  const mediaExistsChecker: MediaExistsChecker = async (mediaId: string): Promise<boolean> => {
+    logger.debug('JSONImportValidator', `🔍 Checking existence of media: ${mediaId}`)
+    try {
+      const result = await getMedia(mediaId)
+      const exists = result !== null
+      
+      // Enhanced debug logging
+      if (result !== null) {
+        logger.debug('JSONImportValidator', `✅ Media ${mediaId} EXISTS - result type: ${typeof result}, hasData: ${result?.data !== undefined}, hasMetadata: ${result?.metadata !== undefined}`)
+      } else {
+        logger.debug('JSONImportValidator', `❌ Media ${mediaId} DOES NOT EXIST - getMedia returned null`)
+      }
+      
+      return exists
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      logger.debug('JSONImportValidator', `💥 Media ${mediaId} ERROR during existence check: ${errorMsg}`)
+      // If getMedia throws an error, the media doesn't exist
+      return false
+    }
+  }
+  
+  // Helper function to apply orphaned media cleanup and show user feedback
+  const applyMediaCleanup = async (parsedData: CourseContent, context: string = 'unknown'): Promise<CourseContent> => {
+    logger.info('JSONImportValidator', `🔍 Starting orphaned media cleanup process from: ${context}`)
+    
+    // Enhanced media reference finder - checks multiple patterns and sources
+    const findAllMediaIds = (obj: any, path: string = ''): string[] => {
+      const mediaIds: string[] = []
+      
+      // Add debug logging for important paths
+      if (path.includes('media') || path === '' || path.includes('welcomePage') || path.includes('learningObjectivesPage') || path.includes('topics')) {
+        logger.debug('JSONImportValidator', `🔍 Checking path: ${path || 'root'} - type: ${typeof obj}, isArray: ${Array.isArray(obj)}`)
+      }
+      
+      if (obj && typeof obj === 'object') {
+        if (Array.isArray(obj)) {
+          obj.forEach((item, index) => {
+            mediaIds.push(...findAllMediaIds(item, `${path}[${index}]`))
+          })
+        } else {
+          for (const [key, value] of Object.entries(obj)) {
+            // Primary pattern: media arrays
+            if (key === 'media' && Array.isArray(value)) {
+              logger.debug('JSONImportValidator', `🎯 Found media array at ${path}.media with ${value.length} items`)
+              value.forEach((mediaItem, index) => {
+                logger.debug('JSONImportValidator', `🎯 Checking media item ${index}:`, mediaItem)
+                if (mediaItem && typeof mediaItem === 'object' && mediaItem.id) {
+                  mediaIds.push(mediaItem.id)
+                  logger.info('JSONImportValidator', `📁 Found media reference: ${mediaItem.id} at ${path}.media[${index}]`)
+                } else {
+                  logger.debug('JSONImportValidator', `⚠️ Media item ${index} has no valid id:`, mediaItem)
+                }
+              })
+            }
+            // Additional patterns: look for any key containing 'id' that looks like media
+            else if (typeof value === 'string' && (key.includes('id') || key.includes('Id')) && 
+                     (value.startsWith('image-') || value.startsWith('audio-') || value.startsWith('video-'))) {
+              logger.info('JSONImportValidator', `📁 Found potential media ID reference: ${value} at ${path}.${key}`)
+              mediaIds.push(value)
+            }
+            // Continue recursive traversal
+            else {
+              mediaIds.push(...findAllMediaIds(value, path ? `${path}.${key}` : key))
+            }
+          }
+        }
+      }
+      return mediaIds
+    }
+
+    try {
+      // STEP 1: Clean the input JSON data (current behavior)
+      const foundMediaIds = findAllMediaIds(parsedData)
+      logger.info('JSONImportValidator', `📋 Found ${foundMediaIds.length} media references in INPUT JSON:`, foundMediaIds)
+      
+      // Log detailed structure to debug what content we're actually processing
+      logger.debug('JSONImportValidator', '📄 INPUT JSON structure being processed:', {
+        hasWelcomePage: !!parsedData.welcomePage,
+        hasLearningObjectivesPage: !!parsedData.learningObjectivesPage,
+        topicsCount: parsedData.topics?.length || 0,
+        welcomePageMediaCount: parsedData.welcomePage?.media?.length || 0,
+        learningObjectivesPageMediaCount: parsedData.learningObjectivesPage?.media?.length || 0,
+        firstTopicMediaCount: parsedData.topics?.[0]?.media?.length || 0,
+        rootKeys: Object.keys(parsedData)
+      })
+      
+      const inputCleanupResult = await cleanupOrphanedMediaReferences(parsedData, mediaExistsChecker)
+      logger.info('JSONImportValidator', '🎯 INPUT JSON cleanup completed', {
+        totalFoundInJson: foundMediaIds.length,
+        removedCount: inputCleanupResult.removedMediaIds.length,
+        removedIds: Array.from(inputCleanupResult.removedMediaIds)
+      })
+
+      // STEP 2: Also check and clean existing course content from storage (CRITICAL FIX)
+      let totalRemovedIds = new Set(inputCleanupResult.removedMediaIds)
+      let finalCleanedContent = inputCleanupResult.cleanedContent
+
+      if (storage && storage.isInitialized && storage.currentProjectId) {
+        try {
+          const existingCourseContent = await storage.getCourseContent()
+          if (existingCourseContent) {
+            logger.info('JSONImportValidator', '🔍 Also checking EXISTING STORAGE course content for orphaned media')
+            
+            const existingMediaIds = findAllMediaIds(existingCourseContent)
+            logger.info('JSONImportValidator', `📋 Found ${existingMediaIds.length} media references in STORAGE:`, existingMediaIds)
+            
+            // Log storage structure for comparison
+            logger.debug('JSONImportValidator', '📄 STORAGE structure being processed:', {
+              hasWelcomePage: !!existingCourseContent.welcomePage,
+              hasLearningObjectivesPage: !!existingCourseContent.learningObjectivesPage,
+              topicsCount: existingCourseContent.topics?.length || 0,
+              welcomePageMediaCount: existingCourseContent.welcomePage?.media?.length || 0,
+              learningObjectivesPageMediaCount: existingCourseContent.learningObjectivesPage?.media?.length || 0,
+              firstTopicMediaCount: existingCourseContent.topics?.[0]?.media?.length || 0
+            })
+            
+            if (existingMediaIds.length > 0) {
+              const storageCleanupResult = await cleanupOrphanedMediaReferences(existingCourseContent, mediaExistsChecker)
+              logger.info('JSONImportValidator', '🎯 STORAGE cleanup completed', {
+                totalFoundInStorage: existingMediaIds.length,
+                removedCount: storageCleanupResult.removedMediaIds.length,
+                removedIds: Array.from(storageCleanupResult.removedMediaIds)
+              })
+              
+              // If we found orphaned references in storage, save the cleaned version
+              if (storageCleanupResult.removedMediaIds.length > 0) {
+                await storage.saveCourseContent(storageCleanupResult.cleanedContent)
+                logger.info('JSONImportValidator', '✅ Saved cleaned storage content back to storage')
+                
+                // Add to total removed IDs
+                storageCleanupResult.removedMediaIds.forEach(id => totalRemovedIds.add(id))
+              }
+            }
+          }
+        } catch (storageError) {
+          logger.warn('JSONImportValidator', '⚠️ Could not check storage for orphaned media', {
+            error: storageError instanceof Error ? storageError.message : String(storageError)
+          })
+        }
+      }
+      
+      // STEP 3: Report combined results
+      if (totalRemovedIds.size > 0) {
+        info(`🧹 Cleaned up ${totalRemovedIds.size} orphaned media references that were pointing to deleted files.`)
+        logger.info('JSONImportValidator', '✅ COMBINED orphaned media cleanup completed', {
+          totalRemovedIds: Array.from(totalRemovedIds),
+          count: totalRemovedIds.size
+        })
+      } else {
+        logger.info('JSONImportValidator', '✅ No orphaned media references found in input JSON or storage')
+      }
+      
+      return finalCleanedContent
+      
+    } catch (error) {
+      logger.error('JSONImportValidator', '❌ Failed to clean up orphaned media references', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      // Return original data if cleanup fails
+      return parsedData
+    }
+  }
   
   // Always start with empty JSON input - users should paste their own content
   const [jsonInput, setJsonInput] = useState('')
@@ -74,6 +242,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']))
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const previousProjectIdRef = useRef<string | null>(null)
+  const isLoadingFromStorageRef = useRef(false)
+  const isAutoFixingRef = useRef(false)
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
   
   // Load persisted JSON import data on mount and when project changes
@@ -118,6 +288,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         previousProjectIdRef.current = currentProjectId
         
         try {
+          // Set loading flag to prevent validation triggers during state restoration
+          isLoadingFromStorageRef.current = true
+          
           // Try to load the complete JSON import data
           const jsonImportData = await storage.getContent('json-import-data')
           logger.info('JSONValidator', 'Raw storage response for json-import-data', {
@@ -181,6 +354,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           logger.error('JSONValidator', 'Error loading persisted validation state', { error: error instanceof Error ? error.message : String(error) })
           console.error('Error loading persisted validation state:', error)
           setHasLoadedInitialData(true)
+        } finally {
+          // Clear loading flag after state restoration is complete
+          isLoadingFromStorageRef.current = false
         }
       }
     }
@@ -188,37 +364,10 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     loadPersistedValidationState()
   }, [storage?.isInitialized, storage?.currentProjectId, logger])
   
-  // Persist validation state AND raw JSON when it changes
-  useEffect(() => {
-    const persistValidationState = async () => {
-      // Only save after initial data has been loaded to prevent overwriting during mount
-      if (storage && storage.isInitialized && hasLoadedInitialData) {
-        try {
-          // Save both the validation result and the raw JSON input
-          const jsonImportData = {
-            rawJson: jsonInput,
-            validationResult: validationResult,
-            isLocked: isLocked,
-            isTreeVisible: isTreeVisible
-          }
-          await storage.saveContent('json-import-data', jsonImportData)
-          
-          // Log saves for debugging
-          if (jsonInput.trim().length > 0) {
-            logger.info('JSONValidator', 'Persisted JSON data', {
-              jsonLength: jsonInput.length,
-              isLocked: isLocked,
-              hasValidation: !!validationResult
-            })
-          }
-        } catch (error) {
-          console.error('Error persisting validation state:', error)
-        }
-      }
-    }
-    
-    persistValidationState()
-  }, [jsonInput, validationResult, isLocked, isTreeVisible, storage?.isInitialized, hasLoadedInitialData, logger])
+  // State persistence is handled directly in validation success handlers and navigation handlers
+  
+  // Note: Validation state persistence is handled directly in validation success handlers
+  // to avoid race conditions with async state updates
   
   // Cleanup timeouts on unmount and save final state
   useEffect(() => {
@@ -285,14 +434,36 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   // JSON input state is tracked but not auto-saved to localStorage anymore
 
   const validateJSON = async () => {
-    // Clear previous validation result
-    setValidationResult(null)
-    setIsValidating(true)
+    // Prevent multiple simultaneous validations
+    if (isValidating || isAutoFixingRef.current) {
+      return
+    }
     
-    let processedInput = jsonInput
-    let wasAutoFixed = false
+    // Add timeout for extremely large JSON to prevent hanging
+    const MAX_VALIDATION_TIME = 10000 // 10 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Validation timeout - JSON too large to process')), MAX_VALIDATION_TIME)
+    })
     
-    try {
+    const validationPromise = (async () => {
+      // Clear previous validation result
+      setValidationResult(null)
+      setIsValidating(true)
+      
+      let processedInput = jsonInput
+      let wasAutoFixed = false
+      
+      // Check for escaped brackets before processing
+      const hasEscapedBrackets = processedInput.includes('\\[') || processedInput.includes('\\]')
+      if (hasEscapedBrackets) {
+        console.log('INFO: Detected escaped brackets in JSON - will auto-fix')
+      }
+      
+      try {
+        // Check for extremely large input early
+        if (processedInput.length > 500000) { // 500KB limit
+          throw new Error('JSON file is too large (>500KB). Please reduce the content size.')
+        }
       
       if (!processedInput.trim()) {
         // Don't show error for empty input, just silently return
@@ -338,7 +509,9 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         ['\u201D', 'right smart quote'],
         ['\u2026', 'ellipsis'],
         ['\u2013', 'en dash'],
-        ['\u2014', 'em dash']
+        ['\u2014', 'em dash'],
+        ['\\[', 'escaped opening bracket'],
+        ['\\]', 'escaped closing bracket']
       ]
       
       for (const [char, name] of problematicChars) {
@@ -380,19 +553,36 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         // The JSON is valid after pre-processing
         const parsedData = JSON.parse(processedInput) as CourseContent
         
+        // Clean up orphaned media references
+        const cleanedData = await applyMediaCleanup(parsedData, 'pre-processing')
+        
         // Update validation state with production-safe logging
         logger.info('JSONValidator', 'JSON validation successful (pre-processing)', {
-          topicsCount: parsedData.topics?.length || 0,
-          hasWelcomePage: !!parsedData.welcomePage,
-          hasObjectivesPage: !!parsedData.learningObjectivesPage,
-          hasAssessment: !!parsedData.assessment
+          topicsCount: cleanedData.topics?.length || 0,
+          hasWelcomePage: !!cleanedData.welcomePage,
+          hasObjectivesPage: !!cleanedData.learningObjectivesPage,
+          hasAssessment: !!cleanedData.assessment
+        })
+
+        // COMPREHENSIVE LOGGING: Track validation result creation (PRE-PROCESSING PATH)
+        logger.info('JSONImportValidator', '📋 Creating validation result from CLEANED data (pre-processing)', {
+          cleanedDataId: 'pre-processing-path',
+          hasWelcomePage: !!cleanedData.welcomePage,
+          hasObjectivesPage: !!cleanedData.learningObjectivesPage,
+          topicsCount: cleanedData.topics?.length || 0,
+          welcomePageHasMedia: !!cleanedData.welcomePage?.media,
+          welcomePageMediaCount: cleanedData.welcomePage?.media?.length || 0,
+          objectivesPageHasMedia: !!cleanedData.learningObjectivesPage?.media,
+          objectivesPageMediaCount: cleanedData.learningObjectivesPage?.media?.length || 0,
+          firstTopicHasMedia: !!cleanedData.topics?.[0]?.media,
+          firstTopicMediaCount: cleanedData.topics?.[0]?.media?.length || 0
         })
         
         // Update state synchronously to prevent race condition
         setValidationResult({
           isValid: true,
-          data: parsedData,
-          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+          data: cleanedData,
+          summary: `Successfully parsed! Contains ${cleanedData.topics?.length || 0} topics.`
         })
         
         success('✅ Valid JSON detected! Course structure loaded successfully.')
@@ -407,14 +597,15 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           hasValidationResult: true
         })
         
+        
         // Save the validated JSON data to storage after state updates
         if (storage && storage.isInitialized) {
           const jsonImportData = {
             rawJson: jsonInput,
             validationResult: {
               isValid: true,
-              data: parsedData,
-              summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+              data: cleanedData,
+              summary: `Successfully parsed! Contains ${cleanedData.topics?.length || 0} topics.`
             },
             isLocked: true
           }
@@ -442,18 +633,36 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       // Try to parse after smart fix
       try {
         const parsedData = JSON.parse(fixedJson) as CourseContent
+        
+        // Clean up orphaned media references
+        const cleanedData = await applyMediaCleanup(parsedData, 'smart-auto-fix')
+        
         logger.info('JSONValidator', 'JSON validation successful (smart auto-fix)', {
-          topicsCount: parsedData.topics?.length || 0,
-          hasWelcomePage: !!parsedData.welcomePage,
-          hasObjectivesPage: !!parsedData.learningObjectivesPage,
-          hasAssessment: !!parsedData.assessment
+          topicsCount: cleanedData.topics?.length || 0,
+          hasWelcomePage: !!cleanedData.welcomePage,
+          hasObjectivesPage: !!cleanedData.learningObjectivesPage,
+          hasAssessment: !!cleanedData.assessment
+        })
+
+        // COMPREHENSIVE LOGGING: Track validation result creation (SMART-AUTO-FIX PATH)
+        logger.info('JSONImportValidator', '📋 Creating validation result from CLEANED data (smart-auto-fix)', {
+          cleanedDataId: 'smart-auto-fix-path',
+          hasWelcomePage: !!cleanedData.welcomePage,
+          hasObjectivesPage: !!cleanedData.learningObjectivesPage,
+          topicsCount: cleanedData.topics?.length || 0,
+          welcomePageHasMedia: !!cleanedData.welcomePage?.media,
+          welcomePageMediaCount: cleanedData.welcomePage?.media?.length || 0,
+          objectivesPageHasMedia: !!cleanedData.learningObjectivesPage?.media,
+          objectivesPageMediaCount: cleanedData.learningObjectivesPage?.media?.length || 0,
+          firstTopicHasMedia: !!cleanedData.topics?.[0]?.media,
+          firstTopicMediaCount: cleanedData.topics?.[0]?.media?.length || 0
         })
         
         // Update state synchronously to prevent race condition
         setValidationResult({
           isValid: true,
-          data: parsedData,
-          summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+          data: cleanedData,
+          summary: `Successfully parsed! Contains ${cleanedData.topics?.length || 0} topics.`
         })
         
         success('🔧 JSON automatically fixed and validated! Course structure loaded.')
@@ -474,8 +683,8 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             rawJson: fixedJson,
             validationResult: {
               isValid: true,
-              data: parsedData,
-              summary: `Successfully parsed! Contains ${parsedData.topics?.length || 0} topics.`
+              data: cleanedData,
+              summary: `Successfully parsed! Contains ${cleanedData.topics?.length || 0} topics.`
             },
             isLocked: true
           }
@@ -748,6 +957,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if ('activities' in parsedData || 'quiz' in parsedData) {
         setValidationResult({ isValid: false, error: 'Invalid format: This appears to be the old JSON format. Please use the new format with welcomePage, learningObjectivesPage, and assessment.' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
 
@@ -755,11 +965,13 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!parsedData.welcomePage) {
         setValidationResult({ isValid: false, error: 'Missing required field: welcomePage' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
       if (!parsedData.welcomePage.id || !parsedData.welcomePage.title || !parsedData.welcomePage.content || !parsedData.welcomePage.narration) {
         setValidationResult({ isValid: false, error: 'Missing required fields in welcomePage' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
 
@@ -767,12 +979,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!parsedData.learningObjectivesPage) {
         setValidationResult({ isValid: false, error: 'Missing required field: learningObjectivesPage' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
       if (!parsedData.learningObjectivesPage.id || !parsedData.learningObjectivesPage.title || 
           !parsedData.learningObjectivesPage.content || !parsedData.learningObjectivesPage.narration) {
         setValidationResult({ isValid: false, error: 'Missing required fields in learningObjectivesPage' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
 
@@ -780,6 +994,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!parsedData.topics || !Array.isArray(parsedData.topics)) {
         setValidationResult({ isValid: false, error: 'Missing required field: topics' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
       }
 
@@ -787,12 +1002,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         if (!topic.id || !topic.title || !topic.content || topic.narration === undefined) {
           setValidationResult({ isValid: false, error: 'Missing required fields in topic' })
           setIsValidating(false)
+          setIsTreeVisible(false) // Hide tree view on error
           return
         }
         // Check for old format
         if ('bulletPoints' in topic || Array.isArray(topic.narration)) {
           setValidationResult({ isValid: false, error: 'Invalid format: Topics should have single narration string, not array or bulletPoints' })
           setIsValidating(false)
+          setIsTreeVisible(false) // Hide tree view on error
           return
         }
       }
@@ -801,7 +1018,103 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       if (!parsedData.assessment || !parsedData.assessment.questions || !Array.isArray(parsedData.assessment.questions)) {
         setValidationResult({ isValid: false, error: 'Missing required field: assessment' })
         setIsValidating(false)
+        setIsTreeVisible(false) // Hide tree view on error
         return
+      }
+
+      // Auto-fix missing or null assessment narration
+      if (!parsedData.assessment.narration) {
+        parsedData.assessment.narration = null
+        fixes.push('Added missing assessment narration')
+      }
+
+      // Auto-fix missing assessment passMark
+      if (typeof parsedData.assessment.passMark !== 'number') {
+        parsedData.assessment.passMark = 80
+        fixes.push('Added missing assessment pass mark (80%)')
+      }
+
+      // Auto-fix missing fields in welcomePage
+      if (!parsedData.welcomePage.narration) {
+        parsedData.welcomePage.narration = ''
+        fixes.push('Added missing welcome page narration')
+      }
+      if (!parsedData.welcomePage.imageKeywords) {
+        parsedData.welcomePage.imageKeywords = []
+        fixes.push('Added missing welcome page image keywords')
+      }
+      if (!parsedData.welcomePage.imagePrompts) {
+        parsedData.welcomePage.imagePrompts = []
+        fixes.push('Added missing welcome page image prompts')
+      }
+      if (!parsedData.welcomePage.videoSearchTerms) {
+        parsedData.welcomePage.videoSearchTerms = []
+        fixes.push('Added missing welcome page video search terms')
+      }
+      if (typeof parsedData.welcomePage.duration !== 'number') {
+        parsedData.welcomePage.duration = 2
+        fixes.push('Added missing welcome page duration (2 minutes)')
+      }
+
+      // Auto-fix missing fields in learningObjectivesPage
+      if (!parsedData.learningObjectivesPage.imageKeywords) {
+        parsedData.learningObjectivesPage.imageKeywords = []
+        fixes.push('Added missing objectives page image keywords')
+      }
+      if (!parsedData.learningObjectivesPage.imagePrompts) {
+        parsedData.learningObjectivesPage.imagePrompts = []
+        fixes.push('Added missing objectives page image prompts')
+      }
+      if (!parsedData.learningObjectivesPage.videoSearchTerms) {
+        parsedData.learningObjectivesPage.videoSearchTerms = []
+        fixes.push('Added missing objectives page video search terms')
+      }
+      if (typeof parsedData.learningObjectivesPage.duration !== 'number') {
+        parsedData.learningObjectivesPage.duration = 3
+        fixes.push('Added missing objectives page duration (3 minutes)')
+      }
+
+      // Auto-fix missing fields in topics
+      for (let i = 0; i < parsedData.topics.length; i++) {
+        const topic = parsedData.topics[i]
+        
+        if (!topic.narration) {
+          topic.narration = ''
+          fixes.push(`Added missing narration for topic "${topic.title}"`)
+        }
+        if (!topic.imageKeywords) {
+          topic.imageKeywords = []
+          fixes.push(`Added missing image keywords for topic "${topic.title}"`)
+        }
+        if (!topic.imagePrompts) {
+          topic.imagePrompts = []
+          fixes.push(`Added missing image prompts for topic "${topic.title}"`)
+        }
+        if (!topic.videoSearchTerms) {
+          topic.videoSearchTerms = []
+          fixes.push(`Added missing video search terms for topic "${topic.title}"`)
+        }
+        if (typeof topic.duration !== 'number') {
+          topic.duration = 5
+          fixes.push(`Added missing duration for topic "${topic.title}" (5 minutes)`)
+        }
+        if (!topic.knowledgeCheck) {
+          topic.knowledgeCheck = { questions: [] }
+          fixes.push(`Added missing knowledge check for topic "${topic.title}"`)
+        }
+      }
+
+      // Auto-fix missing question feedback
+      for (let i = 0; i < parsedData.assessment.questions.length; i++) {
+        const question = parsedData.assessment.questions[i]
+        
+        if (!question.feedback) {
+          question.feedback = {
+            correct: 'Correct!',
+            incorrect: 'Incorrect. Please review the material and try again.'
+          }
+          fixes.push(`Added missing feedback for assessment question ${i + 1}`)
+        }
       }
 
       // Count knowledge check questions
@@ -814,11 +1127,25 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
       // If we made any fixes, update the input and notify the user
       if (fixes.length > 0 && !parseError) {
+        // Set flag to prevent re-validation loop during auto-fix
+        isAutoFixingRef.current = true
+        
+        // Clear any pending validation timeouts to prevent conflicts
+        if (validationTimeoutRef.current) {
+          clearTimeout(validationTimeoutRef.current)
+          validationTimeoutRef.current = null
+        }
+        
         // Format the fixed JSON nicely
         const formattedJson = JSON.stringify(parsedData, null, 2)
         setJsonInput(formattedJson)
         markDirty('courseContent') // Mark dirty when formatting content
         success(`✨ Automatically fixed ${fixes.length} formatting issue(s)`)
+        
+        // Reset flag after a brief delay to allow the input update to complete
+        setTimeout(() => {
+          isAutoFixingRef.current = false
+        }, 200) // Increased delay to ensure completion
       }
 
       logger.info('JSONValidator', 'JSON validation successful (full validation)', {
@@ -933,12 +1260,16 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         const autoFixed = smartAutoFixJSON(processedInput)
         if (autoFixed !== processedInput) {
           wasAutoFixed = true
+          // Set flag to prevent re-validation loop during auto-fix
+          isAutoFixingRef.current = true
           setJsonInput(autoFixed)
           markDirty('courseContent') // Mark dirty when auto-fixing content
           info('Applied auto-fixes, validating...')
           // Try validation again with fixed JSON
           validationTimeoutRef.current = setTimeout(() => {
             validateJSON()
+            // Reset flag after validation completes
+            isAutoFixingRef.current = false
           }, 100)
           setIsValidating(false)
           return
@@ -947,6 +1278,23 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       
       setValidationResult({ isValid: false, error: errorMessage })
       setIsValidating(false)
+    }
+    })() // End of validation promise
+    
+    // Race between validation and timeout
+    try {
+      await Promise.race([validationPromise, timeoutPromise])
+    } catch (error) {
+      setIsValidating(false)
+      if (error instanceof Error && error.message.includes('timeout')) {
+        setValidationResult({ 
+          isValid: false, 
+          error: 'Validation timeout: The JSON file is too large or complex to process. Please try with a smaller file or break your content into smaller sections.' 
+        })
+      } else {
+        // Re-throw other errors to be handled by the normal error handling
+        throw error
+      }
     }
   }
 
@@ -963,7 +1311,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       success('Content pasted from clipboard!')
       // Automatically validate immediately after pasting
       setTimeout(() => validateJSON(), 100)
-    } catch (error) {
+    } catch (err) {
       notifyError('Failed to read clipboard. Please paste manually.')
     }
   }
@@ -991,12 +1339,39 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
           error: error instanceof Error ? error.message : String(error)
         })
       }
+
+      // CRITICAL FIX: Clean validation result data before passing to onNext
+      // This ensures no orphaned media references get passed to the next step
+      logger.info('JSONImportValidator', '🔧 Final cleanup of validation result data before onNext')
       
-      // Unlock all subsequent steps when JSON is validated successfully
-      // Steps: 0=Seed, 1=Prompt, 2=JSON, 3=Media, 4=Audio, 5=Activities, 6=SCORM
-      navigation.unlockSteps([3, 4, 5, 6])
-      resetDirty('courseContent') // Reset dirty flag on successful next
-      onNext(validationResult.data)
+      try {
+        const finalCleanedData = await applyMediaCleanup(validationResult.data, 'pre-onNext-final-cleanup')
+        
+        logger.info('JSONImportValidator', '✅ Final cleanup completed before onNext', {
+          hasWelcomePage: !!finalCleanedData.welcomePage,
+          hasObjectivesPage: !!finalCleanedData.learningObjectivesPage,
+          topicsCount: finalCleanedData.topics?.length || 0,
+          hasAssessment: !!finalCleanedData.assessment
+        })
+        
+        // Unlock all subsequent steps when JSON is validated successfully
+        // Steps: 0=Seed, 1=Prompt, 2=JSON, 3=Media, 4=Audio, 5=Activities, 6=SCORM
+        navigation.unlockSteps([3, 4, 5, 6])
+        resetDirty('courseContent') // Reset dirty flag on successful next
+        
+        // Pass the final cleaned data to onNext instead of the raw validation result
+        onNext(finalCleanedData)
+        
+      } catch (cleanupError) {
+        logger.error('JSONImportValidator', '❌ Failed to clean validation result data before onNext', {
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        })
+        
+        // Fallback: still proceed with original data to not break the user flow
+        navigation.unlockSteps([3, 4, 5, 6])
+        resetDirty('courseContent')
+        onNext(validationResult.data)
+      }
     }
     // Don't show alert - the disabled Next button provides sufficient feedback
   }
@@ -1039,6 +1414,12 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     setIsLocked(false)
     setIsTreeVisible(false) // Reset to JSON editor view
     info('Course structure cleared. All pages have been reset and locked until new JSON is imported.')
+    
+    // Clear any existing validation timeout to prevent interference
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
     
     // Clear persisted validation state (both old and new formats)
     if (storage && storage.isInitialized) {
@@ -1111,6 +1492,15 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
 
   // Render tree view for validated content
   const renderTreeView = (data: CourseContent) => {
+    // Defensive check - ensure we have valid data structure
+    if (!data || !data.welcomePage || !data.learningObjectivesPage || !data.topics || !data.assessment) {
+      return (
+        <div style={{ padding: '1rem', textAlign: 'center' }}>
+          <p>Invalid or incomplete course data. Please check your JSON structure.</p>
+        </div>
+      )
+    }
+    
     const isExpanded = (nodeId: string) => expandedNodes.has(nodeId)
     
     return (
@@ -1297,7 +1687,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                       )}
                       {topic.knowledgeCheck && (
                         <span className={styles.badge}>
-                          <Icon icon={FileQuestion} size="xs" /> {topic.knowledgeCheck.questions.length} questions
+                          <Icon icon={FileQuestion} size="xs" /> {topic.knowledgeCheck.questions.length} {topic.knowledgeCheck.questions.length === 1 ? 'question' : 'questions'}
                         </span>
                       )}
                       <span className={styles.badge}>{topic.duration || 5} min</span>
@@ -1394,7 +1784,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
             <span className={styles.treeNodeTitle}>Assessment</span>
             <div className={styles.treeNodeBadges}>
               <span className={styles.badge}>
-                {data.assessment.questions.length} questions
+                {data.assessment.questions.length} {data.assessment.questions.length === 1 ? 'question' : 'questions'}
               </span>
               <span className={styles.badge}>
                 Pass: {data.assessment.passMark || 80}%
@@ -1438,7 +1828,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
     <PageLayout
       currentStep={2}
       title="JSON Import & Validation"
-      description="Paste the JSON response from your AI chatbot below, or upload a JSON file."
+      description="Paste the JSON response from your AI chatbot below."
       autoSaveIndicator={autoSaveIndicator}
       onSettingsClick={onSettingsClick}
       onSave={onSave}
@@ -1485,8 +1875,25 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
       </div>
 
       <Section>
+        {/* Toggle button - visible when JSON has been successfully validated */}
+        {isLocked && (
+          <div style={{ marginBottom: '1rem' }}>
+            <Button
+              variant="primary"
+              onClick={() => setIsTreeVisible(prev => !prev)}
+              data-testid="toggle-view-button"
+              aria-label={isTreeVisible ? 'Switch to JSON editor view (Ctrl+T)' : 'Switch to course tree view (Ctrl+T)'}
+              title="Press Ctrl+T to toggle view"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Icon icon={Eye} size="sm" />
+              {isTreeVisible ? 'Show JSON Editor' : 'Show Course Tree'}
+            </Button>
+          </div>
+        )}
+
         {/* Show tree view when user chooses to, editor otherwise */}
-        {isTreeVisible && validationResult?.isValid && validationResult?.data ? (
+        {isTreeVisible && isLocked ? (
             <div 
               ref={treeViewRef} 
               tabIndex={0}
@@ -1497,21 +1904,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
               <div className={styles.sectionWrapper}>
                 <h2 className={styles.sectionTitle}>Course Structure</h2>
                 <Card>
-                  {renderTreeView(validationResult.data)}
+                  {validationResult?.data ? 
+                    renderTreeView(validationResult.data) : 
+                    <div style={{ padding: '1rem', textAlign: 'center' }}>
+                      <p>Course structure validated successfully, but data is temporarily unavailable.</p>
+                      <p>Try switching back to JSON view and then to tree view again.</p>
+                    </div>
+                  }
                 </Card>
-              </div>
-              
-              {/* Clear button when locked */}
-              <div style={{ marginTop: '1rem' }}>
-                <Button 
-                  variant="secondary"
-                  onClick={handleClear}
-                  data-testid="clear-json-button"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  <Icon icon={Trash2} size="sm" />
-                  Clear Course Structure
-                </Button>
               </div>
             </div>
           ) : (
@@ -1531,7 +1931,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                     <SimpleJSONEditor
               value={jsonInput}
               onChange={(value) => {
-                if (!isLocked) {
+                if (!isLocked && !isLoadingFromStorageRef.current) {
                   const prevLength = jsonInput.length
                   setJsonInput(value)
                   markDirty('courseContent') // Mark dirty when user changes JSON content
@@ -1562,7 +1962,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
               }}
               onPaste={() => {
                 // Handle paste event - validate immediately
-                if (!isLocked && jsonInput && jsonInput.trim().length > 50) {
+                if (!isLocked && !isLoadingFromStorageRef.current && jsonInput && jsonInput.trim().length > 50) {
                   // Clear any existing timeout
                   if (validationTimeoutRef.current) {
                     clearTimeout(validationTimeoutRef.current)
@@ -1575,13 +1975,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 }
               }}
               onValidate={(isValid, errors) => {
-                // Don't update validation state if already locked (successfully validated)
-                if (isLocked) {
+                // Don't update validation state if already locked or loading from storage
+                if (isLocked || isLoadingFromStorageRef.current) {
                   return
                 }
                 
                 // If JSON is syntactically valid, automatically trigger full validation
-                if (isValid && jsonInput.trim().length > 0) {
+                // Skip if we're currently auto-fixing to prevent infinite loops
+                if (isValid && jsonInput.trim().length > 0 && !isAutoFixingRef.current) {
                   // Use a short delay to ensure the JSON content is fully processed
                   validationTimeoutRef.current = setTimeout(() => {
                     validateJSON()
@@ -1632,20 +2033,6 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                     Paste from Clipboard
                   </Button>
                   
-                  {validationResult?.isValid && validationResult?.data && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setIsTreeVisible(prev => !prev)}
-                      disabled={!validationResult?.isValid || !validationResult?.data}
-                      data-testid="toggle-view-button"
-                      aria-label={isTreeVisible ? 'Switch to JSON editor view' : 'Switch to course tree view'}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                      <Icon icon={Eye} size="sm" />
-                      {isTreeVisible ? 'Show JSON Editor' : 'Show Course Tree'}
-                    </Button>
-                  )}
-                  
                   {/* Show validation status */}
                   {isValidating && (
                     <div 
@@ -1682,6 +2069,21 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
                 Please ensure you've copied the complete response from the AI chatbot.
               </span>
             </Alert>
+          </div>
+        )}
+
+        {/* Clear button - always available when there's content */}
+        {jsonInput.trim().length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <Button 
+              variant="secondary"
+              onClick={handleClear}
+              data-testid="clear-json-button"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Icon icon={Trash2} size="sm" />
+              Clear Course Structure
+            </Button>
           </div>
         )}
       </Section>

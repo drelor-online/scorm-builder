@@ -12,6 +12,7 @@ import { logger } from '@/utils/logger'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { initializeLoggerConfig } from '@/config/loggerConfig'
 import { createMutationSafeContent, validateImmutableUpdate } from '@/utils/mutationSafety'
+import { cleanupOrphanedMediaReferences } from '@/utils/orphanedMediaCleaner'
 
 // Initialize logger configuration to reduce console noise
 initializeLoggerConfig()
@@ -81,7 +82,7 @@ import { useStatusMessages } from '@/hooks/useStatusMessages'
 // Contexts
 import { StepNavigationProvider, useStepNavigation } from './contexts/StepNavigationContext'
 import { AutoSaveProvider } from './contexts/AutoSaveContext'
-import { UnifiedMediaProvider } from './contexts/UnifiedMediaContext'
+import { UnifiedMediaProvider, useUnifiedMedia } from './contexts/UnifiedMediaContext'
 import { useNotifications } from './contexts/NotificationContext'
 import { useUnsavedChanges } from './contexts/UnsavedChangesContext'
 import MediaLoadingOverlay from './components/MediaLoadingOverlay'
@@ -120,6 +121,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
+  const { deleteAllMedia, getMedia } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -128,7 +130,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
-  const [isStatusPanelDocked, setIsStatusPanelDocked] = useState(false)
+  const [isStatusPanelDocked, setIsStatusPanelDocked] = useState(true)
 
   // Set up debug log export on window close
   useEffect(() => {
@@ -237,7 +239,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   })
   
   // Use notification context instead of local toast state
-  const { success, error: showError } = useNotifications()
+  const { success, error: showError, info } = useNotifications()
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -358,6 +360,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Load project data from PersistentStorage on mount
   useEffect(() => {
+    // Reset counters when project ID changes
+    if (hasLoadedProjectRef.current !== storage.currentProjectId) {
+      loadProjectCallCount = 0
+      hasLoadedProjectRef.current = null
+    }
+    
     // DEBUG: Track how many times this effect runs
     loadProjectCallCount++
     console.log(`[DEBUG] loadProject useEffect called ${loadProjectCallCount} times for project:`, storage.currentProjectId)
@@ -372,6 +380,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         currentProjectId: storage.currentProjectId,
         isInitialized: storage.isInitialized
       })
+      
+      // If no project ID, reset the tracking refs to allow loading next project
+      if (!storage.currentProjectId) {
+        hasLoadedProjectRef.current = null
+        loadProjectCallCount = 0
+      }
       return
     }
     
@@ -1081,23 +1095,54 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleClearCourseContent = async () => {
+    debugLogger.info('App', 'Clearing course content and all associated media files')
+    
     // Clear all course content when JSON is cleared
     setCourseContent(null)
     
     // Navigate back to JSON step when course content is cleared
     navigation.navigateToStep(2) // JSON step
     
-    // Save the cleared state
+    // FIRST: Save the cleared course content to storage to remove all media references
+    // This prevents other components from accessing stale course content with media references
     if (storage.currentProjectId) {
       try {
+        debugLogger.info('App', 'Saving cleared course content to prevent stale media references')
         await storage.saveCourseContent(null)
         await storage.saveContent('currentStep', { step: 'json' })
-        debugLogger.info('App', 'Course content cleared and subsequent pages locked')
+        debugLogger.info('App', 'Course content cleared and saved to storage successfully')
       } catch (error) {
-        debugLogger.error('App', 'Failed to save cleared course content state', { error })
-        console.error('Failed to save cleared course content state:', error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        debugLogger.error('App', 'CRITICAL: Failed to save cleared course content state', { 
+          error: errorMessage,
+          projectId: storage.currentProjectId 
+        })
+        console.error('CRITICAL: Failed to save cleared course content state:', error)
+        
+        // This is a critical failure - course content references won't be cleared
+        // Alert the user and potentially abort the operation
+        alert(`Failed to clear course content from storage: ${errorMessage}\n\nThis may leave orphaned media references. Please try again.`)
+        return // Abort the operation to prevent inconsistent state
       }
     }
+    
+    // SECOND: Delete all media files (now orphaned since course content is cleared)
+    if (storage.currentProjectId) {
+      try {
+        debugLogger.info('App', 'Deleting orphaned media files for project', { projectId: storage.currentProjectId })
+        await deleteAllMedia(storage.currentProjectId)
+        debugLogger.info('App', 'Successfully deleted all orphaned media files')
+      } catch (error) {
+        debugLogger.error('App', 'Failed to delete media files during course content clear', { 
+          error: error instanceof Error ? error.message : String(error) 
+        })
+        console.error('Failed to delete media files during course content clear:', error)
+        // Media deletion failure doesn't affect course content clearing
+        // The course content is already cleared, so the user isn't left in an inconsistent state
+      }
+    }
+    
+    debugLogger.info('App', 'Course content and media cleanup completed')
   }
 
   const handleJSONNext = async (data: CourseContent) => {
@@ -1113,6 +1158,42 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         await storage.saveContent('currentStep', { step: 'media' })
         await storage.saveCourseContent(data)
         
+        // Post-save failsafe: Clean up any orphaned media references that might have been missed
+        try {
+          debugLogger.info('App.handleJSONNext', '🔧 Running post-save orphaned media cleanup validation')
+          
+          const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
+            try {
+              const result = await getMedia(mediaId)
+              const exists = result !== null
+              debugLogger.debug('App.handleJSONNext', `Post-save media check: ${mediaId} exists: ${exists}`)
+              return exists
+            } catch (error) {
+              debugLogger.debug('App.handleJSONNext', `Post-save media check error for ${mediaId}:`, error)
+              return false
+            }
+          }
+          
+          const cleanupResult = await cleanupOrphanedMediaReferences(data, mediaExistsChecker)
+          
+          if (cleanupResult.removedMediaIds.length > 0) {
+            debugLogger.info('App.handleJSONNext', '🧹 Post-save cleanup found and removed orphaned media references:', {
+              removedMediaIds: Array.from(cleanupResult.removedMediaIds),
+              count: cleanupResult.removedMediaIds.length
+            })
+            
+            // Update course content with the cleaned version
+            setCourseContent(cleanupResult.cleanedContent)
+            await storage.saveCourseContent(cleanupResult.cleanedContent)
+            
+            info(`🧹 Removed ${cleanupResult.removedMediaIds.length} orphaned media references that were pointing to deleted files.`)
+          } else {
+            debugLogger.debug('App.handleJSONNext', '✅ Post-save cleanup found no orphaned media references')
+          }
+        } catch (cleanupError) {
+          debugLogger.error('App.handleJSONNext', '❌ Post-save cleanup failed:', cleanupError)
+          // Don't fail the entire save operation if cleanup fails
+        }
         
         // NOTE: Individual page saves removed - saveCourseContent() above already saves 
         // the complete course structure including welcomePage, learningObjectivesPage, and all topics
@@ -1313,8 +1394,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       await handleSave()
     }
     
-    // Update the auto-save state to reflect the manual save
-    await autoSaveState.forceSave()
+    // Manual save already resets unsaved changes, no need to force autosave
   }
   
   
@@ -1723,18 +1803,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 onOpen={handleOpen}
                 isSaving={isSaving}
                 onSave={async (content?: CourseSeedData) => {
-                  if (content) {
-                    setCourseSeedData(content);
-                    // Auto-save: use silent save without notifications
-                    const updatedProjectData: ProjectData = {
-                      ...projectData,
-                      courseSeedData: content
-                    };
-                    await handleAutosave(updatedProjectData);
-                  } else {
-                    // Manual save: use current state
-                    await handleAutosave(projectData);
-                  }
+                  // Manual save from Save button - use handleManualSave with proper notifications
+                  await handleManualSave(content);
                 }}
                 onSubmit={handleCourseSeedSubmit}
                 onStepClick={handleStepClick}
