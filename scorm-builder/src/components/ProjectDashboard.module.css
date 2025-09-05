@@ -268,10 +268,12 @@
   padding: var(--space-2xl);
 }
 
-/* New: wide content variant for dashboard lists */
+/* Centered, full-width content area that matches the card above */
 .mainContentWide {
-  max-width: none;   /* remove 1200px clamp */
-  width: 100%;
+  max-width: var(--page-max-width, 1280px);
+  margin: 0 auto;     /* center like other sections */
+  padding-left: 0;    /* avoid extra inset vs the card */
+  padding-right: 0;
 }
 
 /* Project Grid */

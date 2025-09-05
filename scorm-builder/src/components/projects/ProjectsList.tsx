@@ -79,39 +79,44 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
   return (
     <div className={styles.listContainer}>
       <div className={styles.toolbar}>
-        <Icon icon={Search} aria-hidden="true" />
-        <Input
-          placeholder="Search projects by name or path…"
-          value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
-          className={styles.searchInput}
-          aria-label="Search projects by name or path"
-        />
+        <div className={styles.inputWithIcon} aria-label="Search projects">
+          <span className={styles.icon} aria-hidden="true">
+            <Icon icon={Search} size="sm" />
+          </span>
+          <Input
+            placeholder="Search projects by name or path…"
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+          />
+        </div>
+
         <select
-          aria-label="Sort key"
+          aria-label="Sort by"
+          className={styles.sortSelect}
           value={sortKey}
           onChange={e => setSortKey(e.target.value as any)}
-          className={styles.sortSelect}
         >
           <option value="name">Title</option>
-          <option value="lastAccessed">Last Accessed</option>
+          <option value="lastAccessed">Last Modified</option>
         </select>
+
         <select
           aria-label="Sort direction"
+          className={styles.sortDir}
           value={sortDir}
           onChange={e => setSortDir(e.target.value as any)}
-          className={styles.sortSelect}
         >
           <option value="asc">↑</option>
           <option value="desc">↓</option>
         </select>
+
         <div className={styles.count}>{filtered.length} projects</div>
       </div>
 
-      <div className={styles.columnHeaders} role="row">
-        <div role="columnheader">Project</div>
-        <div role="columnheader">Last Modified</div>
-        <div role="columnheader">Actions</div>
+      <div className={styles.columns} role="rowgroup" aria-hidden="true">
+        <div>PROJECT</div>
+        <div style={{ textAlign: 'right' }}>LAST MODIFIED</div>
+        <div style={{ textAlign: 'right' }}>ACTIONS</div>
       </div>
 
       <div className={styles.rows} role="table" aria-label="Projects">
@@ -130,42 +135,14 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
                 <div className={styles.title} title={p.name}>{p.name}</div>
                 <div className={styles.path} title={path}>{path || 'No path specified'}</div>
               </div>
-              <div className={styles.last} role="cell" title={last}>
-                {formatDate(last)}
+              <div className={styles.last} role="cell" title={last || '—'}>
+                {last ? formatDate(last) : '—'}
               </div>
               <div className={styles.actions} role="cell">
-                <Button 
-                  size="small" 
-                  onClick={() => onOpen(p)}
-                  aria-label={`Open project ${p.name}`}
-                >
-                  Open
-                </Button>
-                <Button 
-                  size="small" 
-                  variant="secondary" 
-                  onClick={() => onExport(p)}
-                  aria-label={`Export project ${p.name}`}
-                >
-                  Export
-                </Button>
-                <Button 
-                  size="small" 
-                  variant="secondary" 
-                  onClick={() => onRename(p)}
-                  aria-label={`Rename project ${p.name}`}
-                >
-                  Rename
-                </Button>
-                <Button 
-                  size="small" 
-                  variant="danger" 
-                  data-testid={`delete-project-${p.id}`} 
-                  onClick={() => onDelete(p)}
-                  aria-label={`Delete project ${p.name}`}
-                >
-                  Delete
-                </Button>
+                <Button size="small" onClick={() => onOpen(p)}>Open</Button>
+                <Button size="small" variant="secondary" onClick={() => onExport(p)}>Export</Button>
+                <Button size="small" variant="secondary" onClick={() => onRename(p)}>Rename</Button>
+                <Button size="small" variant="danger" onClick={() => onDelete(p)}>Delete</Button>
               </div>
             </div>
           )

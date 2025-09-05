@@ -7,20 +7,46 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  padding: var(--space-sm);
+  width: 100%;
+  padding: 0; /* the toolbar + rows control their own padding */
 }
 
+/* Sticky toolbar, consistent control sizes, centered baseline */
 .toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
-  border-bottom: 1px solid var(--border-default);
-  margin-bottom: var(--space-sm);
   position: sticky;
   top: 0;
+  z-index: 1;
   background: var(--bg-secondary);
-  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) auto auto 1fr;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-sm);
+  border-bottom: 1px solid var(--border-default);
+}
+
+/* Input with left icon: avoids clipped placeholder */
+.inputWithIcon {
+  position: relative;
+}
+.inputWithIcon .icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.inputWithIcon input {
+  height: 36px;                 /* unify control height */
+  line-height: 36px;
+  padding-left: 32px;           /* make room for the icon */
+}
+
+/* Sort controls same height as input */
+.sortSelect,
+.sortDir {
+  height: 36px;
 }
 
 .rows {
@@ -29,38 +55,29 @@
   flex-direction: column;
 }
 
-.columnHeaders {
+/* Column headers */
+.columns {
   display: grid;
-  grid-template-columns: 1fr 160px 220px;
+  grid-template-columns: 1fr minmax(140px, 180px) max-content; /* let Actions size to content */
   gap: var(--space-md);
-  align-items: center;
   padding: 6px var(--space-sm);
-  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
   border-bottom: 1px solid var(--border-default);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 1px;
 }
 
+/* Each row: 3 columns matching header grid */
 .row {
   display: grid;
-  grid-template-columns: 1fr 160px 220px;
+  grid-template-columns: 1fr minmax(140px, 180px) max-content;
   gap: var(--space-md);
   align-items: center;
+  min-height: 56px;
   padding: 10px var(--space-sm);
-  border-bottom: 1px solid var(--border-light);
-  transition: background-color var(--transition-fast);
-  border-radius: var(--radius-sm);
-  margin-bottom: 1px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
 }
 
-.row:last-child { 
-  border-bottom: none; 
-  margin-bottom: 0;
-}
+.row:last-child { border-bottom: none; }
 
 .row:hover {
   background-color: var(--bg-tertiary);
@@ -76,91 +93,58 @@
   min-width: 0; /* Allow text truncation */
 }
 
-.title { 
-  font-weight: var(--font-weight-semibold); 
-  font-size: var(--font-size-sm); 
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-bottom: 2px;
+.title { font-weight: 600; font-size: var(--font-size-sm); }
+.path  { color: var(--text-tertiary); font-size: var(--font-size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+.last  { text-align: right; font-size: var(--font-size-xs); color: var(--text-secondary); }
+
+/* Keep action buttons on one line; allow shrinking with tighter gaps */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;     /* prevent wrap causing Delete to drop */
+}
+.actions :where(button) {
+  height: 32px;            /* slightly smaller than input but consistent */
+  padding: 0 10px;
 }
 
-.path  { 
-  color: var(--text-tertiary); 
-  font-size: var(--font-size-xs); 
-  font-family: var(--font-mono, 'SFMono-Regular', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace);
-  overflow: hidden; 
-  text-overflow: ellipsis; 
-  white-space: nowrap; 
-  letter-spacing: 0.02em;
+/* Count label on the far right of the toolbar */
+.count {
+  justify-self: end;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
 }
 
-.last { 
-  text-align: right; 
-  font-size: var(--font-size-xs); 
-  color: var(--text-secondary); 
-  white-space: nowrap;
+/* Optional: responsive squeeze — if width is tight, reduce gaps */
+@media (max-width: 1200px) {
+  .actions { gap: 6px; }
 }
 
-.actions { 
-  display: flex; 
-  justify-content: flex-end; 
-  gap: var(--space-xs); 
-  flex-wrap: wrap;
-}
-
-.count { 
-  margin-left: auto; 
-  color: var(--text-tertiary); 
-  font-size: var(--font-size-xs); 
-  white-space: nowrap;
-}
-
-.searchInput {
-  max-width: 380px;
-  flex: 1;
-}
-
-.sortSelect {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  padding: var(--space-xs) var(--space-sm);
-  font-size: var(--font-size-sm);
-}
-
-.sortSelect:focus {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
-}
-
-/* Responsive adjustments */
+/* Responsive adjustments for mobile */
 @media (max-width: 768px) {
   .row,
-  .columnHeaders {
-    grid-template-columns: 1fr 140px 200px;
+  .columns {
+    grid-template-columns: 1fr 140px max-content;
     gap: var(--space-sm);
   }
   
   .actions {
-    gap: 2px;
-  }
-  
-  .searchInput {
-    max-width: 240px;
+    gap: 4px;
   }
 }
 
 @media (max-width: 640px) {
   .toolbar {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr auto auto auto;
+    gap: var(--space-xs);
   }
   
   .row,
-  .columnHeaders {
-    grid-template-columns: 1fr 120px;
+  .columns {
+    grid-template-columns: 1fr max-content;
     gap: var(--space-sm);
   }
   
