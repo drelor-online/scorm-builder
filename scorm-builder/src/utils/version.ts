@@ -3,7 +3,7 @@
  */
 
 // Version should match package.json, tauri.conf.json, and Cargo.toml
-export const APP_VERSION = '1.0.2'
+export const APP_VERSION = '1.0.3'
 
 /**
  * Get formatted version string for display in UI
