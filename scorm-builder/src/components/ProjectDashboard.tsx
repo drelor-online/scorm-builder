@@ -14,6 +14,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap, Edit2, Check, X } from 'lucide-react'
+import { ProjectsList } from './projects/ProjectsList'
 import './DesignSystem/transitions.css'
 import { envConfig } from '../config/environment'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
@@ -767,132 +768,6 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         </div>
       </div>
       
-      {recentProjects.length > 0 && (
-        <div className={styles.recentSection}>
-          <h2 className={styles.sectionTitle}>Recent Projects</h2>
-          <div className={styles.projectGrid}>
-            {recentProjects.map((project, index) => (
-              <Card 
-                key={`recent-${project.id}`}
-                data-testid="recent-project-card"
-                className={`${styles.projectCard} ${styles.projectCardAnimated}`}
-                style={{ '--animation-index': index } as React.CSSProperties}
-                role="article"
-                aria-label={`Project: ${project.name}`}
-              >
-                <div className={styles.projectCardInner}>
-                  <div className={styles.projectInfo}>
-                    <div className={styles.recentBadge}>
-                      Recent
-                    </div>
-                    {renamingProjectId === project.id ? (
-                      <div className={styles.renameInputWrapper}>
-                        <input
-                          type="text"
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => handleRenameKeyDown(e, (project as any).path || project.id)}
-                          autoFocus
-                          className={styles.renameInput}
-                          data-testid={`rename-input-${project.id}`}
-                        />
-                        <div className={styles.renameButtons}>
-                          <Button
-                            variant="primary"
-                            size="small"
-                            onClick={() => handleSaveRename((project as any).path || project.id)}
-                            aria-label="Save rename"
-                            data-testid={`save-rename-${project.id}`}
-                          >
-                            <Icon icon={Check} size="sm" /> Save
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            onClick={handleCancelRename}
-                            aria-label="Cancel rename"
-                            data-testid={`cancel-rename-${project.id}`}
-                          >
-                            <Icon icon={X} size="sm" /> Cancel
-                          </Button>
-                        </div>
-                        {renameError && (
-                          <p className={styles.renameError}>{renameError}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <h3 className={styles.projectName}>{project.name}</h3>
-                    )}
-                    <p className={styles.projectDate}>
-                      Last accessed {formatLastAccessed(project)}
-                    </p>
-                    <p className={styles.projectDateFull}>
-                      {formatProjectDate(project)}
-                    </p>
-                    {(project as any).path && (
-                      <Tooltip content={(project as any).path} position="top">
-                        <p className={styles.projectPath}>
-                          <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
-                        </p>
-                      </Tooltip>
-                    )}
-                  </div>
-                  <div className={styles.projectButtons}>
-                    {!renamingProjectId && (
-                      <Tooltip content="Rename this project" position="top">
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={() => handleStartRename(project.id, project.name)}
-                          aria-label={`Rename project ${project.name}`}
-                          data-testid={`rename-project-${project.id}`}
-                          disabled={renamingProjectId !== null && renamingProjectId !== project.id}
-                        >
-                          <Icon icon={Edit2} size="sm" />
-                        </Button>
-                      </Tooltip>
-                    )}
-                    <Tooltip content="Open this project" position="top">
-                      <Button
-                        variant="primary"
-                        size="small"
-                        onClick={() => handleOpenProject(project.id, project.path)}
-                        aria-label={`Open project ${project.name}`}
-                        disabled={renamingProjectId !== null}
-                      >
-                        Open
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content="Export this project as ZIP" position="top">
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => handleExportProject(project.id, project.path)}
-                        disabled={exportingProjectId === project.id || renamingProjectId !== null}
-                        aria-label={`Export project ${project.name}`}
-                      >
-                        {exportingProjectId === project.id ? 'Exporting...' : 'Export'}
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content="Delete this project" position="top">
-                      <Button
-                        variant="danger"
-                        size="small"
-                        onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
-                        aria-label={`Delete project ${project.name}`}
-                        disabled={renamingProjectId !== null}
-                        data-testid={`delete-project-${project.id}`}
-                      >
-                        Delete
-                      </Button>
-                    </Tooltip>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
       
       {projects.length === 0 && recentProjects.length === 0 ? (
         <div className="empty-state">
@@ -940,123 +815,31 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         </div>
       ) : (
         <div className={styles.mainContent}>
-          {projects.length > 0 && (
-            <>
-              <h2 className={styles.sectionTitle}>All Projects</h2>
-              <div className={projects.length <= 2 ? styles.projectGridCentered : styles.projectGrid}>
-          {projects.map((project, index) => (
-            <Card 
-              key={project.id}
-              data-testid="project-card"
-              className={`${styles.projectCard} ${styles.projectCardAnimated}`}
-              style={{ '--animation-index': index } as React.CSSProperties}
-              role="article"
-              aria-label={`Project: ${project.name}`}
-            >
-              <div className={styles.projectCardInner}>
-                <div className={styles.projectInfo}>
-                  {renamingProjectId === project.id ? (
-                    <div className={styles.renameInputWrapper}>
-                      <input
-                        type="text"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => handleRenameKeyDown(e, (project as any).path || project.id)}
-                        autoFocus
-                        className={styles.renameInput}
-                        data-testid={`rename-input-${project.id}`}
-                      />
-                      <div className={styles.renameButtons}>
-                        <Button
-                          variant="primary"
-                          size="small"
-                          onClick={() => handleSaveRename((project as any).path || project.id)}
-                          aria-label="Save rename"
-                          data-testid={`save-rename-${project.id}`}
-                        >
-                          <Icon icon={Check} size="sm" /> Save
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={handleCancelRename}
-                          aria-label="Cancel rename"
-                          data-testid={`cancel-rename-${project.id}`}
-                        >
-                          <Icon icon={X} size="sm" /> Cancel
-                        </Button>
-                      </div>
-                      {renameError && (
-                        <p className={styles.renameError}>{renameError}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <h3 className={styles.projectName}>{project.name}</h3>
-                  )}
-                  <p className={styles.projectDate}>
-                    Last accessed {formatLastAccessed(project)}
-                  </p>
-                  <p className={styles.projectDateFull}>
-                    {formatProjectDate(project)}
-                  </p>
-                  {(project as any).path && (
-                    <Tooltip content={(project as any).path} position="top">
-                      <p className={styles.projectPath}>
-                        <Icon icon={FolderOpen} size="xs" /> {(project as any).path.split(/[\\\/]/).slice(-2).join('/')}
-                      </p>
-                    </Tooltip>
-                  )}
-                </div>
-                <div className={styles.projectButtons}>
-                  {!renamingProjectId && (
-                    <Tooltip content="Rename this project" position="top">
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => handleStartRename(project.id, project.name)}
-                        aria-label={`Rename project ${project.name}`}
-                        data-testid={`rename-project-${project.id}`}
-                        disabled={renamingProjectId !== null && renamingProjectId !== project.id}
-                      >
-                        <Icon icon={Edit2} size="sm" />
-                      </Button>
-                    </Tooltip>
-                  )}
-                  <Button
-                    variant="primary"
-                    size="small"
-                    onClick={() => handleOpenProject(project.id, (project as any).path)}
-                    aria-label={`Open project ${project.name}`}
-                    disabled={renamingProjectId !== null}
-                  >
-                    Open
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="small"
-                    onClick={() => handleExportProject(project.id, project.path)}
-                    disabled={exportingProjectId === project.id || renamingProjectId !== null}
-                    aria-label={`Export project ${project.name}`}
-                  >
-                    {exportingProjectId === project.id ? 'Exporting...' : 'Export'}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="small"
-                    onClick={() => setDeleteConfirm({id: project.id, path: (project as any).path})}
-                    aria-label={`Delete project ${project.name}`}
-                    disabled={renamingProjectId !== null}
-                    data-testid={`delete-project-${project.id}`}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-              </div>
-            </>
-          )}
+          <ProjectsList
+            projects={[...recentProjects, ...projects]}
+            onOpen={(projectId, projectPath) => handleOpenProject(projectId, projectPath)}
+            onExport={(projectId) => {
+              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
+              if (project) {
+                handleExportProject(projectId, (project as any).path)
+              }
+            }}
+            onDelete={(projectId) => {
+              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
+              if (project) {
+                setDeleteConfirm({id: projectId, path: (project as any).path})
+              }
+            }}
+            onRename={(projectId, currentName) => handleStartRename(projectId, currentName)}
+            onOpenFolder={(projectId) => {
+              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
+              if (project && (project as any).path) {
+                invoke('open_folder', { path: (project as any).path })
+                  .catch((error) => console.error('Failed to open folder:', error))
+              }
+            }}
+            className="h-full"
+          />
         </div>
       )}
       
