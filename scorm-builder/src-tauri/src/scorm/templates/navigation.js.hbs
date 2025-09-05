@@ -738,6 +738,16 @@
                 // Mark as answered
                 window.answeredQuestions[`${window.currentPage}_fill-blank-${index}`] = true;
                 
+                // Add visual feedback to the input
+                if (isCorrect) {
+                    // Add green highlighting for correct answer
+                    fillInput.classList.add('correct-answer');
+                } else {
+                    // Show correct answer in input box with red highlighting for incorrect answer
+                    fillInput.value = wrapper.dataset.correctAnswer || '';
+                    fillInput.classList.add('incorrect-answer');
+                }
+                
                 // Show feedback
                 const feedbackElement = wrapper.querySelector('.feedback');
                 if (feedbackElement) {

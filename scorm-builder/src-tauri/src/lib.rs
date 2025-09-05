@@ -18,7 +18,7 @@ use commands::{
 // Import secure versions of project commands and other secure commands
 use commands_secure::{
     append_to_log, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
-    load_api_keys, load_project, rename_project, save_api_keys, save_project,
+    load_api_keys, load_project, rename_project, save_api_keys, save_project, unsafe_download_image,
 };
 use backup_recovery::{
     check_recovery, cleanup_old_backups, create_backup, recover_from_backup,
@@ -89,7 +89,8 @@ pub fn run() {
             read_file_binary,
             clean_workflow_files,
             export_workflow_zip,
-            save_workflow_json
+            save_workflow_json,
+            unsafe_download_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

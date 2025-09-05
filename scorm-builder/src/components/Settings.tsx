@@ -9,7 +9,7 @@ import { logger, disableCategory, enableCategory, getDisabledCategories, clearDi
 import { Tabs, Tab } from './DesignSystem/Tabs'
 import { Badge } from './DesignSystem/Badge'
 import { Icon } from './DesignSystem'
-import { Check, AlertTriangle, Eye, EyeOff, BookOpen } from 'lucide-react'
+import { Check, AlertTriangle, Eye, EyeOff, BookOpen, Download, Shield } from 'lucide-react'
 import { useNotifications } from '../contexts/NotificationContext'
 
 interface SettingsProps {
@@ -24,6 +24,7 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
   })
   const [disabledLogCategories, setDisabledLogCategories] = useState<string[]>([])
   const [newCategory, setNewCategory] = useState('')
+  const [forceDownloadMode, setForceDownloadMode] = useState<boolean>(false)
   const { success, error: notifyError } = useNotifications()
   
   // Load API keys from encrypted file on mount
@@ -46,6 +47,12 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
     // Load disabled log categories
     const categories = getDisabledCategories()
     setDisabledLogCategories(categories)
+    
+    // Load force download mode setting
+    const savedForceDownload = localStorage.getItem('scorm_builder_force_download_mode')
+    if (savedForceDownload !== null) {
+      setForceDownloadMode(JSON.parse(savedForceDownload))
+    }
     
     return () => {
       mounted = false
@@ -102,6 +109,18 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
 
   const togglePasswordVisibility = () => {
     setShowPasswords(!showPasswords)
+  }
+
+  const handleForceDownloadToggle = () => {
+    const newValue = !forceDownloadMode
+    setForceDownloadMode(newValue)
+    localStorage.setItem('scorm_builder_force_download_mode', JSON.stringify(newValue))
+    
+    if (newValue) {
+      success('Force Download Mode enabled - use only if experiencing frequent download failures')
+    } else {
+      success('Force Download Mode disabled')
+    }
   }
 
   const inputType = showPasswords ? 'text' : 'password'
@@ -344,6 +363,81 @@ export const Settings: React.FC<SettingsProps> = ({ onSave }) => {
               </Alert>
             )}
               
+          </Section>
+        </Tab>
+
+        <Tab tabKey="advanced" label="Advanced">
+          <Section>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 500, color: 'var(--gray-200)', marginBottom: 'var(--space-sm)' }}>
+              Advanced Download Settings
+            </h2>
+            <p style={{ color: 'var(--gray-400)', marginBottom: 'var(--space-lg)' }}>
+              Configure specialized download behavior for corporate networks and VPN environments.
+            </p>
+            
+            {/* Force Download Mode */}
+            <Card variant="dark" style={{ padding: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-md)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)' }}>
+                    <Icon icon={Download} size="sm" color="var(--gray-300)" />
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--gray-200)' }}>
+                      Force Download Mode
+                    </h3>
+                    <Badge variant={forceDownloadMode ? 'success' : 'default'}>
+                      {forceDownloadMode ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </div>
+                  
+                  <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginBottom: 'var(--space-md)' }}>
+                    <strong style={{ color: 'var(--color-warning)' }}>⚠️ Insecure Mode:</strong> Disables security restrictions for image downloads only. 
+                    Bypasses CORS, SSL validation, and domain restrictions to work in VPN/corporate environments. 
+                    <strong style={{ color: 'var(--color-warning)' }}> Use only for trusted image sources.</strong>
+                  </p>
+                  
+                  {forceDownloadMode && (
+                    <Alert variant="warning">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                        <Icon icon={Shield} size="sm" />
+                        <div>
+                          <strong>Insecure Download Mode is Active</strong>
+                          <p style={{ fontSize: '0.75rem', margin: 0, marginTop: '4px' }}>
+                            All security restrictions are disabled for image downloads. SSL certificates, domain restrictions, 
+                            and CORS policies are bypassed. Only use with trusted image sources.
+                          </p>
+                        </div>
+                      </div>
+                    </Alert>
+                  )}
+                </div>
+                
+                <Button
+                  variant={forceDownloadMode ? 'primary' : 'secondary'}
+                  size="medium"
+                  onClick={handleForceDownloadToggle}
+                  style={{ minWidth: '100px' }}
+                >
+                  {forceDownloadMode ? 'Disable' : 'Enable'}
+                </Button>
+              </div>
+            </Card>
+
+            {/* Information about when to use */}
+            <Alert variant="info">
+              <h3 style={{ fontWeight: 500, marginBottom: 'var(--space-sm)' }}>
+                <Icon icon={BookOpen} size="sm" />
+                When to Enable Force Download Mode
+              </h3>
+              <ul style={{ fontSize: '0.875rem', margin: 0, paddingLeft: '1.25rem' }}>
+                <li>You're on a corporate network or VPN</li>
+                <li>Image downloads frequently fail or timeout</li>
+                <li>You see "CORS policy" or "blocked" errors in the console</li>
+                <li>Regular download methods are unreliable</li>
+              </ul>
+              <p style={{ fontSize: '0.875rem', margin: 0, marginTop: 'var(--space-sm)', color: 'var(--gray-400)' }}>
+                This mode may be slower but more reliable in restrictive network environments.
+              </p>
+            </Alert>
           </Section>
         </Tab>
       </Tabs>

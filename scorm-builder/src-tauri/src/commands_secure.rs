@@ -552,6 +552,132 @@ pub async fn download_image(url: String) -> Result<DownloadImageResponse, String
     })
 }
 
+#[tauri::command]
+pub async fn unsafe_download_image(url: String) -> Result<DownloadImageResponse, String> {
+    log_debug(&format!("UNSAFE image download requested for: {}", url));
+    
+    // Parse URL without validation - allow any domain, HTTP/HTTPS
+    let parsed_url = Url::parse(&url).map_err(|e| format!("Invalid URL format: {e}"))?;
+    
+    // Create an extremely permissive HTTP client
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(45)) // Longer timeout for slow corporate networks
+        .redirect(reqwest::redirect::Policy::limited(10)) // More redirects allowed
+        .danger_accept_invalid_certs(true) // Accept self-signed certs (corporate environments)
+        // Note: System proxy detection is automatic in most reqwest versions
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+    
+    // Aggressive headers to mimic a real browser request
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("Accept", "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8".parse().unwrap());
+    headers.insert("Accept-Language", "en-US,en;q=0.9".parse().unwrap());
+    headers.insert("Accept-Encoding", "gzip, deflate, br".parse().unwrap());
+    headers.insert("Sec-Fetch-Dest", "image".parse().unwrap());
+    headers.insert("Sec-Fetch-Mode", "no-cors".parse().unwrap());
+    headers.insert("Sec-Fetch-Site", "cross-site".parse().unwrap());
+    headers.insert("Cache-Control", "no-cache".parse().unwrap());
+    
+    // Add referrer if it's a different domain
+    if let Some(host) = parsed_url.host_str() {
+        let referer = format!("https://{}/", host);
+        if let Ok(referer_value) = referer.parse() {
+            headers.insert("Referer", referer_value);
+        }
+    }
+    
+    log_debug("Attempting unsafe image download with permissive client...");
+    
+    // Attempt download with aggressive settings
+    let response = client
+        .get(&url)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch image (unsafe mode): {e}"))?;
+    
+    log_debug(&format!("Received response with status: {}", response.status()));
+    
+    // Accept any successful status code (2xx)
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+    
+    // Get content type - be more permissive
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("image/png") // Default to image type
+        .to_string();
+    
+    // More permissive content type checking - accept anything that might be an image
+    let is_likely_image = content_type.starts_with("image/") 
+        || content_type.contains("octet-stream")
+        || content_type.is_empty()
+        || url.ends_with(".jpg") 
+        || url.ends_with(".jpeg") 
+        || url.ends_with(".png") 
+        || url.ends_with(".gif") 
+        || url.ends_with(".webp")
+        || url.ends_with(".svg");
+        
+    if !is_likely_image {
+        log_debug(&format!("Warning: Unusual content type '{}' - proceeding anyway", content_type));
+    }
+    
+    // More generous size limit for corporate environments (20MB)
+    const MAX_SIZE: u64 = 20 * 1024 * 1024;
+    if let Some(content_length) = response.content_length() {
+        if content_length > MAX_SIZE {
+            return Err(format!(
+                "Image too large: {} bytes (max 20MB in unsafe mode)", content_length
+            ));
+        }
+    }
+    
+    // Get the bytes
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read image data: {e}"))?;
+    
+    // Check size after download
+    if bytes.len() > MAX_SIZE as usize {
+        return Err("Image too large: Maximum size is 20MB in unsafe mode".to_string());
+    }
+    
+    // If content type wasn't image, try to detect from bytes
+    let final_content_type = if content_type.starts_with("image/") {
+        content_type
+    } else {
+        // Simple image format detection by magic bytes
+        if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            "image/jpeg".to_string()
+        } else if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+            "image/png".to_string()
+        } else if bytes.starts_with(&[0x47, 0x49, 0x46, 0x38]) {
+            "image/gif".to_string()
+        } else if bytes.starts_with(&[0x52, 0x49, 0x46, 0x46]) && bytes.len() > 12 && bytes[8..12] == [0x57, 0x45, 0x42, 0x50] {
+            "image/webp".to_string()
+        } else {
+            "image/png".to_string() // Default fallback
+        }
+    };
+    
+    // Convert to base64
+    use base64::{engine::general_purpose, Engine as _};
+    let base64_data = general_purpose::STANDARD.encode(&bytes);
+    
+    log_debug(&format!("Successfully downloaded {} bytes as {}", bytes.len(), final_content_type));
+    
+    Ok(DownloadImageResponse {
+        base64_data,
+        content_type: final_content_type,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

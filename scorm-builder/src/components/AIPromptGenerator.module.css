@@ -59,9 +59,21 @@
   border-color: var(--border-focus);
 }
 
+/* Top button container */
+.topButtonContainer {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
 /* Copy button */
 .copyButton {
   margin-top: 1rem;
+}
+
+/* Remove top margin for top button */
+.topButtonContainer .copyButton {
+  margin-top: 0;
 }
 
 .copyButtonIcon {

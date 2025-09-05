@@ -119,33 +119,43 @@ export const searchGoogleImages = async (
       const response = await fetch(apiUrl)
       
       if (!response.ok) {
+        // Only throw SearchError for specific API quota/authentication issues
         if (response.status === 429) {
           throw new SearchError('Rate limit exceeded. Please try again later.', 'RATE_LIMIT', response.status)
         }
         if (response.status === 403) {
           throw new SearchError('Invalid API key or insufficient permissions.', 'INVALID_KEY', response.status)
         }
-        throw new SearchError(`API request failed: ${response.statusText}`, 'API_ERROR', response.status)
-      }
-      
-      const data = await response.json() as GoogleSearchResponse
-      if (data.items) {
-        let results = data.items.map((item, index) => ({
-          id: item.cacheId || `img-${start + index}`,
-          url: item.link,
-          thumbnail: item.image?.thumbnailLink || item.link,
-          title: item.title,
-          source: item.displayLink,
-          dimensions: item.image ? `${item.image.width}x${item.image.height}` : undefined,
-          photographer: undefined
-        }))
-        
-        return results
+        // For other HTTP errors (500, 502, etc.), fall through to mock data instead of throwing
+        console.warn(`Google Images API returned ${response.status}: ${response.statusText}, falling back to mock data`)
+        // Don't return here - let it fall through to mock data
+      } else {
+        // Success case - process the response
+        const data = await response.json() as GoogleSearchResponse
+        if (data.items) {
+          let results = data.items.map((item, index) => ({
+            id: item.cacheId || `img-${start + index}`,
+            url: item.link,
+            thumbnail: item.image?.thumbnailLink || item.link,
+            title: item.title,
+            source: item.displayLink,
+            dimensions: item.image ? `${item.image.width}x${item.image.height}` : undefined,
+            photographer: undefined
+          }))
+          
+          return results
+        }
       }
     } catch (error) {
-      // Log the error but fall back to mock data
-      console.warn('Google Images API error:', error)
-      // Continue to mock data below
+      // Only re-throw SearchError (rate limits, invalid keys)
+      // Let other errors (network timeouts, JSON parsing, etc.) fall back to mock data
+      if (error instanceof SearchError) {
+        throw error // Re-throw specific API errors
+      }
+      
+      // For network errors, parsing errors, etc., fall back to mock data
+      console.warn('Google Images API call failed, falling back to mock data:', error)
+      // Don't throw - let it fall through to mock data below
     }
   }
   
@@ -264,71 +274,81 @@ export const searchYouTubeVideos = async (
       const response = await fetch(url)
       
       if (!response.ok) {
+        // Only throw SearchError for specific API quota/authentication issues
         if (response.status === 429) {
           throw new SearchError('YouTube API rate limit exceeded. Please try again later.', 'RATE_LIMIT', response.status)
         }
         if (response.status === 403) {
           throw new SearchError('Invalid YouTube API key or quota exceeded.', 'INVALID_KEY', response.status)
         }
-        throw new SearchError(`YouTube API request failed: ${response.statusText}`, 'API_ERROR', response.status)
-      }
-      
-      const data = await response.json()
-      
-      // Store the nextPageToken for future pagination
-      if (data.nextPageToken) {
-        const nextPageCacheKey = `${query}_${page}_nextPageToken`
-        youtubePageTokens.set(nextPageCacheKey, data.nextPageToken)
-      }
-      
-      if (data.items) {
-        // Get video details for duration
-        const searchResponse = data as YouTubeSearchResponse
-        const videoIds = searchResponse.items?.map((item) => item.id.videoId).join(',') || ''
+        // For other HTTP errors (500, 502, etc.), fall through to mock data instead of throwing
+        console.warn(`YouTube API returned ${response.status}: ${response.statusText}, falling back to mock data`)
+        // Don't return here - let it fall through to mock data
+      } else {
+        // Success case - process the response
+        const data = await response.json()
         
-        if (videoIds) {
-          const detailsResponse = await fetch(
-            `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`
-          )
-          
-          if (!detailsResponse.ok) {
-            // Log but don't fail the whole search if details fail
-            console.warn('Failed to fetch video details:', detailsResponse.statusText)
-          }
-          
-          const detailsData = detailsResponse.ok ? await detailsResponse.json() as YouTubeDetailsResponse : { items: [] }
-          const detailsMap = new Map<string, YouTubeVideoDetails>(
-            detailsData.items?.map((item) => [item.id, item]) || []
-          )
-          
-          const results = searchResponse.items?.map((item) => {
-            const details = detailsMap.get(item.id.videoId)
-            return {
-              id: item.id.videoId,
-              url: `https://youtube.com/watch?v=${item.id.videoId}`,
-              embedUrl: `https://youtube.com/embed/${item.id.videoId}`,
-              thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url || '',
-              title: item.snippet.title,
-              channel: item.snippet.channelTitle,
-              uploadedAt: new Date(item.snippet.publishedAt).toLocaleDateString(),
-              views: details?.statistics?.viewCount 
-                ? `${Number(details.statistics.viewCount).toLocaleString()} views`
-                : undefined,
-              duration: details?.contentDetails?.duration 
-                ? parseDuration(details.contentDetails.duration)
-                : undefined
-            }
-          }) || []
-          
-          // Return the results
-          return results
+        // Store the nextPageToken for future pagination
+        if (data.nextPageToken) {
+          const nextPageCacheKey = `${query}_${page}_nextPageToken`
+          youtubePageTokens.set(nextPageCacheKey, data.nextPageToken)
         }
+        
+        if (data.items) {
+          // Get video details for duration
+          const searchResponse = data as YouTubeSearchResponse
+          const videoIds = searchResponse.items?.map((item) => item.id.videoId).join(',') || ''
+          
+          if (videoIds) {
+            const detailsResponse = await fetch(
+              `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`
+            )
+            
+            if (!detailsResponse.ok) {
+              // Log but don't fail the whole search if details fail
+              console.warn('Failed to fetch video details:', detailsResponse.statusText)
+            }
+            
+            const detailsData = detailsResponse.ok ? await detailsResponse.json() as YouTubeDetailsResponse : { items: [] }
+            const detailsMap = new Map<string, YouTubeVideoDetails>(
+              detailsData.items?.map((item) => [item.id, item]) || []
+            )
+            
+            const results = searchResponse.items?.map((item) => {
+              const details = detailsMap.get(item.id.videoId)
+              return {
+                id: item.id.videoId,
+                url: `https://youtube.com/watch?v=${item.id.videoId}`,
+                embedUrl: `https://youtube.com/embed/${item.id.videoId}`,
+                thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url || '',
+                title: item.snippet.title,
+                channel: item.snippet.channelTitle,
+                uploadedAt: new Date(item.snippet.publishedAt).toLocaleDateString(),
+                views: details?.statistics?.viewCount 
+                  ? `${Number(details.statistics.viewCount).toLocaleString()} views`
+                  : undefined,
+                duration: details?.contentDetails?.duration 
+                  ? parseDuration(details.contentDetails.duration)
+                  : undefined
+              }
+            }) || []
+            
+            // Return the results
+            return results
+          }
+        }
+        return []
       }
-      return []
     } catch (error) {
-      // Log the error but fall back to mock data
-      console.warn('YouTube API error:', error)
-      // Continue to mock data below
+      // Only re-throw SearchError (rate limits, invalid keys)
+      // Let other errors (network timeouts, JSON parsing, etc.) fall back to mock data
+      if (error instanceof SearchError) {
+        throw error // Re-throw specific API errors
+      }
+      
+      // For network errors, parsing errors, etc., fall back to mock data
+      console.warn('YouTube API call failed, falling back to mock data:', error)
+      // Don't throw - let it fall through to mock data below
     }
   }
   

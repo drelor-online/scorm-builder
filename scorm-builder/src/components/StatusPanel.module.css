@@ -30,7 +30,7 @@
 /* Fixed bell icon in bottom-right corner */
 .statusPanel.fixedBell {
   position: fixed;
-  bottom: 24px;
+  bottom: 60px;
   right: 24px;
   top: auto;
   left: auto;

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useAutoSaveState } from '../contexts/AutoSaveContext'
+import { Icon } from './DesignSystem/Icons'
+import { Save, AlertCircle, CheckCircle } from 'lucide-react'
 import styles from './AutoSaveBadge.module.css'
 
 interface AutoSaveBadgeProps {
@@ -58,6 +60,19 @@ export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
   const badgeText = getBadgeText()
   if (!badgeText) return null
 
+  const getIcon = () => {
+    if (isSaving) {
+      return <Icon icon={Save} size="xs" className={styles.savingIcon} />
+    }
+    if (hasUnsavedChanges) {
+      return <Icon icon={AlertCircle} size="xs" />
+    }
+    if (showSavedMessage) {
+      return <Icon icon={CheckCircle} size="xs" />
+    }
+    return null
+  }
+
   return (
     <div 
       className={`${styles.autoSaveBadge} ${styles[`badge-${getBadgeVariant()}`]} ${className || ''}`}
@@ -65,11 +80,14 @@ export const AutoSaveBadge: React.FC<AutoSaveBadgeProps> = ({ className }) => {
       aria-live="polite"
       aria-label={badgeText}
     >
-      {isSaving && (
-        <div className={styles.spinner} aria-hidden="true">
-          <div className={styles.spinnerIcon}></div>
-        </div>
-      )}
+      <div className={styles.iconContainer}>
+        {getIcon()}
+        {isSaving && (
+          <div className={styles.spinner} aria-hidden="true">
+            <div className={styles.spinnerIcon}></div>
+          </div>
+        )}
+      </div>
       <span className={styles.badgeText}>{badgeText}</span>
       {lastSaved && !isSaving && hasUnsavedChanges && (
         <span className={styles.lastSaved} title={`Last saved: ${lastSaved.toLocaleString()}`}>

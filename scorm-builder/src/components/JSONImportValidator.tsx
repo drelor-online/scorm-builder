@@ -26,6 +26,7 @@ import { SimpleJSONEditor } from './SimpleJSONEditor'
 import { courseContentSchema } from '../schemas/courseContentSchema'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { cleanupOrphanedMediaReferences, MediaExistsChecker } from '../utils/orphanedMediaCleaner'
+import { cleanMediaReferencesFromCourseContent, hasMediaReferences } from '../utils/courseContentMediaCleaner'
 import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import styles from './JSONImportValidator.module.css'
 
@@ -213,6 +214,19 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
         })
       } else {
         logger.info('JSONImportValidator', '✅ No orphaned media references found in input JSON or storage')
+      }
+      
+      // STEP 4: Apply course content media cleaning for final cleanup (removes ALL media references)
+      // This is especially important for the "pre-onNext-final-cleanup" context after JSON clearing
+      if (context === 'pre-onNext-final-cleanup') {
+        logger.info('JSONImportValidator', '🔧 Applying final course content media cleaning to remove all media references')
+        const mediaRefsBefore = hasMediaReferences(finalCleanedContent)
+        if (mediaRefsBefore) {
+          finalCleanedContent = cleanMediaReferencesFromCourseContent(finalCleanedContent) as CourseContent
+          logger.info('JSONImportValidator', '✅ Final course content media cleaning completed - all media references removed')
+        } else {
+          logger.info('JSONImportValidator', '✅ No media references found in course content - no additional cleaning needed')
+        }
       }
       
       return finalCleanedContent

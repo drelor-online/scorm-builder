@@ -1,0 +1,400 @@
+{
+  "sessionId": "workflow-1755612186888",
+  "startTime": "2025-08-19T14:03:06.888Z",
+  "interactions": [
+    {
+      "type": "note",
+      "selector": "body",
+      "timestamp": "10:03:23 AM",
+      "elementText": "User Note",
+      "elementTag": "note",
+      "elementAttributes": {},
+      "step": "dashboard",
+      "noteText": "The delete button on this project card is cut off",
+      "isPriority": true,
+      "screenshot": "workflow-screenshot-1-1755612203457.png"
+    },
+    {
+      "type": "note",
+      "selector": "body",
+      "timestamp": "10:06:15 AM",
+      "elementText": "User Note",
+      "elementTag": "note",
+      "elementAttributes": {},
+      "step": "json-import",
+      "noteText": "If you enter a valid json, then clear course structure, then enter another valid json, it doesn't go to tree view automatically for some reason.  It also doesn't show the toggle button.",
+      "isPriority": true,
+      "screenshot": "workflow-screenshot-27-1755612375428.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"delete-project-1754928164855\"]",
+      "timestamp": "10:03:42 AM",
+      "elementText": "Delete",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "dashboard",
+      "screenshot": "workflow-screenshot-2-1755612222171.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"delete-confirm-button\"]",
+      "timestamp": "10:03:43 AM",
+      "elementText": "Delete",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "dashboard",
+      "screenshot": "workflow-screenshot-3-1755612223596.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"new-project-button\"]",
+      "timestamp": "10:03:48 AM",
+      "elementText": "Create New Project",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "dashboard",
+      "screenshot": "workflow-screenshot-4-1755612228246.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"project-name-input\"]",
+      "timestamp": "10:03:49 AM",
+      "elementText": "",
+      "elementTag": "input",
+      "elementAttributes": {
+        "placeholder": "Enter project name (Press Enter to create)",
+        "type": "text"
+      },
+      "step": "dashboard",
+      "screenshot": "workflow-screenshot-5-1755612229431.png"
+    },
+    {
+      "type": "input",
+      "selector": "[data-testid=\"project-name-input\"]",
+      "timestamp": "10:03:55 AM",
+      "elementText": "",
+      "elementTag": "input",
+      "elementAttributes": {
+        "placeholder": "Enter project name (Press Enter to create)",
+        "type": "text"
+      },
+      "step": "dashboard",
+      "finalValue": "Natural Gas Safety",
+      "value": "Natural Gas Safety"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:03:59 AM",
+      "step": "course-seed",
+      "elementText": "course-seed",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"template-select\"]",
+      "timestamp": "10:03:59 AM",
+      "elementText": "Choose a template...How-to GuideCorporateTechnical",
+      "elementTag": "select",
+      "elementAttributes": {},
+      "step": "course-seed",
+      "screenshot": "workflow-screenshot-6-1755612239516.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"template-select\"]",
+      "timestamp": "10:04:01 AM",
+      "elementText": "Choose a template...How-to GuideCorporateTechnical",
+      "elementTag": "select",
+      "elementAttributes": {},
+      "step": "course-seed",
+      "screenshot": "workflow-screenshot-7-1755612241851.png"
+    },
+    {
+      "type": "input",
+      "selector": "[data-testid=\"template-select\"]",
+      "timestamp": "10:04:02 AM",
+      "elementText": "Choose a template...How-to GuideCorporateTechnical",
+      "elementTag": "select",
+      "elementAttributes": {},
+      "step": "course-seed",
+      "finalValue": "Safety",
+      "value": "Safety"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"add-template-topics\"]",
+      "timestamp": "10:04:02 AM",
+      "elementText": "+ Add Template Topics",
+      "elementTag": "button",
+      "elementAttributes": {
+        "type": "button"
+      },
+      "step": "course-seed",
+      "screenshot": "workflow-screenshot-8-1755612242705.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"save-button\"]",
+      "timestamp": "10:04:06 AM",
+      "elementText": "Saving...",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "course-seed",
+      "screenshot": "workflow-screenshot-9-1755612246700.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:04:09 AM",
+      "step": "unknown",
+      "elementText": "unknown",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"exit-button\"]",
+      "timestamp": "10:04:09 AM",
+      "elementText": "Exit to Dashboard",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "unknown",
+      "screenshot": "workflow-screenshot-10-1755612249077.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:04:11 AM",
+      "step": "dashboard",
+      "elementText": "dashboard",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": ".btn",
+      "timestamp": "10:04:11 AM",
+      "elementText": "Open",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "dashboard",
+      "screenshot": "workflow-screenshot-11-1755612251517.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:04:17 AM",
+      "step": "course-seed",
+      "elementText": "course-seed",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"next-button\"]",
+      "timestamp": "10:04:17 AM",
+      "elementText": "Next →",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "course-seed",
+      "screenshot": "workflow-screenshot-12-1755612257177.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:04:22 AM",
+      "step": "ai-prompt",
+      "elementText": "ai-prompt",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": ".StatusPanel-module__bellButton__PuEQj",
+      "timestamp": "10:04:22 AM",
+      "elementText": "1",
+      "elementTag": "button",
+      "elementAttributes": {
+        "title": "1 unread messages"
+      },
+      "step": "ai-prompt",
+      "screenshot": "workflow-screenshot-13-1755612262196.png"
+    },
+    {
+      "type": "click",
+      "selector": ".StatusPanel-module__header__3LVHi",
+      "timestamp": "10:04:25 AM",
+      "elementText": "Activity (1)Debug Logs (207)",
+      "elementTag": "div",
+      "elementAttributes": {},
+      "step": "ai-prompt",
+      "screenshot": "workflow-screenshot-14-1755612265244.png"
+    },
+    {
+      "type": "click",
+      "selector": "svg",
+      "timestamp": "10:04:27 AM",
+      "elementText": "",
+      "elementTag": "svg",
+      "elementAttributes": {},
+      "step": "ai-prompt",
+      "screenshot": "workflow-screenshot-15-1755612267497.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:04:30 AM",
+      "step": "unknown",
+      "elementText": "unknown",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"next-button\"]",
+      "timestamp": "10:04:30 AM",
+      "elementText": "Next →",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "unknown",
+      "screenshot": "workflow-screenshot-16-1755612270979.png"
+    },
+    {
+      "type": "step_change",
+      "selector": "body",
+      "timestamp": "10:05:04 AM",
+      "step": "json-import",
+      "elementText": "json-import",
+      "elementTag": "body",
+      "elementAttributes": {}
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"json-textarea\"]",
+      "timestamp": "10:05:04 AM",
+      "elementText": "",
+      "elementTag": "textarea",
+      "elementAttributes": {
+        "placeholder": "Paste the AI chatbot's response here..."
+      },
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-17-1755612304084.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"paste-clipboard-button\"]",
+      "timestamp": "10:05:05 AM",
+      "elementText": "Paste from Clipboard",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-18-1755612305469.png"
+    },
+    {
+      "type": "click",
+      "selector": "svg",
+      "timestamp": "10:05:10 AM",
+      "elementText": "",
+      "elementTag": "svg",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-19-1755612310096.png"
+    },
+    {
+      "type": "click",
+      "selector": "svg",
+      "timestamp": "10:05:11 AM",
+      "elementText": "",
+      "elementTag": "svg",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-20-1755612311763.png"
+    },
+    {
+      "type": "click",
+      "selector": "svg",
+      "timestamp": "10:05:16 AM",
+      "elementText": "",
+      "elementTag": "svg",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-21-1755612316646.png"
+    },
+    {
+      "type": "click",
+      "selector": "svg",
+      "timestamp": "10:05:18 AM",
+      "elementText": "",
+      "elementTag": "svg",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-22-1755612318730.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"clear-json-button\"]",
+      "timestamp": "10:05:25 AM",
+      "elementText": "Clear Course Structure",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-23-1755612325159.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"json-textarea\"]",
+      "timestamp": "10:05:29 AM",
+      "elementText": "",
+      "elementTag": "textarea",
+      "elementAttributes": {
+        "placeholder": "Paste the AI chatbot's response here..."
+      },
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-24-1755612329483.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"paste-clipboard-button\"]",
+      "timestamp": "10:05:32 AM",
+      "elementText": "Paste from Clipboard",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-25-1755612332009.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"json-textarea\"]",
+      "timestamp": "10:05:38 AM",
+      "elementText": "{\r\n  \"welcomePage\": {\r\n    \"id\": \"welcome\",\r\n    \"",
+      "elementTag": "textarea",
+      "elementAttributes": {
+        "placeholder": "Paste the AI chatbot's response here..."
+      },
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-26-1755612338001.png"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid=\"next-button\"]",
+      "timestamp": "10:06:22 AM",
+      "elementText": "Next →",
+      "elementTag": "button",
+      "elementAttributes": {},
+      "step": "json-import",
+      "screenshot": "workflow-screenshot-28-1755612382613.png"
+    }
+  ],
+  "screenshots": [],
+  "endTime": "2025-08-19T14:06:30.046Z",
+  "metadata": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Edg/139.0.0.0",
+    "url": "http://tauri.localhost/",
+    "timestamp": "2025-08-19T14:06:33.915Z",
+    "totalInteractions": 37,
+    "totalScreenshots": 28
+  }
+}

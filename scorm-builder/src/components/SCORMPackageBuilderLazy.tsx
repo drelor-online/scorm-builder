@@ -7,7 +7,7 @@ import { loadCourseContentConverter, loadSCORMGenerator } from '../utils/dynamic
 import { useStorage } from '../contexts/PersistentStorageContext'
 
 import { PageLayout } from './PageLayout'
-import { CoursePreview } from './CoursePreview'
+import { CoursePreviewAccurate } from './CoursePreviewAccurate'
 import { ProjectExportButton, ProjectImportButton } from './ProjectExportImport'
 import { 
   Button, 
@@ -487,7 +487,7 @@ export const SCORMPackageBuilder: React.FC<SCORMPackageBuilderProps> = ({
           title="Course Preview"
           size="large"
         >
-          <CoursePreview
+          <CoursePreviewAccurate
             courseContent={courseContent}
             courseSeedData={{
               ...courseSeedData,

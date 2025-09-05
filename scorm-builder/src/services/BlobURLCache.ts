@@ -196,6 +196,26 @@ export class BlobURLCache {
   }
 
   /**
+   * Clear all blob URLs (for project switching or session reset)
+   */
+  clearAll(): void {
+    const totalCount = this.cache.size
+    
+    for (const [mediaId, entry] of this.cache.entries()) {
+      try {
+        URL.revokeObjectURL(entry.url)
+        this.log(`Revoked URL for ${mediaId}:`, entry.url)
+      } catch (error) {
+        logger.warn(`[BlobURLCache] Failed to revoke URL for ${mediaId}:`, error)
+      }
+    }
+    
+    this.cache.clear()
+    this.resetStats()
+    this.log(`Cleared all ${totalCount} blob URLs`)
+  }
+
+  /**
    * Preload multiple media items in parallel
    */
   async preloadMedia(

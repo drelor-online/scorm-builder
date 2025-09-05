@@ -43,18 +43,12 @@ nul
 *.bak
 *.backup
 
-# Test files and outputs
-**/*.test.tsx
-**/*.test.ts
-**/*.spec.ts
-**/*.spec.tsx
+# Test outputs (but allow test source files)
 coverage/
 .nyc_output/
 cypress/
 test-results/
 test-output/
-tests/
-__tests__/
 playwright-report/
 *.webm
 lighthouse-report.json
@@ -62,6 +56,12 @@ test-results.json
 cypress-results.json
 test-*.json
 test-*.js
+
+# Generated test files (but keep authored test files)
+**/*.test.generated.ts
+**/*.spec.generated.ts
+**/test-temp/
+**/test-files/
 test-*.mjs
 test-*.cjs
 test-*.html

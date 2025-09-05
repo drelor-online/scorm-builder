@@ -833,11 +833,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       // Generate using Rust
       performanceMetrics.rustGenerationStart = Date.now()
       
-      // Create timeout promise
-      const SCORM_GENERATION_TIMEOUT = 120000 // 2 minutes
+      // Create timeout promise - dynamic timeout based on media count
+      const baseTimeout = 180000 // 3 minutes base
+      const timeoutPerMedia = 8000 // 8 seconds per media file
+      const SCORM_GENERATION_TIMEOUT = Math.max(baseTimeout, baseTimeout + (mediaCount * timeoutPerMedia))
+      
+      console.log(`[SCORMPackageBuilder] Calculated timeout: ${SCORM_GENERATION_TIMEOUT / 1000} seconds for ${mediaCount} media files`)
+      
       const timeoutPromise = new Promise<never>((_, reject) => {
         const timeoutId = setTimeout(() => {
-          reject(new Error(`SCORM generation timeout after ${SCORM_GENERATION_TIMEOUT / 1000} seconds. The operation may be too complex or there may be a system issue.`))
+          reject(new Error(`SCORM generation timeout after ${SCORM_GENERATION_TIMEOUT / 1000} seconds with ${mediaCount} media files. Large media sets require more processing time.`))
         }, SCORM_GENERATION_TIMEOUT)
         
         // Clear timeout if generation completes normally

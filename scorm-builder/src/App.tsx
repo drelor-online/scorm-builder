@@ -13,6 +13,7 @@ import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { initializeLoggerConfig } from '@/config/loggerConfig'
 import { createMutationSafeContent, validateImmutableUpdate } from '@/utils/mutationSafety'
 import { cleanupOrphanedMediaReferences } from '@/utils/orphanedMediaCleaner'
+import { cleanMediaReferencesFromCourseContent, hasMediaReferences, countMediaReferences } from '@/utils/courseContentMediaCleaner'
 
 // Initialize logger configuration to reduce console noise
 initializeLoggerConfig()
@@ -121,7 +122,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
-  const { deleteAllMedia, getMedia } = useUnifiedMedia();
+  const { deleteAllMedia, getMedia, resetMediaCache } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -1097,13 +1098,30 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleClearCourseContent = async () => {
     debugLogger.info('App', 'Clearing course content and all associated media files')
     
+    // FIRST: Clean any existing course content of media references before clearing
+    // This handles the case where course content exists and has stale media references
+    if (storage.currentProjectId && courseContent) {
+      try {
+        const mediaRefCount = countMediaReferences(courseContent)
+        if (mediaRefCount > 0) {
+          debugLogger.info('App', `Found ${mediaRefCount} media references in course content - cleaning before clear`)
+          const cleanedContent = cleanMediaReferencesFromCourseContent(courseContent)
+          await storage.saveCourseContent(cleanedContent)
+          debugLogger.info('App', 'Media references cleaned from course content before clearing')
+        }
+      } catch (error) {
+        debugLogger.error('App', 'Failed to clean media references from course content', { error })
+        // Continue with the clear process even if this fails
+      }
+    }
+    
     // Clear all course content when JSON is cleared
     setCourseContent(null)
     
     // Navigate back to JSON step when course content is cleared
     navigation.navigateToStep(2) // JSON step
     
-    // FIRST: Save the cleared course content to storage to remove all media references
+    // SECOND: Save the cleared course content to storage to remove all media references
     // This prevents other components from accessing stale course content with media references
     if (storage.currentProjectId) {
       try {
@@ -1126,12 +1144,15 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       }
     }
     
-    // SECOND: Delete all media files (now orphaned since course content is cleared)
+    // THIRD: Delete all media files (now orphaned since course content is cleared)
     if (storage.currentProjectId) {
       try {
         debugLogger.info('App', 'Deleting orphaned media files for project', { projectId: storage.currentProjectId })
         await deleteAllMedia(storage.currentProjectId)
-        debugLogger.info('App', 'Successfully deleted all orphaned media files')
+        // CRITICAL: Reset media cache to ensure UI reflects the deletion
+        // This prevents stale media references from appearing in the Media page
+        resetMediaCache()
+        debugLogger.info('App', 'Successfully deleted all orphaned media files and reset cache')
       } catch (error) {
         debugLogger.error('App', 'Failed to delete media files during course content clear', { 
           error: error instanceof Error ? error.message : String(error) 

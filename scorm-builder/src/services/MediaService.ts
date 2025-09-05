@@ -444,6 +444,11 @@ export class MediaService {
   async getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
     debugLogger.debug('MediaService.getMedia', 'Getting media', { mediaId })
     
+    // Enhanced debug logging to track caller context
+    const stack = new Error().stack
+    const caller = stack?.split('\n')[2]?.trim() || 'unknown'
+    console.log(`🔍 [MediaService] getMedia called for ${mediaId} from: ${caller}`)
+    
     // Check if this is audio and we have it cached
     if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
       const cached = this.audioDataCache.get(mediaId)
@@ -669,14 +674,22 @@ export class MediaService {
         url: result.url
       })
       
+      console.log(`✅ [MediaService] getMedia SUCCESS for ${mediaId}:`, {
+        hasData: !!result.data,
+        hasMetadata: !!result.metadata,
+        hasUrl: !!result.url,
+        metadataType: result.metadata?.type
+      })
       return result
     } catch (error) {
       debugLogger.error('MediaService.getMedia', 'Failed to get media', {
         mediaId,
         error
       })
+      const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error('[MediaService] Failed to get media from file system:', error)
-      console.error('[MediaService] Error details:', error)
+      console.error(`❌ [MediaService] getMedia FAILED for ${mediaId}:`, errorMsg)
+      console.log(`🔍 [MediaService] Full error object for ${mediaId}:`, error)
       return null
     }
   }
@@ -1111,8 +1124,8 @@ export class MediaService {
     debugLogger.info('MediaService.deleteMediaForTopic', 'Deleting media for topic', { projectId, topicId })
     
     try {
-      // List all media for the project
-      const allMedia = await this.fileStorage.listMedia()
+      // Use getAllProjectMedia() which actually works, instead of listMedia() which doesn't exist
+      const allMedia = await this.fileStorage.getAllProjectMedia()
       
       // Filter media for this topic
       const topicMedia = allMedia.filter((media: any) => 
@@ -1149,12 +1162,22 @@ export class MediaService {
     debugLogger.info('MediaService.deleteAllMedia', 'Deleting all media', { projectId })
     
     try {
-      // List all media
-      const allMedia = await this.fileStorage.listMedia()
+      // Use getAllProjectMedia() which actually works, instead of listMedia() which doesn't exist
+      const allMedia = await this.fileStorage.getAllProjectMedia()
+      
+      debugLogger.info('MediaService.deleteAllMedia', 'Found media items to delete', { 
+        projectId, 
+        count: allMedia.length 
+      })
       
       // Delete each media item
       for (const media of allMedia) {
-        await this.deleteMedia(projectId, media.id)
+        const success = await this.deleteMedia(projectId, media.id)
+        if (!success) {
+          debugLogger.warn('MediaService.deleteAllMedia', 'Failed to delete media item', { 
+            mediaId: media.id 
+          })
+        }
       }
       
       // Clear cache and revoke all blob URLs

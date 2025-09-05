@@ -3,7 +3,7 @@ import { CourseContentUnion, CourseContent, Media, Page, Topic } from '../types/
 import type { MediaItem } from '../services/MediaService'
 import { CourseSeedData } from '../types/course'
 import { searchGoogleImages, searchYouTubeVideos, SearchError } from '../services/searchService'
-import { isKnownCorsRestrictedDomain, downloadExternalImage } from '../services/externalImageDownloader'
+import { isKnownCorsRestrictedDomain, downloadExternalImage, forceDownloadExternalImage } from '../services/externalImageDownloader'
 import { PageLayout } from './PageLayout'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AutoSaveBadge } from './AutoSaveBadge'
@@ -23,7 +23,7 @@ import {
   Tab,
   Alert
 } from './DesignSystem'
-import { Upload, Image as ImageIcon, Edit, Video, Copy, Plus } from 'lucide-react'
+import { Upload, Image as ImageIcon, Edit, Video, Copy, Plus, Shield } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
@@ -166,6 +166,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [isPaginationLoading, setIsPaginationLoading] = useState(false)
+  const [addingMediaIds, setAddingMediaIds] = useState<Set<string>>(new Set())
   const [lightboxMedia, setLightboxMedia] = useState<SearchResult | null>(null)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
@@ -176,6 +178,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const mediaItemsRef = useRef<Map<string, Media>>(new Map())
   const [existingPageMedia, setExistingPageMedia] = useState<Media[]>([])
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [forceDownloadMode, setForceDownloadMode] = useState<boolean>(false)
   const [contentHistory, setContentHistory] = useState<{ [key: string]: Page | Topic }>({})
   const [hasSearched, setHasSearched] = useState(false)
   const [existingMediaIdMap, setExistingMediaIdMap] = useState<Map<string, string>>(new Map())
@@ -224,6 +227,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   useEffect(() => {
     courseContentRef.current = courseContent
   }, [courseContent])
+
+  // Load force download mode preference from localStorage
+  useEffect(() => {
+    const savedForceDownload = localStorage.getItem('scorm_builder_force_download_mode')
+    if (savedForceDownload !== null) {
+      setForceDownloadMode(JSON.parse(savedForceDownload))
+    }
+  }, [])
   
   const { 
     storeMedia, 
@@ -385,10 +396,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
 
   // Separate function to add media to page
   const addMediaToPage = async (result: SearchResult) => {
+    const mediaId = result.id
+    
+    // Create timeout promise for stuck operations (30 seconds for portable exe)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Media addition timeout: Operation took too long. This may happen with slow network connections or in portable versions. Please try again.'))
+      }, 30000) // 30 second timeout
+    })
+    
     try {
-      setIsSearching(true) // Use existing loading state
+      // Add this specific media ID to the loading set
+      setAddingMediaIds(prev => new Set(prev).add(mediaId))
       
-      // Declare pageId at function scope so it's accessible throughout
+      // Create the main media addition logic as a separate promise
+      const addMediaPromise = async () => {
+        // Declare pageId at function scope so it's accessible throughout
       const currentPage = getCurrentPage()
       if (!currentPage) {
         throw new Error('No current page selected')
@@ -461,8 +484,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           blob = mediaItem.blob
         } else {
           // Download and store external image
-          console.log('[MediaEnhancement] Downloading external image')
-          blob = await downloadExternalImage(result.url)
+          if (forceDownloadMode) {
+            console.log('[MediaEnhancement] Using force download mode for external image')
+            blob = await forceDownloadExternalImage(result.url)
+          } else {
+            console.log('[MediaEnhancement] Downloading external image (normal mode)')
+            blob = await downloadExternalImage(result.url)
+          }
         }
         
         console.log('[MediaEnhancement] Image blob:', {
@@ -551,9 +579,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       // Mark media section as dirty after successful media addition
       markDirty('media')
       
-      // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
-      // This ensures the component shows the latest data with proper blob URLs
-      await loadExistingMedia()
+        // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
+        // This ensures the component shows the latest data with proper blob URLs
+        await loadExistingMedia()
+      }
+      
+      // Race the media addition against timeout
+      await Promise.race([addMediaPromise(), timeoutPromise])
     } catch (error) {
       // Properly serialize error for logging (Error objects serialize to {})
       const errorInfo = error instanceof Error ? {
@@ -562,11 +594,36 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         stack: error.stack?.split('\n')[0] // Just first line of stack
       } : error
       console.error('[MediaEnhancement] Error adding media:', errorInfo)
-      const errorMsg = 'Failed to add media to page'
+      
+      // Provide helpful error messages based on error type
+      let errorMsg = 'Failed to add media to page'
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : ''
+      
+      if (errorMessage.includes('cors') || errorMessage.includes('blocked') || errorMessage.includes('policy')) {
+        if (forceDownloadMode) {
+          errorMsg = 'Unable to download this image even with force mode. The source may have strict security policies.'
+        } else {
+          errorMsg = 'Download blocked by network restrictions. Try enabling Force Download Mode in Settings > Advanced.'
+        }
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        if (!forceDownloadMode) {
+          errorMsg = 'Download timed out. If you\'re on a corporate network or VPN, try enabling Force Download Mode in Settings > Advanced.'
+        } else {
+          errorMsg = 'Network timeout occurred even with force download mode. Please try again or upload the image manually.'
+        }
+      } else if (errorMessage.includes('force download methods failed')) {
+        errorMsg = 'All download methods failed. Please save the image to your computer and upload it using the Upload tab.'
+      }
+      
       setSearchError(errorMsg)
       notifyError(errorMsg)
     } finally {
-      setIsSearching(false)
+      // Remove this specific media ID from the loading set
+      setAddingMediaIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(mediaId)
+        return newSet
+      })
     }
   }
 
@@ -978,13 +1035,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return `https://www.youtube.com/embed/${videoId}?${safeParams.toString()}`
   }
   
-  const handleSearch = async () => {
+  const handleSearch = async (resetPagination: boolean = true) => {
     if (!searchQuery.trim()) return
     
     // Use activeTab to determine search type
     const isVideoSearch = activeTab === 'videos'
     
-    setIsSearching(true)
+    // Use different loading states for initial search vs pagination
+    if (resetPagination) {
+      setIsSearching(true) // Initial search - show loading on search button
+    } else {
+      setIsPaginationLoading(true) // Pagination search - don't block media clicks
+    }
     setSearchError(null)
     setYoutubeMessage(null)
     
@@ -996,7 +1058,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           setYoutubeMessage("YouTube API key not configured. Please add it in settings.")
           setSearchResults([])
         } else {
-          const videoResults = await searchYouTubeVideos(searchQuery, 1, youtubeApiKey)
+          const videoResults = await searchYouTubeVideos(searchQuery, resultPage, youtubeApiKey)
           // Extract thumbnails for YouTube videos
           const thumbnails: { [key: string]: string } = {}
           videoResults.forEach(result => {
@@ -1023,7 +1085,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         
         const images = await searchGoogleImages(
           searchQuery, 
-          1, 
+          resultPage, 
           apiKeys?.googleImageApiKey || '', 
           apiKeys?.googleCseId || ''
         )
@@ -1034,7 +1096,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         setSearchResults(images)
       }
       setHasSearched(true)
-      setResultPage(1)
+      if (resetPagination) {
+        setResultPage(1)
+      }
     } catch (error) {
       console.error('Search error:', error)
       if (error instanceof SearchError) {
@@ -1044,9 +1108,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       }
       setSearchResults([])
     } finally {
-      setIsSearching(false)
+      // Clear the appropriate loading state
+      if (resetPagination) {
+        setIsSearching(false)
+      } else {
+        setIsPaginationLoading(false)
+      }
     }
   }
+
+  // Wrapper function for onClick handlers to maintain TypeScript compatibility
+  const handleSearchClick = () => handleSearch() // Uses default resetPagination=true
   
   const navigateToPage = (index: number) => {
     if (index >= 0 && index < totalPages) {
@@ -1544,18 +1616,24 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     loadBlobUrls()
   }, [existingPageMedia, createBlobUrl])
   
+  // Effect to trigger new search when pagination changes
+  useEffect(() => {
+    // Trigger search for any page change after initial search has been performed
+    // This includes going back to page 1 from page 2 (which was previously broken)
+    if (hasSearched && searchQuery.trim()) {
+      handleSearch(false) // Don't reset pagination when triggered by pagination change
+    }
+  }, [resultPage])
   
-  
-  // Paginate results
-  const paginateResults = (results: SearchResult[]) => {
-    const startIndex = (resultPage - 1) * resultsPerPage
-    const endIndex = startIndex + resultsPerPage
-    return results.slice(startIndex, endIndex)
-  }
-  
+  // Note: For API pagination, we don't slice results locally since each search already returns the correct page
+  // The searchResults array contains only the current page's results from the API
   const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
   const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
-  const totalResultPages = Math.ceil([...searchResultsArray, ...uploadedMediaArray].length / resultsPerPage)
+  
+  // For API-based pagination, we assume there are more pages if we got a full page of results (10 items)
+  // This matches how the searchService mock data works (it provides 100 results across 10 pages)
+  const hasNextPage = searchResultsArray.length === 10 // If we got 10 results, there might be more pages
+  const totalResultPages = hasNextPage ? Math.max(resultPage + 1, 10) : resultPage // Estimate pages based on current results
   
   // Scroll to Add Media section
   const scrollToAddMedia = () => {
@@ -1717,9 +1795,26 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         alt={media.title || 'Media'} 
                         className={styles.mediaThumbnail}
                         onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
-                        onError={(e) => {
+                        onError={async (e) => {
                           console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)
                           const target = e.target as HTMLImageElement
+                          
+                          // Attempt to regenerate blob URL if this is a storage-based image
+                          if (media.storageId && createBlobUrl) {
+                            try {
+                              console.log('[MediaEnhancement v2.0.6] Attempting to regenerate blob URL for:', media.storageId)
+                              const newBlobUrl = await createBlobUrl(media.storageId)
+                              if (newBlobUrl && newBlobUrl !== target.src) {
+                                console.log('[MediaEnhancement v2.0.6] Retrying with regenerated blob URL:', newBlobUrl)
+                                target.src = newBlobUrl
+                                return // Don't show error placeholder yet, try again
+                              }
+                            } catch (error) {
+                              console.error('[MediaEnhancement v2.0.6] Failed to regenerate blob URL:', error)
+                            }
+                          }
+                          
+                          // Show error placeholder only if regeneration failed or not applicable
                           target.style.display = 'none'
                           const parent = target.parentElement
                           if (parent) {
@@ -1792,6 +1887,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               setSearchResults([])
               setSearchQuery('')
               setSearchError(null)
+              setResultPage(1) // Reset pagination when switching tabs
             }}>
               <Tab 
                 tabKey="images" 
@@ -1834,12 +1930,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSearchClick()}
                       placeholder="Search for images..."
                       className={styles.flex1}
                     />
                     <Button 
-                      onClick={handleSearch} 
+                      onClick={handleSearchClick} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search images"
                       size="large"
@@ -1848,6 +1944,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                       {isSearching ? 'Searching...' : 'Search'}
                     </Button>
                   </Flex>
+                  
+                  {/* Force Download Mode Indicator */}
+                  {forceDownloadMode && (
+                    <Alert variant="info">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Icon icon={Shield} size="sm" />
+                        <span>
+                          <strong>Force Download Mode Active</strong> - Using aggressive download methods for VPN/corporate networks
+                        </span>
+                      </div>
+                    </Alert>
+                  )}
                   
                   {searchError && (
                     <Alert variant="warning">
@@ -1899,12 +2007,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     <Input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSearchClick()}
                       placeholder="Search for videos..."
                       className={styles.flexInput}
                     />
                     <Button 
-                      onClick={handleSearch} 
+                      onClick={handleSearchClick} 
                       disabled={isSearching || !searchQuery.trim()}
                       aria-label="Search videos"
                       size="large"
@@ -2138,7 +2246,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {(searchResults.length > 0 || uploadedMedia.length > 0) && (
               <>
                 <div className={styles.resultsGrid}>
-                  {paginateResults([...searchResultsArray, ...uploadedMediaArray]).map((result, index) => {
+                  {[...searchResultsArray, ...uploadedMediaArray].map((result, index) => {
                     const isVideo = result.embedUrl || (result.url && result.url.includes('youtube'))
                     const imageSource = getImageSource(result.thumbnail || result.url, true)
                     const isRestricted = !imageSource && !isVideo
@@ -2213,12 +2321,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 </div>
                 
                 {/* Pagination */}
-                {totalResultPages > 1 && (
+                {(hasSearched && (resultPage > 1 || hasNextPage)) && (
                   <div className={styles['mt-lg']}>
                     <Pagination
                       currentPage={resultPage}
-                      hasNextPage={resultPage < totalResultPages}
+                      hasNextPage={hasNextPage}
                       onPageChange={setResultPage}
+                      isLoading={isPaginationLoading}
                     />
                   </div>
                 )}
@@ -2344,9 +2453,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 variant="primary"
                 size="large"
                 onClick={handleLightboxConfirm}
+                disabled={lightboxMedia ? addingMediaIds.has(lightboxMedia.id) : false}
                 data-testid="set-media-button"
               >
-                {existingPageMedia && existingPageMedia.length > 0 ? 'Replace Media' : 'Set Media'}
+                {lightboxMedia && addingMediaIds.has(lightboxMedia.id)
+                  ? 'Adding Media...' 
+                  : (existingPageMedia && existingPageMedia.length > 0 ? 'Replace Media' : 'Set Media')
+                }
               </Button>
             </div>
           </div>

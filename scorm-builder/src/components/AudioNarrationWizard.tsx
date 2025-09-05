@@ -112,44 +112,45 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
   const hasNewPages = 'welcomePage' in content && 'learningObjectivesPage' in content
   
   if (hasNewPages) {
-    // Add welcome page narration
-    if ('welcomePage' in content && content.welcomePage?.narration) {
+    // ALWAYS add welcome page block (even if no narration text)
+    if ('welcomePage' in content) {
       blocks.push({
         id: `welcome-narration`,
-        text: content.welcomePage.narration,
-        blockNumber: String(blockCounter++).padStart(4, '0'),
+        text: content.welcomePage?.narration || '',
+        blockNumber: '0001',
         // Always use 'welcome' for consistency with media ID generation
         pageId: 'welcome',
-        pageTitle: content.welcomePage.title
+        pageTitle: content.welcomePage?.title || 'Welcome'
       })
     }
 
-    // Add learning objectives page narration
-    if ('learningObjectivesPage' in content && content.learningObjectivesPage?.narration) {
+    // ALWAYS add learning objectives page block (even if no narration text)
+    if ('learningObjectivesPage' in content) {
       blocks.push({
         id: `objectives-narration`,
-        text: content.learningObjectivesPage.narration,
-        blockNumber: String(blockCounter++).padStart(4, '0'),
+        text: content.learningObjectivesPage?.narration || '',
+        blockNumber: '0002',
         // Always use 'objectives' for consistency with media ID generation
         pageId: 'objectives',
-        pageTitle: content.learningObjectivesPage.title
+        pageTitle: content.learningObjectivesPage?.title || 'Learning Objectives'
       })
     }
+    
+    // Start topic block counter at 3 to ensure consistent numbering
+    blockCounter = 3
   }
 
-  // Process topics (both formats)
+  // Process topics (both formats) - ALWAYS create blocks regardless of narration text
   if (content.topics && Array.isArray(content.topics)) {
     content.topics.forEach(topic => {
-      if (topic.narration) {
-        const narrationText = typeof topic.narration === 'string' ? topic.narration : ''
-        blocks.push({
-          id: `${topic.id}-narration`,
-          text: narrationText,
-          blockNumber: String(blockCounter++).padStart(4, '0'),
-          pageId: topic.id,
-          pageTitle: topic.title
-        })
-      }
+      const narrationText = (typeof topic.narration === 'string' ? topic.narration : '') || ''
+      blocks.push({
+        id: `${topic.id}-narration`,
+        text: narrationText,
+        blockNumber: String(blockCounter++).padStart(4, '0'),
+        pageId: topic.id,
+        pageTitle: topic.title
+      })
     })
   }
 
@@ -2457,9 +2458,11 @@ export function AudioNarrationWizard({
         
         // Extract block number (expecting format like 0001-Block.mp3)
         const blockNumber = filename.match(/(\d{4})/)?.[1]
+        const displayName = filename.split('/').pop() || filename
+        
         if (!blockNumber) {
           logger.warn(`[AudioNarrationWizard] Skipping ${filename}: no 4-digit block number found (expected format: 0001-Block.mp3)`)
-          skippedFiles.push({ filename, reason: 'No 4-digit block number found' })
+          skippedFiles.push({ filename: displayName, reason: 'No 4-digit block number found' })
           continue
         }
         
@@ -2467,7 +2470,8 @@ export function AudioNarrationWizard({
         const block = narrationBlocks.find(n => n.blockNumber === blockNumber)
         if (!block) {
           logger.warn(`[AudioNarrationWizard] Skipping ${filename}: no narration block found for number ${blockNumber}`)
-          skippedFiles.push({ filename, reason: `No narration block for ${blockNumber}` })
+          const availableBlocks = narrationBlocks.map(b => b.blockNumber).join(', ')
+          skippedFiles.push({ filename: displayName, reason: `No narration block for ${blockNumber}. Available: ${availableBlocks}` })
           continue
         }
         
@@ -2586,7 +2590,8 @@ export function AudioNarrationWizard({
           const errorMessage = fileError instanceof Error ? fileError.message : String(fileError)
           failedFiles.push({ file: filename, error: errorMessage })
           
-          skippedFiles.push({ filename, reason: `Processing error: ${fileError}` })
+          const displayName = filename.split('/').pop() || filename
+          skippedFiles.push({ filename: displayName, reason: `Processing error: ${fileError}` })
           // Continue with next file
         }
       }
@@ -2799,6 +2804,7 @@ export function AudioNarrationWizard({
       for (const [filename, zipEntry] of Object.entries(contents.files)) {
         if (!zipEntry.dir && /\.(vtt|srt)$/i.test(filename)) {
           const blockNumber = filename.match(/(\d{4})/)?.[1]
+          const displayName = filename.split('/').pop() || filename
           if (blockNumber) {
             try {
               // Update the current processing file name
@@ -2842,7 +2848,7 @@ export function AudioNarrationWizard({
                 })
                 
                 // Track successful caption file
-                captionSuccessfulFiles.push(filename)
+                captionSuccessfulFiles.push(displayName)
                 
                 processedCount++
                 
@@ -2870,7 +2876,7 @@ export function AudioNarrationWizard({
               
               // Track failed caption file
               const errorMessage = error instanceof Error ? error.message : String(error)
-              captionFailedFiles.push({ file: filename, error: errorMessage })
+              captionFailedFiles.push({ file: displayName, error: errorMessage })
             }
           }
         }
@@ -3351,7 +3357,7 @@ export function AudioNarrationWizard({
                       data-testid="captions-zip-input"
                     />
                     
-                    {!captionsUploaded && !isUploading && (
+                    {!captionsUploaded && !captionProgress && (
                       <>
                         <Upload size={32} className={styles.dropZoneIcon} />
                         <p className={styles.dropZoneText}>Click to upload captions ZIP</p>
@@ -3359,7 +3365,7 @@ export function AudioNarrationWizard({
                       </>
                     )}
                     
-                    {isUploading && captionProgress && (
+                    {captionProgress && (
                       <div className={styles.uploadingContainer}>
                         <div className={styles.progressSection}>
                           <div className={styles.progressLabel}>

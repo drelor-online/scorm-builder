@@ -542,6 +542,18 @@ body.fullscreen-mode .main-area {
     border: 2px solid #f44336;
 }
 
+/* Visual feedback for fill-in-blank questions */
+.kc-fill-blank.correct-answer {
+    background-color: #e8f5e9;
+    border: 2px solid #4caf50;
+    animation: flash-correct 0.6s ease-in-out 3;
+}
+
+.kc-fill-blank.incorrect-answer {
+    background-color: #ffebee;
+    border: 2px solid #f44336;
+}
+
 @keyframes flash-correct {
     0%, 100% { 
         background-color: #e8f5e9;

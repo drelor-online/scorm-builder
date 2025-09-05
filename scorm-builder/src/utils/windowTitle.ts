@@ -1,9 +1,10 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getAppNameWithVersion } from './version'
 
 export async function updateWindowTitle(projectName?: string, hasUnsavedChanges: boolean = false) {
   try {
     const window = getCurrentWindow()
-    const baseTitle = 'SCORM Course Builder'
+    const baseTitle = getAppNameWithVersion()
     
     let title = baseTitle
     if (projectName) {

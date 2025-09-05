@@ -35,12 +35,35 @@
   color: var(--color-success-600);
 }
 
+.iconContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 14px;
+  height: 14px;
+}
+
 .spinner {
+  position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 12px;
   height: 12px;
+}
+
+.savingIcon {
+  animation: savingIconPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes savingIconPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .spinnerIcon {

@@ -882,8 +882,8 @@ describe('Utilities and Services - Consolidated Test Suite', () => {
         temperature: 0.8
       })
 
-      expect(result).resolves.toHaveProperty('content')
-      expect(credits).resolves.toHaveProperty('remaining', 50000)
+      await expect(result).resolves.toHaveProperty('content')
+      await expect(credits).resolves.toHaveProperty('remaining', 50000)
       expect(formattedRequest).toHaveProperty('model', 'gpt-3.5-turbo')
       expect(formattedRequest.max_tokens).toBe(500)
     })

@@ -150,3 +150,31 @@
 .pageLayout > * + * {
   margin-top: 24px;
 }
+
+/* Version Footer */
+.versionFooter {
+  position: fixed;
+  bottom: 12px;
+  right: 24px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.versionText {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #71717a);
+  font-weight: 500;
+  font-family: monospace;
+  background: var(--bg-tertiary, rgba(39, 39, 42, 0.8));
+  padding: 4px 8px;
+  border-radius: 4px;
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle, rgba(63, 63, 70, 0.5));
+}
+
+/* Hide version footer on small screens to avoid clutter */
+@media (max-width: 768px) {
+  .versionFooter {
+    display: none;
+  }
+}

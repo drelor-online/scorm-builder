@@ -7,10 +7,68 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   padding: var(--space-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 1000;
   max-width: 300px;
-  margin-top: var(--space-sm);
+  left: 100%;
+  margin-left: var(--space-md);
+  top: 0;
+  transform: translateY(-10%);
+  min-width: 280px;
+}
+
+/* Arrow pointing to the select */
+.templatePreviewTooltip::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 20px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid var(--border-primary);
+}
+
+.templatePreviewTooltip::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 20px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid var(--bg-primary);
+}
+
+/* Responsive positioning for smaller screens */
+@media (max-width: 1024px) {
+  .templatePreviewTooltip {
+    left: 0;
+    margin-left: 0;
+    top: 100%;
+    margin-top: var(--space-sm);
+    transform: none;
+  }
+  
+  .templatePreviewTooltip::before {
+    left: 20px;
+    top: -8px;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--border-primary);
+    border-top: none;
+  }
+  
+  .templatePreviewTooltip::after {
+    left: 20px;
+    top: -7px;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--bg-primary);
+    border-top: none;
+  }
 }
 
 /* Template Button Spacing */
@@ -691,3 +749,4 @@
 .dragDropContainer {
   margin-top: var(--space-sm);
 }
+

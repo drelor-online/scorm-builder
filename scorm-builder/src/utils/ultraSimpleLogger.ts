@@ -6,29 +6,33 @@
 type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
 
 class UltraSimpleLogger {
-  private logs: string[] = []
+  private _logs: string[] = []
   private maxLogs = 1000
   private logLevel: LogLevel = 'INFO' // Default to INFO, hiding DEBUG
+  private localStorageBatch: string[] = []
+  private localStorageTimer: NodeJS.Timeout | null = null
+  private readonly BATCH_SIZE = 50
+  private readonly BATCH_DELAY = 10000 // 10 seconds
   
   constructor() {
-    // Try to write a startup message everywhere
-    this.writeEverywhere('LOGGER', 'UltraSimpleLogger initialized')
-    
     // Load existing logs from localStorage - but limit to last 100 entries
     try {
       const stored = localStorage.getItem('debug_logs')
       if (stored) {
         const allLogs = JSON.parse(stored)
         // Only keep the last 100 logs to avoid flooding on startup
-        this.logs = allLogs.slice(-100)
+        this._logs = allLogs.slice(-100)
       }
     } catch {
       // Ignore
     }
     
+    // Try to write a startup message everywhere
+    this.writeEverywhere('LOGGER', 'UltraSimpleLogger initialized')
+    
     // Make it globally accessible for debugging
     if (typeof window !== 'undefined') {
-      (window as any).debugLogs = this.logs;
+      (window as any).debugLogs = this._logs;
       (window as any).dumpLogs = () => this.dumpLogs();
       (window as any).clearLogs = () => this.clearLogs();
     }
@@ -46,6 +50,43 @@ class UltraSimpleLogger {
     console.log(`Log level set to: ${level}`)
   }
   
+  private flushLocalStorageBatch() {
+    if (this.localStorageBatch.length === 0) return
+    
+    try {
+      // Write all logs to localStorage at once
+      localStorage.setItem('debug_logs', JSON.stringify(this._logs))
+      localStorage.setItem('last_debug_log', this.localStorageBatch[this.localStorageBatch.length - 1])
+      this.localStorageBatch = []
+    } catch {
+      // Ignore quota errors
+      this.localStorageBatch = [] // Clear batch to prevent memory leak
+    }
+    
+    // Clear timer
+    if (this.localStorageTimer) {
+      clearTimeout(this.localStorageTimer)
+      this.localStorageTimer = null
+    }
+  }
+  
+  private scheduleLocalStorageWrite() {
+    // Clear existing timer
+    if (this.localStorageTimer) {
+      clearTimeout(this.localStorageTimer)
+    }
+    
+    // Schedule batch write
+    this.localStorageTimer = setTimeout(() => {
+      this.flushLocalStorageBatch()
+    }, this.BATCH_DELAY)
+    
+    // If batch is full, flush immediately
+    if (this.localStorageBatch.length >= this.BATCH_SIZE) {
+      this.flushLocalStorageBatch()
+    }
+  }
+  
   private writeEverywhere(category: string, message: string, data?: any, level: LogLevel = 'INFO') {
     // Skip if below current log level
     if (!this.shouldLog(level)) {
@@ -55,9 +96,9 @@ class UltraSimpleLogger {
     const logLine = `[${timestamp}] [${category}] ${message}${data ? ' ' + JSON.stringify(data) : ''}`
     
     // 1. Add to memory
-    this.logs.push(logLine)
-    if (this.logs.length > this.maxLogs) {
-      this.logs.shift()
+    this._logs.push(logLine)
+    if (this._logs.length > this.maxLogs) {
+      this._logs.shift()
     }
     
     // 2. Add to window.__debugLogs for production debugging
@@ -71,13 +112,9 @@ class UltraSimpleLogger {
       }
     }
     
-    // 3. Write to localStorage
-    try {
-      localStorage.setItem('debug_logs', JSON.stringify(this.logs))
-      localStorage.setItem('last_debug_log', logLine)
-    } catch {
-      // Ignore quota errors
-    }
+    // 3. Add to localStorage batch (write later)
+    this.localStorageBatch.push(logLine)
+    this.scheduleLocalStorageWrite()
     
     // 4. Write to console (if available)
     if (typeof console !== 'undefined' && console.log) {
@@ -112,7 +149,7 @@ class UltraSimpleLogger {
   
   // Utility methods
   dumpLogs(): string {
-    const logText = this.logs.join('\n')
+    const logText = this._logs.join('\n')
     if (typeof console !== 'undefined' && console.log) {
       console.log('=== DEBUG LOGS ===')
       console.log(logText)
@@ -132,7 +169,14 @@ class UltraSimpleLogger {
   }
   
   clearLogs() {
-    this.logs = []
+    this._logs = []
+    this.localStorageBatch = []
+    
+    // Clear timer
+    if (this.localStorageTimer) {
+      clearTimeout(this.localStorageTimer)
+      this.localStorageTimer = null
+    }
     
     // Clear all log arrays
     if (typeof window !== 'undefined') {
@@ -160,7 +204,7 @@ class UltraSimpleLogger {
   createBugReport() {
     return {
       timestamp: new Date().toISOString(),
-      logs: this.logs,
+      logs: this._logs,
       localStorage: this.getLocalStorageSnapshot()
     }
   }
@@ -179,6 +223,11 @@ class UltraSimpleLogger {
   
   async writeToFile(entry: any): Promise<void> {
     this.writeEverywhere('FILE', 'writeToFile called', entry)
+  }
+
+  // Getter for testing access to private logs array
+  get logs(): string[] {
+    return [...this._logs] // Return a copy to prevent external mutation
   }
 }
 

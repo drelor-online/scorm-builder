@@ -24,6 +24,7 @@ import { useStorage } from '../contexts/PersistentStorageContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext';
 import { debugLogger } from '../utils/ultraSimpleLogger';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface CourseSeedInputProps {
   // Make onSubmit return a Promise so we can await it
@@ -107,8 +108,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   const [customTemplates, setCustomTemplates] = useState<Record<string, any>>({})
   const [isTitleLocked, setIsTitleLocked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showTemplatePreview, setShowTemplatePreview] = useState(false)
   const [isTopicsEditable, setIsTopicsEditable] = useState(true)
+  const [showClearTopicsConfirm, setShowClearTopicsConfirm] = useState(false)
+  const [topicsExplicitlyCleared, setTopicsExplicitlyCleared] = useState(false)
   
   
   
@@ -181,7 +183,22 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   // Sync state when initialData changes (for when component receives data after mounting)
   // Only update fields that are currently empty to avoid overriding user selections
   useEffect(() => {
-    if (initialData && hasMountedRef.current) {
+    if (initialData) {
+      // Prevent rapid re-syncs (debounce syncing to max once per 100ms)
+      const now = Date.now()
+      const timeSinceLastSync = now - lastSyncTimeRef.current
+      
+      if (timeSinceLastSync < 100) {
+        return // Skip sync if it's too soon after last sync
+      }
+      
+      // Don't sync if user is actively editing
+      if (isActivelyEditingRef.current) {
+        return // Skip sync if user is currently typing
+      }
+      
+      lastSyncTimeRef.current = now
+      
       debugLogger.info('CourseSeedInput', 'Syncing state with initialData', {
         hasTitle: !!initialData.courseTitle,
         hasDifficulty: !!initialData.difficulty,
@@ -189,7 +206,10 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         hasCustomTopics: !!initialData.customTopics?.length,
         currentTemplate: template,
         currentTitle: courseTitle,
-        hasMounted: hasMountedRef.current
+        hasMounted: hasMountedRef.current,
+        willSync: true,
+        timeSinceLastSync: timeSinceLastSync,
+        isActivelyEditing: isActivelyEditingRef.current
       });
       
       const newValues = {
@@ -200,15 +220,22 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
       
       // Only update fields that are currently empty/default to avoid overriding user selections
-      // Don't sync if user has already made changes (check against initial defaults)
-      const userHasChangedTemplate = template !== 'None' && template !== initialData.template
-      // Protect user-added topics: if user has topics and initialData doesn't, or if topics differ significantly
-      const userHasChangedTopics = customTopics.trim().length > 0 && (
+      // But always allow loading saved data on first sync (when component hasn't mounted yet)
+      const userHasChangedTemplate = hasMountedRef.current && template !== 'None' && template !== initialData.template
+      // Improved logic: Only consider topics "changed by user" if they are actively different from saved data
+      // AND the user has actually mounted the component (not on initial load)
+      const userHasChangedTopics = hasMountedRef.current && (
+        customTopics.trim().length > 0 || topicsExplicitlyCleared
+      ) && (
         !initialData.customTopics?.length || 
         customTopics.trim() !== initialData.customTopics?.join('\n').trim()
       )
       
-      if (!courseTitle && initialData.courseTitle) {
+      // Additional protection: check if user has made changes compared to the original defaults
+      const userHasChangedTitle = courseTitle.trim().length > 0 && courseTitle !== initialData.courseTitle
+      const userHasChangedDifficulty = difficulty !== 3 && difficulty !== initialData.difficulty
+      
+      if (!courseTitle && initialData.courseTitle && !userHasChangedTitle) {
         setCourseTitle(initialData.courseTitle)
         newValues.courseTitle = initialData.courseTitle
       }
@@ -218,14 +245,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
         newValues.template = initialData.template
       }
       
-      if (difficulty === 3 && initialData.difficulty) {
+      if (difficulty === 3 && initialData.difficulty && !userHasChangedDifficulty) {
         setDifficulty(initialData.difficulty)
         newValues.difficulty = initialData.difficulty
       }
       
       // Only sync topics if the user hasn't added any topics AND initialData has topics
-      // AND we're not overriding user-added template topics
-      if (!customTopics.trim() && initialData.customTopics?.length && !userHasChangedTopics) {
+      // AND we're not overriding user-added template topics AND user hasn't explicitly cleared topics
+      if (!customTopics.trim() && initialData.customTopics?.length && !userHasChangedTopics && !topicsExplicitlyCleared) {
         const topicsStr = initialData.customTopics.join('\n')
         setCustomTopics(topicsStr)
         newValues.customTopics = topicsStr
@@ -238,6 +265,9 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
   
   // Track if we've mounted to prevent initial save
   const isSubmittingRef = useRef(false)
+  const lastSyncTimeRef = useRef(0)
+  const isActivelyEditingRef = useRef(false)
+  const isTopicsTextareaFocusedRef = useRef(false)
   const previousValuesRef = useRef({
     courseTitle,
     difficulty,
@@ -281,6 +311,12 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     const saveMetadata = async () => {
       // Don't autosave while submitting to prevent race conditions
       if (isSubmittingRef.current) {
+        return
+      }
+      
+      // Don't autosave while user is focused on topics textarea
+      if (isTopicsTextareaFocusedRef.current) {
+        debugLogger.info('CourseSeedInput', 'Skipping autosave - topics textarea is focused')
         return
       }
       
@@ -341,8 +377,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
     }
     
-    // Debounce the save
-    const timer = setTimeout(saveMetadata, 1000)
+    // Debounce the save (5 seconds to give users more time to type)
+    const timer = setTimeout(saveMetadata, 5000)
     return () => clearTimeout(timer)
   }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized, onSave, markDirty])
   
@@ -396,6 +432,69 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
     }
     setShowTopicWarning(false)
+  }
+
+  // Clear topics confirmation handlers
+  const handleConfirmClearTopics = () => {
+    setCustomTopics('')
+    setIsTopicsEditable(true)
+    setTopicsExplicitlyCleared(true)
+    markDirty('courseSeed')
+    
+    // Save the cleared topics to storage
+    if (onSave) {
+      const seedData: CourseSeedData = {
+        template,
+        customTopics: [], // Empty array
+        courseTitle,
+        difficulty,
+        templateTopics: template !== 'None' ? templateTopics[template] || [] : []
+      }
+      onSave(seedData)
+    }
+    
+    setShowClearTopicsConfirm(false)
+  }
+  
+  const handleCancelClearTopics = () => {
+    setShowClearTopicsConfirm(false)
+  }
+
+  // Helper function to trigger immediate save (for blur events)
+  const triggerImmediateSave = async () => {
+    if (isSubmittingRef.current || !courseTitle || !storage?.currentProjectId || !storage?.isInitialized) {
+      return
+    }
+
+    try {
+      const topicsArray = customTopics
+        .split('\n')
+        .map(topic => topic.trim())
+        .filter(topic => topic.length > 0)
+      
+      const seedData: CourseSeedData = {
+        courseTitle,
+        difficulty,
+        customTopics: topicsArray,
+        template,
+        templateTopics: []
+      }
+      
+      markDirty('courseSeed')
+      
+      if (onSave) {
+        onSave(seedData)
+      } else {
+        await storage.saveCourseSeedData(seedData)
+      }
+      
+      debugLogger.info('CourseSeedInput', 'Immediate save completed on blur', {
+        courseTitle,
+        projectId: storage?.currentProjectId
+      })
+    } catch (error) {
+      console.error('Immediate save failed:', error)
+    }
   }
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -492,6 +591,15 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       debugLogger.info('CourseSeedInput v2.0.4', 'Submission complete, reset submitting flag');
+      
+      // Fallback timeout to ensure isSubmitting doesn't get stuck
+      setTimeout(() => {
+        if (isSubmittingRef.current) {
+          debugLogger.warn('CourseSeedInput', 'Force-resetting stuck isSubmitting flag');
+          setIsSubmitting(false);
+          isSubmittingRef.current = false;
+        }
+      }, 30000); // 30 second timeout
     }
   }
   
@@ -542,6 +650,22 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
       }
     }
   }
+
+  // Keyboard shortcuts (placed after handleManualSave is defined)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + S: Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        if (onSave && !isSubmitting && courseTitle.trim().length > 0) {
+          handleManualSave()
+        }
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onSave, isSubmitting, courseTitle, handleManualSave])
 
   return (
     <>
@@ -695,17 +819,14 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
               {/* Template */}
               <div>
                 <label htmlFor="course-template-select" className={`input-label ${styles.inputLabelOptional}`}>Course Template (Optional)</label>
-                <div 
-                  style={{ position: 'relative' }}
-                  onMouseEnter={() => template !== 'None' && setShowTemplatePreview(true)}
-                  onMouseLeave={() => setShowTemplatePreview(false)}
-                >
-                  <Select
-                    id="course-template-select"
-                    value={template}
-                    onChange={handleTemplateChange}
-                    data-testid="template-select"
-                  >
+                <div style={{ position: 'relative', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <Select
+                      id="course-template-select"
+                      value={template}
+                      onChange={handleTemplateChange}
+                      data-testid="template-select"
+                    >
                   <option value="None">Choose a template...</option>
                   <option value="How-to Guide">How-to Guide</option>
                   <option value="Corporate">Corporate</option>
@@ -717,25 +838,8 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   {Object.keys(customTemplates).map(templateName => (
                     <option key={templateName} value={templateName}>{templateName}</option>
                   ))}
-                </Select>
-                
-                {/* Template Preview Tooltip */}
-                {showTemplatePreview && template !== 'None' && templateTopics[template] && (
-                  <div 
-                    className={`${styles.templatePreviewTooltip} templatePreviewTooltip`}
-                    data-testid="template-preview-tooltip"
-                  >
-                    <h4>{template} Template Topics:</h4>
-                    <ul>
-                      {templateTopics[template].slice(0, 6).map((topic, index) => (
-                        <li key={index}>{topic}</li>
-                      ))}
-                      {templateTopics[template].length > 6 && (
-                        <li>...and {templateTopics[template].length - 6} more</li>
-                      )}
-                    </ul>
+                    </Select>
                   </div>
-                )}
                 </div>
                 
                 {template !== 'None' && (
@@ -781,11 +885,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                         variant="secondary"
                         size="small"
                         onClick={() => {
-                          if (window.confirm('Clear all topics? This cannot be undone.')) {
-                            setCustomTopics('')
-                            setIsTopicsEditable(true)
-                            markDirty('courseSeed')
-                          }
+                          setShowClearTopicsConfirm(true)
                         }}
                         type="button"
                         data-testid="clear-topics-button"
@@ -805,12 +905,33 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
                   id="topics-textarea"
                   placeholder={`List your course topics (one per line):\n\n• Introduction to workplace safety\n• Hazard identification techniques\n• Personal protective equipment\n• Emergency response procedures\n• Incident reporting protocols`}
                   value={customTopics}
+                  onFocus={() => {
+                    isTopicsTextareaFocusedRef.current = true
+                    debugLogger.info('CourseSeedInput', 'Topics textarea focused - autosave disabled')
+                  }}
+                  onBlur={() => {
+                    isTopicsTextareaFocusedRef.current = false
+                    debugLogger.info('CourseSeedInput', 'Topics textarea blurred - triggering immediate save')
+                    // Trigger immediate save when user finishes editing
+                    triggerImmediateSave()
+                  }}
                   onChange={(e) => {
                     if (isTopicsEditable) {
                       const value = e.target.value
+                      // Mark as actively editing to prevent sync interference
+                      isActivelyEditingRef.current = true
                       // Just set the value as-is - topics are only separated by newlines
                       setCustomTopics(value)
+                      // If user types something after clearing, allow auto-restore again
+                      if (value.trim() && topicsExplicitlyCleared) {
+                        setTopicsExplicitlyCleared(false)
+                      }
                       markDirty('courseSeed')
+                      
+                      // Clear the actively editing flag after a brief delay
+                      setTimeout(() => {
+                        isActivelyEditingRef.current = false
+                      }, 300)
                     }
                   }}
                   data-testid="topics-textarea"
@@ -926,6 +1047,18 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           />
         </Modal>
       )}
+
+      {/* Clear Topics Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showClearTopicsConfirm}
+        title="Clear Topics"
+        message="Clear all topics? This cannot be undone."
+        confirmText="Clear Topics"
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={handleConfirmClearTopics}
+        onCancel={handleCancelClearTopics}
+      />
 
       {/* Removed validation alert - the disabled Next button provides sufficient feedback */}
     </PageLayout>

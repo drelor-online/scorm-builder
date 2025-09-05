@@ -4,6 +4,7 @@ import styles from './PageLayout.module.css'
 import stepperStyles from './WorkflowProgress.module.css'
 import { useStepNavigation } from '../contexts/StepNavigationContext'
 import { Tooltip } from './DesignSystem/Tooltip'
+import { getVersionDisplay } from '../utils/version'
 
 // WorkflowProgress component with CSS modules
 const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onStepClick?: (step: number) => void }> = ({ 
@@ -241,6 +242,13 @@ const PageLayoutComponent: React.FC<PageLayoutProps> = ({
           {children}
         </div>
       </main>
+
+      {/* Version Footer */}
+      <footer className={styles.versionFooter} data-testid="version-footer">
+        <span className={styles.versionText}>
+          {getVersionDisplay()}
+        </span>
+      </footer>
     </div>
   )
 }

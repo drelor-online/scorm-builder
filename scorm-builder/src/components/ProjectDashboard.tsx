@@ -72,6 +72,49 @@ function formatProjectDate(project: Project): string {
   }
 }
 
+// Enhanced filename validation for cross-platform compatibility
+function validateProjectFilename(name: string): { isValid: boolean; errorMessage: string } {
+  // Check for invalid characters that cause problems across different OS
+  const invalidChars = /[<>:"\/\\|?*]/
+  const invalidMatch = name.match(invalidChars)
+  
+  if (invalidMatch) {
+    const invalidChar = invalidMatch[0]
+    return {
+      isValid: false,
+      errorMessage: `Project name contains invalid character '${invalidChar}'. Cannot contain < > : " / \\ | ? *. Try using letters, numbers, spaces, hyphens, underscores, or parentheses instead.`
+    }
+  }
+  
+  // Check for reserved Windows filenames (case-insensitive)
+  const reservedNames = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9']
+  if (reservedNames.includes(name.toUpperCase())) {
+    return {
+      isValid: false,
+      errorMessage: `'${name}' is a reserved system name and cannot be used. Please choose a different name.`
+    }
+  }
+  
+  // Check for names ending with periods or spaces (problematic on Windows)
+  if (name.endsWith('.') || name.endsWith(' ')) {
+    return {
+      isValid: false,
+      errorMessage: `Project name cannot end with a period or space. Please remove trailing characters.`
+    }
+  }
+  
+  // Check length (most filesystems support 255 chars, but we're more conservative) 
+  if (name.length > 100) {
+    return {
+      isValid: false,
+      errorMessage: `Project name is too long (${name.length} characters). Please use 100 characters or less.`
+    }
+  }
+  
+  // All checks passed
+  return { isValid: true, errorMessage: '' }
+}
+
 export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDashboardProps) {
   const storage = useStorage()
   const { success, error: notifyError, info } = useNotifications()
@@ -246,16 +289,10 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         return
       }
       
-      // Validate project name length
-      if (trimmedName.length > 100) {
-        notifyError('Project name must be 100 characters or less')
-        return
-      }
-      
-      // Validate project name characters (allow alphanumeric, spaces, hyphens, underscores)
-      const validNameRegex = /^[a-zA-Z0-9\s\-_]+$/
-      if (!validNameRegex.test(trimmedName)) {
-        notifyError('Project name can only contain letters, numbers, spaces, hyphens, and underscores')
+      // Enhanced filename validation for cross-platform compatibility
+      const validationResult = validateProjectFilename(trimmedName)
+      if (!validationResult.isValid) {
+        notifyError(validationResult.errorMessage)
         return
       }
       
@@ -1099,22 +1136,6 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           </ButtonGroup>
         </div>
       </Modal>
-      
-      {/* Keyboard shortcut hint */}
-      <div style={{
-        position: 'fixed',
-        bottom: '1rem',
-        right: '1rem',
-        fontSize: '0.75rem',
-        color: 'var(--text-tertiary)',
-        background: 'var(--bg-secondary)',
-        padding: '0.5rem',
-        borderRadius: '0.25rem',
-        border: '1px solid var(--border-default)',
-        zIndex: 100
-      }}>
-        Press <kbd style={{background: 'var(--bg-tertiary)', padding: '0.125rem 0.25rem', borderRadius: '0.125rem', fontFamily: 'monospace'}}>Ctrl+/</kbd> for shortcuts
-      </div>
     </div>
   )
 }

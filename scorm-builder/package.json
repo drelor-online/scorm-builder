@@ -1,6 +1,6 @@
 {
   "name": "scorm-builder",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "type": "module",
   "description": "Modern SCORM package builder with React 19, Vite 6, and Tauri. See DEPENDENCY_STRATEGY.md for version rationale.",
   "scripts": {

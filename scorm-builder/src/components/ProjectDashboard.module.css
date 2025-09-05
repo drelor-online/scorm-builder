@@ -164,7 +164,8 @@
 .projectCardInner {
   position: relative;
   padding: var(--space-lg);
-  overflow: hidden;
+  /* Removed overflow: hidden to prevent clipping of delete button */
+  /* The projectCard parent already handles card bounds properly */
 }
 
 .projectCardActions {

@@ -1488,8 +1488,8 @@ export async function generateRustSCORM(
     }
     
     // Calculate dynamic timeout based on media files
-    const baseTimeout = 120000 // 2 minutes base
-    const perFileTimeout = 4000 // 4 seconds per media file
+    const baseTimeout = 180000 // 3 minutes base (increased from 2 minutes)
+    const perFileTimeout = 8000 // 8 seconds per media file (increased from 4 seconds)
     const maxTimeout = 600000 // 10 minutes max
     const calculatedTimeout = Math.min(baseTimeout + (mediaFiles.length * perFileTimeout), maxTimeout)
     

@@ -17,6 +17,7 @@ interface UnifiedMediaContextType {
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
   getMedia: (mediaId: string) => Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>
   deleteMedia: (mediaId: string) => Promise<boolean>
+  deleteAllMedia: (projectId: string) => Promise<void>
   
   // YouTube specific
   storeYouTubeVideo: (youtubeUrl: string, embedUrl: string, pageId: string, metadata?: Partial<MediaMetadata>) => Promise<MediaItem>
@@ -40,6 +41,9 @@ interface UnifiedMediaContextType {
   error: Error | null
   clearError: () => void
   refreshMedia: () => Promise<void>
+  
+  // Cache management
+  resetMediaCache: () => void
 }
 
 const UnifiedMediaContext = createContext<UnifiedMediaContextType | null>(null)
@@ -157,9 +161,9 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         ;(mediaServiceRef.current as any).clearAudioCache()
       }
       
-      // Clean up blob URLs for this project using BlobURLCache
-      logger.info('[UnifiedMediaContext] Cleaning up project-specific blob URLs')
-      blobCache.clearProject(actualProjectId)
+      // Clean up ALL blob URLs when switching projects to prevent stale references
+      logger.info('[UnifiedMediaContext] Clearing ALL blob URLs to prevent stale references')
+      blobCache.clearAll()
     }
   }, [actualProjectId, storage.fileStorage, blobCache])
   
@@ -374,6 +378,51 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     }
   }, [blobCache])
   
+  const deleteAllMedia = useCallback(async (projectId: string): Promise<void> => {
+    try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
+      
+      logger.info('[UnifiedMediaContext] Deleting all media for project:', projectId)
+      
+      // Call MediaService to delete all media
+      await mediaService.deleteAllMedia(projectId)
+      
+      // CRITICAL: Reset the entire media cache and load tracking
+      // This ensures that UnifiedMediaContext will reload media on next access
+      resetMediaCache()
+      
+      logger.info('[UnifiedMediaContext] Successfully deleted all media for project:', projectId)
+    } catch (err) {
+      logger.error('[UnifiedMediaContext] Failed to delete all media:', projectId, err)
+      setError(err as Error)
+      throw err
+    }
+  }, [blobCache])
+
+  const resetMediaCache = useCallback(() => {
+    logger.info('[UnifiedMediaContext] Resetting media cache and load tracking refs')
+    
+    // Clear the media cache completely
+    setMediaCache(new Map())
+    
+    // Reset the refs that track what projects have been loaded
+    hasLoadedRef.current.clear()
+    lastLoadedProjectIdRef.current = null
+    
+    // Reset loading state
+    isLoadingRef.current = false
+    setIsLoading(false)
+    setError(null)
+    
+    // Clear all blob URL cache to prevent stale references
+    blobCache.clearAll()
+    
+    logger.info('[UnifiedMediaContext] Media cache and refs completely reset')
+  }, [blobCache])
+  
   const storeYouTubeVideo = useCallback(async (
     youtubeUrl: string,
     embedUrl: string,
@@ -559,6 +608,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     storeMedia,
     getMedia,
     deleteMedia,
+    deleteAllMedia,
     storeYouTubeVideo,
     getMediaForPage,
     getAllMedia,
@@ -571,11 +621,13 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     isLoading,
     error,
     clearError,
-    refreshMedia
+    refreshMedia,
+    resetMediaCache
   }), [
     storeMedia,
     getMedia,
     deleteMedia,
+    deleteAllMedia,
     storeYouTubeVideo,
     getMediaForPage,
     getAllMedia,
@@ -588,7 +640,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     isLoading,
     error,
     clearError,
-    refreshMedia
+    refreshMedia,
+    resetMediaCache
   ])
   
   // Set global context for TauriAudioPlayer

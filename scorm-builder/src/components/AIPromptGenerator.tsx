@@ -84,7 +84,7 @@ Generate a JSON response with the following structure:
     "id": "welcome",
     "title": "Welcome to [Course Title]",
     "content": "HTML fragment for welcome content",
-    "narration": "Narration text for welcome page (2-3 minutes, approximately 300-500 words)",
+    "narration": "Narration text for welcome page (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
     "imageKeywords": ["welcome", "introduction"],
     "imagePrompts": ["AI image generation prompt for welcome"],
     "videoSearchTerms": ["course introduction", "overview"],
@@ -95,7 +95,7 @@ Generate a JSON response with the following structure:
     "id": "learning-objectives",
     "title": "Learning Objectives",
     "content": "HTML fragment listing learning objectives",
-    "narration": "Narration text for learning objectives (2-3 minutes, approximately 300-500 words)",
+    "narration": "Narration text for learning objectives (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
     "imageKeywords": ["objectives", "goals"],
     "imagePrompts": ["AI image generation prompt for objectives"],
     "videoSearchTerms": ["learning goals", "course objectives"],
@@ -107,7 +107,7 @@ Generate a JSON response with the following structure:
       "id": "topic-0", // Use numeric IDs: topic-0, topic-1, topic-2, etc.
       "title": "Descriptive title derived from the topic (not a direct copy)",
       "content": "HTML fragment with headings, paragraphs, lists, tables, etc. Example: <h2>Introduction</h2><p>Content here...</p><ul><li>Item 1</li></ul>",
-      "narration": "Narration text for this page (2-3 minutes, approximately 300-500 words per page)",
+      "narration": "Narration text for this page (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
       "imageKeywords": ["keyword1", "keyword2"],
       "imagePrompts": ["AI image generation prompt"],
       "videoSearchTerms": ["search term 1", "search term 2"], // YouTube search terms for finding relevant tutorial videos
@@ -159,7 +159,7 @@ Please ensure:
 4. NO knowledge check for Welcome page or Learning Objectives page
 5. Content must be provided as an HTML fragment with proper semantic markup (headings, paragraphs, lists, tables, etc.)
 6. Do NOT include bulletPoints - all content should be in the HTML fragment
-7. Each page should have exactly ONE narration (single narration per page, 2-3 minutes long, approximately 300-500 words)
+7. Each page should have exactly ONE narration (single narration per page, 1-2 minutes long, approximately 150-300 words, maximum 1000 characters)
 8. Titles should be descriptive and derived from the topic, not a direct copy of the topic name
 9. Knowledge checks can include multiple choice, true/false, or fill-in-the-blank questions with feedback for correct and incorrect answers
 10. Final assessment should ONLY contain multiple choice or true/false questions (NO fill-in-the-blank)
@@ -171,7 +171,7 @@ Please ensure:
 Important Notes:
 - Welcome & Learning Objectives: These pages are automatically added to every course - always include them
 - HTML Content: Write all content as HTML fragments including <h2>, <h3>, <p>, <ul>, <ol>, <table>, etc.
-- Single Narration: Each topic page gets exactly one narration text (300-500 words for 2-3 minutes of speech), not multiple narrations
+- Single Narration: Each topic page gets exactly one narration text (150-300 words for 1-2 minutes of speech, maximum 1000 characters), not multiple narrations
 - Derived Titles: If topic is "Safety procedures in the workplace", title could be "Workplace Safety Fundamentals"
 - Knowledge Checks: Mix question types - multiple choice, true/false, and fill-in-the-blank. Include encouraging feedback for correct answers and instructive feedback for incorrect answers
 - Assessment Only: The final assessment should only use multiple choice or true/false questions
@@ -333,6 +333,28 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
       <div className={styles.sectionWrapper}>
         <h2 className={styles.sectionTitle}>AI Prompt</h2>
         <Card>
+          {/* Copy button above textarea for better accessibility */}
+          <div className={styles.topButtonContainer}>
+            <Button
+              onClick={handleCopy}
+              aria-label="Copy prompt to clipboard"
+              data-testid="copy-prompt-button-top"
+              variant={copied ? 'success' : 'secondary'}
+              size="medium"
+              className={styles.copyButton}
+            >
+              {copied ? (
+                <>
+                  <Check size={16} className={styles.copyButtonIcon} /> Copied!
+                </>
+              ) : (
+                <>
+                  <Copy size={16} className={styles.copyButtonIcon} /> Copy Prompt
+                </>
+              )}
+            </Button>
+          </div>
+          
           <textarea
             id="ai-prompt"
             data-testid="ai-prompt-textarea"
@@ -342,25 +364,6 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
             aria-label="AI prompt for course generation"
             className={styles.promptTextarea}
           />
-          
-          <Button
-            onClick={handleCopy}
-            aria-label="Copy prompt to clipboard"
-            data-testid="copy-prompt-button"
-            variant={copied ? 'success' : 'secondary'}
-            size="medium"
-            className={styles.copyButton}
-          >
-            {copied ? (
-              <>
-                <Check size={16} className={styles.copyButtonIcon} /> Copied!
-              </>
-            ) : (
-              <>
-                <Copy size={16} className={styles.copyButtonIcon} /> Copy Prompt
-              </>
-            )}
-          </Button>
         </Card>
       </div>
 

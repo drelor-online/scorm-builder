@@ -35,7 +35,7 @@ interface TauriProjectFile {
     lastModified: string;
   };
   // Backend data fields accessed throughout FileStorage
-  course_content?: Record<string, unknown>;
+  course_content?: Record<string, unknown> | null;
   course_seed_data?: unknown;
   course_data?: {
     title?: string;
@@ -187,10 +187,32 @@ export class FileStorage {
         hasSeedData: !!projectFile.course_seed_data
       });
       
-      this._currentProjectId = projectFile.project.id;
+      // Ensure we have a consistent numeric project ID
+      let numericProjectId = projectFile.project.id;
+      
+      // If the project.id contains a path, extract just the numeric ID
+      if (numericProjectId && (numericProjectId.includes('\\') || numericProjectId.includes('/'))) {
+        // It's a path like "C:\...\1754508638860" - extract the last part
+        const parts = numericProjectId.split(/[\\/]/);
+        numericProjectId = parts[parts.length - 1];
+      }
+      
+      // If it's still not a numeric ID, try to extract from the file path
+      if (numericProjectId && !/^\d+$/.test(numericProjectId)) {
+        const match = projectId.match(/_(\d+)\.scormproj$/);
+        if (match) {
+          numericProjectId = match[1];
+        }
+      }
+      
+      this._currentProjectId = numericProjectId;
       this._currentProjectPath = projectId;
       
-      debugLogger.info('FileStorage.openProject', `Project opened successfully: ${projectFile.project.name}`);
+      debugLogger.info('FileStorage.openProject', `Project opened successfully: ${projectFile.project.name}`, {
+        originalId: projectFile.project.id,
+        extractedId: numericProjectId,
+        projectPath: projectId
+      });
       
       // Return data with recovery info if available
       const result: ExtendedLoadResult = { 
@@ -1760,12 +1782,13 @@ export class FileStorage {
    */
   
   // Course Content Methods
-  async saveCourseContent(content: import('../types/aiPrompt').CourseContent): Promise<void> {
+  async saveCourseContent(content: import('../types/aiPrompt').CourseContent | null): Promise<void> {
     debugLogger.info('FileStorage.saveCourseContent', 'Saving course content to root-level field', {
-      hasWelcomePage: !!content.welcomePage,
-      hasObjectives: !!content.learningObjectivesPage,
-      topicsCount: content.topics?.length || 0,
-      hasAssessment: !!content.assessment
+      hasWelcomePage: !!content?.welcomePage,
+      hasObjectives: !!content?.learningObjectivesPage,
+      topicsCount: content?.topics?.length || 0,
+      hasAssessment: !!content?.assessment,
+      isClearing: content === null
     });
 
     try {
@@ -1775,12 +1798,18 @@ export class FileStorage {
       });
       
       // Update course_content at root level (not nested in course_content[key])
-      projectFile.course_content = {
-        ...content,
-        lastModified: new Date().toISOString()
-      };
-      
-      debugLogger.debug('FileStorage.saveCourseContent', 'Updated project file with course content');
+      if (content === null) {
+        // Clearing course content - set to null to remove all references
+        projectFile.course_content = null;
+        debugLogger.info('FileStorage.saveCourseContent', 'Course content cleared (set to null)');
+      } else {
+        // Saving actual course content
+        projectFile.course_content = {
+          ...content,
+          lastModified: new Date().toISOString()
+        };
+        debugLogger.debug('FileStorage.saveCourseContent', 'Updated project file with course content');
+      }
       
       // Save updated project
       await invoke('save_project', {

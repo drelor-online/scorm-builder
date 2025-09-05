@@ -16,6 +16,10 @@ export function smartAutoFixJSON(input: string): string {
     .replace(/…/g, '...')
     .replace(/–/g, '-')
     .replace(/—/g, '--')
+    // Fix invalid escape sequences (common copy-paste issue)
+    // Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    // Remove backslash from invalid escape sequences but preserve valid ones
+    .replace(/\\([^"\\\/bfnrtu]|u(?![0-9a-fA-F]{4}))/g, '$1')  // Remove backslash from invalid escapes
     // Remove invisible Unicode characters that can break JSON parsing
     .replace(/\u200B/g, '')            // Zero-width space
     .replace(/\u00A0/g, ' ')           // Non-breaking space to regular space
