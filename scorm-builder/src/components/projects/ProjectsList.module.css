@@ -1,0 +1,147 @@
+/**
+ * ProjectsList CSS Module - Design System Compliant
+ * Uses CSS variables from DesignSystem for consistent theming
+ */
+
+.listContainer {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: var(--space-sm);
+}
+
+.rows {
+  /* Simple flex container - no virtualization */
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 160px 220px;
+  gap: var(--space-md);
+  align-items: center;
+  padding: 10px var(--space-sm);
+  border-bottom: 1px solid var(--border-light);
+  transition: background-color var(--transition-fast);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1px;
+}
+
+.row:last-child { 
+  border-bottom: none; 
+  margin-bottom: 0;
+}
+
+.row:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.row:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  background-color: var(--bg-tertiary);
+}
+
+.titleCell {
+  min-width: 0; /* Allow text truncation */
+}
+
+.title { 
+  font-weight: var(--font-weight-semibold); 
+  font-size: var(--font-size-sm); 
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 2px;
+}
+
+.path  { 
+  color: var(--text-tertiary); 
+  font-size: var(--font-size-xs); 
+  font-family: var(--font-mono);
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+}
+
+.last { 
+  text-align: right; 
+  font-size: var(--font-size-xs); 
+  color: var(--text-secondary); 
+  white-space: nowrap;
+}
+
+.actions { 
+  display: flex; 
+  justify-content: flex-end; 
+  gap: var(--space-xs); 
+  flex-wrap: wrap;
+}
+
+.count { 
+  margin-left: auto; 
+  color: var(--text-tertiary); 
+  font-size: var(--font-size-xs); 
+  white-space: nowrap;
+}
+
+.searchInput {
+  max-width: 380px;
+  flex: 1;
+}
+
+.sortSelect {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.sortSelect:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .row {
+    grid-template-columns: 1fr 140px 200px;
+    gap: var(--space-sm);
+  }
+  
+  .actions {
+    gap: 2px;
+  }
+  
+  .searchInput {
+    max-width: 240px;
+  }
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  
+  .row {
+    grid-template-columns: 1fr 120px;
+    gap: var(--space-sm);
+  }
+  
+  .last {
+    display: none; /* Hide last accessed on very small screens */
+  }
+}

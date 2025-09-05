@@ -14,7 +14,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap, Edit2, Check, X } from 'lucide-react'
-import { ProjectsList } from './projects/ProjectsList'
+import ProjectsList from './projects/ProjectsList'
+import { ProjectRow } from './projects/types'
 import './DesignSystem/transitions.css'
 import { envConfig } from '../config/environment'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
@@ -715,13 +716,15 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
               Change Folder
             </Button>
             {defaultFolder && (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={handleClearDefaultFolder}
-              >
-                Clear
-              </Button>
+              <Tooltip content="Reset to default folder location" position="bottom">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={handleClearDefaultFolder}
+                >
+                  Reset
+                </Button>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -815,30 +818,15 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         </div>
       ) : (
         <div className={styles.mainContent}>
+          <h2 className={styles.sectionTitle}>
+            Recent Projects
+          </h2>
           <ProjectsList
-            projects={[...recentProjects, ...projects]}
-            onOpen={(projectId, projectPath) => handleOpenProject(projectId, projectPath)}
-            onExport={(projectId) => {
-              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
-              if (project) {
-                handleExportProject(projectId, (project as any).path)
-              }
-            }}
-            onDelete={(projectId) => {
-              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
-              if (project) {
-                setDeleteConfirm({id: projectId, path: (project as any).path})
-              }
-            }}
-            onRename={(projectId, currentName) => handleStartRename(projectId, currentName)}
-            onOpenFolder={(projectId) => {
-              const project = [...recentProjects, ...projects].find(p => p.id === projectId)
-              if (project && (project as any).path) {
-                invoke('open_folder', { path: (project as any).path })
-                  .catch((error) => console.error('Failed to open folder:', error))
-              }
-            }}
-            className="h-full"
+            projects={[...recentProjects, ...projects] as ProjectRow[]}
+            onOpen={(project: ProjectRow) => handleOpenProject(project.id, project.path || project.filePath || '')}
+            onExport={(project: ProjectRow) => handleExportProject(project.id, project.path || project.filePath)}
+            onDelete={(project: ProjectRow) => setDeleteConfirm({id: project.id, path: project.path || project.filePath})}
+            onRename={(project: ProjectRow) => handleStartRename(project.id, project.name)}
           />
         </div>
       )}
