@@ -1185,25 +1185,59 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleClearCourseContent = async () => {
     debugLogger.info('App', 'Clearing course content and all associated media files')
     
-    // FIRST: Clean any existing course content of media references before clearing
+    // CRITICAL FIX: Immediately clear in-memory state to prevent race conditions
+    // This prevents components from accessing stale media references during the clearing process
+    debugLogger.info('App', 'Immediately clearing in-memory courseContent state to prevent race conditions')
+    setCourseContent(null)
+    
+    // DEFENSIVE: Clean and save any existing course content to storage (after state is cleared)
     // This handles the case where course content exists and has stale media references
     if (storage.currentProjectId && courseContent) {
       try {
         const mediaRefCount = countMediaReferences(courseContent)
         if (mediaRefCount > 0) {
-          debugLogger.info('App', `Found ${mediaRefCount} media references in course content - cleaning before clear`)
-          const cleanedContent = cleanMediaReferencesFromCourseContent(courseContent)
-          await storage.saveCourseContent(cleanedContent)
-          debugLogger.info('App', 'Media references cleaned from course content before clearing')
+          debugLogger.info('App', `Found ${mediaRefCount} media references in course content - attempting defensive cleanup`)
+          
+          // DEFENSIVE APPROACH: Don't pass React state directly to cleaner
+          // Create a safe copy first to avoid mutation issues
+          let courseContentForCleaning: any
+          try {
+            courseContentForCleaning = JSON.parse(JSON.stringify(courseContent))
+            debugLogger.debug('App', 'Successfully created safe copy of course content for cleaning')
+          } catch (copyError) {
+            debugLogger.error('App', 'Failed to create safe copy of course content', {
+              error: copyError instanceof Error ? copyError.message : String(copyError),
+              contentType: typeof courseContent
+            })
+            // Skip cleaning if we can't make a safe copy
+            courseContentForCleaning = null
+          }
+          
+          if (courseContentForCleaning) {
+            try {
+              const cleanedContent = cleanMediaReferencesFromCourseContent(courseContentForCleaning)
+              await storage.saveCourseContent(cleanedContent)
+              debugLogger.info('App', 'Successfully cleaned and saved media references before clearing')
+            } catch (cleaningError) {
+              debugLogger.error('App', 'Cleaning failed, but proceeding with clear since state is already null', {
+                error: cleaningError instanceof Error ? cleaningError.message : String(cleaningError),
+                hasStack: cleaningError instanceof Error && !!cleaningError.stack
+              })
+              // State is already null, so this is not critical - just log and continue
+            }
+          }
+        } else {
+          debugLogger.debug('App', 'No media references found in course content - skipping cleanup')
         }
       } catch (error) {
-        debugLogger.error('App', 'Failed to clean media references from course content', { error })
-        // Continue with the clear process even if this fails
+        debugLogger.error('App', 'Failed to analyze course content for cleaning', { 
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Continue with the clear process - state is already null, this is not critical
       }
+    } else {
+      debugLogger.debug('App', 'No course content or project to clean - proceeding with clear')
     }
-    
-    // Clear all course content when JSON is cleared
-    setCourseContent(null)
     
     // Navigate back to JSON step when course content is cleared
     navigation.navigateToStep(2) // JSON step

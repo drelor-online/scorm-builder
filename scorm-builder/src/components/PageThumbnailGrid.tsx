@@ -287,7 +287,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   }, [])
 
   // Get context to access media
-  const { getMediaForPage } = useUnifiedMedia()
+  const { getValidMediaForPage } = useUnifiedMedia()
   
   // Create array of all pages first - memoized to prevent recreation
   const allPages: Array<Page | Topic> = useMemo(() => [
@@ -296,14 +296,37 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     ...(Array.isArray(courseContent.topics) ? courseContent.topics : [])
   ].filter(Boolean), [courseContent]) // Remove any undefined entries
   
-  // Memoize media data for all pages to prevent redundant calls
-  const pageMediaMap = useMemo(() => {
-    const map = new Map<string, any[]>()
-    allPages.forEach(page => {
-      map.set(page.id, getMediaForPage(page.id) || [])
-    })
-    return map
-  }, [allPages, getMediaForPage])
+  // State to track media data for all pages (async loading)
+  const [pageMediaMap, setPageMediaMap] = useState<Map<string, any[]>>(new Map())
+  
+  // Load media for all pages when allPages changes
+  useEffect(() => {
+    const loadMediaForAllPages = async () => {
+      const newMap = new Map<string, any[]>()
+      
+      // Load media for each page using defensive filtering
+      const mediaPromises = allPages.map(async (page) => {
+        try {
+          const mediaItems = await getValidMediaForPage(page.id) || []
+          return { pageId: page.id, mediaItems }
+        } catch (error) {
+          console.warn(`[PageThumbnailGrid] Failed to load media for page ${page.id}:`, error)
+          return { pageId: page.id, mediaItems: [] }
+        }
+      })
+      
+      const results = await Promise.all(mediaPromises)
+      results.forEach(({ pageId, mediaItems }) => {
+        newMap.set(pageId, mediaItems)
+      })
+      
+      setPageMediaMap(newMap)
+    }
+    
+    if (allPages.length > 0) {
+      loadMediaForAllPages()
+    }
+  }, [allPages, getValidMediaForPage])
   
   // Helper to get media count (only image/video, not audio/captions) - memoized
   const getMediaCount = useCallback((page: Page | Topic): number => {

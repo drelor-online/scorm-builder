@@ -24,6 +24,7 @@ interface UnifiedMediaContextType {
   
   // Query operations
   getMediaForPage: (pageId: string) => MediaItem[]
+  getValidMediaForPage: (pageId: string) => Promise<MediaItem[]>  // Defensive version that validates existence
   getAllMedia: () => MediaItem[]
   getMediaById: (mediaId: string) => MediaItem | undefined
   
@@ -408,7 +409,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     // Clear the media cache completely
     setMediaCache(new Map())
     
-    // Reset the refs that track what projects have been loaded
+    // CRITICAL FIX: Reset the refs that track what projects have been loaded
+    // This was the root cause of the persistent media reference bug
     hasLoadedRef.current.clear()
     lastLoadedProjectIdRef.current = null
     
@@ -419,6 +421,12 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     
     // Clear all blob URL cache to prevent stale references
     blobCache.clearAll()
+    
+    // ADDITIONAL FIX: Clear the audio cache from the MediaService if it exists
+    if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+      logger.info('[UnifiedMediaContext] Clearing MediaService audio cache during reset')
+      ;(mediaServiceRef.current as any).clearAudioCache()
+    }
     
     logger.info('[UnifiedMediaContext] Media cache and refs completely reset')
   }, [blobCache])
@@ -454,6 +462,49 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const getMediaForPage = useCallback((pageId: string): MediaItem[] => {
     return Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
   }, [mediaCache])
+  
+  const getValidMediaForPage = useCallback(async (pageId: string): Promise<MediaItem[]> => {
+    const allMediaForPage = Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
+    
+    // DEFENSIVE FILTERING: Only return media that actually exists
+    // This prevents components from trying to load deleted media files
+    const validMedia: MediaItem[] = []
+    const orphanedMedia: string[] = []
+    
+    for (const item of allMediaForPage) {
+      try {
+        // Quick existence check - if getMedia returns data, the media exists
+        const mediaData = await getMedia(item.id)
+        if (mediaData) {
+          validMedia.push(item)
+        } else {
+          logger.log(`[UnifiedMediaContext] Filtered out non-existent media: ${item.id} for page ${pageId}`)
+          orphanedMedia.push(item.id)
+        }
+      } catch (error) {
+        // If getMedia throws, the media doesn't exist - filter it out
+        logger.log(`[UnifiedMediaContext] Filtered out errored media: ${item.id} for page ${pageId}`, error)
+        orphanedMedia.push(item.id)
+      }
+    }
+    
+    // Clean up orphaned entries from cache to prevent future issues
+    if (orphanedMedia.length > 0) {
+      logger.log(`[UnifiedMediaContext] Cleaning ${orphanedMedia.length} orphaned entries from cache`)
+      orphanedMedia.forEach(mediaId => {
+        mediaCache.delete(mediaId)
+        // Also clear any cached URLs for this media
+        blobCache.revoke(mediaId)
+      })
+    }
+    
+    // If we filtered out some media, log the difference for debugging
+    if (validMedia.length !== allMediaForPage.length) {
+      logger.log(`[UnifiedMediaContext] Defensive filtering for page ${pageId}: ${allMediaForPage.length} → ${validMedia.length} media items`)
+    }
+    
+    return validMedia
+  }, [mediaCache, getMedia, blobCache])
   
   const getAllMedia = useCallback((): MediaItem[] => {
     return Array.from(mediaCache.values())
@@ -611,6 +662,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     deleteAllMedia,
     storeYouTubeVideo,
     getMediaForPage,
+    getValidMediaForPage,
     getAllMedia,
     getMediaById,
     createBlobUrl,
@@ -630,6 +682,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     deleteAllMedia,
     storeYouTubeVideo,
     getMediaForPage,
+    getValidMediaForPage,
     getAllMedia,
     getMediaById,
     createBlobUrl,

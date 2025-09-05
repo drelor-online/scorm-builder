@@ -241,7 +241,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     storeYouTubeVideo, 
     getMedia, 
     deleteMedia,
-    getMediaForPage,
+    getValidMediaForPage,
     createBlobUrl
   } = useUnifiedMedia()
   
@@ -699,15 +699,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const pageId = getPageId(currentPage)
     console.log('[MediaEnhancement] Loading media for page:', pageId)
     
-    // Get media items for the current page
+    // Get media items for the current page (using defensive version)
     let pageMediaItems: Media[] = []
     try {
-      const result = getMediaForPage(pageId)
-      // Handle both promise and direct return
-      pageMediaItems = Array.isArray(result) ? result as unknown as Media[] : await result as unknown as Media[]
+      // DEFENSIVE FIX: Use getValidMediaForPage to filter out orphaned media references
+      const result = await getValidMediaForPage(pageId)
+      pageMediaItems = result as unknown as Media[]
+      
       // Ensure it's always an array
       if (!Array.isArray(pageMediaItems)) {
-        console.warn('[MediaEnhancement] getMediaForPage did not return an array:', pageMediaItems)
+        console.warn('[MediaEnhancement] getValidMediaForPage did not return an array:', pageMediaItems)
         pageMediaItems = []
       }
     } catch (error) {
@@ -787,7 +788,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     setIsLoadingMedia(false)
     setLoadingProgress({ current: 0, total: 0 })
-  }, [currentPageIndex, courseContent, getMediaForPage, createBlobUrl])
+  }, [currentPageIndex, courseContent, getValidMediaForPage, createBlobUrl])
   
   // Load existing media on mount and page change
   useEffect(() => {
@@ -928,7 +929,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Check if there's existing media on the current page
     const currentPage = getCurrentPage()
     const pageId = getPageId(currentPage!)
-    const existingMedia = getMediaForPage(pageId)
+    const existingMedia = await getValidMediaForPage(pageId)
     
     if (results.length > 0) {
       // Store uploaded media and open lightbox for preview
