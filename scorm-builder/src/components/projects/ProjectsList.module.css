@@ -3,6 +3,11 @@
  * Uses CSS variables from DesignSystem for consistent theming
  */
 
+:root {
+  --projects-col-last: 160px;      /* tweak if you prefer */
+  --projects-col-actions: 300px;   /* wide enough for 4 buttons + gaps */
+}
+
 .listContainer {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
@@ -11,15 +16,15 @@
   padding: 0; /* the toolbar + rows control their own padding */
 }
 
-/* Sticky toolbar, consistent control sizes, centered baseline */
+/* Toolbar grid: input | sort | dir | count */
 .toolbar {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--bg-secondary);
   display: grid;
-  grid-template-columns: minmax(280px, 420px) auto auto 1fr;
-  align-items: center;
+  grid-template-columns: minmax(320px, 420px) auto auto 1fr;
+  align-items: center;                 /* centers all controls on the same baseline */
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-sm);
   border-bottom: 1px solid var(--border-default);
@@ -43,10 +48,23 @@
   padding-left: 32px;           /* make room for the icon */
 }
 
-/* Sort controls same height as input */
-.sortSelect,
-.sortDir {
+/* Theme native selects to match DS inputs */
+.sortSelect, .sortDir {
   height: 36px;
+  appearance: none;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 0 calc(var(--space-xl) + 4px) 0 var(--space-md);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .6rem center;
+  background-size: 12px;
+}
+.sortSelect:focus, .sortDir:focus { 
+  outline: 2px solid var(--border-focus); 
+  outline-offset: 2px; 
 }
 
 .rows {
@@ -55,23 +73,22 @@
   flex-direction: column;
 }
 
-/* Column headers */
-.columns {
+/* Header row (thin) and data rows use the SAME grid */
+.columns, .row {
   display: grid;
-  grid-template-columns: 1fr minmax(140px, 180px) max-content; /* let Actions size to content */
+  grid-template-columns: 1fr var(--projects-col-last) var(--projects-col-actions);
   gap: var(--space-md);
+  align-items: center;
   padding: 6px var(--space-sm);
+}
+
+.columns {
   color: var(--text-tertiary);
   font-size: var(--font-size-2xs);
   border-bottom: 1px solid var(--border-default);
 }
 
-/* Each row: 3 columns matching header grid */
 .row {
-  display: grid;
-  grid-template-columns: 1fr minmax(140px, 180px) max-content;
-  gap: var(--space-md);
-  align-items: center;
   min-height: 56px;
   padding: 10px var(--space-sm);
   border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
@@ -98,17 +115,17 @@
 
 .last  { text-align: right; font-size: var(--font-size-xs); color: var(--text-secondary); }
 
-/* Keep action buttons on one line; allow shrinking with tighter gaps */
+/* Actions never wrap — keeps Delete on same line */
 .actions {
-  display: flex;
-  justify-content: flex-end;
+  display: flex; 
+  justify-content: flex-end; 
   align-items: center;
-  gap: 8px;
-  white-space: nowrap;     /* prevent wrap causing Delete to drop */
+  gap: 8px; 
+  white-space: nowrap;
 }
-.actions :where(button) {
-  height: 32px;            /* slightly smaller than input but consistent */
-  padding: 0 10px;
+.actions :where(button) { 
+  height: 32px; 
+  padding: 0 10px; 
 }
 
 /* Count label on the far right of the toolbar */

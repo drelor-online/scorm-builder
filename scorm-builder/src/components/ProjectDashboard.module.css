@@ -268,12 +268,11 @@
   padding: var(--space-2xl);
 }
 
-/* Centered, full-width content area that matches the card above */
+/* Centered container that matches header card width exactly */
 .mainContentWide {
-  max-width: var(--page-max-width, 1280px);
-  margin: 0 auto;     /* center like other sections */
-  padding-left: 0;    /* avoid extra inset vs the card */
-  padding-right: 0;
+  max-width: 1200px;   /* match header */
+  margin: 0 auto;
+  padding: var(--space-2xl);
 }
 
 /* Project Grid */
