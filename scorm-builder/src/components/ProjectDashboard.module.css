@@ -268,6 +268,12 @@
   padding: var(--space-2xl);
 }
 
+/* New: wide content variant for dashboard lists */
+.mainContentWide {
+  max-width: none;   /* remove 1200px clamp */
+  width: 100%;
+}
+
 /* Project Grid */
 .projectGrid {
   display: grid;

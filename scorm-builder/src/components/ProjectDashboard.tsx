@@ -817,9 +817,9 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           </div>
         </div>
       ) : (
-        <div className={styles.mainContent}>
+        <div className={`${styles.mainContent} ${styles.mainContentWide}`}>
           <h2 className={styles.sectionTitle}>
-            Recent Projects
+            Projects
           </h2>
           <ProjectsList
             projects={[...recentProjects, ...projects] as ProjectRow[]}

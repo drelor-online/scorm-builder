@@ -53,7 +53,24 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
   const formatDate = (dateString: string) => {
     if (!dateString) return '—'
     try {
-      return new Date(dateString).toLocaleString()
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return '—'
+      
+      // Use Intl.RelativeTimeFormat for relative dates
+      const now = new Date()
+      const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+      
+      if (diffInSeconds < 60) return 'Just now'
+      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
+      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
+      if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
+      
+      // For older dates, show actual date
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      })
     } catch {
       return '—'
     }
@@ -62,12 +79,13 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
   return (
     <div className={styles.listContainer}>
       <div className={styles.toolbar}>
-        <Icon icon={Search} />
+        <Icon icon={Search} aria-hidden="true" />
         <Input
           placeholder="Search projects by name or path…"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           className={styles.searchInput}
+          aria-label="Search projects by name or path"
         />
         <select
           aria-label="Sort key"
@@ -90,6 +108,12 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
         <div className={styles.count}>{filtered.length} projects</div>
       </div>
 
+      <div className={styles.columnHeaders} role="row">
+        <div role="columnheader">Project</div>
+        <div role="columnheader">Last Modified</div>
+        <div role="columnheader">Actions</div>
+      </div>
+
       <div className={styles.rows} role="table" aria-label="Projects">
         {filtered.map((p) => {
           const path = getProjectPath(p)
@@ -110,14 +134,35 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
                 {formatDate(last)}
               </div>
               <div className={styles.actions} role="cell">
-                <Button size="small" onClick={() => onOpen(p)}>Open</Button>
-                <Button size="small" variant="secondary" onClick={() => onExport(p)}>Export</Button>
-                <Button size="small" variant="secondary" onClick={() => onRename(p)}>Rename</Button>
+                <Button 
+                  size="small" 
+                  onClick={() => onOpen(p)}
+                  aria-label={`Open project ${p.name}`}
+                >
+                  Open
+                </Button>
+                <Button 
+                  size="small" 
+                  variant="secondary" 
+                  onClick={() => onExport(p)}
+                  aria-label={`Export project ${p.name}`}
+                >
+                  Export
+                </Button>
+                <Button 
+                  size="small" 
+                  variant="secondary" 
+                  onClick={() => onRename(p)}
+                  aria-label={`Rename project ${p.name}`}
+                >
+                  Rename
+                </Button>
                 <Button 
                   size="small" 
                   variant="danger" 
                   data-testid={`delete-project-${p.id}`} 
                   onClick={() => onDelete(p)}
+                  aria-label={`Delete project ${p.name}`}
                 >
                   Delete
                 </Button>
