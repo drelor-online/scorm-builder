@@ -13,7 +13,7 @@ import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { initializeLoggerConfig } from '@/config/loggerConfig'
 import { createMutationSafeContent, validateImmutableUpdate } from '@/utils/mutationSafety'
 import { cleanupOrphanedMediaReferences } from '@/utils/orphanedMediaCleaner'
-import { cleanMediaReferencesFromCourseContent, hasMediaReferences, countMediaReferences } from '@/utils/courseContentMediaCleaner'
+import { cleanMediaReferencesFromCourseContent, countMediaReferences } from '@/utils/courseContentMediaCleaner'
 
 // Initialize logger configuration to reduce console noise
 initializeLoggerConfig()
@@ -47,7 +47,7 @@ const SCORMPackageBuilder = lazy(() =>
 )
 // Types
 import type { CourseSeedData } from '@/types/course'
-import type { CourseContent, CourseContentUnion, Topic, Media } from '@/types/aiPrompt'
+import type { CourseContent, CourseContentUnion, Topic } from '@/types/aiPrompt'
 import type { ProjectData } from '@/types/project'
 
 // Type guards
@@ -475,15 +475,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }
                   
                   if (audioId) {
-                    const audioItem = { 
-                      id: audioId,
-                      type: 'audio' as const,
-                      url: '',
-                      title: 'Audio Narration',
-                      pageId: 'welcome'
-                    }
-                    if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
-                      loadedCourseContent.welcomePage.media.push(audioItem)
+                    // CRITICAL FIX: Validate media exists before adding reference
+                    const mediaExists = await getMedia(audioId)
+                    if (mediaExists) {
+                      const audioItem = { 
+                        id: audioId,
+                        type: 'audio' as const,
+                        url: '',
+                        title: 'Audio Narration',
+                        pageId: 'welcome'
+                      }
+                      if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
+                        loadedCourseContent.welcomePage.media.push(audioItem)
+                        debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to welcome page`)
+                      }
+                    } else {
+                      debugLogger.info('App.loadProject', `Skipping orphaned audio reference: ${audioId} (file not found)`)
                     }
                   }
                 }
@@ -492,11 +499,18 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const mediaItems = Array.isArray(mediaEnhancementsData.welcome) 
                     ? mediaEnhancementsData.welcome 
                     : [mediaEnhancementsData.welcome]
-                  mediaItems.forEach((item: Media) => {
-                    if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
-                      loadedCourseContent.welcomePage!.media!.push(item)
+                  // CRITICAL FIX: Validate each media item exists before adding reference
+                  for (const item of mediaItems) {
+                    const mediaExists = await getMedia(item.id)
+                    if (mediaExists) {
+                      if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
+                        loadedCourseContent.welcomePage!.media!.push(item)
+                        debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to welcome page`)
+                      }
+                    } else {
+                      debugLogger.info('App.loadProject', `Skipping orphaned media reference: ${item.id} (file not found)`)
                     }
-                  })
+                  }
                 }
               }
               
@@ -517,15 +531,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   }
                   
                   if (audioId) {
-                    const audioItem = {
-                      id: audioId,
-                      type: 'audio' as const,
-                      url: '',
-                      title: 'Audio Narration',
-                      pageId: 'objectives'
-                    }
-                    if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
-                      loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                    // CRITICAL FIX: Validate media exists before adding reference
+                    const mediaExists = await getMedia(audioId)
+                    if (mediaExists) {
+                      const audioItem = {
+                        id: audioId,
+                        type: 'audio' as const,
+                        url: '',
+                        title: 'Audio Narration',
+                        pageId: 'objectives'
+                      }
+                      if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
+                        loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                        debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to objectives page`)
+                      }
+                    } else {
+                      debugLogger.info('App.loadProject', `Skipping orphaned audio reference: ${audioId} (file not found)`)
                     }
                   }
                 }
@@ -534,17 +555,25 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   const mediaItems = Array.isArray(mediaEnhancementsData.objectives)
                     ? mediaEnhancementsData.objectives
                     : [mediaEnhancementsData.objectives]
-                  mediaItems.forEach((item: Media) => {
-                    if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
-                      loadedCourseContent.learningObjectivesPage!.media!.push(item)
+                  // CRITICAL FIX: Validate each media item exists before adding reference
+                  for (const item of mediaItems) {
+                    const mediaExists = await getMedia(item.id)
+                    if (mediaExists) {
+                      if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
+                        loadedCourseContent.learningObjectivesPage!.media!.push(item)
+                        debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to objectives page`)
+                      }
+                    } else {
+                      debugLogger.info('App.loadProject', `Skipping orphaned media reference: ${item.id} (file not found)`)
                     }
-                  })
+                  }
                 }
               }
               
               // Process topics
               if (loadedCourseContent.topics) {
-                loadedCourseContent.topics.forEach((topic, index) => {
+                for (let index = 0; index < loadedCourseContent.topics.length; index++) {
+                  const topic = loadedCourseContent.topics[index]
                   if (!topic.media) {
                     topic.media = []
                   }
@@ -562,15 +591,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     }
                     
                     if (audioId) {
-                      const audioItem = {
-                        id: audioId,
-                        type: 'audio' as const,
-                        url: '',
-                        title: 'Audio Narration',
-                        pageId: topicKey
-                      }
-                      if (!topic.media.some(m => m.id === audioItem.id)) {
-                        topic.media.push(audioItem)
+                      // CRITICAL FIX: Validate media exists before adding reference
+                      const mediaExists = await getMedia(audioId)
+                      if (mediaExists) {
+                        const audioItem = {
+                          id: audioId,
+                          type: 'audio' as const,
+                          url: '',
+                          title: 'Audio Narration',
+                          pageId: topicKey
+                        }
+                        if (!topic.media.some(m => m.id === audioItem.id)) {
+                          topic.media.push(audioItem)
+                          debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to ${topicKey}`)
+                        }
+                      } else {
+                        debugLogger.info('App.loadProject', `Skipping orphaned audio reference: ${audioId} (file not found)`)
                       }
                     }
                   }
@@ -580,16 +616,23 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     const mediaItems = Array.isArray(mediaEnhancementsData[topicKey])
                       ? mediaEnhancementsData[topicKey]
                       : [mediaEnhancementsData[topicKey]]
-                    mediaItems.forEach((item: Media) => {
-                      if (!topic.media!.some(m => m.id === item.id)) {
-                        topic.media!.push(item)
+                    // CRITICAL FIX: Validate each media item exists before adding reference
+                    for (const item of mediaItems) {
+                      const mediaExists = await getMedia(item.id)
+                      if (mediaExists) {
+                        if (!topic.media!.some(m => m.id === item.id)) {
+                          topic.media!.push(item)
+                          debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to ${topicKey}`)
+                        }
+                      } else {
+                        debugLogger.info('App.loadProject', `Skipping orphaned media reference: ${item.id} (file not found)`)
                       }
-                    })
+                    }
                   }
-                })
+                }
               }
               
-              debugLogger.info('App.loadProject', 'Populated media arrays from persistence data')
+              debugLogger.info('App.loadProject', 'Completed media reference validation and population from persistence data')
             }
             
             // Validate and fix fill-in-the-blank questions
@@ -744,12 +787,56 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
         // Atomic state updates
         setLoadingProgress({ current: 4, total: 5, phase: 'Finalizing...' })
+        
+        // CRITICAL FIX: Final orphaned media cleanup before setting course content
+        let finalCourseContent = loadedCourseContent
+        if (loadedCourseContent) {
+          debugLogger.info('App.loadProject', '🧹 Performing final orphaned media cleanup on loaded course content')
+          
+          try {
+            // Create media existence checker using UnifiedMediaContext
+            const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
+              try {
+                const result = await getMedia(mediaId)
+                return result !== null
+              } catch (error) {
+                debugLogger.debug('App.loadProject', `Media existence check failed for ${mediaId}: ${error}`)
+                return false
+              }
+            }
+            
+            // Apply final cleanup to catch any orphaned references that might have slipped through
+            const cleanupResult = await cleanupOrphanedMediaReferences(loadedCourseContent, mediaExistsChecker)
+            
+            if (cleanupResult.removedMediaIds.length > 0) {
+              debugLogger.info('App.loadProject', '🎯 Final cleanup removed orphaned media references', {
+                removedCount: cleanupResult.removedMediaIds.length,
+                removedIds: cleanupResult.removedMediaIds
+              })
+              
+              finalCourseContent = cleanupResult.cleanedContent
+              
+              // Save the cleaned course content back to storage
+              await storage.saveCourseContent(finalCourseContent)
+              debugLogger.info('App.loadProject', '✅ Saved cleaned course content to storage after final cleanup')
+            } else {
+              debugLogger.info('App.loadProject', '✅ Final cleanup found no orphaned media references')
+            }
+          } catch (error) {
+            debugLogger.error('App.loadProject', '❌ Failed to perform final media cleanup', {
+              error: error instanceof Error ? error.message : String(error)
+            })
+            // Continue with original content if cleanup fails to avoid breaking the load process
+            finalCourseContent = loadedCourseContent
+          }
+        }
+        
         debugLogger.info('App.loadProject', 'About to update state', {
           loadedCourseSeedData,
-          loadedCourseContent: loadedCourseContent ? 'present' : 'null',
+          loadedCourseContent: finalCourseContent ? 'present' : 'null',
           loadedStep
         })
-        setCourseContent(loadedCourseContent)
+        setCourseContent(finalCourseContent)
         setCourseSeedData(loadedCourseSeedData)
         setCurrentStep(loadedStep)
         
@@ -1128,6 +1215,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         debugLogger.info('App', 'Saving cleared course content to prevent stale media references')
         await storage.saveCourseContent(null)
         await storage.saveContent('currentStep', { step: 'json' })
+        
+        // CRITICAL FIX: Clear persistent media fields to prevent orphaned references on reload
+        // These fields are what loadProject reads to populate course content media arrays
+        await storage.saveContent('audioNarration', null)
+        await storage.saveContent('media-enhancements', null)
+        debugLogger.info('App', 'Cleared persistent audioNarration and media-enhancements fields')
+        
         debugLogger.info('App', 'Course content cleared and saved to storage successfully')
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
