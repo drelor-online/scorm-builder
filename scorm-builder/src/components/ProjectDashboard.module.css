@@ -1,5 +1,19 @@
 /* ProjectDashboard Component Styles */
 
+/* Single source of truth for page width */
+:root {
+  --page-max-width: 1200px;
+  --page-hpad: var(--space-2xl);
+}
+
+/* Centered container all major sections should use */
+.pageClamp {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding-left: var(--page-hpad);
+  padding-right: var(--page-hpad);
+}
+
 /* Main Container */
 .dashboardContainer {
   min-height: 100vh;
@@ -263,16 +277,7 @@
 
 /* Main Content */
 .mainContent {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--space-2xl);
-}
-
-/* Centered container that matches header card width exactly */
-.mainContentWide {
-  max-width: 1200px;   /* match header */
-  margin: 0 auto;
-  padding: var(--space-2xl);
+  /* Width and margin now handled by .pageClamp wrapper */
 }
 
 /* Project Grid */

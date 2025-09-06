@@ -690,15 +690,16 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className={styles.dashboardHeader}>
-        <h1 
-          className={styles.headerTitle}
-          onClick={handleSecretClick}
-          style={{ cursor: onSecretClick ? 'pointer' : 'default' }}
-          title={onSecretClick ? `Click ${5 - clickCount} more times to activate beta features` : undefined}
-        >
-          SCORM Builder Projects
-        </h1>
+      <div className={styles.pageClamp}>
+        <div className={styles.dashboardHeader}>
+          <h1 
+            className={styles.headerTitle}
+            onClick={handleSecretClick}
+            style={{ cursor: onSecretClick ? 'pointer' : 'default' }}
+            title={onSecretClick ? `Click ${5 - clickCount} more times to activate beta features` : undefined}
+          >
+            SCORM Builder Projects
+          </h1>
         <div className={styles.folderInfo}>
           <span className={styles.folderLabel}>Default Folder:</span>
           <span 
@@ -770,7 +771,7 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           </Tooltip>
         </div>
       </div>
-      
+      </div>
       
       {projects.length === 0 && recentProjects.length === 0 ? (
         <div className="empty-state">
@@ -817,17 +818,19 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           </div>
         </div>
       ) : (
-        <div className={`${styles.mainContent} ${styles.mainContentWide}`}>
-          <h2 className={styles.sectionTitle}>
-            Projects
-          </h2>
-          <ProjectsList
-            projects={[...recentProjects, ...projects] as ProjectRow[]}
-            onOpen={(project: ProjectRow) => handleOpenProject(project.id, project.path || project.filePath || '')}
-            onExport={(project: ProjectRow) => handleExportProject(project.id, project.path || project.filePath)}
-            onDelete={(project: ProjectRow) => setDeleteConfirm({id: project.id, path: project.path || project.filePath})}
-            onRename={(project: ProjectRow) => handleStartRename(project.id, project.name)}
-          />
+        <div className={styles.pageClamp}>
+          <div className={styles.mainContent}>
+            <h2 className={styles.sectionTitle}>
+              Projects
+            </h2>
+            <ProjectsList
+              projects={[...recentProjects, ...projects] as ProjectRow[]}
+              onOpen={(project: ProjectRow) => handleOpenProject(project.id, project.path || project.filePath || '')}
+              onExport={(project: ProjectRow) => handleExportProject(project.id, project.path || project.filePath)}
+              onDelete={(project: ProjectRow) => setDeleteConfirm({id: project.id, path: project.path || project.filePath})}
+              onRename={(project: ProjectRow) => handleStartRename(project.id, project.name)}
+            />
+          </div>
         </div>
       )}
       
@@ -905,6 +908,59 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
               Delete
             </Button>
           </ButtonGroup>
+        </div>
+      </Modal>
+      
+      <Modal
+        isOpen={renamingProjectId !== null}
+        onClose={handleCancelRename}
+        title="Rename Project"
+      >
+        <div className="rename-form">
+          <input
+            ref={(input) => {
+              if (input && renamingProjectId) {
+                // Focus the input after the modal animation completes
+                setTimeout(() => input.focus(), 100);
+              }
+            }}
+            type="text"
+            placeholder="Enter project name"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              const project = [...recentProjects, ...projects].find(p => p.id === renamingProjectId);
+              const projectPath = project ? (project.path || project.id) : '';
+              handleRenameKeyDown(e, projectPath);
+            }}
+            autoFocus
+            aria-label="Project name"
+            data-testid="rename-project-input"
+            className={styles.projectNameInput}
+          />
+          {renameError && (
+            <div className={styles.renameError}>{renameError}</div>
+          )}
+          <div className="modal-actions">
+            <Button
+              variant="secondary"
+              onClick={handleCancelRename}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                const project = [...recentProjects, ...projects].find(p => p.id === renamingProjectId);
+                const projectPath = project ? (project.path || project.id) : '';
+                handleSaveRename(projectPath);
+              }}
+              disabled={!renameValue.trim()}
+              data-testid="rename-project-confirm"
+            >
+              Rename
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
