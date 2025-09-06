@@ -48,6 +48,42 @@ function extractObjectivesFromContent(content: string): string[] {
 }
 
 /**
+ * Generate YouTube embed URL with clip timing parameters if available
+ */
+function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: number): string {
+  const baseUrl = `https://www.youtube.com/embed/${videoId}`
+  const params = new URLSearchParams({
+    rel: '0',
+    modestbranding: '1'
+  })
+  
+  console.log(`[SCORM DEBUG] generateYouTubeEmbedUrl called:`, {
+    videoId,
+    clipStart,
+    clipEnd,
+    clipStartType: typeof clipStart,
+    clipEndType: typeof clipEnd,
+    clipStartUndefined: clipStart === undefined,
+    clipEndUndefined: clipEnd === undefined
+  })
+  
+  // Add clip timing parameters if provided
+  if (clipStart !== undefined && clipStart >= 0) {
+    params.set('start', Math.floor(clipStart).toString())
+    console.log(`[SCORM DEBUG] Added start parameter: ${Math.floor(clipStart)}`)
+  }
+  
+  if (clipEnd !== undefined && clipEnd > 0) {
+    params.set('end', Math.floor(clipEnd).toString())
+    console.log(`[SCORM DEBUG] Added end parameter: ${Math.floor(clipEnd)}`)
+  }
+  
+  const finalUrl = `${baseUrl}?${params.toString()}`
+  console.log(`[SCORM DEBUG] Final YouTube embed URL: ${finalUrl}`)
+  return finalUrl
+}
+
+/**
  * Pre-load media into the cache from a Map of blobs
  * This allows SCORMPackageBuilder to pass already-loaded media
  */
@@ -546,12 +582,30 @@ async function resolveMedia(
         if (match) videoId = match[1]
       }
       
+      console.log(`[SCORM DEBUG] Processing YouTube media for SCORM:`, {
+        mediaId: media.id,
+        videoId: videoId,
+        clipStart: media.clipStart,
+        clipEnd: media.clipEnd,
+        originalUrl: media.url,
+        isYouTube: media.isYouTube,
+        embedUrl: media.embedUrl
+      })
+      
+      const embedUrl = generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd)
+      console.log(`[SCORM DEBUG] Generated YouTube embed URL:`, {
+        videoId,
+        clipStart: media.clipStart,
+        clipEnd: media.clipEnd,
+        generatedEmbedUrl: embedUrl
+      })
+      
       resolvedMedia.push({
         ...media,
         url: media.url,
         is_youtube: true,
         youtube_id: videoId,
-        embed_url: `https://www.youtube.com/embed/${videoId}`
+        embed_url: embedUrl
       })
       continue
     }
@@ -807,7 +861,7 @@ async function resolveMedia(
         url: media.url, // Keep original URL
         is_youtube: true,
         youtube_id: videoId,
-        embed_url: videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+        embed_url: videoId ? generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd) : ''
       })
     } else if (resolvedUrl) {
       // For non-YouTube media, only add if we have a valid resolved URL

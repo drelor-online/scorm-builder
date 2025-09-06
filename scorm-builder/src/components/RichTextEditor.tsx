@@ -76,16 +76,44 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         setTimeout(initializeContent, 50)
       })
     }
-  }, [isOpen, content])
+  }, [isOpen]) // Remove content dependency to prevent cursor resets during typing
 
-  // Sync content when mode changes
+  // Sync content when mode changes (but not during active editing)
   useEffect(() => {
     if (isHtmlMode && textareaRef.current) {
       textareaRef.current.value = editorContent
     } else if (!isHtmlMode && editorRef.current && hasSetContent.current) {
-      editorRef.current.innerHTML = DOMPurify.sanitize(editorContent)
+      // Only update if the content is different to avoid cursor resets
+      const currentContent = editorRef.current.innerHTML
+      const sanitizedContent = DOMPurify.sanitize(editorContent)
+      if (currentContent !== sanitizedContent) {
+        // Store cursor position before update
+        const selection = window.getSelection()
+        let cursorOffset = 0
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          cursorOffset = range.startOffset
+        }
+        
+        editorRef.current.innerHTML = sanitizedContent
+        
+        // Restore cursor position after update
+        if (cursorOffset > 0 && editorRef.current.firstChild) {
+          try {
+            const newRange = document.createRange()
+            const sel = window.getSelection()
+            newRange.setStart(editorRef.current.firstChild, Math.min(cursorOffset, editorRef.current.firstChild.textContent?.length || 0))
+            newRange.setEnd(editorRef.current.firstChild, Math.min(cursorOffset, editorRef.current.firstChild.textContent?.length || 0))
+            sel?.removeAllRanges()
+            sel?.addRange(newRange)
+          } catch (e) {
+            // If cursor restoration fails, just continue without it
+            console.warn('Failed to restore cursor position:', e)
+          }
+        }
+      }
     }
-  }, [isHtmlMode, editorContent])
+  }, [isHtmlMode]) // Remove editorContent dependency to prevent cursor resets
 
   const execCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value)

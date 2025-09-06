@@ -59,6 +59,10 @@ pub struct MediaItem {
     pub embed_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_youtube: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clip_start: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clip_end: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -397,6 +401,8 @@ mod tests {
                 title: "YouTube Video".to_string(),
                 embed_url: Some("https://www.youtube.com/embed/dQw4w9WgXcQ".to_string()),
                 is_youtube: Some(true),
+                clip_start: Some(30),
+                clip_end: Some(120),
             }]),
         };
 

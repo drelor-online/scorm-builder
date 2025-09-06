@@ -35,7 +35,7 @@ import {
   videoDir
 } from "./chunk-SL6RB3OX.js";
 import "./chunk-HHV3XBJ5.js";
-import "./chunk-2TUXWMP5.js";
+import "./chunk-SROXYCZ4.js";
 export {
   BaseDirectory,
   appCacheDir,

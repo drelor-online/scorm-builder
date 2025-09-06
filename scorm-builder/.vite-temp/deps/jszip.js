@@ -1,7 +1,7 @@
 import {
   __commonJS,
   __require
-} from "./chunk-2TUXWMP5.js";
+} from "./chunk-SROXYCZ4.js";
 
 // node_modules/jszip/dist/jszip.min.js
 var require_jszip_min = __commonJS({

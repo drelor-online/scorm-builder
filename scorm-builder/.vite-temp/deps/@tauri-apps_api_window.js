@@ -10,7 +10,7 @@ import {
   SERIALIZE_TO_IPC_FN,
   invoke
 } from "./chunk-HHV3XBJ5.js";
-import "./chunk-2TUXWMP5.js";
+import "./chunk-SROXYCZ4.js";
 
 // node_modules/@tauri-apps/api/dpi.js
 var LogicalSize = class {

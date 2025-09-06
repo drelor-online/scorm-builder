@@ -79,6 +79,8 @@ export interface Media {
   isYouTube?: boolean // Flag for YouTube videos
   mimeType?: string // MIME type of the media
   fileName?: string // Original file name
+  clipStart?: number // Start time in seconds for video clips
+  clipEnd?: number // End time in seconds for video clips
 }
 
 export interface Assessment {

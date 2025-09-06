@@ -76,14 +76,18 @@ export function MediaDisplay({ mediaId, alt, className, style, fallback }: Media
       // Extract video ID and create embed URL
       const videoId = mediaUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)?.[1]
       if (videoId) {
+        // Build standard YouTube embed URL
+        const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`
+        
         return (
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}`}
+            src={embedUrl}
             className={className}
             style={style}
             title={alt || 'Video'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
+            data-testid="video-preview"
           />
         )
       }

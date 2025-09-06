@@ -6,7 +6,7 @@ import {
   Resource,
   invoke
 } from "./chunk-HHV3XBJ5.js";
-import "./chunk-2TUXWMP5.js";
+import "./chunk-SROXYCZ4.js";
 
 // node_modules/@tauri-apps/plugin-fs/dist-js/index.js
 var SeekMode;

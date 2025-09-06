@@ -83,6 +83,7 @@ export class MediaService {
   private loadingPromise: Promise<void> | null = null // For deduplicating concurrent loads
   private audioDataCache: Map<string, { data: Uint8Array; metadata: MediaMetadata }> = new Map() // Persistent audio cache
   private audioLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate concurrent audio loads
+  private mediaLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate ALL media loads
   
   private constructor(config: MediaServiceConfig) {
     // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks
@@ -275,6 +276,96 @@ export class MediaService {
   }
   
   /**
+   * Update existing media with new content and metadata
+   * This replaces the existing media file while keeping the same ID
+   * @param existingId - The ID of the media to update
+   * @param file - New file/blob content
+   * @param metadata - Updated metadata
+   * @param progressCallback - Optional progress callback
+   */
+  async updateMedia(
+    existingId: string,
+    file: File | Blob,
+    metadata?: Partial<MediaMetadata>,
+    progressCallback?: ProgressCallback
+  ): Promise<MediaItem> {
+    debugLogger.info('MediaService.updateMedia', 'Updating media', {
+      mediaId: existingId,
+      fileSize: file.size,
+      fileName: (file as File).name || 'blob',
+      mimeType: file.type
+    })
+    
+    try {
+      // Get existing media to preserve type and pageId
+      const existingMedia = this.mediaCache.get(existingId)
+      if (!existingMedia) {
+        throw new Error(`Media with ID ${existingId} not found`)
+      }
+      
+      // Report initial progress
+      progressCallback?.({
+        loaded: 0,
+        total: file.size,
+        percent: 0
+      })
+      
+      // Store/overwrite using FileStorage with the existing ID
+      const fileName = (file as File).name || `${existingId}.${this.getExtension(existingMedia.type, file.type)}`
+      
+      // Use existing type and pageId, but allow metadata updates
+      await this.fileStorage.storeMedia(existingId, file, existingMedia.type, {
+        page_id: existingMedia.pageId,
+        type: existingMedia.type,
+        original_name: fileName,
+        mime_type: file.type,
+        size: file.size,
+        ...metadata
+      }, (progress) => {
+        progressCallback?.({
+          loaded: Math.round(file.size * progress.percent / 100),
+          total: file.size,
+          percent: progress.percent
+        })
+      })
+      
+      // Create updated media item with same ID
+      const updatedMediaItem: MediaItem = {
+        id: existingId, // Keep the same ID
+        type: existingMedia.type,
+        pageId: existingMedia.pageId,
+        fileName,
+        metadata: {
+          ...existingMedia.metadata, // Preserve existing metadata
+          size: file.size,
+          mimeType: file.type,
+          ...metadata // Apply any new metadata updates
+        }
+      }
+      
+      // Update cache
+      this.mediaCache.set(existingId, updatedMediaItem)
+      
+      debugLogger.info('MediaService.updateMedia', 'Media updated successfully', {
+        mediaId: existingId,
+        fileName,
+        fileSize: file.size
+      })
+      
+      logger.info('[MediaService] Updated media in FILE SYSTEM:', existingId)
+      
+      return updatedMediaItem
+    } catch (error) {
+      debugLogger.error('MediaService.updateMedia', 'Failed to update media', {
+        mediaId: existingId,
+        error
+      })
+      logger.error('[MediaService] Failed to update media:', error)
+      throw error
+    }
+  }
+  
+  /**
    * Legacy method for backward compatibility - DEPRECATED
    * @deprecated Use storeMedia(file, pageId, type, metadata?, progressCallback?) instead
    */
@@ -397,7 +488,8 @@ export class MediaService {
         page_id: pageId,
         title: metadata?.title,
         thumbnail: metadata?.thumbnail,
-        embed_url: embedUrl  // Use the embedUrl parameter
+        embed_url: embedUrl,  // Use the embedUrl parameter
+        duration: metadata?.duration  // Include video duration
       })
       
       debugLogger.info('MediaService.storeYouTubeVideo', 'YouTube video stored successfully', {
@@ -449,6 +541,29 @@ export class MediaService {
     const caller = stack?.split('\n')[2]?.trim() || 'unknown'
     console.log(`🔍 [MediaService] getMedia called for ${mediaId} from: ${caller}`)
     
+    // Check if we're already loading this media (deduplication)
+    const existingPromise = this.mediaLoadingPromises.get(mediaId)
+    if (existingPromise) {
+      console.log(`[MediaService] 🔄 Deduplicating concurrent request for ${mediaId}`)
+      return existingPromise
+    }
+    
+    // Create the loading promise and cache it immediately
+    const loadingPromise = this.getMediaInternal(mediaId)
+    this.mediaLoadingPromises.set(mediaId, loadingPromise)
+    
+    // Clean up the promise when done (success or failure)
+    loadingPromise.finally(() => {
+      this.mediaLoadingPromises.delete(mediaId)
+    })
+    
+    return loadingPromise
+  }
+  
+  /**
+   * Internal method that does the actual media loading (without deduplication)
+   */
+  private async getMediaInternal(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
     // Check if this is audio and we have it cached
     if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
       const cached = this.audioDataCache.get(mediaId)
@@ -601,10 +716,15 @@ export class MediaService {
         // Create blob from the data
         const blob = new Blob([mediaInfo.data], { type: mimeType })
         
-        // Create blob URL
-        url = URL.createObjectURL(blob)
+        // Use BlobURLManager for proper lifecycle management
+        url = blobUrlManager.getOrCreateUrl(mediaId, blob, {
+          type: metadata.type,
+          pageId: metadata.pageId,
+          mimeType,
+          size: blob.size
+        })
         
-        // Cache the blob URL for this session
+        // Keep backward compatibility with simple cache
         this.blobUrlCache.set(mediaId, url)
         
         debugLogger.debug('MediaService.getMedia', 'Created blob URL', { 

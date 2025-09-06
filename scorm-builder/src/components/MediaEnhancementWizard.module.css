@@ -84,7 +84,7 @@
 
 .mediaGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
   gap: var(--space-lg);
 }
 
@@ -109,7 +109,7 @@
 
 .mediaThumbnail {
   width: 100%;
-  height: 200px;
+  height: 281px;
   object-fit: contain;
   background-color: var(--bg-secondary);
 }
@@ -155,6 +155,7 @@
 
 .mediaInfo {
   padding: var(--space-sm);
+  text-align: center;
 }
 
 .mediaInfoTitle {
@@ -164,6 +165,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+  text-align: center;
 }
 
 /* Card Styles */
@@ -1165,6 +1167,70 @@
   padding: 2rem;
   text-align: center;
   margin-bottom: 1rem;
+}
+
+/* YouTube Clip Container */
+.youTubeClipContainer {
+  padding: var(--space-sm);
+  border-top: 1px solid #3f3f46;
+  background-color: #18181b;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.youTubeClipInputs {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  font-size: 0.75rem;
+  justify-content: center;
+}
+
+.youTubeClipInput {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.youTubeClipLabel {
+  color: #a1a1aa;
+  min-width: 30px;
+  font-size: 0.75rem;
+}
+
+.youTubeClipTextInput {
+  padding: 0.25rem 0.375rem;
+  font-size: 0.75rem;
+  border-radius: 0.25rem;
+  border: 1px solid #3f3f46;
+  background-color: #27272a;
+  color: #fafafa;
+  width: 60px;
+}
+
+.youTubeClipDuration {
+  color: #a1a1aa;
+  font-size: 0.7rem;
+  margin-left: 0.25rem;
+}
+
+/* Media Button Container */
+.mediaButtonContainer {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  justify-content: center;
+}
+
+.mediaEditButton {
+  min-width: 80px;
+  flex: 0 0 auto;
+}
+
+.mediaRemoveButton {
+  min-width: 80px;
+  flex: 0 0 auto;
 }
 
 /* Utility Classes */

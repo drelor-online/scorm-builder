@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { CourseContentUnion, CourseContent, Media, Page, Topic } from '../types/aiPrompt'
 import type { MediaItem } from '../services/MediaService'
 import { CourseSeedData } from '../types/course'
@@ -28,6 +28,7 @@ import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
 import { RichTextEditor } from './RichTextEditor'
+import { ImageEditModal } from './ImageEditModal'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import DOMPurify from 'dompurify'
@@ -213,6 +214,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const [resultPage, setResultPage] = useState(1)
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null)
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
+  const [editingImage, setEditingImage] = useState<{ id: string; title: string; url: string } | null>(null)
   const resultsPerPage = 12
   const [replaceConfirmDetails, setReplaceConfirmDetails] = useState<{
     existingMedia: Media
@@ -251,6 +253,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // Track blob URLs (using state to persist across re-renders)
   const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map())
+  
+  // Local state for YouTube clip time inputs to prevent re-render during typing
+  const [activeTimeInputs, setActiveTimeInputs] = useState<Map<string, { start?: string; end?: string }>>(new Map())
+  const [focusedInput, setFocusedInput] = useState<{ mediaId: string; field: 'start' | 'end' } | null>(null)
+  
+  // INPUT VALUE PRESERVATION: Backup state to prevent complete value loss
+  const [lastKnownGoodValues, setLastKnownGoodValues] = useState<Map<string, { start?: number; end?: number }>>(new Map())
   
   // Clear any stale blob URLs on mount to force regeneration
   useEffect(() => {
@@ -388,7 +397,391 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setIsLightboxOpen(false)
     setLightboxMedia(null)
   }
-  
+
+  // Image edit handlers
+  const handleEditImage = (media: Media) => {
+    const imageUrl = (media.storageId && blobUrls.get(media.storageId)) || media.url
+    if (imageUrl && media.type === 'image') {
+      setEditingImage({
+        id: media.id,
+        title: media.title || 'Untitled',
+        url: imageUrl
+      })
+    }
+  }
+
+
+  const handleImageUpdated = async (imageId: string, newTitle: string) => {
+    try {
+      console.log('handleImageUpdated called with:', { imageId, newTitle, editingImage })
+      
+      // Update the image metadata (title) - ID stays the same since we're overwriting
+      if (editingImage) {
+        console.log('Before update - existingPageMedia:', existingPageMedia.map(m => ({ id: m.id, title: m.title })))
+        
+        const updatedMedia = existingPageMedia.map(media => {
+          if (media.id === editingImage.id) {
+            console.log('Updating media title for same ID:', media.id, 'new title:', newTitle)
+            // ID stays the same, only update title/metadata
+            return { ...media, title: newTitle }
+          }
+          return media
+        })
+        
+        console.log('After update - updatedMedia:', updatedMedia.map(m => ({ id: m.id, title: m.title })))
+        
+        setExistingPageMedia(updatedMedia)
+        
+        // Update the course content
+        const currentPage = getCurrentPage()
+        if (currentPage) {
+          console.log('Updating page content for:', currentPage.title)
+          updatePageInCourseContent(currentPage, updatedMedia)
+        }
+        
+        // Mark as unsaved
+        markDirty('media')
+      }
+      
+      setEditingImage(null)
+    } catch (error) {
+      console.error('Error updating edited image:', error)
+      notifyError('Failed to update edited image')
+    }
+  }
+
+  const handleCloseImageEdit = () => {
+    setEditingImage(null)
+  }
+
+  // Helper functions for time parsing and formatting
+  const parseTimeToSeconds = (timeString: string): number | null => {
+    if (!timeString || timeString.trim() === '') return null
+    
+    const trimmed = timeString.trim()
+    
+    // Format: MM:SS or M:SS
+    if (trimmed.includes(':')) {
+      const parts = trimmed.split(':')
+      if (parts.length === 2) {
+        const minutes = parseInt(parts[0], 10)
+        const seconds = parseInt(parts[1], 10)
+        if (!isNaN(minutes) && !isNaN(seconds) && seconds < 60) {
+          return minutes * 60 + seconds
+        }
+      }
+    }
+    
+    // Format: pure seconds
+    const totalSeconds = parseInt(trimmed, 10)
+    if (!isNaN(totalSeconds) && totalSeconds >= 0) {
+      return totalSeconds
+    }
+    
+    return null
+  }
+
+  const formatSecondsToTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // YouTube clip time handlers
+  const handleClipTimeChange = (mediaId: string, field: 'start' | 'end', value: string) => {
+    const timeInSeconds = parseTimeToSeconds(value)
+    
+    console.log(`[YouTube Clip] handleClipTimeChange called:`, {
+      mediaId,
+      field,
+      value,
+      timeInSeconds,
+      currentExistingPageMedia: existingPageMedia.length
+    })
+    
+    // Only update media state if parsing succeeded (not null)
+    if (timeInSeconds !== null) {
+      const updatedMedia = existingPageMedia.map(media => {
+        if (media.id === mediaId) {
+          // CRITICAL FIX: Synchronize with backup system to preserve all timing values
+          const backupValues = lastKnownGoodValues.get(mediaId) || {}
+          const updatedMedia = {
+            ...media,
+            // Use backup values as source of truth, falling back to media object values
+            clipStart: field === 'start' ? timeInSeconds : (backupValues.start ?? media.clipStart ?? undefined),
+            clipEnd: field === 'end' ? timeInSeconds : (backupValues.end ?? media.clipEnd ?? undefined)
+          }
+          console.log(`[YouTube Clip] Updated media object:`, {
+            mediaId,
+            field,
+            oldClipStart: media.clipStart,
+            oldClipEnd: media.clipEnd,
+            newClipStart: updatedMedia.clipStart,
+            newClipEnd: updatedMedia.clipEnd
+          })
+          console.log(`[SCORM DEBUG] Media object after timing update:`, {
+            id: updatedMedia.id,
+            type: updatedMedia.type,
+            url: updatedMedia.url,
+            isYouTube: updatedMedia.isYouTube,
+            clipStart: updatedMedia.clipStart,
+            clipEnd: updatedMedia.clipEnd,
+            embedUrl: updatedMedia.embedUrl,
+            title: updatedMedia.title
+          })
+          return updatedMedia
+        }
+        return media
+      })
+      
+      console.log(`[YouTube Clip] Setting existingPageMedia with ${updatedMedia.length} items`)
+      setExistingPageMedia(updatedMedia)
+      
+      // Update course content
+      const currentPage = getCurrentPage()
+      if (currentPage) {
+        updatePageInCourseContent(currentPage, updatedMedia)
+      }
+      
+      // Mark as unsaved
+      markDirty('media')
+    }
+  }
+
+  // Enhanced input change handler with useCallback
+  const handleClipInputChange = useCallback((mediaId: string, field: 'start' | 'end', value: string) => {
+    console.log(`[YouTube Clip] handleClipInputChange called:`, {
+      mediaId,
+      field,
+      value,
+      activeTimeInputsSize: activeTimeInputs.size
+    })
+    
+    // Update local input state during typing
+    setActiveTimeInputs(prev => {
+      const updated = new Map(prev)
+      const current = updated.get(mediaId) || {}
+      updated.set(mediaId, { ...current, [field]: value })
+      
+      console.log(`[YouTube Clip] Updated activeTimeInputs:`, {
+        mediaId,
+        field,
+        newValue: value,
+        updatedEntry: updated.get(mediaId)
+      })
+      
+      return updated
+    })
+  }, [activeTimeInputs])
+
+  // Enhanced focus handler with useCallback
+  const handleClipInputFocus = useCallback((mediaId: string, field: 'start' | 'end') => {
+    console.log(`[YouTube Clip] handleClipInputFocus called:`, {
+      mediaId,
+      field,
+      previousFocus: focusedInput
+    })
+    
+    setFocusedInput({ mediaId, field })
+    
+    // Initialize local input with current formatted value if not already present
+    const media = existingPageMedia.find(m => m.id === mediaId)
+    if (media) {
+      const currentValue = field === 'start' ? media.clipStart : media.clipEnd
+      const formattedValue = currentValue !== undefined ? formatSecondsToTime(currentValue) : ''
+      
+      setActiveTimeInputs(prev => {
+        const updated = new Map(prev)
+        const current = updated.get(mediaId) || {}
+        // Only set if not already typing
+        if (!current[field]) {
+          updated.set(mediaId, { ...current, [field]: formattedValue })
+        }
+        return updated
+      })
+    }
+  }, [focusedInput, existingPageMedia, formatSecondsToTime])
+
+  // Enhanced clip input blur handler with debouncing and conflict prevention
+  const handleClipInputBlur = useCallback((mediaId: string, field: 'start' | 'end') => {
+    // Parse the current input value and save to media state
+    const inputValue = activeTimeInputs.get(mediaId)?.[field] || ''
+    const timeInSeconds = parseTimeToSeconds(inputValue)
+    
+    console.log(`[YouTube Clip] handleClipInputBlur called:`, {
+      mediaId,
+      field,
+      inputValue,
+      timeInSeconds,
+      activeTimeInputsSize: activeTimeInputs.size,
+      activeTimeInputsForMedia: activeTimeInputs.get(mediaId)
+    })
+    
+    // DEBOUNCING: Use requestAnimationFrame to ensure proper timing
+    requestAnimationFrame(() => {
+      // Only save if input is valid, otherwise keep the invalid input visible for correction
+      if (inputValue.trim() && timeInSeconds !== null) {
+        console.log(`[YouTube Clip] Valid input detected, saving with debounced execution...`)
+        
+        // ATOMIC STATE UPDATE: Use functional updates to ensure consistency
+        setExistingPageMedia(prevMedia => {
+          const updatedMedia = prevMedia.map(media => {
+            if (media.id === mediaId) {
+              // CRITICAL FIX: Synchronize with backup system to preserve all timing values
+              const backupValues = lastKnownGoodValues.get(mediaId) || {}
+              const updatedMediaItem = {
+                ...media,
+                // Use backup values as source of truth, falling back to media object values
+                clipStart: field === 'start' ? timeInSeconds : (backupValues.start ?? media.clipStart ?? undefined),
+                clipEnd: field === 'end' ? timeInSeconds : (backupValues.end ?? media.clipEnd ?? undefined)
+              }
+              console.log(`[YouTube Clip] Updated media object atomically (debounced):`, {
+                mediaId,
+                field,
+                oldClipStart: media.clipStart,
+                oldClipEnd: media.clipEnd,
+                backupStart: backupValues.start,
+                backupEnd: backupValues.end,
+                newClipStart: updatedMediaItem.clipStart,
+                newClipEnd: updatedMediaItem.clipEnd,
+                sourcedFromBackup: {
+                  start: backupValues.start !== undefined,
+                  end: backupValues.end !== undefined
+                }
+              })
+              
+              // IMMEDIATE COURSE CONTENT UPDATE: Update course content in the same render cycle
+              const currentPage = getCurrentPage()
+              if (currentPage) {
+                console.log(`[YouTube Clip] Updating course content synchronously for page:`, currentPage.id)
+                // Update the course content with the new media immediately
+                const updatedPageMedia = prevMedia.map(m => m.id === mediaId ? updatedMediaItem : m)
+                updatePageInCourseContent(currentPage, updatedPageMedia)
+              }
+              
+              return updatedMediaItem
+            }
+            return media
+          })
+          
+          console.log(`[YouTube Clip] Setting existingPageMedia with ${updatedMedia.length} items (atomic debounced update)`)
+          return updatedMedia
+        })
+        
+        // Mark as unsaved
+        markDirty('media')
+        
+        // BACKUP SUCCESSFUL VALUE: Store in preservation state for fallback
+        setLastKnownGoodValues(prev => {
+          const updated = new Map(prev)
+          const current = updated.get(mediaId) || {}
+          updated.set(mediaId, { 
+            ...current, 
+            [field]: timeInSeconds 
+          })
+          console.log(`[YouTube Clip] Preserved good value for fallback:`, {
+            mediaId,
+            field,
+            value: timeInSeconds,
+            allBackups: Object.fromEntries(updated)
+          })
+          return updated
+        })
+        
+        // CONFLICT PREVENTION: Use requestAnimationFrame for local state clearing
+        requestAnimationFrame(() => {
+          setActiveTimeInputs(prev => {
+            const updated = new Map(prev)
+            const current = updated.get(mediaId) || {}
+            const newCurrent = { ...current }
+            delete newCurrent[field]
+            
+            console.log(`[YouTube Clip] Clearing activeTimeInputs for ${mediaId}.${field} (conflict-safe)`, {
+              beforeDelete: current,
+              afterDelete: newCurrent
+            })
+            
+            if (Object.keys(newCurrent).length === 0) {
+              updated.delete(mediaId)
+              console.log(`[YouTube Clip] Removing all activeTimeInputs for ${mediaId} (conflict-safe)`)
+            } else {
+              updated.set(mediaId, newCurrent)
+              console.log(`[YouTube Clip] Keeping remaining activeTimeInputs for ${mediaId} (conflict-safe):`, newCurrent)
+            }
+            return updated
+          })
+        })
+        
+      } else if (inputValue.trim()) {
+        // Invalid input - keep it visible so user can correct it
+        // Don't clear local state, don't save to media state
+        console.warn('[YouTube Clip] Invalid time format:', inputValue)
+      } else {
+        // Empty input - clear local state immediately (no debouncing needed)
+        setActiveTimeInputs(prev => {
+          const updated = new Map(prev)
+          const current = updated.get(mediaId) || {}
+          const newCurrent = { ...current }
+          delete newCurrent[field]
+          
+          if (Object.keys(newCurrent).length === 0) {
+            updated.delete(mediaId)
+          } else {
+            updated.set(mediaId, newCurrent)
+          }
+          return updated
+        })
+      }
+      
+      // Clear focused input after everything else is done
+      if (focusedInput?.mediaId === mediaId && focusedInput?.field === field) {
+        setFocusedInput(null)
+      }
+    })
+  }, [activeTimeInputs, parseTimeToSeconds, markDirty, focusedInput])
+
+  // Enhanced input value getter with state synchronization guards
+  const getInputValue = useCallback((media: Media, field: 'start' | 'end'): string => {
+    // STATE SYNCHRONIZATION GUARD: Check if we have active input first
+    const activeInput = activeTimeInputs.get(media.id)?.[field]
+    if (activeInput !== undefined) {
+      console.log(`[YouTube Clip] getInputValue returning activeInput (guarded):`, {
+        mediaId: media.id,
+        field,
+        activeInput,
+        source: 'activeTimeInputs',
+        hasStoredValue: (field === 'start' ? media.clipStart : media.clipEnd) !== undefined
+      })
+      return activeInput
+    }
+    
+    // FALLBACK TO STORED VALUE: Show the formatted stored value with validation
+    const storedValue = field === 'start' ? media.clipStart : media.clipEnd
+    const hasValidStoredValue = storedValue !== undefined && storedValue !== null && storedValue >= 0
+    
+    // ULTIMATE FALLBACK: Use backup value if stored value is missing/invalid
+    const backupValue = lastKnownGoodValues.get(media.id)?.[field]
+    const hasValidBackupValue = backupValue !== undefined && backupValue !== null && backupValue >= 0
+    
+    const finalValue = hasValidStoredValue ? storedValue : (hasValidBackupValue ? backupValue : null)
+    const formattedValue = finalValue !== null ? formatSecondsToTime(finalValue) : ''
+    
+    console.log(`[YouTube Clip] getInputValue returning fallback-protected value (guarded):`, {
+      mediaId: media.id,
+      field,
+      storedValue,
+      hasValidStoredValue,
+      backupValue,
+      hasValidBackupValue,
+      finalValue,
+      formattedValue,
+      source: hasValidStoredValue ? 'media.clip' + (field === 'start' ? 'Start' : 'End') : (hasValidBackupValue ? 'backup' : 'empty'),
+      activeTimeInputsSize: activeTimeInputs.size
+    })
+    
+    return formattedValue
+  }, [activeTimeInputs, lastKnownGoodValues, formatSecondsToTime])
+
   // Keep old function for compatibility but redirect to preview
   const handleToggleSelection = (resultId: string) => {
     handleMediaPreview(resultId)
@@ -464,6 +857,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             title: result.title || 'Video',
             type: 'video',
             isYouTube: true
+            // Duration will be available from ReactPlayer when needed
           }
         )
         console.log('[MediaEnhancement] Successfully stored YouTube video:', storedItem)
@@ -815,6 +1209,33 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   useEffect(() => {
     setUploadedMedia([])
   }, [activeTab])
+  
+  // STATE SYNCHRONIZATION GUARD: Ensure activeTimeInputs doesn't hold stale references to media that no longer exist
+  useEffect(() => {
+    const existingMediaIds = new Set(existingPageMedia.map(media => media.id))
+    
+    setActiveTimeInputs(prev => {
+      const updated = new Map(prev)
+      let hasChanges = false
+      
+      // Remove any activeTimeInputs for media that no longer exists
+      for (const [mediaId] of prev) {
+        if (!existingMediaIds.has(mediaId)) {
+          updated.delete(mediaId)
+          hasChanges = true
+          console.log(`[YouTube Clip] Removed stale activeTimeInputs for deleted media:`, mediaId)
+        }
+      }
+      
+      return hasChanges ? updated : prev
+    })
+    
+    // Also clear focused input if it references non-existent media
+    if (focusedInput && !existingMediaIds.has(focusedInput.mediaId)) {
+      console.log(`[YouTube Clip] Clearing stale focusedInput for deleted media:`, focusedInput.mediaId)
+      setFocusedInput(null)
+    }
+  }, [existingPageMedia, focusedInput])
   
   // Load prompt suggestions separated by type
   useEffect(() => {
@@ -1181,6 +1602,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       if (isYouTube) {
         // For YouTube videos, use the special storeYouTubeVideo method
         console.log('[MediaEnhancement] YouTube video detected, preserving URL:', mediaItem.url)
+        
         try {
           const storedItem = await storeYouTubeVideo(
             mediaItem.url,
@@ -1189,6 +1611,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {
               title: mediaItem.title,
               thumbnail: mediaItem.thumbnail
+              // Duration will be available from ReactPlayer when needed
             }
           )
           
@@ -1292,6 +1715,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       ...item,
       // Preserve isYouTube flag explicitly
       isYouTube: item.isYouTube || false,
+      // CRITICAL FIX: Explicitly preserve YouTube clip timing properties
+      clipStart: item.clipStart,
+      clipEnd: item.clipEnd,
       // If no URL, create one based on the media ID
       url: item.url || item.embedUrl || `media://${item.id}`
     }))
@@ -1343,6 +1769,36 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       }
     }
     
+    // Enhanced debug logging to trace clip timing data flow
+    const currentPageMedia = updatedPage.media || []
+    const youtubeMediaWithTiming = currentPageMedia.filter(m => m.isYouTube && (m.clipStart !== undefined || m.clipEnd !== undefined))
+    
+    console.log(`[SCORM DEBUG] Calling onUpdateContent with course content:`, {
+      totalPages: Object.keys(updatedContent).length,
+      currentPageId: updatedPage.id,
+      currentPageMediaCount: currentPageMedia.length,
+      youtubeMediaWithTimingCount: youtubeMediaWithTiming.length,
+      // CRITICAL: Log detailed YouTube media with timing
+      youtubeMediaDetails: youtubeMediaWithTiming.map(m => ({
+        id: m.id,
+        title: m.title,
+        type: m.type,
+        isYouTube: m.isYouTube,
+        clipStart: m.clipStart,
+        clipEnd: m.clipEnd,
+        hasClipStart: m.clipStart !== undefined,
+        hasClipEnd: m.clipEnd !== undefined,
+        url: m.url?.substring(0, 50) + '...'
+      })),
+      // Log all media for current page
+      allCurrentPageMedia: currentPageMedia.map(m => ({
+        id: m.id,
+        type: m.type,
+        isYouTube: m.isYouTube,
+        clipStart: m.clipStart,
+        clipEnd: m.clipEnd
+      }))
+    })
     onUpdateContent(updatedContent)
   }
   
@@ -1839,7 +2295,65 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                         {media.title || 'Untitled'}
                       </p>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem' }}>
+
+                    {/* YouTube clip time inputs */}
+                    {media.type === 'video' && media.isYouTube && (
+                      <div 
+                        className={styles.youTubeClipContainer}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className={styles.youTubeClipInputs}>
+                          <div className={styles.youTubeClipInput}>
+                            <label className={styles.youTubeClipLabel}>Start:</label>
+                            <input
+                              type="text"
+                              value={getInputValue(media, 'start')}
+                              onChange={(e) => handleClipInputChange(media.id, 'start', e.target.value)}
+                              onFocus={() => handleClipInputFocus(media.id, 'start')}
+                              onBlur={() => handleClipInputBlur(media.id, 'start')}
+                              placeholder="0:30 or 30"
+                              className={styles.youTubeClipTextInput}
+                            />
+                          </div>
+                          <div className={styles.youTubeClipInput}>
+                            <label className={styles.youTubeClipLabel}>End:</label>
+                            <input
+                              type="text"
+                              value={getInputValue(media, 'end')}
+                              onChange={(e) => handleClipInputChange(media.id, 'end', e.target.value)}
+                              onFocus={() => handleClipInputFocus(media.id, 'end')}
+                              onBlur={() => handleClipInputBlur(media.id, 'end')}
+                              placeholder="2:00 or 120"
+                              className={styles.youTubeClipTextInput}
+                            />
+                          </div>
+                          {(media.clipStart !== undefined || media.clipEnd !== undefined) && (
+                            <span className={styles.youTubeClipDuration}>
+                              {media.clipStart !== undefined && media.clipEnd !== undefined && media.clipEnd > media.clipStart
+                                ? `${formatSecondsToTime(media.clipEnd - media.clipStart)} long`
+                                : 'Clip set'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={styles.mediaButtonContainer}>
+                      {media.type === 'image' && (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditImage(media)
+                          }}
+                          aria-label={`Edit ${media.title || 'image'}`}
+                          className={styles.mediaEditButton}
+                        >
+                          <Edit size={14} />
+                          Edit
+                        </Button>
+                      )}
                       <Button
                         variant="secondary"
                         size="small"
@@ -1847,8 +2361,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           e.stopPropagation()
                           handleRemoveMedia(media.id)
                         }}
-                        className={styles.removeButton}
-                        style={{ flex: 1 }}
+                        className={styles.mediaRemoveButton}
                       >
                         Remove
                       </Button>
@@ -2465,6 +2978,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Image Edit Modal */}
+      {editingImage && (
+        <ImageEditModal
+          isOpen={true}
+          onClose={handleCloseImageEdit}
+          imageUrl={editingImage.url}
+          imageTitle={editingImage.title}
+          originalImageId={editingImage.id}
+          onImageUpdated={handleImageUpdated}
+        />
       )}
     </PageLayout>
   )

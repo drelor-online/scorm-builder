@@ -25,6 +25,9 @@ export function disableCategory(category: string) {
   } else {
     disabledCategories.add(category)
   }
+  
+  // Persist to storage with tracking prevention fallback
+  void saveDisabledCategoriesToStorage()
 }
 
 export function enableCategory(category: string) {
@@ -35,6 +38,9 @@ export function enableCategory(category: string) {
   if (index > -1) {
     wildcardPatterns.splice(index, 1)
   }
+  
+  // Persist to storage with tracking prevention fallback
+  void saveDisabledCategoriesToStorage()
 }
 
 export function getDisabledCategories(): string[] {
@@ -44,6 +50,20 @@ export function getDisabledCategories(): string[] {
 export function clearDisabledCategories() {
   disabledCategories.clear()
   wildcardPatterns.length = 0
+  
+  // Persist to storage with tracking prevention fallback
+  void saveDisabledCategoriesToStorage()
+}
+
+// Helper function to save disabled categories using tracking prevention fallback
+async function saveDisabledCategoriesToStorage(): Promise<void> {
+  try {
+    const { trackingPreventionFallback } = await import('./trackingPreventionFallback')
+    const categories = getDisabledCategories()
+    await trackingPreventionFallback.saveDisabledCategories(categories)
+  } catch (e) {
+    // Ignore errors during save
+  }
 }
 
 function isCategoryDisabled(message: string): boolean {
@@ -193,18 +213,19 @@ declare global {
   }
 }
 
-// Initialize disabled categories from environment or localStorage
+// Initialize disabled categories from environment or localStorage with tracking prevention fallback
 if (typeof process !== 'undefined' && process.env?.LOGGER_DISABLED_CATEGORIES) {
   const categories = process.env.LOGGER_DISABLED_CATEGORIES.split(',')
   categories.forEach(cat => disableCategory(cat.trim()))
-} else if (typeof localStorage !== 'undefined') {
-  try {
-    const stored = localStorage.getItem('loggerDisabledCategories')
-    if (stored) {
-      const categories = stored.split(',')
+} else {
+  // Use dynamic import to avoid circular dependency
+  void (async () => {
+    try {
+      const { trackingPreventionFallback } = await import('./trackingPreventionFallback')
+      const categories = await trackingPreventionFallback.loadDisabledCategories()
       categories.forEach(cat => disableCategory(cat.trim()))
+    } catch (e) {
+      // Ignore errors during initialization
     }
-  } catch (e) {
-    // Ignore localStorage errors
-  }
+  })()
 }

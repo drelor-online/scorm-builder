@@ -15,6 +15,7 @@ import { useStorage } from './PersistentStorageContext'
 interface UnifiedMediaContextType {
   // Core media operations
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
+  updateMedia: (existingId: string, file: File | Blob, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
   getMedia: (mediaId: string) => Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>
   deleteMedia: (mediaId: string) => Promise<boolean>
   deleteAllMedia: (projectId: string) => Promise<void>
@@ -654,9 +655,42 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       (mediaService as any).clearAudioFromCache(mediaId)
     }
   }, [])
+
+  const updateMedia = useCallback(async (
+    existingId: string,
+    file: File | Blob,
+    metadata?: Partial<MediaMetadata>,
+    progressCallback?: ProgressCallback
+  ): Promise<MediaItem> => {
+    try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
+      
+      const updatedItem = await mediaService.updateMedia(existingId, file, metadata, progressCallback)
+      
+      // Update cache with the updated media item (same ID, new content)
+      setMediaCache(prev => {
+        const updated = new Map(prev)
+        updated.set(updatedItem.id, updatedItem)
+        return updated
+      })
+      
+      // Clear any existing blob URL for this media since the content changed
+      blobCache.revoke(existingId)
+      
+      return updatedItem
+    } catch (err) {
+      logger.error('[UnifiedMediaContext] Failed to update media:', existingId, err)
+      setError(err as Error)
+      throw err
+    }
+  }, [blobCache])
   
   const value = useMemo<UnifiedMediaContextType>(() => ({
     storeMedia,
+    updateMedia,
     getMedia,
     deleteMedia,
     deleteAllMedia,
@@ -677,6 +711,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     resetMediaCache
   }), [
     storeMedia,
+    updateMedia,
     getMedia,
     deleteMedia,
     deleteAllMedia,

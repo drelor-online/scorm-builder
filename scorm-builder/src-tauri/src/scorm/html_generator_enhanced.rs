@@ -126,7 +126,9 @@ impl<'a> HtmlGenerator<'a> {
                         "url": url,
                         "title": item.title,
                         "embed_url": item.embed_url,
-                        "is_youtube": is_youtube
+                        "is_youtube": is_youtube,
+                        "clip_start": item.clip_start,
+                        "clip_end": item.clip_end
                     })
                 })
                 .collect::<Vec<_>>()
@@ -187,7 +189,9 @@ impl<'a> HtmlGenerator<'a> {
                         "url": url,
                         "title": item.title,
                         "embed_url": item.embed_url,
-                        "is_youtube": is_youtube
+                        "is_youtube": is_youtube,
+                        "clip_start": item.clip_start,
+                        "clip_end": item.clip_end
                     })
                 })
                 .collect::<Vec<_>>()
@@ -349,7 +353,9 @@ impl<'a> HtmlGenerator<'a> {
                         "url": url,
                         "title": item.title,
                         "embed_url": item.embed_url,
-                        "is_youtube": is_youtube
+                        "is_youtube": is_youtube,
+                        "clip_start": item.clip_start,
+                        "clip_end": item.clip_end
                     })
                 }).collect::<Vec<_>>()
             })
