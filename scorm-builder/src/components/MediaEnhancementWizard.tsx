@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { CourseContentUnion, CourseContent, Media, Page, Topic } from '../types/aiPrompt'
 import type { MediaItem } from '../services/MediaService'
 import { CourseSeedData } from '../types/course'
@@ -345,6 +345,20 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return _getPageMedia(page)
   }, [getCurrentPage])
   
+  // PERFORMANCE: Memoize array combinations to prevent expensive recalculation on every render
+  const searchResultsArray = useMemo(() => 
+    Array.isArray(searchResults) ? searchResults : [], 
+    [searchResults]
+  )
+  const uploadedMediaArray = useMemo(() => 
+    Array.isArray(uploadedMedia) ? uploadedMedia : [], 
+    [uploadedMedia]
+  )
+  const displayedResults = useMemo(() => 
+    [...searchResultsArray, ...uploadedMediaArray], 
+    [searchResultsArray, uploadedMediaArray]
+  )
+  
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
     if (!page) return 'image'
     
@@ -355,10 +369,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }
 
   // Handle clicking on search results to open lightbox preview
-  const handleMediaPreview = (resultId: string) => {
-    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
-    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
-    const result = [...searchResultsArray, ...uploadedMediaArray].find(r => r.id === resultId)
+  const handleMediaPreview = useCallback((resultId: string) => {
+    const result = displayedResults.find(r => r.id === resultId)
     if (!result) return
     
     // Initialize clip timing from existing values or parse from embed URL
@@ -385,7 +397,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     setLightboxMedia(result)
     setIsLightboxOpen(true)
-  }
+  }, [displayedResults])
   
   // Handle lightbox actions
   const handleLightboxConfirm = async () => {
@@ -1081,12 +1093,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }
 
   // Handle replace confirmation
-  const handleReplaceConfirm = async () => {
+  const handleReplaceConfirm = useCallback(async () => {
     if (!replaceMode) return
     
-    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
-    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
-    const result = [...searchResultsArray, ...uploadedMediaArray].find(r => r.id === replaceMode.id)
+    const result = displayedResults.find(r => r.id === replaceMode.id)
     if (!result) {
       setReplaceMode(null)
       return
@@ -1123,7 +1133,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setReplaceMode(null)
     
     // Note: loadExistingMedia() is already called inside addMediaToPage() after the fix
-  }
+  }, [replaceMode, displayedResults, existingPageMedia, deleteMedia, addMediaToPage])
   
   // Move loadExistingMedia to component scope using useCallback
   const loadExistingMedia = React.useCallback(async () => {
@@ -1623,9 +1633,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (!currentPage) return
     
     const pageId = getPageId(currentPage)
-    const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
-    const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
-    const allResults = [...searchResultsArray, ...uploadedMediaArray]
+    const allResults = displayedResults
     const selectedItems: (SearchResult | Media)[] = []
     
     if (selectedItems.length === 0) return
@@ -2153,8 +2161,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // Note: For API pagination, we don't slice results locally since each search already returns the correct page
   // The searchResults array contains only the current page's results from the API
-  const searchResultsArray = Array.isArray(searchResults) ? searchResults : []
-  const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
+  // (searchResultsArray and uploadedMediaArray are now memoized earlier in the component)
   
   // For API-based pagination, we assume there are more pages if we got a full page of results (10 items)
   // This matches how the searchService mock data works (it provides 100 results across 10 pages)
@@ -2822,7 +2829,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             {(searchResults.length > 0 || uploadedMedia.length > 0) && (
               <>
                 <div className={styles.resultsGrid}>
-                  {[...searchResultsArray, ...uploadedMediaArray].map((result, index) => {
+                  {displayedResults.map((result, index) => {
                     const isVideo = result.embedUrl || (result.url && result.url.includes('youtube'))
                     const imageSource = getImageSource(result.thumbnail || result.url, true)
                     const isRestricted = !imageSource && !isVideo

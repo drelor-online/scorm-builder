@@ -168,10 +168,10 @@ describe('scormPostProcessor', () => {
       expect(processedContent).toContain('src="https://www.youtube.com/embed/XYZ789"')
     })
     
-    it('should strip extra parameters from YouTube URLs', async () => {
+    it('should preserve clip timing parameters while stripping other parameters', async () => {
       const htmlWithParams = `
         <video>
-          <source src="https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST&index=1">
+          <source src="https://www.youtube.com/watch?v=VIDEO_ID&start=60&end=120&list=PLAYLIST&index=1">
         </video>
       `
       
@@ -190,10 +190,116 @@ describe('scormPostProcessor', () => {
       const processedCall = mockProcessedZip.file.mock.calls[0]
       const processedContent = processedCall[1]
       
-      // Should only include the video ID, not other parameters
-      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID"')
+      // Should preserve clip timing parameters
+      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID?start=60&end=120"')
+      // Should not include other parameters
       expect(processedContent).not.toContain('list=')
       expect(processedContent).not.toContain('index=')
+    })
+    
+    it('should support t parameter as alias for start', async () => {
+      const htmlWithTParam = `
+        <video>
+          <source src="https://www.youtube.com/watch?v=VIDEO_ID&t=45">
+        </video>
+      `
+      
+      mockZip.files = {
+        'pages/video.html': {}
+      }
+      
+      const mockFile = {
+        async: vi.fn().mockResolvedValue(htmlWithTParam)
+      }
+      
+      mockZip.file.mockReturnValue(mockFile)
+      
+      await postProcessSCORMPackage(mockZip)
+      
+      const processedCall = mockProcessedZip.file.mock.calls[0]
+      const processedContent = processedCall[1]
+      
+      // Should convert t= to start=
+      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID?start=45"')
+    })
+    
+    it('should handle time formats in clip parameters', async () => {
+      const htmlWithTimeFormat = `
+        <video>
+          <source src="https://www.youtube.com/watch?v=VIDEO_ID&t=1:30&end=2:45">
+        </video>
+      `
+      
+      mockZip.files = {
+        'pages/video.html': {}
+      }
+      
+      const mockFile = {
+        async: vi.fn().mockResolvedValue(htmlWithTimeFormat)
+      }
+      
+      mockZip.file.mockReturnValue(mockFile)
+      
+      await postProcessSCORMPackage(mockZip)
+      
+      const processedCall = mockProcessedZip.file.mock.calls[0]
+      const processedContent = processedCall[1]
+      
+      // Should convert time formats to seconds
+      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID?start=90&end=165"')
+    })
+    
+    it('should handle only start parameter', async () => {
+      const htmlWithStartOnly = `
+        <video>
+          <source src="https://www.youtube.com/watch?v=VIDEO_ID&start=30">
+        </video>
+      `
+      
+      mockZip.files = {
+        'pages/video.html': {}
+      }
+      
+      const mockFile = {
+        async: vi.fn().mockResolvedValue(htmlWithStartOnly)
+      }
+      
+      mockZip.file.mockReturnValue(mockFile)
+      
+      await postProcessSCORMPackage(mockZip)
+      
+      const processedCall = mockProcessedZip.file.mock.calls[0]
+      const processedContent = processedCall[1]
+      
+      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID?start=30"')
+      expect(processedContent).not.toContain('end=')
+    })
+    
+    it('should validate end time is greater than start time', async () => {
+      const htmlWithInvalidRange = `
+        <video>
+          <source src="https://www.youtube.com/watch?v=VIDEO_ID&start=120&end=60">
+        </video>
+      `
+      
+      mockZip.files = {
+        'pages/video.html': {}
+      }
+      
+      const mockFile = {
+        async: vi.fn().mockResolvedValue(htmlWithInvalidRange)
+      }
+      
+      mockZip.file.mockReturnValue(mockFile)
+      
+      await postProcessSCORMPackage(mockZip)
+      
+      const processedCall = mockProcessedZip.file.mock.calls[0]
+      const processedContent = processedCall[1]
+      
+      // Should only include start time when end time is invalid
+      expect(processedContent).toContain('src="https://www.youtube.com/embed/VIDEO_ID?start=120"')
+      expect(processedContent).not.toContain('end=60')
     })
   })
   

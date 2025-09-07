@@ -44,31 +44,89 @@ async function processHTMLFile(html: string, filename: string, zip: JSZip): Prom
 }
 
 /**
- * Convert YouTube video tags to iframe embeds
+ * Parse time string to seconds (supports hh:mm:ss, mm:ss, or raw seconds)
+ */
+function parseTimeToSeconds(timeStr: string): number | undefined {
+  if (!timeStr || timeStr.trim() === '') return undefined
+  
+  // If it's already a number (seconds)
+  if (/^\d+$/.test(timeStr)) {
+    return Math.max(0, parseInt(timeStr, 10))
+  }
+  
+  // Parse hh:mm:ss or mm:ss format
+  const parts = timeStr.split(':').map(Number)
+  if (parts.some(isNaN)) return undefined
+  
+  if (parts.length === 3) {
+    // hh:mm:ss format
+    const [hours, minutes, seconds] = parts
+    return Math.max(0, hours * 3600 + minutes * 60 + seconds)
+  } else if (parts.length === 2) {
+    // mm:ss format  
+    const [minutes, seconds] = parts
+    return Math.max(0, minutes * 60 + seconds)
+  }
+  
+  return undefined
+}
+
+/**
+ * Convert YouTube video tags to iframe embeds with clip timing preservation
  */
 function fixYouTubeVideos(html: string): string {
   // Match video tags with YouTube URLs
-  const videoRegex = /<video[^>]*>[\s\S]*?<source[^>]*src="(https?:\/\/(www\.)?youtube\.com\/watch\?v=([^"]+)|https?:\/\/youtu\.be\/([^"]+))"[^>]*>[\s\S]*?<\/video>/gi
+  const videoRegex = /<video[^>]*>[\s\S]*?<source[^>]*src="(https?:\/\/(?:www\.)?youtube\.com\/watch\?[^"]+|https?:\/\/youtu\.be\/[^"]+)"[^>]*>[\s\S]*?<\/video>/gi
   
-  return html.replace(videoRegex, (_match, _url, _domain, videoId1, videoId2) => {
-    const videoId = videoId1 || videoId2
-    
-    // Extract video ID from YouTube URL
-    let extractedId = videoId
-    if (videoId1) {
-      // Handle youtube.com/watch?v=ID format
-      extractedId = videoId.split('&')[0] // Remove any additional parameters
-    }
-    
-    // Create responsive iframe embed
-    return `<div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+  return html.replace(videoRegex, (_match, url) => {
+    try {
+      const urlObj = new URL(url)
+      
+      // Extract video ID
+      let videoId: string
+      if (url.includes('youtu.be/')) {
+        // youtu.be/VIDEO_ID format
+        videoId = urlObj.pathname.substring(1).split('?')[0]
+      } else {
+        // youtube.com/watch?v=VIDEO_ID format
+        videoId = urlObj.searchParams.get('v') || ''
+      }
+      
+      if (!videoId) return _match // Return original if we can't extract ID
+      
+      // Parse clip timing parameters (support both 'start'/'t' and 'end')
+      const startParam = urlObj.searchParams.get('start') || urlObj.searchParams.get('t')
+      const endParam = urlObj.searchParams.get('end')
+      
+      const startSeconds = startParam ? parseTimeToSeconds(startParam) : undefined
+      const endSeconds = endParam ? parseTimeToSeconds(endParam) : undefined
+      
+      // Build embed URL with clip timing
+      const embedParams = new URLSearchParams()
+      if (startSeconds !== undefined) {
+        embedParams.set('start', startSeconds.toString())
+      }
+      if (endSeconds !== undefined && (startSeconds === undefined || endSeconds > startSeconds)) {
+        embedParams.set('end', endSeconds.toString())
+      }
+      
+      const paramString = embedParams.toString() ? `?${embedParams.toString()}` : ''
+      const embedUrl = `https://www.youtube.com/embed/${videoId}${paramString}`
+      
+      // Create responsive iframe embed
+      return `<div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
       <iframe 
-        src="https://www.youtube.com/embed/${extractedId}" 
+        src="${embedUrl}" 
         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
         allowfullscreen>
       </iframe>
     </div>`
+    } catch (error) {
+      // If URL parsing fails, return original match
+      console.warn('[SCORM Post-processor] Failed to parse YouTube URL:', url, error)
+      return _match
+    }
   })
 }
 
