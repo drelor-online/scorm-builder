@@ -9,6 +9,8 @@ export interface MediaMetadata {
   source?: 'upload' | 'search' | 'library'
   embed_url?: string
   title?: string
+  clip_start?: number // Start time in seconds for video clips
+  clip_end?: number   // End time in seconds for video clips
 }
 
 // Legacy metadata format with camelCase field names
@@ -18,6 +20,8 @@ export interface LegacyMediaMetadata {
   embedUrl?: string
   source?: string
   title?: string
+  clipStart?: number // Start time in seconds for video clips
+  clipEnd?: number   // End time in seconds for video clips
 }
 
 export interface PageContent {

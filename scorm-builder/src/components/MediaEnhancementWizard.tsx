@@ -68,6 +68,17 @@ interface MediaEnhancementWizardRefactoredProps {
   onStepClick?: (step: number) => void
 }
 
+// Module-local utility functions for YouTube clip timing
+function parseTimeToSeconds(s?: string | null): number | undefined {
+  if (!s) return undefined
+  if (/^\d+$/.test(s)) return Number(s)
+  const p = s.split(':').map(Number)
+  if (p.some(Number.isNaN)) return undefined
+  const [h, m, sec] = p.length === 3 ? p : [0, p[0] || 0, p[1] || 0]
+  return h * 3600 + m * 60 + sec
+}
+
+
 // Helper to safely extract page IDs from course content
 const getPageId = (content: Page | Topic | undefined): string => {
   if (!content) return ''
@@ -266,6 +277,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // INPUT VALUE PRESERVATION: Backup state to prevent complete value loss
   const [lastKnownGoodValues, setLastKnownGoodValues] = useState<Map<string, { start?: number; end?: number }>>(new Map())
   
+  // LIGHTBOX CLIP TIMING: Controlled state for start/end text inputs
+  const [startText, setStartText] = useState<string>('')
+  const [endText, setEndText] = useState<string>('')
+  
+  // PENDING CLIP UPDATES: State for deferred persistence to fix render-phase updates
+  const [pendingClip, setPendingClip] = useState<null | {
+    pageId: string
+    mediaId: string
+    clipStart?: number
+    clipEnd?: number
+    embedUrl: string
+  }>(null)
+  
   // Clear any stale blob URLs on mount to force regeneration
   useEffect(() => {
     // Clear on mount to ensure fresh blob URLs for new session
@@ -279,6 +303,87 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setBlobUrls(new Map())
     }
   }, [])
+  
+  // PENDING CLIP PROCESSING: Effect to handle deferred clip timing updates
+  useEffect(() => {
+    if (!pendingClip) return
+    
+    // Find and update the media item with clip timing
+    if (!courseContent || !onUpdateContent) {
+      setPendingClip(null)
+      return
+    }
+    
+    const content = courseContent as CourseContent
+    const updatedContent = structuredClone(content)
+    
+    // Find the page and update the specific media item
+    let pageFound = false
+    if (pendingClip.pageId === 'welcome' && updatedContent.welcome?.media) {
+      const mediaIndex = updatedContent.welcome.media.findIndex(m => m.id === pendingClip.mediaId)
+      if (mediaIndex !== -1) {
+        updatedContent.welcome.media[mediaIndex] = {
+          ...updatedContent.welcome.media[mediaIndex],
+          clipStart: pendingClip.clipStart,
+          clipEnd: pendingClip.clipEnd,
+          embedUrl: pendingClip.embedUrl
+        }
+        pageFound = true
+      }
+    } else if (pendingClip.pageId === 'objectives' && updatedContent.objectivesPage?.media) {
+      const mediaIndex = updatedContent.objectivesPage.media.findIndex(m => m.id === pendingClip.mediaId)
+      if (mediaIndex !== -1) {
+        updatedContent.objectivesPage.media[mediaIndex] = {
+          ...updatedContent.objectivesPage.media[mediaIndex],
+          clipStart: pendingClip.clipStart,
+          clipEnd: pendingClip.clipEnd,
+          embedUrl: pendingClip.embedUrl
+        }
+        pageFound = true
+      }
+    } else {
+      // Check topics
+      const topicIndex = updatedContent.topics?.findIndex(t => t.id === pendingClip.pageId)
+      if (topicIndex !== -1 && updatedContent.topics?.[topicIndex]?.media) {
+        const mediaIndex = updatedContent.topics[topicIndex].media!.findIndex(m => m.id === pendingClip.mediaId)
+        if (mediaIndex !== -1) {
+          updatedContent.topics![topicIndex].media![mediaIndex] = {
+            ...updatedContent.topics![topicIndex].media![mediaIndex],
+            clipStart: pendingClip.clipStart,
+            clipEnd: pendingClip.clipEnd,
+            embedUrl: pendingClip.embedUrl
+          }
+          pageFound = true
+        }
+      }
+    }
+    
+    if (pageFound) {
+      onUpdateContent(updatedContent)
+    }
+    
+    setPendingClip(null)
+  }, [pendingClip, courseContent, onUpdateContent])
+  
+  // CLIP INPUT INITIALIZATION: Populate start/end inputs when lightbox opens
+  useEffect(() => {
+    if (isLightboxOpen && lightboxMedia) {
+      // Populate inputs from existing clip values
+      const formatSecondsToText = (seconds?: number): string => {
+        if (seconds === undefined || seconds === null) return ''
+        const mins = Math.floor(seconds / 60)
+        const secs = seconds % 60
+        return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : seconds.toString()
+      }
+      
+      setStartText(formatSecondsToText(lightboxMedia.clipStart))
+      setEndText(formatSecondsToText(lightboxMedia.clipEnd))
+    } else if (!isLightboxOpen) {
+      // Clear inputs when lightbox closes
+      setStartText('')
+      setEndText('')
+    }
+  }, [isLightboxOpen, lightboxMedia?.clipStart, lightboxMedia?.clipEnd])
   
   // FIX: Properly track and manage blob URLs to prevent memory leaks
   const createTrackedBlobUrl = (blob: Blob, key: string): string => {
@@ -358,6 +463,20 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     [...searchResultsArray, ...uploadedMediaArray], 
     [searchResultsArray, uploadedMediaArray]
   )
+  
+  // PREVIEW URL COMPUTATION: Dynamic clip-aware preview URL for lightbox
+  const previewUrl = useMemo(() => {
+    if (!lightboxMedia?.isYouTube) return lightboxMedia?.embedUrl || lightboxMedia?.url || ''
+    
+    const startSeconds = parseTimeToSeconds(startText)
+    const endSeconds = parseTimeToSeconds(endText)
+    
+    return buildYouTubeEmbed(
+      lightboxMedia.url || lightboxMedia.embedUrl || '', 
+      startSeconds, 
+      endSeconds
+    )
+  }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, startText, endText])
   
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
@@ -523,31 +642,6 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }
 
   // Helper functions for time parsing and formatting
-  const parseTimeToSeconds = (timeString: string): number | null => {
-    if (!timeString || timeString.trim() === '') return null
-    
-    const trimmed = timeString.trim()
-    
-    // Format: MM:SS or M:SS
-    if (trimmed.includes(':')) {
-      const parts = trimmed.split(':')
-      if (parts.length === 2) {
-        const minutes = parseInt(parts[0], 10)
-        const seconds = parseInt(parts[1], 10)
-        if (!isNaN(minutes) && !isNaN(seconds) && seconds < 60) {
-          return minutes * 60 + seconds
-        }
-      }
-    }
-    
-    // Format: pure seconds
-    const totalSeconds = parseInt(trimmed, 10)
-    if (!isNaN(totalSeconds) && totalSeconds >= 0) {
-      return totalSeconds
-    }
-    
-    return null
-  }
 
   const formatSecondsToTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -2946,7 +3040,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             <div className={styles.lightboxPreview}>
               {lightboxMedia.isYouTube || lightboxMedia.embedUrl ? (
                 <iframe
-                  src={lightboxMedia.embedUrl || lightboxMedia.url}
+                  src={previewUrl}
                   title={lightboxMedia.title}
                   className={styles.lightboxVideo}
                   allowFullScreen
@@ -2974,30 +3068,119 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   <h4>Clip Timing (optional)</h4>
                   <div className={styles.clipInputs}>
                     <div className={styles.clipInputGroup}>
-                      <label htmlFor="clipStart">Start Time (seconds):</label>
+                      <label htmlFor="clipStart">Start Time:</label>
                       <Input
                         id="clipStart"
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="0"
-                        value={clipStart?.toString() || ''}
-                        onChange={(e) => setClipStart(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                        type="text"
+                        placeholder="0:30 or 30"
+                        value={startText}
+                        onChange={(e) => setStartText(e.target.value)}
+                        onBlur={() => {
+                          // Commit timing when user finishes editing
+                          const startSeconds = parseTimeToSeconds(startText)
+                          const endSeconds = parseTimeToSeconds(endText)
+                          const embedUrl = buildYouTubeEmbed(
+                            lightboxMedia.url || lightboxMedia.embedUrl || '', 
+                            startSeconds, 
+                            endSeconds
+                          )
+                          // Set up pending clip update for deferred persistence
+                          if (currentPage) {
+                            setPendingClip({
+                              pageId: currentPage.id,
+                              mediaId: lightboxMedia.id,
+                              clipStart: startSeconds,
+                              clipEnd: endSeconds,
+                              embedUrl
+                            })
+                          }
+                        }}
                       />
                     </div>
                     <div className={styles.clipInputGroup}>
-                      <label htmlFor="clipEnd">End Time (seconds):</label>
+                      <label htmlFor="clipEnd">End Time:</label>
                       <Input
                         id="clipEnd"
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="Duration"
-                        value={clipEnd?.toString() || ''}
-                        onChange={(e) => setClipEnd(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                        type="text"
+                        placeholder="2:00 or 120"
+                        value={endText}
+                        onChange={(e) => setEndText(e.target.value)}
+                        onBlur={() => {
+                          // Commit timing when user finishes editing
+                          const startSeconds = parseTimeToSeconds(startText)
+                          const endSeconds = parseTimeToSeconds(endText)
+                          const embedUrl = buildYouTubeEmbed(
+                            lightboxMedia.url || lightboxMedia.embedUrl || '', 
+                            startSeconds, 
+                            endSeconds
+                          )
+                          // Set up pending clip update for deferred persistence
+                          if (currentPage) {
+                            setPendingClip({
+                              pageId: currentPage.id,
+                              mediaId: lightboxMedia.id,
+                              clipStart: startSeconds,
+                              clipEnd: endSeconds,
+                              embedUrl
+                            })
+                          }
+                        }}
                       />
                     </div>
                   </div>
+                  
+                  {/* Duration display for UX */}
+                  {(() => {
+                    const startSeconds = parseTimeToSeconds(startText)
+                    const endSeconds = parseTimeToSeconds(endText)
+                    
+                    if (startSeconds !== undefined && endSeconds !== undefined && endSeconds > startSeconds) {
+                      const duration = endSeconds - startSeconds
+                      const mins = Math.floor(duration / 60)
+                      const secs = duration % 60
+                      const durationText = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`
+                      
+                      return (
+                        <div className={styles.clipDuration}>
+                          <strong>Clip Duration: {durationText}</strong>
+                        </div>
+                      )
+                    } else if (startSeconds !== undefined || endSeconds !== undefined) {
+                      return (
+                        <div className={styles.clipDuration}>
+                          <em>Partial clip timing set</em>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
+                  
+                  <div className={styles.clipActions}>
+                    {(startText || endText) && (
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => {
+                          setStartText('')
+                          setEndText('')
+                          // Clear the clip timing from the media immediately
+                          if (currentPage) {
+                            setPendingClip({
+                              pageId: currentPage.id,
+                              mediaId: lightboxMedia.id,
+                              clipStart: undefined,
+                              clipEnd: undefined,
+                              embedUrl: buildYouTubeEmbed(lightboxMedia.url || lightboxMedia.embedUrl || '')
+                            })
+                          }
+                        }}
+                        className={styles.clearClipButton}
+                      >
+                        Clear Timing
+                      </Button>
+                    )}
+                  </div>
+                  
                   <p className={styles.clipTimingHelp}>
                     Set start and end times to create a video clip. Leave empty to play the entire video.
                   </p>
