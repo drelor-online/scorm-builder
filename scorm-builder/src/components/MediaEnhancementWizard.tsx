@@ -359,6 +359,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     [searchResultsArray, uploadedMediaArray]
   )
   
+  // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
     if (!page) return 'image'
     
@@ -981,10 +982,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           type: 'video',
           title: (typeof storedItem.metadata?.title === 'string' ? storedItem.metadata.title : undefined) || storedItem.fileName || result.title || 'Video',
           url: storedItem.metadata?.youtubeUrl || result.url || '',
-          embedUrl: storedItem.metadata?.embedUrl || result.embedUrl || '',
+          embedUrl: (result.clipStart !== undefined || result.clipEnd !== undefined) 
+            ? buildYouTubeEmbed(storedItem.metadata?.youtubeUrl || result.url || '', result.clipStart, result.clipEnd)
+            : storedItem.metadata?.embedUrl || result.embedUrl || '',
           isYouTube: true,
           storageId: storedItem.id,
-          mimeType: 'video/mp4'
+          mimeType: 'video/mp4',
+          clipStart: result.clipStart,
+          clipEnd: result.clipEnd
         }
       } else {
         // Regular image - Force create a fresh blob URL (don't use cached)
@@ -2189,6 +2194,112 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }, [onNext, resetDirty])
 
+  // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
+  const renderedExistingMedia = useMemo(() => {
+    return existingPageMedia.map((media) => (
+      <div 
+        key={media.id} 
+        className={styles.mediaItem}
+        onClick={() => handleMediaClick(media.id)}
+      >
+        {media.type === 'video' && media.isYouTube && media.url ? (
+          // YouTube video thumbnail
+          (() => {
+            const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
+            const videoId = videoIdMatch ? videoIdMatch[1] : null
+            const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+            
+            return thumbnailUrl ? (
+              <div className={styles.mediaItemInner}>
+                <img
+                  src={thumbnailUrl}
+                  alt={media.title || 'Video thumbnail'}
+                  className={styles.mediaThumbnail}
+                  onError={(e) => {
+                    console.log('[MediaEnhancement] YouTube thumbnail failed to load:', thumbnailUrl)
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                    const parent = target.parentElement
+                    if (parent) {
+                      const fallbackDiv = document.createElement('div')
+                      fallbackDiv.className = styles.videoThumbnailPlaceholder
+                      fallbackDiv.textContent = '📹 Video'
+                      parent.appendChild(fallbackDiv)
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className={styles.mediaItemInner}>
+                <span className={styles.videoThumbnailPlaceholder}>📹 Video</span>
+              </div>
+            )
+          })()
+        ) : (
+          // Regular image or other media
+          <div className={styles.mediaItemInner}>
+            {blobUrls.has(media.storageId || media.id) ? (
+              <img
+                src={blobUrls.get(media.storageId || media.id)}
+                alt={media.title || 'Media'}
+                className={styles.mediaThumbnail}
+                onError={(e) => {
+                  console.log('[MediaEnhancement] Media thumbnail failed to load')
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                }}
+              />
+            ) : (
+              <div className={styles.mediaPlaceholder}>
+                <span>Loading...</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className={styles.mediaInfo}>
+          <p className={styles.mediaTitle}>
+            {media.title || 'Untitled'}
+          </p>
+        </div>
+
+        {/* YouTube clip time inputs */}
+        {media.type === 'video' && media.isYouTube && (
+          <div 
+            className={styles.youTubeClipContainer}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.youTubeClipInputs}>
+              <div className={styles.clipInputWrapper}>
+                <input
+                  type="text"
+                  placeholder="0:00"
+                  className={styles.clipInput}
+                  value={getInputValue(media, 'start')}
+                  onChange={(e) => handleClipInputChange(media.id, 'start', e.target.value)}
+                  onFocus={() => setFocusedInput({ mediaId: media.id, field: 'start' })}
+                  onBlur={() => handleClipInputBlur(media.id, 'start')}
+                />
+                <span className={styles.clipInputLabel}>Start</span>
+              </div>
+              <div className={styles.clipInputWrapper}>
+                <input
+                  type="text"
+                  placeholder="0:00"
+                  className={styles.clipInput}
+                  value={getInputValue(media, 'end')}
+                  onChange={(e) => handleClipInputChange(media.id, 'end', e.target.value)}
+                  onFocus={() => setFocusedInput({ mediaId: media.id, field: 'end' })}
+                  onBlur={() => handleClipInputBlur(media.id, 'end')}
+                />
+                <span className={styles.clipInputLabel}>End</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    ))
+  }, [existingPageMedia, blobUrls, handleMediaClick, handleClipInputChange, handleClipInputBlur, getInputValue, setFocusedInput, styles])
+
   return (
     <PageLayout
       currentStep={3}
@@ -2277,173 +2388,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             <Card className={styles.mediaCard}>
               <h3 className={styles.mediaTitle}>Current Media</h3>
               <div className={styles.mediaGrid}>
-                {existingPageMedia.map((media) => (
-                  <div 
-                    key={media.id} 
-                    className={styles.mediaItem}
-                    onClick={() => handleMediaClick(media.id)}
-                  >
-                    {media.type === 'video' && media.isYouTube && media.url ? (
-                      // FIXED: Display YouTube thumbnail for video preview
-                      (() => {
-                        const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
-                        const videoId = videoIdMatch ? videoIdMatch[1] : null
-                        const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
-                        
-                        return thumbnailUrl ? (
-                          <div className={styles.mediaItemInner}>
-                            <img
-                              src={thumbnailUrl}
-                              alt={media.title || 'Video thumbnail'}
-                              className={styles.mediaThumbnail}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement
-                                target.style.display = 'none'
-                                const parent = target.parentElement
-                                if (parent) {
-                                  // Use safe DOM manipulation instead of innerHTML
-                                  const placeholder = document.createElement('div')
-                                  placeholder.style.padding = '2rem'
-                                  placeholder.style.textAlign = 'center'
-                                  placeholder.style.color = '#666'
-                                  placeholder.textContent = '📹 Video'
-                                  parent.replaceChildren(placeholder)
-                                }
-                              }}
-                            />
-                            {/* Video play overlay */}
-                            <div className={styles.videoPlayButton}>
-                              <div className={styles.playIcon} />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={styles.noPreview}>
-                            <span>📹 Video</span>
-                          </div>
-                        )
-                      })()
-                    ) : (media.storageId && blobUrls.get(media.storageId)) || getImageSource(media.url || '', false, media.storageId) ? (
-                      <img 
-                        src={(media.storageId && blobUrls.get(media.storageId)) || getImageSource(media.url || '', false, media.storageId)} 
-                        alt={media.title || 'Media'} 
-                        className={styles.mediaThumbnail}
-                        onLoad={() => console.log('[MediaEnhancement v2.0.6] Image loaded successfully:', media.id)}
-                        onError={async (e) => {
-                          console.error('[MediaEnhancement v2.0.6] Image failed to load:', media.id, e)
-                          const target = e.target as HTMLImageElement
-                          
-                          // Attempt to regenerate blob URL if this is a storage-based image
-                          if (media.storageId && createBlobUrl) {
-                            try {
-                              console.log('[MediaEnhancement v2.0.6] Attempting to regenerate blob URL for:', media.storageId)
-                              const newBlobUrl = await createBlobUrl(media.storageId)
-                              if (newBlobUrl && newBlobUrl !== target.src) {
-                                console.log('[MediaEnhancement v2.0.6] Retrying with regenerated blob URL:', newBlobUrl)
-                                target.src = newBlobUrl
-                                return // Don't show error placeholder yet, try again
-                              }
-                            } catch (error) {
-                              console.error('[MediaEnhancement v2.0.6] Failed to regenerate blob URL:', error)
-                            }
-                          }
-                          
-                          // Show error placeholder only if regeneration failed or not applicable
-                          target.style.display = 'none'
-                          const parent = target.parentElement
-                          if (parent) {
-                            // Use safe DOM manipulation instead of innerHTML
-                            const placeholder = document.createElement('div')
-                            placeholder.style.padding = '2rem'
-                            placeholder.style.textAlign = 'center'
-                            placeholder.style.color = '#666'
-                            placeholder.textContent = 'Image unavailable'
-                            parent.replaceChildren(placeholder)
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className={styles.noPreview}>
-                        <span>No preview</span>
-                      </div>
-                    )}
-                    <div className={styles.mediaInfo}>
-                      <p className={styles.mediaInfoTitle}>
-                        {media.title || 'Untitled'}
-                      </p>
-                    </div>
-
-                    {/* YouTube clip time inputs */}
-                    {media.type === 'video' && media.isYouTube && (
-                      <div 
-                        className={styles.youTubeClipContainer}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className={styles.youTubeClipInputs}>
-                          <div className={styles.youTubeClipInput}>
-                            <label className={styles.youTubeClipLabel}>Start:</label>
-                            <input
-                              type="text"
-                              value={getInputValue(media, 'start')}
-                              onChange={(e) => handleClipInputChange(media.id, 'start', e.target.value)}
-                              onFocus={() => handleClipInputFocus(media.id, 'start')}
-                              onBlur={() => handleClipInputBlur(media.id, 'start')}
-                              placeholder="0:30 or 30"
-                              className={styles.youTubeClipTextInput}
-                            />
-                          </div>
-                          <div className={styles.youTubeClipInput}>
-                            <label className={styles.youTubeClipLabel}>End:</label>
-                            <input
-                              type="text"
-                              value={getInputValue(media, 'end')}
-                              onChange={(e) => handleClipInputChange(media.id, 'end', e.target.value)}
-                              onFocus={() => handleClipInputFocus(media.id, 'end')}
-                              onBlur={() => handleClipInputBlur(media.id, 'end')}
-                              placeholder="2:00 or 120"
-                              className={styles.youTubeClipTextInput}
-                            />
-                          </div>
-                          {(media.clipStart !== undefined || media.clipEnd !== undefined) && (
-                            <span className={styles.youTubeClipDuration}>
-                              {media.clipStart !== undefined && media.clipEnd !== undefined && media.clipEnd > media.clipStart
-                                ? `${formatSecondsToTime(media.clipEnd - media.clipStart)} long`
-                                : 'Clip set'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={styles.mediaButtonContainer}>
-                      {media.type === 'image' && (
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditImage(media)
-                          }}
-                          aria-label={`Edit ${media.title || 'image'}`}
-                          className={styles.mediaEditButton}
-                        >
-                          <Edit size={14} />
-                          Edit
-                        </Button>
-                      )}
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRemoveMedia(media.id)
-                        }}
-                        className={styles.mediaRemoveButton}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                {renderedExistingMedia}
               </div>
             </Card>
           )}
