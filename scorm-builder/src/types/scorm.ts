@@ -33,6 +33,8 @@ export interface EnhancedCourseContent {
       blob?: Blob
       captionUrl?: string
       captionBlob?: Blob
+      clipStart?: number // seconds
+      clipEnd?: number   // seconds
     }>
   }
   objectives: string[]
@@ -54,6 +56,8 @@ export interface EnhancedCourseContent {
       blob?: Blob
       captionUrl?: string
       captionBlob?: Blob
+      clipStart?: number // seconds
+      clipEnd?: number   // seconds
     }>
   }
   learningObjectivesPage?: {
@@ -73,6 +77,8 @@ export interface EnhancedCourseContent {
       blob?: Blob
       captionUrl?: string
       captionBlob?: Blob
+      clipStart?: number // seconds
+      clipEnd?: number   // seconds
     }>
   }
   topics: Array<{
@@ -114,6 +120,8 @@ export interface EnhancedCourseContent {
       blob?: Blob
       captionUrl?: string
       captionBlob?: Blob
+      clipStart?: number // seconds
+      clipEnd?: number   // seconds
     }>
   }>
   assessment: {

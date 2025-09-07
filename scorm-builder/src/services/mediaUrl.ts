@@ -149,3 +149,67 @@ export class MediaUrlService {
 }
 
 export const mediaUrlService = MediaUrlService.getInstance()
+
+/**
+ * Extract YouTube video ID from various URL formats
+ */
+export function extractYouTubeId(url: string): string | null {
+  if (!url) return null
+  
+  // Match various YouTube URL patterns
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/.*[?&]v=([^&\n?#]+)/
+  ]
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) {
+      return match[1]
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Build YouTube embed URL with optional clip timing parameters
+ */
+export function buildYouTubeEmbed(rawUrl: string, start?: number, end?: number): string {
+  const id = extractYouTubeId(rawUrl)
+  if (!id) {
+    // If we can't extract ID, return the original URL
+    return rawUrl
+  }
+  
+  const params = new URLSearchParams()
+  if (typeof start === 'number' && start >= 0) {
+    params.set('start', String(Math.max(0, Math.floor(start))))
+  }
+  if (typeof end === 'number' && (!start || end > start)) {
+    params.set('end', String(Math.floor(end)))
+  }
+  
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return `https://www.youtube.com/embed/${id}${qs}`
+}
+
+/**
+ * Parse existing YouTube embed URL to extract clip timing
+ */
+export function parseYouTubeClipTiming(embedUrl: string): { start?: number, end?: number } {
+  if (!embedUrl) return {}
+  
+  try {
+    const url = new URL(embedUrl)
+    const start = url.searchParams.get('start')
+    const end = url.searchParams.get('end')
+    
+    return {
+      start: start ? parseInt(start, 10) : undefined,
+      end: end ? parseInt(end, 10) : undefined
+    }
+  } catch {
+    return {}
+  }
+}

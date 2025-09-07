@@ -33,6 +33,7 @@ import { useStorage } from '../contexts/PersistentStorageContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import DOMPurify from 'dompurify'
 import { logger } from '../utils/logger'
+import { buildYouTubeEmbed, parseYouTubeClipTiming } from '../services/mediaUrl'
 import styles from './MediaEnhancementWizard.module.css'
 
 interface SearchResult {
@@ -49,6 +50,8 @@ interface SearchResult {
   channel?: string
   duration?: string
   isYouTube?: boolean
+  clipStart?: number // seconds
+  clipEnd?: number   // seconds
 }
 
 interface MediaEnhancementWizardRefactoredProps {
@@ -171,6 +174,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const [addingMediaIds, setAddingMediaIds] = useState<Set<string>>(new Set())
   const [lightboxMedia, setLightboxMedia] = useState<SearchResult | null>(null)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
+  const [clipStart, setClipStart] = useState<number | undefined>(undefined)
+  const [clipEnd, setClipEnd] = useState<number | undefined>(undefined)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [mediaSource, setMediaSource] = useState<'search' | 'upload'>('search')
   const [uploadedMedia, setUploadedMedia] = useState<SearchResult[]>([])
@@ -303,6 +308,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     2 + ((courseContent as CourseContent).topics?.length || 0) : 
     0
   
+  // PERFORMANCE: Memoized course content validation
+  const validatedCourseContent = React.useMemo(() => {
+    return validateCourseContent(courseContent)
+  }, [courseContent])
+  
   const getCurrentPage = React.useCallback((): Page | Topic | undefined => {
     if (!courseContent) return undefined
     
@@ -319,7 +329,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return undefined
   }, [currentPageIndex, courseContent])
   
-  const getCurrentPageTitle = (): string => {
+  const getCurrentPageTitle = React.useMemo((): string => {
     const page = getCurrentPage()
     if (!page) return 'Unknown Page'
     
@@ -327,7 +337,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (currentPageIndex === 1) return 'Learning Objectives'
     
     return 'Page'
-  }
+  }, [getCurrentPage, currentPageIndex])
+  
+  // PERFORMANCE: Memoized current page media extraction
+  const currentPageMedia = React.useMemo(() => {
+    const page = getCurrentPage()
+    return _getPageMedia(page)
+  }, [getCurrentPage])
   
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
     if (!page) return 'image'
@@ -344,6 +360,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     const uploadedMediaArray = Array.isArray(uploadedMedia) ? uploadedMedia : []
     const result = [...searchResultsArray, ...uploadedMediaArray].find(r => r.id === resultId)
     if (!result) return
+    
+    // Initialize clip timing from existing values or parse from embed URL
+    if (result.isYouTube) {
+      if (result.clipStart !== undefined || result.clipEnd !== undefined) {
+        // Use existing clip timing from the result
+        setClipStart(result.clipStart)
+        setClipEnd(result.clipEnd)
+      } else if (result.embedUrl) {
+        // Parse clip timing from embed URL
+        const { start, end } = parseYouTubeClipTiming(result.embedUrl)
+        setClipStart(start)
+        setClipEnd(end)
+      } else {
+        // Reset to undefined for new YouTube videos
+        setClipStart(undefined)
+        setClipEnd(undefined)
+      }
+    } else {
+      // Reset for non-YouTube media
+      setClipStart(undefined)
+      setClipEnd(undefined)
+    }
     
     setLightboxMedia(result)
     setIsLightboxOpen(true)
@@ -381,9 +419,24 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setExistingPageMedia([])
     }
     
-    // Add new media
-    await addMediaToPage(lightboxMedia)
+    // Add new media with clip timing
+    const mediaToAdd = { ...lightboxMedia }
+    
+    // For YouTube videos, update clip timing and embed URL
+    if (lightboxMedia.isYouTube) {
+      mediaToAdd.clipStart = clipStart
+      mediaToAdd.clipEnd = clipEnd
+      
+      // Update embed URL with clip parameters if they exist
+      if (clipStart !== undefined || clipEnd !== undefined) {
+        mediaToAdd.embedUrl = buildYouTubeEmbed(lightboxMedia.url, clipStart, clipEnd)
+      }
+    }
+    
+    await addMediaToPage(mediaToAdd)
     setLightboxMedia(null)
+    setClipStart(undefined)
+    setClipEnd(undefined)
     
     // Clear uploadedMedia if this was from an upload
     if (uploadedMedia.some(m => m.id === lightboxMedia.id)) {
@@ -396,6 +449,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const handleLightboxCancel = () => {
     setIsLightboxOpen(false)
     setLightboxMedia(null)
+    setClipStart(undefined)
+    setClipEnd(undefined)
   }
 
   // Image edit handlers
@@ -821,6 +876,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           url: result.url,
           embedUrl: result.embedUrl,
           isYouTube: result.isYouTube,
+          clipStart: result.clipStart,
+          clipEnd: result.clipEnd,
           pageId
         })
         
@@ -856,7 +913,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           {
             title: result.title || 'Video',
             type: 'video',
-            isYouTube: true
+            isYouTube: true,
+            clipStart: result.clipStart,  // Pass clip timing data
+            clipEnd: result.clipEnd       // Pass clip timing data
             // Duration will be available from ReactPlayer when needed
           }
         )
@@ -1841,8 +1900,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setRemoveConfirm(null)
   }
   
-  // Handle page selection from thumbnail grid
-  const handlePageSelect = (pageId: string) => {
+  // PERFORMANCE: Handle page selection from thumbnail grid - memoized
+  const handlePageSelect = React.useCallback((pageId: string) => {
     let newIndex = -1
     
     // Find the page index - support both old and new ID formats
@@ -1865,7 +1924,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       console.log('[MediaEnhancementWizard] Navigating to page index:', newIndex, 'from pageId:', pageId)
       navigateToPage(newIndex)
     }
-  }
+  }, [courseContent])
+  
+  // PERFORMANCE: Memoized tab change handler  
+  const handleTabChange = React.useCallback((tab: string) => {
+    setActiveTab(tab as 'images' | 'videos' | 'upload' | 'ai')
+    // Clear search results and query when switching tabs
+    setSearchResults([])
+    setSearchQuery('')
+    setSearchError(null)
+    setResultPage(1) // Reset pagination when switching tabs
+  }, [])
   
   // Handle content editing
   const handleSaveContent = (newContent: string) => {
@@ -2145,7 +2214,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         <div className={styles.leftSidebar}>
           <h3 className={styles.sidebarTitle}>Page Navigation</h3>
           <PageThumbnailGrid
-            courseContent={validateCourseContent(courseContent)}
+            courseContent={validatedCourseContent}
             currentPageId={getCurrentPage()?.id || ''}
             onPageSelect={handlePageSelect}
           />
@@ -2158,7 +2227,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             <Card className={styles.currentPageCard} data-testid="current-page-info-card">
               {/* Header row with title and Edit button */}
               <div className={styles.pageHeader}>
-                <h2 className={styles.pageTitle}>{getCurrentPageTitle()}</h2>
+                <h2 className={styles.pageTitle}>{getCurrentPageTitle}</h2>
                 <Button
                   variant="secondary"
                   size="small"
@@ -2395,14 +2464,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             <h3 className={styles.cardTitle}>Add New Media</h3>
             
             {/* Tabbed Interface */}
-            <Tabs activeTab={activeTab} onChange={(tab) => {
-              setActiveTab(tab as 'images' | 'videos' | 'upload' | 'ai')
-              // Clear search results and query when switching tabs
-              setSearchResults([])
-              setSearchQuery('')
-              setSearchError(null)
-              setResultPage(1) // Reset pagination when switching tabs
-            }}>
+            <Tabs activeTab={activeTab} onChange={handleTabChange}>
               <Tab 
                 tabKey="images" 
                 label="Search Images" 
@@ -2953,6 +3015,42 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               {lightboxMedia.dimensions && <p className={styles.lightboxDimensions}>{lightboxMedia.dimensions}</p>}
               {lightboxMedia.duration && <p className={styles.lightboxDuration}>Duration: {lightboxMedia.duration}</p>}
               {lightboxMedia.channel && <p className={styles.lightboxChannel}>Channel: {lightboxMedia.channel}</p>}
+              
+              {/* Clip timing inputs for YouTube videos */}
+              {lightboxMedia.isYouTube && (
+                <div className={styles.clipTimingSection}>
+                  <h4>Clip Timing (optional)</h4>
+                  <div className={styles.clipInputs}>
+                    <div className={styles.clipInputGroup}>
+                      <label htmlFor="clipStart">Start Time (seconds):</label>
+                      <Input
+                        id="clipStart"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        value={clipStart?.toString() || ''}
+                        onChange={(e) => setClipStart(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                      />
+                    </div>
+                    <div className={styles.clipInputGroup}>
+                      <label htmlFor="clipEnd">End Time (seconds):</label>
+                      <Input
+                        id="clipEnd"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Duration"
+                        value={clipEnd?.toString() || ''}
+                        onChange={(e) => setClipEnd(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                      />
+                    </div>
+                  </div>
+                  <p className={styles.clipTimingHelp}>
+                    Set start and end times to create a video clip. Leave empty to play the entire video.
+                  </p>
+                </div>
+              )}
             </div>
             
             <div className={styles.lightboxActions}>

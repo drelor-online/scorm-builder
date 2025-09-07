@@ -27,6 +27,8 @@ export interface MediaMetadata {
   type: MediaType
   source?: string
   isYouTube?: boolean
+  clipStart?: number  // YouTube clip start time in seconds
+  clipEnd?: number    // YouTube clip end time in seconds
   [key: string]: unknown
 }
 
@@ -479,7 +481,9 @@ export class MediaService {
       mediaId: id,
       pageId,
       youtubeUrl,
-      embedUrl
+      embedUrl,
+      clipStart: metadata?.clipStart,
+      clipEnd: metadata?.clipEnd
     })
     
     try {
@@ -489,7 +493,9 @@ export class MediaService {
         title: metadata?.title,
         thumbnail: metadata?.thumbnail,
         embed_url: embedUrl,  // Use the embedUrl parameter
-        duration: metadata?.duration  // Include video duration
+        duration: metadata?.duration,  // Include video duration
+        clip_start: metadata?.clipStart,  // Include clip start time
+        clip_end: metadata?.clipEnd       // Include clip end time
       })
       
       debugLogger.info('MediaService.storeYouTubeVideo', 'YouTube video stored successfully', {

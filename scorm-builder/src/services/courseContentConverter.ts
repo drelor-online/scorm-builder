@@ -95,7 +95,9 @@ function convertNewFormat(
         blob: m.blob,
         captionUrl: m.captionUrl,
         captionBlob: m.captionBlob,
-        storageId: m.storageId
+        storageId: m.storageId,
+        clipStart: m.clipStart,  // Include clip timing
+        clipEnd: m.clipEnd       // Include clip timing
       }))
     }
     
@@ -141,7 +143,9 @@ function convertNewFormat(
         blob: m.blob,
         captionUrl: m.captionUrl,
         captionBlob: m.captionBlob,
-        storageId: m.storageId
+        storageId: m.storageId,
+        clipStart: m.clipStart,  // Include clip timing
+        clipEnd: m.clipEnd       // Include clip timing
       }))
     }
     
@@ -205,7 +209,9 @@ function convertNewFormat(
           blob: (m as any).blob,
           captionUrl: (m as any).captionUrl,
           captionBlob: (m as any).captionBlob,
-          storageId: (m as any).storageId
+          storageId: (m as any).storageId,
+          clipStart: (m as any).clipStart,  // Include clip timing
+          clipEnd: (m as any).clipEnd       // Include clip timing
         }))
       }
     })
@@ -353,7 +359,9 @@ function convertOldFormat(
         embedUrl: m.embedUrl,
         blob: (m as any).blob,
         captionUrl: (m as any).captionUrl,
-        captionBlob: (m as any).captionBlob
+        captionBlob: (m as any).captionBlob,
+        clipStart: (m as any).clipStart,  // Include clip timing
+        clipEnd: (m as any).clipEnd       // Include clip timing
       }))
     }
   })
