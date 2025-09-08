@@ -15,252 +15,82 @@ interface PageThumbnailGridProps {
   onPageSelect: (pageId: string) => void
 }
 
-// Media Preview Component - Memoized for performance
+// Media Preview Component - Simplified approach using mediaItems[0]
 const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo(({ page, mediaItems }) => {
-  const { createBlobUrl, getMedia } = useUnifiedMedia()
+  const { createBlobUrl } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const mediaIdRef = React.useRef<string | null>(null)
-  const retryTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
-  
-  const MAX_RETRIES = 3
-  const RETRY_DELAYS = [1000, 2000, 4000] // Exponential backoff: 1s, 2s, 4s
+  // Simplified - no retry logic needed
   
   useEffect(() => {
     const loadMedia = async () => {
-      if (!page.id) return
+      if (!page.id || !mediaItems.length) return
       
       // Clear previous media URL to avoid showing stale content
       setMediaUrl(null)
       
-      // Use the media items passed as props instead of calling getMediaForPage
-      const pageMediaRefs = mediaItems
+      // Use mediaItems[0] as specified - much simpler approach
+      const firstMediaRef = mediaItems[0]
       
-      // Log detailed info about each media item
-      pageMediaRefs.forEach((media: any, index: number) => {
-        console.log(`[PageThumbnailGrid] Media item ${index} for page ${page.id}:`, {
-          id: media.id,
-          type: media.type,
-          isYouTube: media.metadata?.isYouTube,
-          url: media.metadata?.youtubeUrl || media.metadata?.embedUrl,
-          metadata: media.metadata,
-          hasAllProperties: !!(media.id && media.type)
-        })
+      console.log(`[PageThumbnailGrid] Processing first media item for page ${page.id}:`, {
+        id: firstMediaRef.id,
+        type: firstMediaRef.type,
+        storageId: firstMediaRef.storageId,
+        isYouTube: firstMediaRef.metadata?.isYouTube,
+        url: firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl,
+        hasAllProperties: !!(firstMediaRef.id && firstMediaRef.type)
       })
       
-      const firstMediaRef = pageMediaRefs.find((m: any) => m.type === 'image' || m.type === 'video' || m.type === 'youtube')
-      
       if (firstMediaRef) {
-        console.log('[PageThumbnailGrid] Selected first media ref:', {
-          id: firstMediaRef.id,
-          type: firstMediaRef.type,
-          isYouTube: firstMediaRef.metadata?.isYouTube,
-          youtubeUrl: firstMediaRef.metadata?.youtubeUrl,
-          embedUrl: firstMediaRef.metadata?.embedUrl
-        })
-        
-        // Handle YouTube videos specially - DEFENSIVE FIX: Only process as YouTube if it's actually a video
-        // Support multiple ways to identify YouTube videos: explicit type, metadata flags, or URL patterns
+        // Check if it's a YouTube video - simplified logic
         const isYouTubeVideo = (
-          // Explicit YouTube type
           firstMediaRef.type === 'youtube' ||
-          // Video type with YouTube metadata
-          (firstMediaRef.type === 'video' && (
+          firstMediaRef.type === 'video' && (
             firstMediaRef.metadata?.isYouTube || 
-            firstMediaRef.metadata?.source === 'youtube' ||
-            (firstMediaRef.metadata?.youtubeUrl && firstMediaRef.metadata.youtubeUrl.includes('youtube.com')) ||
-            (firstMediaRef.metadata?.embedUrl && firstMediaRef.metadata.embedUrl.includes('youtube.com'))
-          ))
+            firstMediaRef.metadata?.source === 'youtube'
+          )
         )
         
         if (isYouTubeVideo) {
-          // FIXED: Get processed URL with clip timing from MediaService instead of raw metadata
-          try {
-            const mediaData = await getMedia(firstMediaRef.id)
-            const processedUrl = mediaData?.url || firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
-            console.log('[PageThumbnailGrid] Processing YouTube video:', processedUrl)
-            console.log('[PageThumbnailGrid] 🎬 URL includes clip timing:', processedUrl?.includes('start=') && processedUrl?.includes('end='))
-            
-            if (processedUrl) {
-              // Extract YouTube video ID and use thumbnail URL
-              const videoIdMatch = processedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
-              if (videoIdMatch) {
-                const videoId = videoIdMatch[1]
-                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-                console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
-                setMediaUrl(thumbnailUrl)
-                return // CRITICAL: Exit early to prevent blob URL creation
-              } else {
-                console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', processedUrl)
-              }
+          // YouTube → thumbnail via img.youtube.com/vi/ID/hqdefault.jpg
+          const youtubeUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
+          if (youtubeUrl) {
+            const videoIdMatch = youtubeUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
+            if (videoIdMatch) {
+              const videoId = videoIdMatch[1]
+              const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+              console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
+              setMediaUrl(thumbnailUrl)
+              return
             }
-          } catch (error) {
-            console.error('[PageThumbnailGrid] Failed to get processed URL for YouTube video:', error)
-            // Fallback to raw metadata URL if getMedia() fails
-            const fallbackUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
-            console.log('[PageThumbnailGrid] Using fallback URL:', fallbackUrl)
-            if (fallbackUrl) {
-              const videoIdMatch = fallbackUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
-              if (videoIdMatch) {
-                const videoId = videoIdMatch[1]
-                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-                setMediaUrl(thumbnailUrl)
-                return // CRITICAL: Exit early to prevent blob URL creation
-              }
-            }
-          }
-        } else if (typeof firstMediaRef.metadata?.url === 'string' && firstMediaRef.metadata.url.startsWith('data:image/svg+xml')) {
-          // SVG data URLs work directly, no conversion needed
-          console.log('[PageThumbnailGrid] Using SVG data URL directly')
-          const safeUrl = typeof firstMediaRef.metadata?.url === 'string' ? firstMediaRef.metadata.url : null
-          if (safeUrl) {
-            setMediaUrl(safeUrl)
-          }
-        } else if (firstMediaRef.metadata?.url) {
-          // Normalize the URL first to fix double-encoding issues
-          const safeUrl = typeof firstMediaRef.metadata?.url === 'string' ? firstMediaRef.metadata.url : ''
-          const normalizedUrl = normalizeAssetUrl(safeUrl)
-          console.log('[PageThumbnailGrid] URL normalized:', {
-            original: firstMediaRef.metadata.url,
-            normalized: normalizedUrl,
-            hasChanged: normalizedUrl !== firstMediaRef.metadata.url
-          })
-          
-          // For asset:// URLs or blob URLs that need regeneration
-          if (normalizedUrl.includes('asset://') || normalizedUrl.includes('asset.localhost') || normalizedUrl.startsWith('blob:')) {
-            // Always regenerate blob URLs (don't reuse stale ones)
-            const mediaId = firstMediaRef.id
-            console.log('[PageThumbnailGrid] Creating fresh blob URL for media ID:', mediaId)
-            
-            // Store the media ID for cleanup
-            mediaIdRef.current = mediaId
-            
-            try {
-              const url = await createBlobUrl(mediaId)
-              console.log('[PageThumbnailGrid] Blob URL result:', {
-                mediaId,
-                originalUrl: firstMediaRef.metadata.url,
-                normalizedUrl,
-                newUrl: url,
-                isValidBlobUrl: url ? url.startsWith('blob:') : false
-              })
-              
-              if (!url) {
-                console.error('[PageThumbnailGrid] createBlobUrl returned null/undefined for:', mediaId)
-                // Retry with exponential backoff if we haven't exceeded max retries
-                if (retryCount < MAX_RETRIES) {
-                  const delay = RETRY_DELAYS[retryCount]
-                  console.log(`[PageThumbnailGrid] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-                  retryTimeoutRef.current = setTimeout(() => {
-                    setRetryCount(prev => prev + 1)
-                  }, delay)
-                } else {
-                  // Fallback to normalized URL if all retries fail
-                  console.warn(`[PageThumbnailGrid] All retries exhausted for media ${mediaId}`)
-                  setMediaUrl(normalizedUrl)
-                }
-              } else {
-                setMediaUrl(url)
-                setRetryCount(0) // Reset retry count on success
-              }
-            } catch (error) {
-              console.error('[PageThumbnailGrid] Error creating blob URL:', error)
-              // Retry on error
-              if (retryCount < MAX_RETRIES) {
-                const delay = RETRY_DELAYS[retryCount]
-                console.log(`[PageThumbnailGrid] Retrying after error in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-                retryTimeoutRef.current = setTimeout(() => {
-                  setRetryCount(prev => prev + 1)
-                }, delay)
-              } else {
-                // Fallback to normalized URL
-                setMediaUrl(normalizedUrl)
-              }
-            }
-          } else {
-            // For regular URLs, use the normalized URL directly
-            setMediaUrl(normalizedUrl)
           }
         } else {
-          // For other cases, try to create a blob URL from the media ID
-          const mediaId = firstMediaRef.id
-          console.log('[PageThumbnailGrid] Creating blob URL for media ID:', mediaId)
-          
-          // Store the media ID for cleanup
-          mediaIdRef.current = mediaId
+          // For all other media, call createBlobUrl(first.storageId || first.id)
+          const mediaId = firstMediaRef.storageId || firstMediaRef.id
+          console.log('[PageThumbnailGrid v2.0.8] Creating blob URL for media ID:', mediaId)
           
           try {
-            console.log('[PageThumbnailGrid v2.0.6] Creating blob URL for mediaId:', mediaId)
             const url = await createBlobUrl(mediaId)
-            console.log('[PageThumbnailGrid v2.0.6] Blob URL result:', {
-              mediaId,
-              url,
-              urlLength: url ? url.length : 0,
-              isAssetUrl: url ? url.startsWith('asset://') : false,
-              isBlobUrl: url ? url.startsWith('blob:') : false,
-              urlType: url ? (url.startsWith('asset://') ? 'asset' : url.startsWith('blob:') ? 'blob' : 'other') : 'none'
-            })
             
-            if (!url) {
-              console.error('[PageThumbnailGrid v2.0.7] createBlobUrl returned null/undefined for:', mediaId)
-              // Retry with exponential backoff
-              if (retryCount < MAX_RETRIES) {
-                const delay = RETRY_DELAYS[retryCount]
-                console.log(`[PageThumbnailGrid] Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-                retryTimeoutRef.current = setTimeout(() => {
-                  setRetryCount(prev => prev + 1)
-                }, delay)
-              }
-            } else if (url === '') {
-              console.error('[PageThumbnailGrid v2.0.7] createBlobUrl returned empty string for:', mediaId)
-              // Retry for empty string as well
-              if (retryCount < MAX_RETRIES) {
-                const delay = RETRY_DELAYS[retryCount]
-                retryTimeoutRef.current = setTimeout(() => {
-                  setRetryCount(prev => prev + 1)
-                }, delay)
-              }
-            } else {
-              console.log('[PageThumbnailGrid v2.0.7] Setting media URL:', url)
+            if (url) {
+              console.log('[PageThumbnailGrid v2.0.8] Setting media URL:', url)
               setMediaUrl(url)
-              setRetryCount(0) // Reset retry count on success
+            } else {
+              console.error('[PageThumbnailGrid v2.0.8] createBlobUrl returned null/undefined for:', mediaId)
             }
           } catch (error) {
-            console.error('[PageThumbnailGrid v2.0.7] Error creating blob URL:', error, 'for media:', mediaId)
-            // Retry on error
-            if (retryCount < MAX_RETRIES) {
-              const delay = RETRY_DELAYS[retryCount]
-              console.log(`[PageThumbnailGrid] Retrying after error in ${delay}ms`)
-              retryTimeoutRef.current = setTimeout(() => {
-                setRetryCount(prev => prev + 1)
-              }, delay)
-            }
+            console.error('[PageThumbnailGrid v2.0.8] Error creating blob URL:', error, 'for media:', mediaId)
           }
         }
-      } else {
-        console.log(`[PageThumbnailGrid] No image/video media found for page ${page.id}`)
       }
     }
     
     loadMedia()
     
-    // Cleanup function
+    // Cleanup function - simplified
     return () => {
-      // Clear any pending retry timeouts
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
-        retryTimeoutRef.current = null
-      }
-      // DO NOT revoke blob URLs here!
-      // Blob URLs are cached and shared across multiple components
-      // Revoking them here causes images to fail loading when components re-render
-      // The UnifiedMediaContext manages the blob URL cache globally
+      // No cleanup needed for simplified approach
     }
-  }, [page.id, mediaItems, createBlobUrl, getMedia, retryCount, 
-      // CRITICAL FIX: Add media metadata dependencies to trigger refresh when clip timing changes
-      // This ensures thumbnails are refreshed when YouTube videos get clip timing updates
-      mediaItems.map(m => m.id + '_' + (m.metadata?.clipStart || 0) + '_' + (m.metadata?.clipEnd || 0)).join(';')
-    ])
+  }, [page.id, mediaItems, createBlobUrl])
   
   // Check for video in media items passed as props
   const hasVideo = mediaItems.some(m => m.type === 'video')

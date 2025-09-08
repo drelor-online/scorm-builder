@@ -380,35 +380,60 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     checkForContamination()
   }, [existingPageMedia])
   
-  // Manual contamination cleanup handler
+  // Manual media issues cleanup handler - now uses orphaned media references cleanup
   const handleManualContaminationCleanup = useCallback(async () => {
     setIsCleaningContamination(true)
     
     try {
-      console.log('[MediaEnhancement] 🧹 Running MANUAL contamination cleanup...')
-      const result = await cleanContaminatedMedia()
+      console.log('[MediaEnhancement] 🧹 Running MANUAL media issues cleanup with orphaned references...')
       
-      if (result.cleaned.length > 0) {
-        console.log('[MediaEnhancement] ✅ Manual cleanup successful:', result.cleaned)
-        success(`Successfully cleaned ${result.cleaned.length} contaminated media items`)
-        
-        // Note: Media will refresh automatically through effects
-      } else if (result.errors.length === 0) {
-        success('No contaminated media found - all media is clean!')
+      // Import the cleanup utility
+      const { cleanupOrphanedMediaReferences } = await import('../utils/orphanedMediaCleaner')
+      
+      // Create media existence checker using getMedia from UnifiedMediaContext
+      const mediaExistsChecker = async (mediaId: string) => {
+        try {
+          const mediaResult = await getMedia(mediaId)
+          return mediaResult !== null && mediaResult !== undefined
+        } catch {
+          return false
+        }
       }
       
-      if (result.errors.length > 0) {
-        console.error('[MediaEnhancement] ❌ Manual cleanup errors:', result.errors)
-        notifyError(`Cleanup completed with ${result.errors.length} errors. Check console for details.`)
-        result.errors.forEach(err => console.error(`Cleanup error: ${err}`))
+      // Get current course content
+      if (!courseContent) {
+        notifyError('No course content available for cleanup')
+        return
+      }
+      
+      // Run cleanup on course content
+      const cleanupResult = await cleanupOrphanedMediaReferences(courseContent, mediaExistsChecker)
+      
+      if (cleanupResult.removedMediaIds.length > 0) {
+        console.log('[MediaEnhancement] ✅ Manual cleanup successful:', cleanupResult.removedMediaIds)
+        success(`Successfully cleaned ${cleanupResult.removedMediaIds.length} orphaned media references`)
+        
+        // Update course content with cleaned version
+        if (onUpdateContent && cleanupResult.cleanedContent) {
+          onUpdateContent(cleanupResult.cleanedContent)
+          console.log('[MediaEnhancement] ✅ Course content updated with cleaned version')
+        }
+        
+        // Trigger save if available
+        if (onSave) {
+          onSave()
+          console.log('[MediaEnhancement] ✅ Course content saved after cleanup')
+        }
+      } else {
+        success('No orphaned media references found - all media references are valid!')
       }
     } catch (err) {
       console.error('[MediaEnhancement] ❌ Manual cleanup failed:', err)
-      notifyError('Failed to clean contaminated media. Please try again or check console for details.')
+      notifyError('Failed to clean media issues. Please try again or check console for details.')
     } finally {
       setIsCleaningContamination(false)
     }
-  }, [cleanContaminatedMedia, success, notifyError])
+  }, [courseContent, getMedia, onUpdateContent, onSave, success, notifyError])
   
   // PENDING CLIP PROCESSING: Effect to handle deferred clip timing updates
   useEffect(() => {
