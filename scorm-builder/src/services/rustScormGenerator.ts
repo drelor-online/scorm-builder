@@ -301,7 +301,8 @@ async function resolveImageUrl(
         return `media/${filename}`
       }
     } catch (error) {
-      console.error(`[Rust SCORM] Failed to download external image:`, error)
+      console.warn(`[Rust SCORM] Could not download external image: ${imageUrl}`, error instanceof Error ? error.message : error)
+      // Continue with fallback handling - external image failures should not block SCORM generation
     }
     // If download fails, keep the original external URL
     return imageUrl
@@ -609,10 +610,56 @@ async function resolveMedia(
       })
       continue
     }
-    // If it's an external URL (non-YouTube), download it
-    else if (isExternalUrl(media.url)) {
+    // 🔧 ADDITIONAL FIX: Catch any YouTube URLs that weren't caught by main detection
+    else if (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be'))) {
+      console.warn(`[Rust SCORM] ⚠️  YouTube URL not caught by main detection, processing as fallback:`)
+      console.warn(`  URL: ${media.url}`)
+      console.warn(`  Type: ${media.type}`)
+      
+      // Try to extract video ID and process as YouTube video
+      let videoId = ''
+      if (media.url.includes('youtube.com/watch?v=')) {
+        const match = media.url.match(/[?&]v=([^&]+)/)
+        if (match) videoId = match[1]
+      } else if (media.url.includes('youtu.be/')) {
+        const match = media.url.match(/youtu\.be\/([^?]+)/)
+        if (match) videoId = match[1]
+      } else if (media.url.includes('youtube.com/embed/')) {
+        const match = media.url.match(/embed\/([^?]+)/)
+        if (match) videoId = match[1]
+      }
+      
+      if (videoId) {
+        const embedUrl = generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd)
+        console.log(`[Rust SCORM] ✅ Successfully processed fallback YouTube video: ${videoId}`)
+        
+        resolvedMedia.push({
+          ...media,
+          url: media.url,
+          is_youtube: true,
+          youtube_id: videoId,
+          embed_url: embedUrl
+        })
+        continue
+      } else {
+        console.error(`[Rust SCORM] ❌ Failed to extract video ID from YouTube URL: ${media.url}`)
+      }
+    }
+    // 🔧 FIX: If it's an external URL (non-YouTube), download it
+    // CRITICAL: Exclude YouTube URLs from external download attempts
+    else if (isExternalUrl(media.url) && !media.url.includes('youtube.com') && !media.url.includes('youtu.be')) {
       try {
         console.log(`[Rust SCORM] Downloading external media: ${media.url}`)
+        
+        // 🔧 ADDITIONAL SAFETY: Double-check for YouTube URLs that shouldn't be downloaded
+        if (media.url.includes('youtube.com') || media.url.includes('youtu.be')) {
+          console.error(`[Rust SCORM] 🚨 CRITICAL ERROR: Attempted to download YouTube URL as external media!`)
+          console.error(`  URL: ${media.url}`)
+          console.error(`  This YouTube URL should have been processed as embedded content, not downloaded.`)
+          console.error(`  Skipping download to prevent error.`)
+          continue
+        }
+        
         const blob = await downloadIfExternal(media.url)
         
         if (blob) {
@@ -634,7 +681,9 @@ async function resolveMedia(
           resolvedUrl = `media/${filename}`
         }
       } catch (error) {
-        console.error(`[Rust SCORM] Error downloading external media:`, error)
+        console.warn(`[Rust SCORM] Could not download external media: ${media.url}`, error instanceof Error ? error.message : error)
+        // Continue with processing - external media failures should not block SCORM generation
+        // The media will simply be excluded from the package
       }
     }
     // If it's a media ID, load from MediaService
@@ -1024,11 +1073,15 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
             type: m.type,
             url: m.url || '',
             title: m.title || '',
+            clipStart: m.clipStart,
+            clipEnd: m.clipEnd
           })) : (topic as any).media && (topic as any).media.type !== 'image' ? [{
             id: (topic as any).media.id,
             type: (topic as any).media.type,
             url: (topic as any).media.url || '',
             title: (topic as any).media.title || '',
+            clipStart: (topic as any).media.clipStart,
+            clipEnd: (topic as any).media.clipEnd
           }] : undefined, 
           projectId, 
           mediaFiles, 
@@ -1232,6 +1285,8 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
           type: m.type,
           url: m.url || '',
           title: m.title || '',
+          clipStart: m.clipStart,
+          clipEnd: m.clipEnd
         })), projectId, mediaFiles, mediaCounter)
       }
       

@@ -47,6 +47,9 @@ interface UnifiedMediaContextType {
   
   // Cache management
   resetMediaCache: () => void
+  
+  // Cleanup utilities
+  cleanContaminatedMedia: () => Promise<{ cleaned: string[], errors: string[] }>
 }
 
 const UnifiedMediaContext = createContext<UnifiedMediaContextType | null>(null)
@@ -432,6 +435,36 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     
     logger.info('[UnifiedMediaContext] Media cache and refs completely reset')
   }, [blobCache])
+
+  const cleanContaminatedMedia = useCallback(async (): Promise<{ cleaned: string[], errors: string[] }> => {
+    try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
+      
+      logger.info('[UnifiedMediaContext] Starting contaminated media cleanup...')
+      
+      // Check if the MediaService has the cleanup method
+      if (typeof (mediaService as any).cleanContaminatedMedia === 'function') {
+        const result = await (mediaService as any).cleanContaminatedMedia()
+        
+        // Refresh media cache after cleanup
+        await refreshMedia()
+        
+        logger.info('[UnifiedMediaContext] Contaminated media cleanup complete:', result)
+        return result
+      } else {
+        const errorMsg = 'MediaService cleanup method not available'
+        logger.error('[UnifiedMediaContext]', errorMsg)
+        return { cleaned: [], errors: [errorMsg] }
+      }
+    } catch (err) {
+      logger.error('[UnifiedMediaContext] Failed to clean contaminated media:', err)
+      setError(err as Error)
+      return { cleaned: [], errors: [String(err)] }
+    }
+  }, [refreshMedia])
   
   const storeYouTubeVideo = useCallback(async (
     youtubeUrl: string,
@@ -776,7 +809,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     error,
     clearError,
     refreshMedia,
-    resetMediaCache
+    resetMediaCache,
+    cleanContaminatedMedia
   }), [
     storeMedia,
     updateMedia,
@@ -798,7 +832,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     error,
     clearError,
     refreshMedia,
-    resetMediaCache
+    resetMediaCache,
+    cleanContaminatedMedia
   ])
   
   // Set global context for TauriAudioPlayer

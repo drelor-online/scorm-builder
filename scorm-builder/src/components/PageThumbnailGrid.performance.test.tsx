@@ -6,7 +6,9 @@ import { CourseContent } from '../types/aiPrompt';
 // Mock the UnifiedMediaContext
 const mockUnifiedMediaContext = {
   getMediaForPage: vi.fn().mockReturnValue([]),
-  createBlobUrl: vi.fn(),
+  getValidMediaForPage: vi.fn().mockResolvedValue([]), // FIXED: Added missing function
+  getMedia: vi.fn().mockResolvedValue(null), // FIXED: Added for MediaPreview component
+  createBlobUrl: vi.fn().mockResolvedValue('blob:mock-url'),
   mediaLoaded: true,
   loadMedia: vi.fn(),
   storeMedia: vi.fn(),
@@ -124,9 +126,9 @@ describe('PageThumbnailGrid Performance', () => {
       />
     );
 
-    // getMediaForPage should be called once per page with memoization (was 20, now 4)
+    // getValidMediaForPage should be called once per page with memoization (was 20, now 4)
     // Note: Some pages might be filtered out, so exact count may vary
-    expect(mockUnifiedMediaContext.getMediaForPage).toHaveBeenCalledTimes(4); // Optimized from 20 to 4
+    expect(mockUnifiedMediaContext.getValidMediaForPage).toHaveBeenCalledTimes(4); // Updated to use getValidMediaForPage
   });
 
   it('should handle large course content without performance degradation', () => {

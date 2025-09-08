@@ -48,7 +48,7 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
         })
       })
       
-      const firstMediaRef = pageMediaRefs.find((m: any) => m.type === 'image' || m.type === 'video')
+      const firstMediaRef = pageMediaRefs.find((m: any) => m.type === 'image' || m.type === 'video' || m.type === 'youtube')
       
       if (firstMediaRef) {
         console.log('[PageThumbnailGrid] Selected first media ref:', {
@@ -60,9 +60,20 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
         })
         
         // Handle YouTube videos specially - DEFENSIVE FIX: Only process as YouTube if it's actually a video
-        if (firstMediaRef.metadata?.isYouTube && 
-            (firstMediaRef.type === 'video' || firstMediaRef.type === 'youtube') && 
-            firstMediaRef.metadata?.source === 'youtube') {
+        // Support multiple ways to identify YouTube videos: explicit type, metadata flags, or URL patterns
+        const isYouTubeVideo = (
+          // Explicit YouTube type
+          firstMediaRef.type === 'youtube' ||
+          // Video type with YouTube metadata
+          (firstMediaRef.type === 'video' && (
+            firstMediaRef.metadata?.isYouTube || 
+            firstMediaRef.metadata?.source === 'youtube' ||
+            (firstMediaRef.metadata?.youtubeUrl && firstMediaRef.metadata.youtubeUrl.includes('youtube.com')) ||
+            (firstMediaRef.metadata?.embedUrl && firstMediaRef.metadata.embedUrl.includes('youtube.com'))
+          ))
+        )
+        
+        if (isYouTubeVideo) {
           // FIXED: Get processed URL with clip timing from MediaService instead of raw metadata
           try {
             const mediaData = await getMedia(firstMediaRef.id)
@@ -78,6 +89,7 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
                 const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
                 console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
                 setMediaUrl(thumbnailUrl)
+                return // CRITICAL: Exit early to prevent blob URL creation
               } else {
                 console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', processedUrl)
               }
@@ -93,6 +105,7 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
                 const videoId = videoIdMatch[1]
                 const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
                 setMediaUrl(thumbnailUrl)
+                return // CRITICAL: Exit early to prevent blob URL creation
               }
             }
           }
@@ -243,7 +256,11 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
       // Revoking them here causes images to fail loading when components re-render
       // The UnifiedMediaContext manages the blob URL cache globally
     }
-  }, [page.id, mediaItems, createBlobUrl, getMedia, retryCount])
+  }, [page.id, mediaItems, createBlobUrl, getMedia, retryCount, 
+      // CRITICAL FIX: Add media metadata dependencies to trigger refresh when clip timing changes
+      // This ensures thumbnails are refreshed when YouTube videos get clip timing updates
+      mediaItems.map(m => m.id + '_' + (m.metadata?.clipStart || 0) + '_' + (m.metadata?.clipEnd || 0)).join(';')
+    ])
   
   // Check for video in media items passed as props
   const hasVideo = mediaItems.some(m => m.type === 'video')

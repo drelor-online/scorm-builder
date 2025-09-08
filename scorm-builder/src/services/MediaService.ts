@@ -217,6 +217,19 @@ export class MediaService {
       const stack = new Error().stack
       console.error('   📍 Storage call stack:', stack?.split('\n').slice(1, 6).join('\n     '))
       console.error('   🔧 This contamination should be prevented at the source!')
+      
+      // 🔧 ENHANCED PREVENTION: Auto-clean contaminated metadata to prevent storage
+      console.warn('   🧹 Auto-cleaning contaminated metadata before storage...')
+      const cleanedMetadata = { ...metadata }
+      delete cleanedMetadata.source
+      delete cleanedMetadata.youtubeUrl
+      delete cleanedMetadata.embedUrl
+      delete cleanedMetadata.clipStart
+      delete cleanedMetadata.clipEnd
+      delete cleanedMetadata.isYouTube
+      
+      console.log('   ✅ Cleaned metadata:', Object.keys(cleanedMetadata))
+      metadata = cleanedMetadata
     }
     
     debugLogger.info('MediaService.storeMedia', 'Storing media', {
@@ -1041,6 +1054,156 @@ export class MediaService {
     }
   }
   
+  /**
+   * Clean contaminated media metadata by removing YouTube fields from non-video media
+   */
+  async cleanContaminatedMedia(): Promise<{ cleaned: string[], errors: string[] }> {
+    const cleaned: string[] = []
+    const errors: string[] = []
+    
+    try {
+      // Get all media in the project
+      const allMedia = await this.listAllMedia()
+      console.log(`[MediaService] 🧹 Starting aggressive cleanup scan of ${allMedia.length} media items`)
+      console.log(`[MediaService] 🔍 DEBUG: All media IDs:`, allMedia.map(m => m.id))
+      console.log(`[MediaService] 🔍 DEBUG: Sample metadata:`, allMedia.length > 0 ? allMedia[0].metadata : 'No items')
+      
+      for (const mediaItem of allMedia) {
+        // AGGRESSIVE CONTAMINATION DETECTION
+        // Check for ALL possible YouTube-related contamination patterns
+        const metadata = mediaItem.metadata as any
+        
+        // Build comprehensive list of YouTube contamination indicators
+        const contaminationFields = [
+          // Standard camelCase fields
+          'source', 'youtubeUrl', 'embedUrl', 'clipStart', 'clipEnd', 'isYouTube',
+          // Snake case variants (legacy data)
+          'youtube_url', 'embed_url', 'clip_start', 'clip_end', 'is_youtube',
+          // Mixed case variants that might slip through
+          'youTubeUrl', 'embedURL', 'YouTubeUrl', 'YOUTUBE_URL',
+          // Uppercase variants
+          'CLIP_START', 'CLIP_END', 'EMBED_URL', 'IS_YOUTUBE'
+        ]
+        
+        // Check if ANY contamination fields are present
+        const hasYouTubeContamination = contaminationFields.some(field => {
+          const value = metadata[field]
+          if (value === undefined || value === null) return false
+          
+          // Special handling for source field - only 'youtube' source is contamination
+          if (field === 'source' || field.toLowerCase().includes('source')) {
+            return value === 'youtube'
+          }
+          
+          // For boolean fields, any truthy value is contamination
+          if (field.toLowerCase().includes('youtube') && typeof value === 'boolean') {
+            return value === true
+          }
+          
+          // For URL fields, check if it contains youtube
+          if (field.toLowerCase().includes('url')) {
+            return typeof value === 'string' && value.includes('youtube')
+          }
+          
+          // For numeric fields (clip timing), any number is contamination
+          if (field.toLowerCase().includes('clip') || field.toLowerCase().includes('start') || field.toLowerCase().includes('end')) {
+            return typeof value === 'number' && value >= 0
+          }
+          
+          // Any other truthy value is potential contamination
+          return !!value
+        })
+        
+        // CONTAMINATION SCOPE CHECK
+        // Only clean non-video/non-YouTube media that has YouTube contamination
+        const isLegitimateYouTubeVideo = mediaItem.type === 'video' || mediaItem.type === 'youtube'
+        const shouldClean = hasYouTubeContamination && !isLegitimateYouTubeVideo
+        
+        if (shouldClean) {
+          console.log(`[MediaService] 🧹 AGGRESSIVE: Cleaning contaminated ${mediaItem.type}: ${mediaItem.id}`)
+          console.log(`[MediaService] 🔍 Detected contamination fields:`, contaminationFields.filter(field => !!metadata[field]))
+          
+          try {
+            // AGGRESSIVE CLEANUP - Remove ALL YouTube-related fields
+            const cleanMetadata = { ...metadata }
+            
+            // Remove all contamination fields regardless of case/format
+            contaminationFields.forEach(field => {
+              if (cleanMetadata.hasOwnProperty(field)) {
+                console.log(`[MediaService] 🗑️ Removing contaminated field: ${field} = ${cleanMetadata[field]}`)
+                delete cleanMetadata[field]
+              }
+            })
+            
+            // Also check for any field that contains 'youtube' in the name (case-insensitive)
+            Object.keys(cleanMetadata).forEach(key => {
+              if (key.toLowerCase().includes('youtube') || 
+                  key.toLowerCase().includes('embed') ||
+                  key.toLowerCase().includes('clip')) {
+                console.log(`[MediaService] 🗑️ Removing suspicious field: ${key} = ${cleanMetadata[key]}`)
+                delete cleanMetadata[key]
+              }
+            })
+            
+            // Preserve essential metadata
+            const essentialFields = {
+              type: mediaItem.type,
+              pageId: mediaItem.pageId,
+              page_id: mediaItem.pageId, // Keep both formats for compatibility
+              originalName: cleanMetadata.originalName,
+              mimeType: cleanMetadata.mimeType,
+              mime_type: cleanMetadata.mime_type,
+              uploadedAt: cleanMetadata.uploadedAt,
+              uploaded_at: cleanMetadata.uploaded_at,
+              duration: cleanMetadata.duration
+            }
+            
+            // Merge essential fields back
+            Object.keys(essentialFields).forEach(key => {
+              const value = essentialFields[key as keyof typeof essentialFields]
+              if (value !== undefined) {
+                cleanMetadata[key] = value
+              }
+            })
+            
+            console.log(`[MediaService] 🧽 Clean metadata keys:`, Object.keys(cleanMetadata))
+            
+            // Update the file storage with clean metadata
+            await this.fileStorage.storeMedia(mediaItem.id, new Blob([]), mediaItem.type, {
+              page_id: mediaItem.pageId,
+              ...cleanMetadata
+            })
+            
+            // Update cache with clean metadata
+            const cleanedItem = {
+              ...mediaItem,
+              metadata: cleanMetadata as MediaMetadata
+            }
+            this.mediaCache.set(mediaItem.id, cleanedItem)
+            
+            cleaned.push(mediaItem.id)
+            console.log(`[MediaService] ✅ AGGRESSIVELY cleaned contaminated media: ${mediaItem.id}`)
+          } catch (error) {
+            const errorMsg = `Failed to clean ${mediaItem.id}: ${error}`
+            errors.push(errorMsg)
+            console.error(`[MediaService] ❌ Error cleaning media:`, errorMsg)
+          }
+        }
+      }
+      
+      console.log(`[MediaService] 🧹 AGGRESSIVE cleanup complete: ${cleaned.length} cleaned, ${errors.length} errors`)
+      if (cleaned.length > 0) {
+        console.log(`[MediaService] 🎯 Cleaned items:`, cleaned)
+      }
+      return { cleaned, errors }
+    } catch (error) {
+      const errorMsg = `Failed to enumerate media for cleaning: ${error}`
+      errors.push(errorMsg)
+      console.error(`[MediaService] ❌ Error during cleanup:`, errorMsg)
+      return { cleaned, errors }
+    }
+  }
+
   /**
    * Helper to process metadata consistently - converts snake_case to camelCase
    */

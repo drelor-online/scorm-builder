@@ -1,5 +1,40 @@
 /* MediaEnhancementWizard Component Styles */
 
+/* Contamination Cleanup Styles */
+.contaminationWarning {
+  margin-bottom: var(--space-md);
+  border: 2px solid var(--color-warning-border);
+  background-color: var(--color-warning-bg);
+}
+
+.contaminationContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.contaminationMessage {
+  flex: 1;
+}
+
+.contaminationMessage strong {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--color-warning-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.contaminationMessage p {
+  margin: 0;
+  color: var(--color-warning-text);
+  font-size: var(--font-size-sm);
+}
+
+.cleanupButton {
+  flex-shrink: 0;
+}
+
 /* Main Layout - Use flexbox for better height management */
 .mainLayout {
   display: flex;
@@ -166,6 +201,54 @@
   white-space: nowrap;
   color: var(--text-primary);
   text-align: center;
+}
+
+/* Thumbnail container with overlay support */
+.mediaThumbnailContainer {
+  position: relative;
+  width: 100%;
+  height: auto;
+}
+
+/* Action buttons overlay */
+.mediaActionsOverlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  z-index: 2;
+}
+
+/* Show overlay buttons on hover */
+.mediaItem:hover .mediaActionsOverlay {
+  opacity: 1;
+}
+
+/* Compact overlay buttons */
+.overlayButton {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  padding: 6px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  border-radius: var(--radius-sm) !important;
+  backdrop-filter: blur(4px);
+  transition: all var(--transition-normal) !important;
+}
+
+.overlayButton:hover {
+  background-color: rgba(0, 0, 0, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  transform: scale(1.05);
+}
+
+.overlayButton:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* Card Styles */

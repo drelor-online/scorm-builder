@@ -23,7 +23,7 @@ import {
   Tab,
   Alert
 } from './DesignSystem'
-import { Upload, Image as ImageIcon, Edit, Video, Copy, Plus, Shield } from 'lucide-react'
+import { Upload, Image as ImageIcon, Edit, Video, Copy, Plus, Shield, Trash2 } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import { tokens } from './DesignSystem/designTokens'
 import { PageThumbnailGrid } from './PageThumbnailGrid'
@@ -194,6 +194,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const [videoPromptSuggestions, setVideoPromptSuggestions] = useState<string[]>([])
   const mediaItemsRef = useRef<Map<string, Media>>(new Map())
   const [existingPageMedia, setExistingPageMedia] = useState<Media[]>([])
+  
+  // State for contamination cleanup
+  const [isCleaningContamination, setIsCleaningContamination] = useState(false)
+  const [contaminationDetected, setContaminationDetected] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [forceDownloadMode, setForceDownloadMode] = useState<boolean>(false)
   const [contentHistory, setContentHistory] = useState<{ [key: string]: Page | Topic }>({})
@@ -249,18 +253,24 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // Load force download mode preference from localStorage
   useEffect(() => {
     const savedForceDownload = localStorage.getItem('scorm_builder_force_download_mode')
-    if (savedForceDownload !== null) {
-      setForceDownloadMode(JSON.parse(savedForceDownload))
+    if (savedForceDownload !== null && savedForceDownload !== 'undefined') {
+      try {
+        setForceDownloadMode(JSON.parse(savedForceDownload))
+      } catch (err) {
+        console.warn('[MediaEnhancement] Failed to parse force download mode from localStorage:', err)
+      }
     }
   }, [])
   
   const { 
     storeMedia, 
-    storeYouTubeVideo, 
+    storeYouTubeVideo,
+    updateYouTubeVideoMetadata, 
     getMedia, 
     deleteMedia,
     getValidMediaForPage,
-    createBlobUrl
+    createBlobUrl,
+    cleanContaminatedMedia
   } = useUnifiedMedia()
   
   const storage = useStorage()
@@ -289,6 +299,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     clipEnd?: number
     embedUrl: string
   }>(null)
+
+  // MEDIA CLEARING FIX: Track when we're updating clip timing to avoid unnecessary media reloading
+  const [isUpdatingClipTiming, setIsUpdatingClipTiming] = useState(false)
+  const isUpdatingClipTimingRef = useRef(false)
   
   // Clear any stale blob URLs on mount to force regeneration
   useEffect(() => {
@@ -303,6 +317,98 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setBlobUrls(new Map())
     }
   }, [])
+  
+  // 🔧 CONTAMINATION CLEANUP: Clean any contaminated media on component mount
+  useEffect(() => {
+    const runContaminationCleanup = async () => {
+      try {
+        console.log('[MediaEnhancement] 🧹 Running contamination cleanup on startup...')
+        const result = await cleanContaminatedMedia()
+        
+        if (result.cleaned.length > 0) {
+          console.log('[MediaEnhancement] ✅ Cleaned contaminated media:', result.cleaned)
+          // Show success notification to user
+          success(`Cleaned ${result.cleaned.length} contaminated media items`)
+        }
+        
+        if (result.errors.length > 0) {
+          console.error('[MediaEnhancement] ❌ Cleanup errors:', result.errors)
+          result.errors.forEach(error => console.error(`Cleanup error: ${error}`))
+        }
+        
+        if (result.cleaned.length === 0 && result.errors.length === 0) {
+          console.log('[MediaEnhancement] ✅ No contaminated media found - all clean!')
+        }
+      } catch (error) {
+        console.error('[MediaEnhancement] ❌ Failed to run contamination cleanup:', error)
+      }
+    }
+    
+    // Run cleanup after a short delay to allow media context to initialize
+    const cleanupTimer = setTimeout(runContaminationCleanup, 1000)
+    return () => clearTimeout(cleanupTimer)
+  }, [cleanContaminatedMedia, success])
+  
+  // 🚨 CONTAMINATION DETECTION: Check for contamination in loaded media
+  useEffect(() => {
+    const checkForContamination = () => {
+      const hasContamination = existingPageMedia.some(media => {
+        const metadata = media.metadata || {}
+        
+        // Check if image/audio has YouTube-specific fields
+        if (media.type !== 'video') {
+          const mediaAny = media as any
+          const isContaminated = metadata.source === 'youtube' || 
+                                 metadata.embed_url || 
+                                 metadata.clip_start !== undefined || 
+                                 metadata.clip_end !== undefined ||
+                                 mediaAny.embedUrl ||
+                                 mediaAny.clipStart !== undefined ||
+                                 mediaAny.clipEnd !== undefined ||
+                                 mediaAny.isYouTube === true
+          return isContaminated
+        }
+        return false
+      })
+      setContaminationDetected(hasContamination)
+      
+      if (hasContamination) {
+        console.log('[MediaEnhancement] 🚨 CONTAMINATION DETECTED in current page media')
+      }
+    }
+    
+    checkForContamination()
+  }, [existingPageMedia])
+  
+  // Manual contamination cleanup handler
+  const handleManualContaminationCleanup = useCallback(async () => {
+    setIsCleaningContamination(true)
+    
+    try {
+      console.log('[MediaEnhancement] 🧹 Running MANUAL contamination cleanup...')
+      const result = await cleanContaminatedMedia()
+      
+      if (result.cleaned.length > 0) {
+        console.log('[MediaEnhancement] ✅ Manual cleanup successful:', result.cleaned)
+        success(`Successfully cleaned ${result.cleaned.length} contaminated media items`)
+        
+        // Note: Media will refresh automatically through effects
+      } else if (result.errors.length === 0) {
+        success('No contaminated media found - all media is clean!')
+      }
+      
+      if (result.errors.length > 0) {
+        console.error('[MediaEnhancement] ❌ Manual cleanup errors:', result.errors)
+        notifyError(`Cleanup completed with ${result.errors.length} errors. Check console for details.`)
+        result.errors.forEach(err => console.error(`Cleanup error: ${err}`))
+      }
+    } catch (err) {
+      console.error('[MediaEnhancement] ❌ Manual cleanup failed:', err)
+      notifyError('Failed to clean contaminated media. Please try again or check console for details.')
+    } finally {
+      setIsCleaningContamination(false)
+    }
+  }, [cleanContaminatedMedia, success, notifyError])
   
   // PENDING CLIP PROCESSING: Effect to handle deferred clip timing updates
   useEffect(() => {
@@ -319,22 +425,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     // Find the page and update the specific media item
     let pageFound = false
-    if (pendingClip.pageId === 'welcome' && updatedContent.welcome?.media) {
-      const mediaIndex = updatedContent.welcome.media.findIndex(m => m.id === pendingClip.mediaId)
+    if (pendingClip.pageId === 'welcome' && updatedContent.welcomePage?.media) {
+      const mediaIndex = updatedContent.welcomePage.media.findIndex((m: any) => m.id === pendingClip.mediaId)
       if (mediaIndex !== -1) {
-        updatedContent.welcome.media[mediaIndex] = {
-          ...updatedContent.welcome.media[mediaIndex],
+        updatedContent.welcomePage.media[mediaIndex] = {
+          ...updatedContent.welcomePage.media[mediaIndex],
           clipStart: pendingClip.clipStart,
           clipEnd: pendingClip.clipEnd,
           embedUrl: pendingClip.embedUrl
         }
         pageFound = true
       }
-    } else if (pendingClip.pageId === 'objectives' && updatedContent.objectivesPage?.media) {
-      const mediaIndex = updatedContent.objectivesPage.media.findIndex(m => m.id === pendingClip.mediaId)
+    } else if (pendingClip.pageId === 'objectives' && updatedContent.learningObjectivesPage?.media) {
+      const mediaIndex = updatedContent.learningObjectivesPage.media.findIndex((m: any) => m.id === pendingClip.mediaId)
       if (mediaIndex !== -1) {
-        updatedContent.objectivesPage.media[mediaIndex] = {
-          ...updatedContent.objectivesPage.media[mediaIndex],
+        updatedContent.learningObjectivesPage.media[mediaIndex] = {
+          ...updatedContent.learningObjectivesPage.media[mediaIndex],
           clipStart: pendingClip.clipStart,
           clipEnd: pendingClip.clipEnd,
           embedUrl: pendingClip.embedUrl
@@ -376,14 +482,24 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : seconds.toString()
       }
       
-      setStartText(formatSecondsToText(lightboxMedia.clipStart))
-      setEndText(formatSecondsToText(lightboxMedia.clipEnd))
+      let startTime = lightboxMedia.clipStart
+      let endTime = lightboxMedia.clipEnd
+      
+      // Fallback: parse timing from existing embedUrl if clipStart/clipEnd not available
+      if ((startTime === undefined || endTime === undefined) && lightboxMedia.embedUrl) {
+        const parsed = parseYouTubeClipTiming(lightboxMedia.embedUrl)
+        startTime = startTime ?? parsed.start
+        endTime = endTime ?? parsed.end
+      }
+      
+      setStartText(formatSecondsToText(startTime))
+      setEndText(formatSecondsToText(endTime))
     } else if (!isLightboxOpen) {
       // Clear inputs when lightbox closes
       setStartText('')
       setEndText('')
     }
-  }, [isLightboxOpen, lightboxMedia?.clipStart, lightboxMedia?.clipEnd])
+  }, [isLightboxOpen, lightboxMedia?.clipStart, lightboxMedia?.clipEnd, lightboxMedia?.embedUrl])
   
   // FIX: Properly track and manage blob URLs to prevent memory leaks
   const createTrackedBlobUrl = (blob: Blob, key: string): string => {
@@ -468,15 +584,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const previewUrl = useMemo(() => {
     if (!lightboxMedia?.isYouTube) return lightboxMedia?.embedUrl || lightboxMedia?.url || ''
     
-    const startSeconds = parseTimeToSeconds(startText)
-    const endSeconds = parseTimeToSeconds(endText)
+    // PRIORITY ORDER: Use temporary input state if available, otherwise fall back to persisted values
+    const startSeconds = startText ? parseTimeToSeconds(startText) : lightboxMedia.clipStart
+    const endSeconds = endText ? parseTimeToSeconds(endText) : lightboxMedia.clipEnd
     
     return buildYouTubeEmbed(
       lightboxMedia.url || lightboxMedia.embedUrl || '', 
       startSeconds, 
       endSeconds
     )
-  }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, startText, endText])
+  }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, lightboxMedia?.clipStart, lightboxMedia?.clipEnd, startText, endText])
   
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
@@ -523,17 +640,95 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const handleLightboxConfirm = async () => {
     if (!lightboxMedia) return
     
-    // Check if there's existing media on the page
+    // 🔧 FIX: Check if we're editing existing media or adding new media
+    const isEditingExistingMedia = existingPageMedia.some(media => media.id === lightboxMedia.id)
     const hasExistingMedia = existingPageMedia && existingPageMedia.length > 0
     
     setIsLightboxOpen(false)
     
-    if (hasExistingMedia) {
+    if (isEditingExistingMedia) {
+      // 🔧 FIX: Update existing media clip timing instead of deleting and recreating
+      console.log('[MediaEnhancement] 🎬 Updating clip timing for existing YouTube video:', {
+        mediaId: lightboxMedia.id,
+        title: lightboxMedia.title,
+        oldClipStart: existingPageMedia.find(m => m.id === lightboxMedia.id)?.clipStart,
+        oldClipEnd: existingPageMedia.find(m => m.id === lightboxMedia.id)?.clipEnd,
+        newClipStart: parseTimeToSeconds(startText) ?? lightboxMedia.clipStart,
+        newClipEnd: parseTimeToSeconds(endText) ?? lightboxMedia.clipEnd
+      })
+      
+      // Update the existing media with new clip timing
+      const startSeconds = parseTimeToSeconds(startText) ?? lightboxMedia.clipStart
+      const endSeconds = parseTimeToSeconds(endText) ?? lightboxMedia.clipEnd
+      
+      const updatedMedia = existingPageMedia.map(media => {
+        if (media.id === lightboxMedia.id) {
+          const updatedEmbed = lightboxMedia.isYouTube 
+            ? buildYouTubeEmbed(lightboxMedia.url, startSeconds, endSeconds)
+            : media.embedUrl
+            
+          return {
+            ...media,
+            clipStart: startSeconds,
+            clipEnd: endSeconds,
+            embedUrl: updatedEmbed
+          }
+        }
+        return media
+      })
+      
+      // Update the component state
+      setExistingPageMedia(updatedMedia)
+      
+      // Update the course content immediately
+      if (courseContent && onUpdateContent) {
+        const currentPage = getCurrentPage()
+        if (currentPage) {
+          const updatedPage = { ...currentPage, media: updatedMedia }
+          updatePageInCourseContent(currentPage, updatedMedia)
+        }
+      }
+      
+      // Persist clip timing changes to storage
+      try {
+        const existingMedia = existingPageMedia.find(m => m.id === lightboxMedia.id)
+        if (existingMedia?.storageId) {
+          await updateYouTubeVideoMetadata(existingMedia.storageId, {
+            clipStart: startSeconds,
+            clipEnd: endSeconds,
+            embedUrl: lightboxMedia.isYouTube 
+              ? buildYouTubeEmbed(lightboxMedia.url, startSeconds, endSeconds)
+              : undefined
+          })
+          console.log('[MediaEnhancement] ✅ Persisted clip timing changes to storage')
+        }
+      } catch (error) {
+        console.error('[MediaEnhancement] ❌ Failed to persist clip timing changes:', error)
+      }
+      
+      // Clear clip timing state
+      setStartText('')
+      setEndText('')
+      setLightboxMedia(null)
+      setClipStart(undefined)
+      setClipEnd(undefined)
+      
+      console.log('[MediaEnhancement] ✅ Successfully updated YouTube video clip timing')
+    } else if (hasExistingMedia) {
       // Delete existing media first, then add new (same as handleReplaceConfirm)
       console.log('[MediaEnhancement] Deleting existing media before replacement:', existingPageMedia)
       for (const media of existingPageMedia) {
         try {
           console.log('[MediaEnhancement] Deleting existing media:', media.id, media.type)
+          
+          // DEFENSIVE LOGGING: Track what's causing video deletion
+          console.error('🚨 [DELETION DEBUG] Video deletion triggered from addMediaToPage!', {
+            mediaId: media.id,
+            storageId: media.storageId,
+            mediaType: media.type,
+            stackTrace: new Error().stack,
+            timestamp: new Date().toISOString()
+          })
           
           // Delete from storage using the same method as handleReplaceConfirm
           if (media.storageId) {
@@ -547,8 +742,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         }
       }
       
-      // Clear the existing media array immediately
-      setExistingPageMedia([])
+      // NOTE: Keep existing media visible until new media is added (per user requirement)
+      // setExistingPageMedia([]) - REMOVED: This was causing premature clearing
     }
     
     // Add new media with clip timing
@@ -764,8 +959,111 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }, [focusedInput, existingPageMedia, formatSecondsToTime])
 
+  // Function to update page in course content - moved here to fix temporal dead zone error
+  const updatePageInCourseContent = (page: Page | Topic, media: Media[]) => {
+    if (!courseContent || !onUpdateContent) return
+    
+    const content = courseContent as CourseContent
+    const updatedContent = structuredClone(content)
+    
+    // Ensure each Media object has a proper URL for display and preserves all flags
+    const mediaWithUrls = media.map(item => ({
+      ...item,
+      // Preserve isYouTube flag explicitly
+      isYouTube: item.isYouTube || false,
+      // CRITICAL FIX: Explicitly preserve YouTube clip timing properties
+      clipStart: item.clipStart,
+      clipEnd: item.clipEnd,
+      // If no URL, create one based on the media ID
+      url: item.url || item.embedUrl || `media://${item.id}`
+    }))
+    
+    const pageWithMedia = setPageMedia(page, mediaWithUrls)
+    if (!pageWithMedia) return
+    
+    // FIXED: Do NOT modify HTML content - keep media separate
+    // Media should only be stored in the media array, never embedded in content
+    const updatedPage = { ...pageWithMedia }
+    
+    // FIX: Use specific patterns to only remove OUR generated media containers
+    // Preserve user-added images and iframes
+    if (updatedPage.content) {
+      console.log('[MediaEnhancement] Cleaning only our generated media from content')
+      
+      // Pattern 1: Remove our media container divs with class="media-container" or data-media-id
+      updatedPage.content = updatedPage.content.replace(
+        /<div[^>]*(?:class="media-container"|data-media-id="[^"]*")[^>]*>[\s\S]*?<\/div>/gi,
+        ''
+      )
+      
+      // Pattern 2: Only remove blob images that are part of our media system (with data attributes)
+      // This preserves user-uploaded images with regular URLs
+      updatedPage.content = updatedPage.content.replace(
+        /<img[^>]*blob:[^>]*data-media-[^>]*>/gi,
+        ''
+      )
+      
+      // Pattern 3: Only remove YouTube iframes with our specific markers
+      // Look for iframes with data-media-youtube attribute or our specific embed pattern
+      updatedPage.content = updatedPage.content.replace(
+        /<iframe[^>]*(?:data-media-youtube="true"|class="media-youtube")[^>]*>[\s\S]*?<\/iframe>/gi,
+        ''
+      )
+      
+      // Clean up extra whitespace
+      updatedPage.content = updatedPage.content.replace(/\n\s*\n\s*\n/g, '\n\n').trim()
+    }
+    
+    if (currentPageIndex === 0) {
+      updatedContent.welcomePage = updatedPage as Page
+    } else if (currentPageIndex === 1) {
+      updatedContent.learningObjectivesPage = updatedPage as Page
+    } else {
+      const topicIndex = currentPageIndex - 2
+      if (updatedContent.topics && topicIndex >= 0) {
+        updatedContent.topics[topicIndex] = updatedPage as Topic
+      }
+    }
+    
+    // Enhanced debug logging to trace clip timing data flow
+    const currentPageMedia = updatedPage.media || []
+    const youtubeMediaWithTiming = currentPageMedia.filter(m => m.isYouTube && (m.clipStart !== undefined || m.clipEnd !== undefined))
+    
+    console.log(`[SCORM DEBUG] Calling onUpdateContent with course content:`, {
+      totalPages: Object.keys(updatedContent).length,
+      currentPageId: updatedPage.id,
+      currentPageMediaCount: currentPageMedia.length,
+      youtubeMediaWithTimingCount: youtubeMediaWithTiming.length,
+      // CRITICAL: Log detailed YouTube media with timing
+      youtubeMediaDetails: youtubeMediaWithTiming.map(m => ({
+        id: m.id,
+        title: m.title,
+        type: m.type,
+        isYouTube: m.isYouTube,
+        clipStart: m.clipStart,
+        clipEnd: m.clipEnd,
+        hasClipStart: m.clipStart !== undefined,
+        hasClipEnd: m.clipEnd !== undefined,
+        url: m.url?.substring(0, 50) + '...'
+      })),
+      // Log all media for current page
+      allCurrentPageMedia: currentPageMedia.map(m => ({
+        id: m.id,
+        type: m.type,
+        isYouTube: m.isYouTube,
+        clipStart: m.clipStart,
+        clipEnd: m.clipEnd
+      }))
+    })
+    onUpdateContent(updatedContent)
+  }
+
   // Enhanced clip input blur handler with debouncing and conflict prevention
-  const handleClipInputBlur = useCallback((mediaId: string, field: 'start' | 'end') => {
+  const handleClipInputBlur = useCallback(async (mediaId: string, field: 'start' | 'end') => {
+    // MEDIA CLEARING FIX: Set flag to prevent unnecessary media reloading during clip timing updates
+    setIsUpdatingClipTiming(true)
+    isUpdatingClipTimingRef.current = true
+
     // Parse the current input value and save to media state
     const inputValue = activeTimeInputs.get(mediaId)?.[field] || ''
     const timeInSeconds = parseTimeToSeconds(inputValue)
@@ -779,12 +1077,46 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       activeTimeInputsForMedia: activeTimeInputs.get(mediaId)
     })
     
-    // DEBOUNCING: Use requestAnimationFrame to ensure proper timing
-    requestAnimationFrame(() => {
-      // Only save if input is valid, otherwise keep the invalid input visible for correction
-      if (inputValue.trim() && timeInSeconds !== null) {
-        console.log(`[YouTube Clip] Valid input detected, saving with debounced execution...`)
-        
+    // Only save if input is valid, otherwise keep the invalid input visible for correction
+    if (inputValue.trim() && timeInSeconds !== null) {
+      console.log(`[YouTube Clip] Valid input detected, saving...`)
+      
+      // PERSISTENCE TO BACKEND: Update the stored media metadata with new clip timing (do this first)
+      const currentMediaItem = existingPageMedia.find(m => m.id === mediaId)
+      if (currentMediaItem?.isYouTube && currentMediaItem.storageId) {
+        try {
+          const backupValues = lastKnownGoodValues.get(mediaId) || {}
+          const clipStart = field === 'start' ? timeInSeconds : (backupValues.start ?? currentMediaItem.clipStart)
+          const clipEnd = field === 'end' ? timeInSeconds : (backupValues.end ?? currentMediaItem.clipEnd)
+          
+          console.log(`[YouTube Clip] Persisting clip timing to backend storage:`, {
+            mediaId,
+            storageId: currentMediaItem.storageId,
+            clipStart,
+            clipEnd,
+            field,
+            newValue: timeInSeconds
+          })
+          
+          // Call the new backend persistence method
+          await updateYouTubeVideoMetadata(currentMediaItem.storageId, {
+            clipStart,
+            clipEnd
+          })
+          
+          console.log(`[YouTube Clip] Successfully persisted clip timing to backend`)
+          
+          // MEDIA CLEARING FIX: Show positive feedback without disrupting UI
+          setSuccessMessage(`Clip timing ${field} time saved successfully`)
+          setTimeout(() => setSuccessMessage(null), 2000)
+        } catch (error) {
+          console.error(`[YouTube Clip] Failed to persist clip timing to backend:`, error)
+          // Don't throw error - local state is still updated, just backend persistence failed
+        }
+      }
+      
+      // DEBOUNCING: Use requestAnimationFrame to ensure proper timing for state updates
+      requestAnimationFrame(() => {
         // ATOMIC STATE UPDATE: Use functional updates to ensure consistency
         setExistingPageMedia(prevMedia => {
           const updatedMedia = prevMedia.map(media => {
@@ -849,32 +1181,34 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           })
           return updated
         })
+      })
         
-        // CONFLICT PREVENTION: Use requestAnimationFrame for local state clearing
-        requestAnimationFrame(() => {
-          setActiveTimeInputs(prev => {
-            const updated = new Map(prev)
-            const current = updated.get(mediaId) || {}
-            const newCurrent = { ...current }
-            delete newCurrent[field]
-            
-            console.log(`[YouTube Clip] Clearing activeTimeInputs for ${mediaId}.${field} (conflict-safe)`, {
-              beforeDelete: current,
-              afterDelete: newCurrent
-            })
-            
-            if (Object.keys(newCurrent).length === 0) {
-              updated.delete(mediaId)
-              console.log(`[YouTube Clip] Removing all activeTimeInputs for ${mediaId} (conflict-safe)`)
-            } else {
-              updated.set(mediaId, newCurrent)
-              console.log(`[YouTube Clip] Keeping remaining activeTimeInputs for ${mediaId} (conflict-safe):`, newCurrent)
-            }
-            return updated
+      // MEDIA CLEARING FIX: Use gentler clearing that preserves visual state
+      // Instead of immediately clearing, delay the clearing to allow smooth transition
+      setTimeout(() => {
+        setActiveTimeInputs(prev => {
+          const updated = new Map(prev)
+          const current = updated.get(mediaId) || {}
+          const newCurrent = { ...current }
+          delete newCurrent[field]
+          
+          console.log(`[YouTube Clip] Clearing activeTimeInputs for ${mediaId}.${field} (smooth transition)`, {
+            beforeDelete: current,
+            afterDelete: newCurrent
           })
+          
+          if (Object.keys(newCurrent).length === 0) {
+            updated.delete(mediaId)
+            console.log(`[YouTube Clip] Removing all activeTimeInputs for ${mediaId} (smooth transition)`)
+          } else {
+            updated.set(mediaId, newCurrent)
+            console.log(`[YouTube Clip] Keeping remaining activeTimeInputs for ${mediaId} (smooth transition):`, newCurrent)
+          }
+          return updated
         })
-        
-      } else if (inputValue.trim()) {
+      }, 150); // Small delay to allow backend save to complete and prevent jarring clearing
+      
+    } else if (inputValue.trim()) {
         // Invalid input - keep it visible so user can correct it
         // Don't clear local state, don't save to media state
         console.warn('[YouTube Clip] Invalid time format:', inputValue)
@@ -899,8 +1233,23 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       if (focusedInput?.mediaId === mediaId && focusedInput?.field === field) {
         setFocusedInput(null)
       }
-    })
-  }, [activeTimeInputs, parseTimeToSeconds, markDirty, focusedInput])
+
+      // MEDIA CLEARING FIX: Clear the clip timing update flag after a delay to allow state to settle
+      setTimeout(() => {
+        setIsUpdatingClipTiming(false)
+        isUpdatingClipTimingRef.current = false
+      }, 100)
+  }, [
+    activeTimeInputs, 
+    parseTimeToSeconds, 
+    markDirty, 
+    focusedInput, 
+    existingPageMedia, 
+    lastKnownGoodValues, 
+    updateYouTubeVideoMetadata, 
+    getCurrentPage, 
+    updatePageInCourseContent
+  ])
 
   // Enhanced input value getter with state synchronization guards
   const getInputValue = useCallback((media: Media, field: 'start' | 'end'): string => {
@@ -951,6 +1300,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
 
   // Separate function to add media to page
   const addMediaToPage = async (result: SearchResult) => {
+    // DEFENSIVE LOGGING: Track when addMediaToPage is called
+    console.error('🚨 [DELETION DEBUG] addMediaToPage called!', {
+      resultId: result.id,
+      resultTitle: result.title,
+      resultUrl: result.url,
+      resultIsYouTube: result.isYouTube,
+      stackTrace: new Error().stack,
+      timestamp: new Date().toISOString()
+    })
+    
     const mediaId = result.id
     
     // Create timeout promise for stuck operations (30 seconds for portable exe)
@@ -1145,7 +1504,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
         // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
         // This ensures the component shows the latest data with proper blob URLs
-        await loadExistingMedia()
+        // MEDIA CLEARING FIX: Skip reload during clip timing updates
+        if (!isUpdatingClipTimingRef.current) {
+          await loadExistingMedia()
+        } else {
+          console.log('[MediaEnhancement] Skipping loadExistingMedia after media addition - clip timing update in progress')
+        }
       }
       
       // Race the media addition against timeout
@@ -1211,6 +1575,15 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           // Only one media per page is allowed - no exceptions
           console.log('[MediaEnhancement] Deleting existing media:', media.id, media.type)
           
+          // DEFENSIVE LOGGING: Track what's causing video deletion 
+          console.error('🚨 [DELETION DEBUG] Video deletion triggered from addMediaToPage (existing media cleanup)!', {
+            mediaId: media.id,
+            storageId: media.storageId,
+            mediaType: media.type,
+            stackTrace: new Error().stack,
+            timestamp: new Date().toISOString()
+          })
+          
           // Delete from storage if it has a storage ID
           if (media.storageId) {
             await deleteMedia(media.storageId)
@@ -1236,6 +1609,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // Move loadExistingMedia to component scope using useCallback
   const loadExistingMedia = React.useCallback(async () => {
+    // MEDIA CLEARING FIX: Skip loading if we're in the middle of a clip timing update
+    if (isUpdatingClipTimingRef.current) {
+      console.log('[MediaEnhancement] Skipping loadExistingMedia - clip timing update in progress')
+      return
+    }
+
     // Directly determine page based on index to avoid dependency on getCurrentPage
     if (!courseContent) return
     
@@ -1278,9 +1657,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       pageMediaItems = []
     }
     
-    // Only get image and video items (not audio/captions)
+    // Only get image, video, and YouTube items (not audio/captions)
     const imageAndVideoItems = pageMediaItems.filter(item => 
-      item.type === 'image' || item.type === 'video'
+      item.type === 'image' || item.type === 'video' || item.type === 'youtube'
     )
     
     console.log('[MediaEnhancement] Found media items:', imageAndVideoItems.length)
@@ -1294,11 +1673,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const newBlobUrls = new Map<string, string>() // Collect blob URLs to batch update
       
       const mediaItemsPromises = imageAndVideoItems.map(async (item) => {
-        let url = (item as any).metadata.youtubeUrl || (item as any).metadata.embedUrl
+        // DEFENSIVE FIX: Safely access metadata properties, fallback to item properties
+        const metadata = (item as any).metadata || {}
+        const itemAny = item as any
         
-        // For all non-YouTube media (including images with asset:// URLs), ALWAYS create fresh blob URLs
-        // Don't trust any stored blob: URLs as they're session-specific
-        if (!(item as any).metadata.youtubeUrl && !(item as any).metadata.embedUrl) {
+        // Check for YouTube URL in multiple possible locations
+        let url = metadata.youtubeUrl || metadata.embedUrl || itemAny.url || itemAny.embedUrl
+        const isYouTubeVideo = metadata.isYouTube || itemAny.isYouTube || 
+                              (url && (url.includes('youtube.com') || url.includes('youtu.be')))
+        
+        // For all non-YouTube media, create fresh blob URLs
+        if (!isYouTubeVideo) {
           // Always regenerate blob URLs, ignoring any stored blob: URLs
           const blobUrl = await createBlobUrl(item.id)
           url = blobUrl || `media-error://${item.id}` // Fallback if blob creation fails
@@ -1311,14 +1696,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         
         const mediaItem = {
           id: item.id,
-          type: item.type as 'image' | 'video',
-          title: (item as any).metadata.title || item.fileName,
-          thumbnail: (item as any).metadata.thumbnail,
-          url: (item as any).metadata.youtubeUrl || url || '',
-          embedUrl: (item as any).metadata.embedUrl,
-          isYouTube: (item as any).metadata.isYouTube || !!(item as any).metadata.youtubeUrl,
+          type: item.type as 'image' | 'video' | 'youtube',
+          title: metadata.title || itemAny.title || item.fileName,
+          thumbnail: metadata.thumbnail || itemAny.thumbnail,
+          url: url || '',
+          embedUrl: metadata.embedUrl || itemAny.embedUrl,
+          isYouTube: isYouTubeVideo,
           storageId: item.id,
-          mimeType: (item as any).metadata.mimeType || 'video/mp4'
+          mimeType: metadata.mimeType || itemAny.mimeType || 'video/mp4',
+          // 🔧 FIX: Extract clip timing from multiple possible locations
+          clipStart: metadata.clipStart || metadata.clip_start || itemAny.clipStart || itemAny.clip_start,
+          clipEnd: metadata.clipEnd || metadata.clip_end || itemAny.clipEnd || itemAny.clip_end
+        }
+        
+        // Log loaded clip timing values for YouTube videos (for debugging)
+        if (mediaItem.isYouTube && (mediaItem.clipStart !== undefined || mediaItem.clipEnd !== undefined)) {
+          console.log(`[MediaEnhancement] Loaded YouTube video "${mediaItem.title}" with clip timing: ${mediaItem.clipStart || 0}s - ${mediaItem.clipEnd || 'end'}s`)
         }
         
         // Update progress
@@ -1342,6 +1735,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         })
       }
       
+      console.log('[MediaEnhancement] 🎯 Setting existingPageMedia state with loaded items:', {
+        itemCount: mediaItems.length,
+        items: mediaItems.map(item => ({
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          clipStart: item.clipStart,
+          clipEnd: item.clipEnd,
+          isYouTube: item.isYouTube
+        }))
+      })
       setExistingPageMedia(mediaItems)
     } else {
       console.log('[MediaEnhancement] No media found for page')
@@ -1354,6 +1758,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // Load existing media on mount and page change
   useEffect(() => {
+    // MEDIA CLEARING FIX: Skip loading during clip timing updates to prevent UI flickering
+    if (isUpdatingClipTimingRef.current) {
+      console.log('[MediaEnhancement] Skipping loadExistingMedia during clip timing update')
+      return
+    }
+    
     loadExistingMedia()
     
     // Cleanup when page changes or component unmounts
@@ -1361,7 +1771,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       // DO NOT revoke blob URLs here!
       // They are cached and may be needed when returning to this page
       // The UnifiedMediaContext manages the blob URL cache globally
-      setBlobUrls(new Map())
+      
+      // Only clear blob URLs if we're actually changing pages, not during save operations
+      // This prevents the "Loading..." state after saves
+      if (isUpdatingClipTimingRef.current) {
+        console.log('[MediaEnhancement] Preserving blob URLs during clip timing update')
+      } else {
+        setBlobUrls(new Map())
+      }
     }
   }, [loadExistingMedia])
   
@@ -1800,15 +2217,31 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         
         if (fileToStore) {
           try {
+            // 🔧 CONTAMINATION FIX: Only include appropriate metadata for non-YouTube media
+            // This prevents YouTube metadata from contaminating image storage
+            const cleanMetadata: any = {
+              title: mediaItem.title,
+              thumbnail: mediaItem.thumbnail
+            }
+            
+            // Only add embedUrl for actual video files (not images)
+            if (mediaItem.type === 'video' && !mediaItem.isYouTube && mediaItem.embedUrl) {
+              cleanMetadata.embedUrl = mediaItem.embedUrl
+            }
+            
+            console.log('[MediaEnhancement] 🧹 Storing non-YouTube media with clean metadata:', {
+              mediaId: mediaItem.id,
+              type: mediaItem.type,
+              cleanMetadata,
+              originalEmbedUrl: mediaItem.embedUrl,
+              isYouTube: mediaItem.isYouTube
+            })
+            
             const storedItem = await storeMedia(
               fileToStore,
               pageId,
               mediaItem.type as 'image' | 'video',
-              {
-                title: mediaItem.title,
-                thumbnail: mediaItem.thumbnail,
-                embedUrl: mediaItem.embedUrl
-              },
+              cleanMetadata,
               (progress) => {
                 // Update upload progress for individual file storage
                 setUploadProgress({
@@ -1866,112 +2299,37 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     // Reload existing media to get blob URLs for newly stored items
     setTimeout(() => {
-      loadExistingMedia()
+      // MEDIA CLEARING FIX: Skip reload during clip timing updates
+      if (!isUpdatingClipTimingRef.current) {
+        loadExistingMedia()
+      } else {
+        console.log('[MediaEnhancement] Skipping delayed loadExistingMedia - clip timing update in progress')
+      }
     }, 100)
   }
   
-  const updatePageInCourseContent = (page: Page | Topic, media: Media[]) => {
-    if (!courseContent || !onUpdateContent) return
-    
-    const content = courseContent as CourseContent
-    const updatedContent = structuredClone(content)
-    
-    // Ensure each Media object has a proper URL for display and preserves all flags
-    const mediaWithUrls = media.map(item => ({
-      ...item,
-      // Preserve isYouTube flag explicitly
-      isYouTube: item.isYouTube || false,
-      // CRITICAL FIX: Explicitly preserve YouTube clip timing properties
-      clipStart: item.clipStart,
-      clipEnd: item.clipEnd,
-      // If no URL, create one based on the media ID
-      url: item.url || item.embedUrl || `media://${item.id}`
-    }))
-    
-    const pageWithMedia = setPageMedia(page, mediaWithUrls)
-    if (!pageWithMedia) return
-    
-    // FIXED: Do NOT modify HTML content - keep media separate
-    // Media should only be stored in the media array, never embedded in content
-    const updatedPage = { ...pageWithMedia }
-    
-    // FIX: Use specific patterns to only remove OUR generated media containers
-    // Preserve user-added images and iframes
-    if (updatedPage.content) {
-      console.log('[MediaEnhancement] Cleaning only our generated media from content')
-      
-      // Pattern 1: Remove our media container divs with class="media-container" or data-media-id
-      updatedPage.content = updatedPage.content.replace(
-        /<div[^>]*(?:class="media-container"|data-media-id="[^"]*")[^>]*>[\s\S]*?<\/div>/gi,
-        ''
-      )
-      
-      // Pattern 2: Only remove blob images that are part of our media system (with data attributes)
-      // This preserves user-uploaded images with regular URLs
-      updatedPage.content = updatedPage.content.replace(
-        /<img[^>]*blob:[^>]*data-media-[^>]*>/gi,
-        ''
-      )
-      
-      // Pattern 3: Only remove YouTube iframes with our specific markers
-      // Look for iframes with data-media-youtube attribute or our specific embed pattern
-      updatedPage.content = updatedPage.content.replace(
-        /<iframe[^>]*(?:data-media-youtube="true"|class="media-youtube")[^>]*>[\s\S]*?<\/iframe>/gi,
-        ''
-      )
-      
-      // Clean up extra whitespace
-      updatedPage.content = updatedPage.content.replace(/\n\s*\n\s*\n/g, '\n\n').trim()
-    }
-    
-    if (currentPageIndex === 0) {
-      updatedContent.welcomePage = updatedPage as Page
-    } else if (currentPageIndex === 1) {
-      updatedContent.learningObjectivesPage = updatedPage as Page
-    } else {
-      const topicIndex = currentPageIndex - 2
-      if (updatedContent.topics && topicIndex >= 0) {
-        updatedContent.topics[topicIndex] = updatedPage as Topic
-      }
-    }
-    
-    // Enhanced debug logging to trace clip timing data flow
-    const currentPageMedia = updatedPage.media || []
-    const youtubeMediaWithTiming = currentPageMedia.filter(m => m.isYouTube && (m.clipStart !== undefined || m.clipEnd !== undefined))
-    
-    console.log(`[SCORM DEBUG] Calling onUpdateContent with course content:`, {
-      totalPages: Object.keys(updatedContent).length,
-      currentPageId: updatedPage.id,
-      currentPageMediaCount: currentPageMedia.length,
-      youtubeMediaWithTimingCount: youtubeMediaWithTiming.length,
-      // CRITICAL: Log detailed YouTube media with timing
-      youtubeMediaDetails: youtubeMediaWithTiming.map(m => ({
-        id: m.id,
-        title: m.title,
-        type: m.type,
-        isYouTube: m.isYouTube,
-        clipStart: m.clipStart,
-        clipEnd: m.clipEnd,
-        hasClipStart: m.clipStart !== undefined,
-        hasClipEnd: m.clipEnd !== undefined,
-        url: m.url?.substring(0, 50) + '...'
-      })),
-      // Log all media for current page
-      allCurrentPageMedia: currentPageMedia.map(m => ({
-        id: m.id,
-        type: m.type,
-        isYouTube: m.isYouTube,
-        clipStart: m.clipStart,
-        clipEnd: m.clipEnd
-      }))
-    })
-    onUpdateContent(updatedContent)
-  }
-  
   const handleRemoveMedia = (mediaId: string) => {
+    // DELETION FIX: Add protective logging and confirmation
+    console.error('🚨 [DELETION DEBUG] handleRemoveMedia called!', {
+      mediaId,
+      stackTrace: new Error().stack,
+      timestamp: new Date().toISOString()
+    })
+    
     const mediaToRemove = existingPageMedia.find(m => m.id === mediaId)
     if (mediaToRemove) {
-      setRemoveConfirm({ id: mediaId, title: mediaToRemove.title || 'this media' })
+      // DELETION FIX: Enhanced confirmation with clear warning for YouTube videos with clip timing
+      const hasClipTiming = mediaToRemove.clipStart !== undefined || mediaToRemove.clipEnd !== undefined
+      const isYouTubeWithTiming = mediaToRemove.isYouTube && hasClipTiming
+      
+      const confirmationTitle = isYouTubeWithTiming 
+        ? `${mediaToRemove.title || 'this YouTube video'} (with clip timing: ${mediaToRemove.clipStart || 0}s-${mediaToRemove.clipEnd || 'end'}s)`
+        : mediaToRemove.title || 'this media'
+        
+      setRemoveConfirm({ 
+        id: mediaId, 
+        title: confirmationTitle
+      })
     }
   }
   
@@ -1980,6 +2338,40 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     const mediaToRemove = existingPageMedia.find(m => m.id === removeConfirm.id)
     if (mediaToRemove?.storageId) {
+      // DELETION FIX: Extra protection for YouTube videos with clip timing
+      const hasClipTiming = mediaToRemove.clipStart !== undefined || mediaToRemove.clipEnd !== undefined
+      const isYouTubeWithTiming = mediaToRemove.isYouTube && hasClipTiming
+      
+      if (isYouTubeWithTiming) {
+        // Double confirmation for YouTube videos with clip timing
+        const doubleConfirm = window.confirm(
+          `⚠️ WARNING: You are about to delete a YouTube video with clip timing!\n\n` +
+          `Video: ${mediaToRemove.title || 'Untitled'}\n` +
+          `Clip timing: ${mediaToRemove.clipStart || 0}s to ${mediaToRemove.clipEnd || 'end'}s\n\n` +
+          `This will permanently remove the video and all its clip timing settings.\n\n` +
+          `Are you absolutely sure you want to delete this video?`
+        )
+        
+        if (!doubleConfirm) {
+          console.log('[DELETION DEBUG] User cancelled deletion of YouTube video with clip timing')
+          setRemoveConfirm(null)
+          return
+        }
+      }
+      
+      // DEFENSIVE LOGGING: Track intentional video deletion
+      console.error('🚨 [DELETION DEBUG] Video deletion triggered from confirmRemoveMedia (intentional removal)!', {
+        mediaId: mediaToRemove.id,
+        storageId: mediaToRemove.storageId,
+        mediaType: mediaToRemove.type,
+        hasClipTiming,
+        clipStart: mediaToRemove.clipStart,
+        clipEnd: mediaToRemove.clipEnd,
+        stackTrace: new Error().stack,
+        timestamp: new Date().toISOString(),
+        confirmDialogData: removeConfirm
+      })
+      
       // Delete from storage
       await deleteMedia(mediaToRemove.storageId)
       
@@ -2105,7 +2497,29 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (media.type === 'video') {
       // Check if it's a YouTube video
       if (media.embedUrl || (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be')))) {
-        const embedUrl = media.embedUrl || media.url
+        // DEBUG: Log the clip timing data flow
+        console.log('[YouTube Clip Display] 🎬 Rendering YouTube video with timing data:', {
+          mediaId: media.id,
+          title: media.title,
+          originalUrl: media.url,
+          embedUrl: media.embedUrl,
+          clipStart: media.clipStart,
+          clipEnd: media.clipEnd,
+          hasClipTiming: (media.clipStart !== undefined || media.clipEnd !== undefined)
+        })
+        
+        // Generate embed URL with clip timing if available
+        const embedUrl = (media.clipStart !== undefined || media.clipEnd !== undefined)
+          ? buildYouTubeEmbed(media.url || media.embedUrl || '', media.clipStart, media.clipEnd)
+          : media.embedUrl || media.url
+          
+        console.log('[YouTube Clip Display] 📺 Final iframe src URL:', {
+          mediaId: media.id,
+          finalEmbedUrl: embedUrl,
+          urlLength: embedUrl.length,
+          containsClipParams: embedUrl.includes('&t=') || embedUrl.includes('?t=') || embedUrl.includes('start=') || embedUrl.includes('end=')
+        })
+          
         return (
           <iframe
             src={embedUrl}
@@ -2278,7 +2692,56 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // Wrapped onNext function that resets dirty flag on successful navigation
   const handleNext = React.useCallback(async (content: CourseContentUnion) => {
     try {
-      await onNext(content)
+      console.log('[MediaEnhancement] handleNext called, ensuring latest media data...')
+      
+      // 🔧 FIX: Ensure we have the absolute latest course content with all loaded media
+      // This addresses the race condition where loadExistingMedia might not have completed
+      let finalContent = content
+      
+      // CRITICAL FIX: Ensure ALL pages have their latest media data, not just current page
+      // This prevents the "last page wins" bug where only the current page's media is preserved
+      if ('topics' in content) {
+        const currentPage = getCurrentPage()
+        if (currentPage && existingPageMedia.length > 0) {
+          console.log('[MediaEnhancement] Synchronizing current page media with clip timing:', {
+            pageId: currentPage.id,
+            mediaCount: existingPageMedia.length,
+            mediaWithClipTiming: existingPageMedia.filter(m => m.clipStart !== undefined || m.clipEnd !== undefined).length
+          })
+          
+          // Clone the content and update ONLY the current page with latest media
+          // CRITICAL: Other pages' media is preserved as-is to prevent data loss
+          const updatedContent = structuredClone(content as CourseContent)
+          
+          if (currentPage.id === 'welcome') {
+            updatedContent.welcomePage.media = existingPageMedia
+          } else if (currentPage.id === 'objectives') {
+            updatedContent.learningObjectivesPage.media = existingPageMedia
+          } else {
+            // Find topic by ID and update its media
+            const topicIndex = updatedContent.topics.findIndex(t => t.id === currentPage.id)
+            if (topicIndex >= 0) {
+              updatedContent.topics[topicIndex].media = existingPageMedia
+            }
+          }
+          
+          finalContent = updatedContent
+          
+          // ENHANCED DEBUG: Log all pages' media with clip timing to verify preservation
+          console.log('[MediaEnhancement] ✅ Final content synchronized - media summary by page:')
+          console.log('Welcome media:', (finalContent as CourseContent).welcomePage.media?.length || 0)
+          console.log('Objectives media:', (finalContent as CourseContent).learningObjectivesPage.media?.length || 0)
+          ;(finalContent as CourseContent).topics.forEach((topic, index) => {
+            const mediaWithTiming = topic.media?.filter(m => m.clipStart !== undefined || m.clipEnd !== undefined) || []
+            console.log(`Topic ${index} (${topic.id}) media: ${topic.media?.length || 0}, with clip timing: ${mediaWithTiming.length}`)
+            if (mediaWithTiming.length > 0) {
+              mediaWithTiming.forEach(m => console.log(`  - ${m.title}: ${m.clipStart}s-${m.clipEnd}s`))
+            }
+          })
+        }
+      }
+      
+      await onNext(finalContent)
       // Reset media dirty flag only on successful next
       resetDirty('media')
     } catch (error) {
@@ -2286,70 +2749,180 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       console.error('Failed to proceed to next step:', error)
       throw error // Re-throw to maintain error handling
     }
-  }, [onNext, resetDirty])
+  }, [onNext, resetDirty, getCurrentPage, existingPageMedia])
 
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const renderedExistingMedia = useMemo(() => {
+    console.log('[MediaEnhancement] 🎨 Rendering existing media items:', {
+      count: existingPageMedia.length,
+      items: existingPageMedia.map(media => ({
+        id: media.id,
+        type: media.type,
+        title: media.title,
+        isYouTube: media.isYouTube,
+        hasUrl: !!media.url,
+        url: media.url,
+        clipStart: media.clipStart,
+        clipEnd: media.clipEnd
+      }))
+    })
+    
     return existingPageMedia.map((media) => (
       <div 
         key={media.id} 
         className={styles.mediaItem}
         onClick={() => handleMediaClick(media.id)}
       >
-        {media.type === 'video' && media.isYouTube && media.url ? (
-          // YouTube video thumbnail
-          (() => {
-            const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
-            const videoId = videoIdMatch ? videoIdMatch[1] : null
-            const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
-            
-            return thumbnailUrl ? (
-              <div className={styles.mediaItemInner}>
+        <div className={styles.mediaThumbnailContainer}>
+          {(media.type === 'video' || media.type === 'youtube') && (media.isYouTube || media.type === 'youtube') && media.url ? (
+            // YouTube video thumbnail
+            (() => {
+              const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
+              const videoId = videoIdMatch ? videoIdMatch[1] : null
+              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+              
+              return thumbnailUrl ? (
+                <div className={styles.mediaItemInner}>
+                  <img
+                    src={thumbnailUrl}
+                    alt={media.title || 'Video thumbnail'}
+                    className={styles.mediaThumbnail}
+                    onError={(e) => {
+                      console.log('[MediaEnhancement] YouTube thumbnail failed to load:', thumbnailUrl)
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                      const parent = target.parentElement
+                      if (parent) {
+                        const fallbackDiv = document.createElement('div')
+                        fallbackDiv.className = styles.videoThumbnailPlaceholder
+                        fallbackDiv.textContent = '📹 Video'
+                        parent.appendChild(fallbackDiv)
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className={styles.mediaItemInner}>
+                  <span className={styles.videoThumbnailPlaceholder}>📹 Video</span>
+                </div>
+              )
+            })()
+          ) : (
+            // Regular image or other media
+            <div className={styles.mediaItemInner}>
+              {blobUrls.has(media.storageId || media.id) ? (
                 <img
-                  src={thumbnailUrl}
-                  alt={media.title || 'Video thumbnail'}
+                  src={blobUrls.get(media.storageId || media.id)}
+                  alt={media.title || 'Media'}
                   className={styles.mediaThumbnail}
                   onError={(e) => {
-                    console.log('[MediaEnhancement] YouTube thumbnail failed to load:', thumbnailUrl)
+                    console.log('[MediaEnhancement] Media thumbnail failed to load')
                     const target = e.target as HTMLImageElement
                     target.style.display = 'none'
-                    const parent = target.parentElement
-                    if (parent) {
-                      const fallbackDiv = document.createElement('div')
-                      fallbackDiv.className = styles.videoThumbnailPlaceholder
-                      fallbackDiv.textContent = '📹 Video'
-                      parent.appendChild(fallbackDiv)
-                    }
                   }}
                 />
-              </div>
-            ) : (
-              <div className={styles.mediaItemInner}>
-                <span className={styles.videoThumbnailPlaceholder}>📹 Video</span>
-              </div>
-            )
-          })()
-        ) : (
-          // Regular image or other media
-          <div className={styles.mediaItemInner}>
-            {blobUrls.has(media.storageId || media.id) ? (
-              <img
-                src={blobUrls.get(media.storageId || media.id)}
-                alt={media.title || 'Media'}
-                className={styles.mediaThumbnail}
-                onError={(e) => {
-                  console.log('[MediaEnhancement] Media thumbnail failed to load')
-                  const target = e.target as HTMLImageElement
-                  target.style.display = 'none'
+              ) : (
+                <div className={styles.mediaPlaceholder}>
+                  <span>Loading...</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons overlay */}
+          <div className={styles.mediaActionsOverlay}>
+            {media.type === 'image' && (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleEditImage(media)
                 }}
-              />
-            ) : (
-              <div className={styles.mediaPlaceholder}>
-                <span>Loading...</span>
-              </div>
+                aria-label="Edit image"
+                data-testid={`edit-media-${media.id}`}
+                className={styles.overlayButton}
+              >
+                <Icon icon={Edit} size="sm" />
+              </Button>
             )}
+            
+            {/* 🔧 FIX: Add Edit Clip Timing button for existing YouTube videos */}
+            {media.isYouTube && (
+              <Button
+                variant="primary"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  
+                  // Open lightbox with existing YouTube video for clip timing editing
+                  const existingAsSearchResult: SearchResult = {
+                    id: media.id,
+                    title: media.title || 'YouTube Video',
+                    url: media.url,
+                    thumbnail: media.thumbnail,
+                    isYouTube: true,
+                    embedUrl: media.embedUrl,
+                    clipStart: media.clipStart,
+                    clipEnd: media.clipEnd
+                  }
+                  
+                  console.log('[MediaEnhancement] 🎬 Opening clip timing editor for existing video:', {
+                    mediaId: media.id,
+                    title: media.title,
+                    clipStart: media.clipStart,
+                    clipEnd: media.clipEnd
+                  })
+                  
+                  setLightboxMedia(existingAsSearchResult)
+                  setIsLightboxOpen(true)
+                  // Don't set clipStart/clipEnd state here - let the useEffect handle it from lightboxMedia
+                }}
+                aria-label="Edit YouTube clip timing"
+                data-testid={`edit-clip-timing-${media.id}`}
+                className={styles.overlayButton}
+                title="Edit clip timing"
+              >
+                <Icon icon={Video} size="sm" />
+              </Button>
+            )}
+            
+            <Button
+              variant="secondary" 
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation()
+                // DELETION FIX: Add extra protection against accidental clicks
+                const hasClipTiming = media.clipStart !== undefined || media.clipEnd !== undefined
+                const isYouTubeWithTiming = media.isYouTube && hasClipTiming
+                
+                if (isYouTubeWithTiming) {
+                  // For YouTube videos with clip timing, require an immediate confirmation
+                  const immediateConfirm = window.confirm(
+                    `🔥 Are you sure you want to REMOVE this YouTube video?\n\n` +
+                    `"${media.title || 'Untitled'}"\n` +
+                    `(has clip timing: ${media.clipStart || 0}s-${media.clipEnd || 'end'}s)\n\n` +
+                    `Click OK to confirm removal, or Cancel to keep it.`
+                  )
+                  
+                  if (immediateConfirm) {
+                    handleRemoveMedia(media.id)
+                  } else {
+                    console.log('[DELETION DEBUG] User cancelled immediate removal of YouTube video with clip timing')
+                  }
+                } else {
+                  handleRemoveMedia(media.id)
+                }
+              }}
+              aria-label={`Remove ${media.isYouTube && (media.clipStart !== undefined || media.clipEnd !== undefined) ? 'YouTube video with clip timing' : 'media'}`}
+              data-testid={`remove-media-${media.id}`}
+              className={styles.overlayButton}
+              title={media.isYouTube && (media.clipStart !== undefined || media.clipEnd !== undefined) ? 'Remove YouTube video (has clip timing)' : 'Remove media'}
+            >
+              <Icon icon={Trash2} size="sm" />
+            </Button>
           </div>
-        )}
+        </div>
         <div className={styles.mediaInfo}>
           <p className={styles.mediaTitle}>
             {media.title || 'Untitled'}
@@ -2364,28 +2937,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           >
             <div className={styles.youTubeClipInputs}>
               <div className={styles.clipInputWrapper}>
-                <input
+                <label className={styles.clipInputLabel}>Start</label>
+                <Input
                   type="text"
                   placeholder="0:00"
-                  className={styles.clipInput}
                   value={getInputValue(media, 'start')}
                   onChange={(e) => handleClipInputChange(media.id, 'start', e.target.value)}
                   onFocus={() => setFocusedInput({ mediaId: media.id, field: 'start' })}
                   onBlur={() => handleClipInputBlur(media.id, 'start')}
+                  aria-label="Clip start time"
                 />
-                <span className={styles.clipInputLabel}>Start</span>
               </div>
               <div className={styles.clipInputWrapper}>
-                <input
+                <label className={styles.clipInputLabel}>End</label>
+                <Input
                   type="text"
                   placeholder="0:00"
-                  className={styles.clipInput}
                   value={getInputValue(media, 'end')}
                   onChange={(e) => handleClipInputChange(media.id, 'end', e.target.value)}
                   onFocus={() => setFocusedInput({ mediaId: media.id, field: 'end' })}
                   onBlur={() => handleClipInputBlur(media.id, 'end')}
+                  aria-label="Clip end time"
                 />
-                <span className={styles.clipInputLabel}>End</span>
               </div>
             </div>
           </div>
@@ -2459,6 +3032,33 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getCurrentPage()?.content || '') }}
               />
             </Card>
+            
+            {/* Contamination Cleanup Warning */}
+            {contaminationDetected && (
+              <Alert 
+                type="warning" 
+                className={styles.contaminationWarning}
+                data-testid="contamination-warning"
+              >
+                <div className={styles.contaminationContent}>
+                  <div className={styles.contaminationMessage}>
+                    <strong>Media Issues Detected</strong>
+                    <p>Some media files have corrupted metadata that may cause display issues. Click below to fix these problems.</p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={handleManualContaminationCleanup}
+                    disabled={isCleaningContamination}
+                    data-testid="manual-cleanup-button"
+                    className={styles.cleanupButton}
+                  >
+                    <Icon icon={Shield} size="sm" />
+                    {isCleaningContamination ? 'Fixing Issues...' : 'Fix Media Issues'}
+                  </Button>
+                </div>
+              </Alert>
+            )}
             
             {/* Loading indicator */}
             {isLoadingMedia && (
@@ -3085,9 +3685,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                             endSeconds
                           )
                           // Set up pending clip update for deferred persistence
-                          if (currentPage) {
+                          if (getCurrentPage()) {
                             setPendingClip({
-                              pageId: currentPage.id,
+                              pageId: getCurrentPage()!.id,
                               mediaId: lightboxMedia.id,
                               clipStart: startSeconds,
                               clipEnd: endSeconds,
@@ -3115,9 +3715,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                             endSeconds
                           )
                           // Set up pending clip update for deferred persistence
-                          if (currentPage) {
+                          if (getCurrentPage()) {
                             setPendingClip({
-                              pageId: currentPage.id,
+                              pageId: getCurrentPage()!.id,
                               mediaId: lightboxMedia.id,
                               clipStart: startSeconds,
                               clipEnd: endSeconds,
@@ -3164,9 +3764,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                           setStartText('')
                           setEndText('')
                           // Clear the clip timing from the media immediately
-                          if (currentPage) {
+                          if (getCurrentPage()) {
                             setPendingClip({
-                              pageId: currentPage.id,
+                              pageId: getCurrentPage()!.id,
                               mediaId: lightboxMedia.id,
                               clipStart: undefined,
                               clipEnd: undefined,

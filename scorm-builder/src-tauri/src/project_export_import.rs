@@ -315,6 +315,7 @@ pub async fn update_imported_media_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media_storage::MediaMetadata;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -511,6 +512,8 @@ mod tests {
                     source: None,
                     embed_url: None,
                     title: None,
+                    clip_start: None,
+                    clip_end: None,
                 },
             },
         ];

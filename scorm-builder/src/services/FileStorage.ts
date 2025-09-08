@@ -783,7 +783,9 @@ export class FileStorage {
           embed_url: metadata?.embed_url || undefined,
           title: metadata?.title || undefined,
           isYouTube: metadata?.isYouTube || undefined,
-          thumbnail: metadata?.thumbnail || undefined
+          thumbnail: metadata?.thumbnail || undefined,
+          clip_start: metadata?.clip_start || undefined,
+          clip_end: metadata?.clip_end || undefined
         }
       });
       
