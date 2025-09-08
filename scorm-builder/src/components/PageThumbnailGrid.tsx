@@ -17,7 +17,7 @@ interface PageThumbnailGridProps {
 
 // Media Preview Component - Memoized for performance
 const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo(({ page, mediaItems }) => {
-  const { createBlobUrl } = useUnifiedMedia()
+  const { createBlobUrl, getMedia } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const mediaIdRef = React.useRef<string | null>(null)
@@ -59,20 +59,41 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
           embedUrl: firstMediaRef.metadata?.embedUrl
         })
         
-        // Handle YouTube videos specially
-        if (firstMediaRef.metadata?.isYouTube) {
-          const ytUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
-          console.log('[PageThumbnailGrid] Processing YouTube video:', ytUrl)
-          if (ytUrl) {
-            // Extract YouTube video ID and use thumbnail URL
-            const videoIdMatch = ytUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
-            if (videoIdMatch) {
-              const videoId = videoIdMatch[1]
-              const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-              console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
-              setMediaUrl(thumbnailUrl)
-            } else {
-              console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', ytUrl)
+        // Handle YouTube videos specially - DEFENSIVE FIX: Only process as YouTube if it's actually a video
+        if (firstMediaRef.metadata?.isYouTube && 
+            (firstMediaRef.type === 'video' || firstMediaRef.type === 'youtube') && 
+            firstMediaRef.metadata?.source === 'youtube') {
+          // FIXED: Get processed URL with clip timing from MediaService instead of raw metadata
+          try {
+            const mediaData = await getMedia(firstMediaRef.id)
+            const processedUrl = mediaData?.url || firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
+            console.log('[PageThumbnailGrid] Processing YouTube video:', processedUrl)
+            console.log('[PageThumbnailGrid] 🎬 URL includes clip timing:', processedUrl?.includes('start=') && processedUrl?.includes('end='))
+            
+            if (processedUrl) {
+              // Extract YouTube video ID and use thumbnail URL
+              const videoIdMatch = processedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
+              if (videoIdMatch) {
+                const videoId = videoIdMatch[1]
+                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+                console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
+                setMediaUrl(thumbnailUrl)
+              } else {
+                console.warn('[PageThumbnailGrid] Could not extract YouTube ID from:', processedUrl)
+              }
+            }
+          } catch (error) {
+            console.error('[PageThumbnailGrid] Failed to get processed URL for YouTube video:', error)
+            // Fallback to raw metadata URL if getMedia() fails
+            const fallbackUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
+            console.log('[PageThumbnailGrid] Using fallback URL:', fallbackUrl)
+            if (fallbackUrl) {
+              const videoIdMatch = fallbackUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/)
+              if (videoIdMatch) {
+                const videoId = videoIdMatch[1]
+                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+                setMediaUrl(thumbnailUrl)
+              }
             }
           }
         } else if (typeof firstMediaRef.metadata?.url === 'string' && firstMediaRef.metadata.url.startsWith('data:image/svg+xml')) {
@@ -222,7 +243,7 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
       // Revoking them here causes images to fail loading when components re-render
       // The UnifiedMediaContext manages the blob URL cache globally
     }
-  }, [page.id, mediaItems, createBlobUrl, retryCount])
+  }, [page.id, mediaItems, createBlobUrl, getMedia, retryCount])
   
   // Check for video in media items passed as props
   const hasVideo = mediaItems.some(m => m.type === 'video')

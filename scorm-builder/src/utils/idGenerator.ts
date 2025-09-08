@@ -15,7 +15,7 @@ export type ScormPackageId = string & { __brand: 'ScormPackageId' }
 export type KnowledgeCheckId = string & { __brand: 'KnowledgeCheckId' }
 export type AssessmentId = string & { __brand: 'AssessmentId' }
 
-export type MediaType = 'image' | 'video' | 'audio' | 'caption'
+export type MediaType = 'image' | 'video' | 'audio' | 'caption' | 'youtube'
 export type ContentType = 'welcome' | 'objectives' | 'topic'
 
 // Page ID normalization map

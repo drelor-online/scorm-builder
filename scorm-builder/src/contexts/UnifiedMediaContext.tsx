@@ -22,6 +22,7 @@ interface UnifiedMediaContextType {
   
   // YouTube specific
   storeYouTubeVideo: (youtubeUrl: string, embedUrl: string, pageId: string, metadata?: Partial<MediaMetadata>) => Promise<MediaItem>
+  updateYouTubeVideoMetadata: (mediaId: string, updates: Partial<Pick<MediaMetadata, 'clipStart' | 'clipEnd' | 'title' | 'embedUrl'>>) => Promise<MediaItem>
   
   // Query operations
   getMediaForPage: (pageId: string) => MediaItem[]
@@ -459,6 +460,33 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       throw err
     }
   }, [])
+
+  const updateYouTubeVideoMetadata = useCallback(async (
+    mediaId: string,
+    updates: Partial<Pick<MediaMetadata, 'clipStart' | 'clipEnd' | 'title' | 'embedUrl'>>
+  ): Promise<MediaItem> => {
+    try {
+      const mediaService = mediaServiceRef.current
+      if (!mediaService) {
+        throw new Error('Media service not initialized')
+      }
+      const item = await mediaService.updateYouTubeVideoMetadata(mediaId, updates)
+      
+      // Update cache
+      setMediaCache(prev => {
+        const updated = new Map(prev)
+        updated.set(item.id, item)
+        return updated
+      })
+      
+      logger.info('[UnifiedMediaContext] Updated YouTube video metadata:', { mediaId, updates })
+      return item
+    } catch (err) {
+      logger.error('[UnifiedMediaContext] Failed to update YouTube video metadata:', err)
+      setError(err as Error)
+      throw err
+    }
+  }, [])
   
   const getMediaForPage = useCallback((pageId: string): MediaItem[] => {
     return Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
@@ -466,6 +494,45 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const getValidMediaForPage = useCallback(async (pageId: string): Promise<MediaItem[]> => {
     const allMediaForPage = Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
+    
+    // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items
+    let contaminatedCount = 0
+    for (const item of allMediaForPage) {
+      const hasYouTubeMetadata = !!(
+        item.metadata?.source === 'youtube' ||
+        item.metadata?.youtubeUrl ||
+        item.metadata?.embedUrl ||
+        item.metadata?.clipStart ||
+        item.metadata?.clipEnd ||
+        item.metadata?.isYouTube
+      )
+      
+      if (hasYouTubeMetadata && item.type !== 'video' && item.type !== 'youtube') {
+        contaminatedCount++
+        console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE!`)
+        console.warn(`   Media ID: ${item.id}`)
+        console.warn(`   Type: ${item.type} (should be 'video' for YouTube)`)
+        console.warn(`   Page: ${pageId}`)
+        console.warn(`   Contaminated fields:`, {
+          source: item.metadata?.source,
+          isYouTube: item.metadata?.isYouTube,
+          hasYouTubeUrl: !!item.metadata?.youtubeUrl,
+          hasEmbedUrl: !!item.metadata?.embedUrl,
+          hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
+        })
+        console.warn('   🔧 This contaminated data will cause UI issues!')
+      }
+    }
+    
+    if (contaminatedCount > 0) {
+      console.warn(`🚨 [UnifiedMediaContext] Found ${contaminatedCount} contaminated items for page ${pageId}`)
+      console.warn('   📊 Page media summary:')
+      const typeCounts: Record<string, number> = {}
+      allMediaForPage.forEach(item => {
+        typeCounts[item.type] = (typeCounts[item.type] || 0) + 1
+      })
+      console.warn(`   Types: ${JSON.stringify(typeCounts)}`)
+    }
     
     // DEFENSIVE FILTERING: Only return media that actually exists
     // This prevents components from trying to load deleted media files
@@ -695,6 +762,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     deleteMedia,
     deleteAllMedia,
     storeYouTubeVideo,
+    updateYouTubeVideoMetadata,
     getMediaForPage,
     getValidMediaForPage,
     getAllMedia,
@@ -716,6 +784,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     deleteMedia,
     deleteAllMedia,
     storeYouTubeVideo,
+    updateYouTubeVideoMetadata,
     getMediaForPage,
     getValidMediaForPage,
     getAllMedia,

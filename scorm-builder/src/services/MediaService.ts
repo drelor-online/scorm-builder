@@ -190,13 +190,44 @@ export class MediaService {
   ): Promise<MediaItem> {
     const id = generateMediaId(type, pageId)
     
+    // 🚨 CONTAMINATION DETECTION: Check for incoming metadata contamination at storage time
+    const hasYouTubeMetadata = !!(
+      metadata?.source === 'youtube' ||
+      metadata?.youtubeUrl ||
+      metadata?.embedUrl ||
+      metadata?.clipStart ||
+      metadata?.clipEnd ||
+      metadata?.isYouTube
+    )
+    
+    if (hasYouTubeMetadata && type !== 'video' && type !== 'youtube') {
+      console.error('🚨 [MediaService] CONTAMINATION AT STORAGE TIME!')
+      console.error(`   Attempting to store ${type} with YouTube metadata`)
+      console.error(`   Media ID: ${id}`)
+      console.error(`   Page ID: ${pageId}`)
+      console.error('   Contaminated metadata fields:')
+      if (metadata?.source) console.error(`     source: ${metadata.source}`)
+      if (metadata?.youtubeUrl) console.error(`     youtubeUrl: ${metadata.youtubeUrl}`)
+      if (metadata?.embedUrl) console.error(`     embedUrl: ${metadata.embedUrl}`)
+      if (metadata?.clipStart) console.error(`     clipStart: ${metadata.clipStart}`)
+      if (metadata?.clipEnd) console.error(`     clipEnd: ${metadata.clipEnd}`)
+      if (metadata?.isYouTube) console.error(`     isYouTube: ${metadata.isYouTube}`)
+      
+      // Add stack trace to identify the caller
+      const stack = new Error().stack
+      console.error('   📍 Storage call stack:', stack?.split('\n').slice(1, 6).join('\n     '))
+      console.error('   🔧 This contamination should be prevented at the source!')
+    }
+    
     debugLogger.info('MediaService.storeMedia', 'Storing media', {
       mediaId: id,
       pageId,
       type,
       fileSize: file.size,
       fileName: (file as File).name || 'blob',
-      mimeType: file.type
+      mimeType: file.type,
+      hasYouTubeMetadata,
+      isContaminationAttempt: hasYouTubeMetadata && type !== 'video'
     })
     
     try {
@@ -534,6 +565,69 @@ export class MediaService {
       throw error
     }
   }
+
+  /**
+   * Update YouTube video metadata (clip timing, title, etc.)
+   */
+  async updateYouTubeVideoMetadata(
+    mediaId: string,
+    updates: Partial<Pick<MediaMetadata, 'clipStart' | 'clipEnd' | 'title' | 'embedUrl'>>
+  ): Promise<MediaItem> {
+    debugLogger.info('MediaService.updateYouTubeVideoMetadata', 'Updating YouTube video metadata', {
+      mediaId,
+      updates
+    })
+    
+    try {
+      // Get existing media to validate it exists and is a YouTube video
+      const existingMedia = this.mediaCache.get(mediaId)
+      if (!existingMedia) {
+        throw new Error(`Media with ID ${mediaId} not found`)
+      }
+      
+      if (!existingMedia.metadata.isYouTube) {
+        throw new Error(`Media ${mediaId} is not a YouTube video`)
+      }
+      
+      // Prepare updated metadata
+      const updatedMetadata = {
+        ...existingMedia.metadata,
+        ...updates
+      }
+      
+      // Update the metadata in file storage
+      await this.fileStorage.storeYouTubeVideo(mediaId, updatedMetadata.youtubeUrl!, {
+        page_id: updatedMetadata.pageId,
+        title: updatedMetadata.title,
+        thumbnail: updatedMetadata.thumbnail,
+        embed_url: updatedMetadata.embedUrl,
+        duration: updatedMetadata.duration,
+        clip_start: updatedMetadata.clipStart,
+        clip_end: updatedMetadata.clipEnd
+      })
+      
+      // Update cache
+      const updatedItem: MediaItem = {
+        ...existingMedia,
+        metadata: updatedMetadata
+      }
+      this.mediaCache.set(mediaId, updatedItem)
+      
+      debugLogger.info('MediaService.updateYouTubeVideoMetadata', 'YouTube video metadata updated successfully', {
+        mediaId,
+        clipStart: updatedMetadata.clipStart,
+        clipEnd: updatedMetadata.clipEnd
+      })
+      
+      return updatedItem
+    } catch (error) {
+      debugLogger.error('MediaService.updateYouTubeVideoMetadata', 'Failed to update YouTube video metadata', {
+        mediaId,
+        error
+      })
+      throw error
+    }
+  }
   
   /**
    * Get media from file system with asset URL
@@ -633,16 +727,61 @@ export class MediaService {
         pageId: cachedItem?.pageId
       })
       
-      const metadata: MediaMetadata = cachedItem?.metadata || {
-        uploadedAt: new Date().toISOString(),
-        type: mediaInfo.mediaType as MediaType,
-        pageId: (typeof mediaInfo.metadata?.page_id === 'string' ? mediaInfo.metadata.page_id : ''),
-        size: mediaInfo.data?.byteLength || 0,
-        ...mediaInfo.metadata
+      // 🔧 FIX: Use processMetadata to ensure consistent field name conversion
+      const processedMetadata = this.processMetadata(mediaInfo)
+      
+      // 🔍 DEBUG: Log clip timing conversion for YouTube videos with actual values
+      if (processedMetadata.isYouTube || processedMetadata.source === 'youtube') {
+        const debugInfo = {
+          rawClipStart: mediaInfo.metadata?.clip_start,
+          rawClipEnd: mediaInfo.metadata?.clip_end,
+          camelClipStart: mediaInfo.metadata?.clipStart,
+          camelClipEnd: mediaInfo.metadata?.clipEnd,
+          processedClipStart: processedMetadata.clipStart,
+          processedClipEnd: processedMetadata.clipEnd,
+          conversionSource: processedMetadata.clipStart !== undefined || processedMetadata.clipEnd !== undefined 
+            ? (mediaInfo.metadata?.clipStart !== undefined ? 'camelCase' : 'snake_case')
+            : 'none'
+        }
+        console.log(`[MediaService] 🎬 YouTube clip timing conversion for ${mediaId}:`)
+        console.log('  Raw clip_start (snake):', debugInfo.rawClipStart)
+        console.log('  Raw clip_end (snake):', debugInfo.rawClipEnd)
+        console.log('  Raw clipStart (camel):', debugInfo.camelClipStart)
+        console.log('  Raw clipEnd (camel):', debugInfo.camelClipEnd)
+        console.log('  Processed clipStart:', debugInfo.processedClipStart)
+        console.log('  Processed clipEnd:', debugInfo.processedClipEnd)
+        console.log('  Conversion source:', debugInfo.conversionSource)
       }
       
-      // Update cache if not already cached
-      if (!cachedItem) {
+      // 🔧 FIX: Always apply field conversion, even for cached items to ensure clip timing is converted
+      const metadata: MediaMetadata = {
+        ...processedMetadata,
+        // Preserve cached values that shouldn't change (like uploadedAt)
+        ...(cachedItem?.metadata || {}),
+        // But always override with freshly converted values for critical fields
+        clipStart: processedMetadata.clipStart,
+        clipEnd: processedMetadata.clipEnd,
+        embedUrl: processedMetadata.embedUrl,
+        pageId: processedMetadata.pageId,
+        // Override with specific fields if needed
+        uploadedAt: cachedItem?.metadata?.uploadedAt || processedMetadata.uploadedAt || new Date().toISOString(),
+        type: processedMetadata.type || (mediaInfo.mediaType as MediaType),
+        size: cachedItem?.metadata?.size || mediaInfo.data?.byteLength || 0
+      }
+      
+      // 🔧 FIX: Update cache with converted metadata, especially for YouTube videos with clip timing
+      const shouldUpdateCache = !cachedItem || 
+        (processedMetadata.isYouTube && (processedMetadata.clipStart !== undefined || processedMetadata.clipEnd !== undefined))
+      
+      if (shouldUpdateCache) {
+        console.log(`[MediaService] 🔄 Updating cache for ${mediaId}:`, {
+          wasEmpty: !cachedItem,
+          isYouTube: processedMetadata.isYouTube,
+          hasClipTiming: !!(processedMetadata.clipStart !== undefined || processedMetadata.clipEnd !== undefined),
+          clipStart: processedMetadata.clipStart,
+          clipEnd: processedMetadata.clipEnd
+        })
+        
         this.mediaCache.set(mediaId, {
           id: mediaId,
           type: metadata.type,
@@ -669,11 +808,43 @@ export class MediaService {
         metadataKeys: Object.keys(metadata)
       })
       
-      // For YouTube videos, return the embed URL directly
+      // For YouTube videos, generate embed URL with clip timing if available
       if ((metadata.source === 'youtube' || metadata.isYouTube) && metadata.embedUrl) {
-        url = metadata.embedUrl
-        debugLogger.debug('MediaService.getMedia', 'Using YouTube embed URL', { mediaId, url })
-        logger.info('[MediaService] Using YouTube embed URL:', url)
+        let baseUrl = metadata.embedUrl
+        
+        // 🔧 FIX: Dynamically add clip timing parameters to YouTube embed URL
+        if (metadata.clipStart !== undefined || metadata.clipEnd !== undefined) {
+          const urlObj = new URL(baseUrl)
+          
+          // Add start parameter if clipStart exists
+          if (metadata.clipStart !== undefined && metadata.clipStart !== null) {
+            urlObj.searchParams.set('start', metadata.clipStart.toString())
+          }
+          
+          // Add end parameter if clipEnd exists  
+          if (metadata.clipEnd !== undefined && metadata.clipEnd !== null) {
+            urlObj.searchParams.set('end', metadata.clipEnd.toString())
+          }
+          
+          url = urlObj.toString()
+          debugLogger.debug('MediaService.getMedia', 'Generated YouTube embed URL with clip timing', { 
+            mediaId, 
+            baseUrl, 
+            finalUrl: url, 
+            clipStart: metadata.clipStart, 
+            clipEnd: metadata.clipEnd 
+          })
+          logger.info(`[MediaService] 🎬 Generated YouTube embed URL with clip timing for ${mediaId}:`, {
+            baseUrl,
+            finalUrl: url,
+            clipStart: metadata.clipStart,
+            clipEnd: metadata.clipEnd
+          })
+        } else {
+          url = baseUrl
+          debugLogger.debug('MediaService.getMedia', 'Using YouTube embed URL without clip timing', { mediaId, url })
+          logger.info('[MediaService] Using YouTube embed URL (no clip timing):', url)
+        }
       } else if (metadata.youtubeUrl) {
         url = metadata.youtubeUrl
         debugLogger.debug('MediaService.getMedia', 'Using YouTube URL', { mediaId, url })
@@ -871,12 +1042,63 @@ export class MediaService {
   }
   
   /**
-   * Helper to process metadata consistently
+   * Helper to process metadata consistently - converts snake_case to camelCase
    */
   private processMetadata(mediaInfo: any): MediaMetadata {
     const pageId = mediaInfo.metadata?.pageId || mediaInfo.metadata?.page_id || ''
+    const actualMediaType = mediaInfo.mediaType || mediaInfo.metadata?.type || 'unknown'
+    const source = mediaInfo.metadata?.source
+    const hasYouTubeMetadata = !!(
+      mediaInfo.metadata?.source === 'youtube' ||
+      mediaInfo.metadata?.youtubeUrl ||
+      mediaInfo.metadata?.embedUrl ||
+      mediaInfo.metadata?.clipStart ||
+      mediaInfo.metadata?.clip_start ||
+      mediaInfo.metadata?.clipEnd ||
+      mediaInfo.metadata?.clip_end
+    )
+    
+    // 🚨 CONTAMINATION DETECTION: Check for metadata contamination
+    if (hasYouTubeMetadata && actualMediaType !== 'video' && actualMediaType !== 'youtube') {
+      console.warn('🚨 [MediaService] METADATA CONTAMINATION DETECTED!')
+      console.warn(`   Media Type: ${actualMediaType} (should be 'video' for YouTube content)`)
+      console.warn(`   Media ID: ${mediaInfo.id || 'unknown'}`)
+      console.warn(`   Source: ${source}`)
+      console.warn('   YouTube Metadata Fields Found:')
+      if (mediaInfo.metadata?.youtubeUrl) {
+        console.warn(`     youtubeUrl: ${mediaInfo.metadata.youtubeUrl}`)
+      }
+      if (mediaInfo.metadata?.embedUrl) {
+        console.warn(`     embedUrl: ${mediaInfo.metadata.embedUrl}`)
+      }
+      if (mediaInfo.metadata?.clipStart || mediaInfo.metadata?.clip_start) {
+        console.warn(`     clipStart: ${mediaInfo.metadata.clipStart || mediaInfo.metadata.clip_start}`)
+      }
+      if (mediaInfo.metadata?.clipEnd || mediaInfo.metadata?.clip_end) {
+        console.warn(`     clipEnd: ${mediaInfo.metadata.clipEnd || mediaInfo.metadata.clip_end}`)
+      }
+      console.warn('   🔍 This contamination will cause UI rendering issues!')
+      console.warn('   🔧 Root cause investigation needed in storage layer')
+      
+      // Add stack trace to help identify source of contamination
+      const stack = new Error().stack
+      console.warn('   📍 Call stack:', stack?.split('\n').slice(1, 5).join('\n     '))
+    }
+    
+    // 🔍 ENHANCED LOGGING: Log all metadata processing for debugging
+    if (actualMediaType === 'image' || actualMediaType === 'video') {
+      console.log(`[MediaService] 📊 Processing metadata for ${actualMediaType}:`, {
+        mediaId: mediaInfo.id,
+        type: actualMediaType,
+        source: source,
+        hasYouTubeFields: hasYouTubeMetadata,
+        isContaminated: hasYouTubeMetadata && actualMediaType !== 'video',
+        metadataKeys: Object.keys(mediaInfo.metadata || {})
+      })
+    }
+    
     return {
-      type: mediaInfo.mediaType || mediaInfo.metadata?.type || 'unknown',
+      type: actualMediaType,
       pageId: (typeof pageId === 'string' ? pageId : ''),
       mimeType: mediaInfo.metadata?.mimeType || mediaInfo.metadata?.mime_type,
       mime_type: mediaInfo.metadata?.mime_type,
@@ -885,7 +1107,10 @@ export class MediaService {
       isYouTube: mediaInfo.metadata?.source === 'youtube',
       youtubeUrl: mediaInfo.metadata?.youtubeUrl,
       title: mediaInfo.metadata?.title,
-      uploadedAt: mediaInfo.metadata?.uploadedAt || new Date().toISOString()
+      uploadedAt: mediaInfo.metadata?.uploadedAt || new Date().toISOString(),
+      // 🔧 FIX: Convert snake_case clip timing fields to camelCase
+      clipStart: mediaInfo.metadata?.clipStart || mediaInfo.metadata?.clip_start,
+      clipEnd: mediaInfo.metadata?.clipEnd || mediaInfo.metadata?.clip_end
     }
   }
   
