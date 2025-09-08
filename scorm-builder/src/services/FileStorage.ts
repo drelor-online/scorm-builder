@@ -784,8 +784,9 @@ export class FileStorage {
           title: metadata?.title || undefined,
           isYouTube: metadata?.isYouTube || undefined,
           thumbnail: metadata?.thumbnail || undefined,
-          clip_start: metadata?.clip_start || undefined,
-          clip_end: metadata?.clip_end || undefined
+          // Preserve YouTube clip timing (support both formats for robust persistence)
+          clip_start: metadata?.clip_start ?? metadata?.clipStart ?? undefined,
+          clip_end: metadata?.clip_end ?? metadata?.clipEnd ?? undefined
         }
       });
       
