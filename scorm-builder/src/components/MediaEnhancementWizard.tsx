@@ -282,7 +282,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // Local state for YouTube clip time inputs to prevent re-render during typing
   const [activeTimeInputs, setActiveTimeInputs] = useState<Map<string, { start?: string; end?: string }>>(new Map())
-  const [focusedInput, setFocusedInput] = useState<{ mediaId: string; field: 'start' | 'end' } | null>(null)
+  // Note: focusedInput removed - no longer needed after removing inline editor
   
   // INPUT VALUE PRESERVATION: Backup state to prevent complete value loss
   const [lastKnownGoodValues, setLastKnownGoodValues] = useState<Map<string, { start?: number; end?: number }>>(new Map())
@@ -660,85 +660,86 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setIsLightboxOpen(true)
   }, [displayedResults])
   
+  // Single commit path for YouTube clip timing changes
+  const commitClipTiming = useCallback(async () => {
+    if (!lightboxMedia) return
+    
+    const page = getCurrentPage()
+    if (!page) return
+
+    const s = startText ? parseTimeToSeconds(startText) : lightboxMedia.clipStart
+    const e = endText ? parseTimeToSeconds(endText) : lightboxMedia.clipEnd
+    const embed = lightboxMedia.isYouTube 
+      ? buildYouTubeEmbed(lightboxMedia.url || lightboxMedia.embedUrl || '', s, e)
+      : lightboxMedia.embedUrl
+
+    console.log('[MediaEnhancement] 🎬 Committing clip timing:', {
+      mediaId: lightboxMedia.id,
+      title: lightboxMedia.title,
+      clipStart: s,
+      clipEnd: e,
+      embedUrl: embed
+    })
+
+    // 1) Update in-memory current page media (no reordering)
+    const updated = existingPageMedia.map(m =>
+      m.id === lightboxMedia.id ? { ...m, clipStart: s, clipEnd: e, embedUrl: embed } : m
+    )
+    setExistingPageMedia(updated)
+
+    // 2) Update CourseContent via deferred effect path
+    setPendingClip({ 
+      pageId: getPageId(page), 
+      mediaId: lightboxMedia.id, 
+      clipStart: s, 
+      clipEnd: e, 
+      embedUrl: embed || lightboxMedia.embedUrl || lightboxMedia.url || ''
+    })
+
+    // 3) Persist to storage metadata so timing hydrates next session
+    const stored = existingPageMedia.find(m => m.id === lightboxMedia.id)
+    if (stored?.storageId) {
+      try {
+        await updateYouTubeVideoMetadata(stored.storageId, { 
+          clipStart: s, 
+          clipEnd: e, 
+          embedUrl: embed 
+        })
+        console.log('[MediaEnhancement] ✅ Persisted clip timing to storage')
+      } catch (error) {
+        console.error('[MediaEnhancement] ❌ Failed to persist clip timing:', error)
+      }
+    }
+
+    // 4) Close modal + clear inputs
+    setIsLightboxOpen(false)
+    setStartText('')
+    setEndText('')
+    setLightboxMedia(null)
+    setClipStart(undefined)
+    setClipEnd(undefined)
+
+    console.log('[MediaEnhancement] ✅ Clip timing commit completed')
+  }, [lightboxMedia, existingPageMedia, startText, endText, getCurrentPage, getPageId, updateYouTubeVideoMetadata, setPendingClip, buildYouTubeEmbed, parseTimeToSeconds, setExistingPageMedia, setIsLightboxOpen, setStartText, setEndText, setLightboxMedia, setClipStart, setClipEnd])
+
   // Handle lightbox actions
   const handleLightboxConfirm = async () => {
     if (!lightboxMedia) return
     
-    // 🔧 FIX: Check if we're editing existing media or adding new media
+    // Check if we're editing existing media or adding new media
     const isEditingExistingMedia = existingPageMedia.some(media => media.id === lightboxMedia.id)
     const hasExistingMedia = existingPageMedia && existingPageMedia.length > 0
     
+    if (isEditingExistingMedia) {
+      // Use the single commit path for clip timing changes
+      await commitClipTiming()
+      return
+    }
+    
+    // Close lightbox for new media addition
     setIsLightboxOpen(false)
     
-    if (isEditingExistingMedia) {
-      // 🔧 FIX: Update existing media clip timing instead of deleting and recreating
-      console.log('[MediaEnhancement] 🎬 Updating clip timing for existing YouTube video:', {
-        mediaId: lightboxMedia.id,
-        title: lightboxMedia.title,
-        oldClipStart: existingPageMedia.find(m => m.id === lightboxMedia.id)?.clipStart,
-        oldClipEnd: existingPageMedia.find(m => m.id === lightboxMedia.id)?.clipEnd,
-        newClipStart: parseTimeToSeconds(startText) ?? lightboxMedia.clipStart,
-        newClipEnd: parseTimeToSeconds(endText) ?? lightboxMedia.clipEnd
-      })
-      
-      // Update the existing media with new clip timing
-      const startSeconds = parseTimeToSeconds(startText) ?? lightboxMedia.clipStart
-      const endSeconds = parseTimeToSeconds(endText) ?? lightboxMedia.clipEnd
-      
-      const updatedMedia = existingPageMedia.map(media => {
-        if (media.id === lightboxMedia.id) {
-          const updatedEmbed = lightboxMedia.isYouTube 
-            ? buildYouTubeEmbed(lightboxMedia.url, startSeconds, endSeconds)
-            : media.embedUrl
-            
-          return {
-            ...media,
-            clipStart: startSeconds,
-            clipEnd: endSeconds,
-            embedUrl: updatedEmbed
-          }
-        }
-        return media
-      })
-      
-      // Update the component state
-      setExistingPageMedia(updatedMedia)
-      
-      // Update the course content immediately
-      if (courseContent && onUpdateContent) {
-        const currentPage = getCurrentPage()
-        if (currentPage) {
-          const updatedPage = { ...currentPage, media: updatedMedia }
-          updatePageInCourseContent(currentPage, updatedMedia)
-        }
-      }
-      
-      // Persist clip timing changes to storage
-      try {
-        const existingMedia = existingPageMedia.find(m => m.id === lightboxMedia.id)
-        if (existingMedia?.storageId) {
-          await updateYouTubeVideoMetadata(existingMedia.storageId, {
-            clipStart: startSeconds,
-            clipEnd: endSeconds,
-            embedUrl: lightboxMedia.isYouTube 
-              ? buildYouTubeEmbed(lightboxMedia.url, startSeconds, endSeconds)
-              : undefined
-          })
-          console.log('[MediaEnhancement] ✅ Persisted clip timing changes to storage')
-        }
-      } catch (error) {
-        console.error('[MediaEnhancement] ❌ Failed to persist clip timing changes:', error)
-      }
-      
-      // Clear clip timing state
-      setStartText('')
-      setEndText('')
-      setLightboxMedia(null)
-      setClipStart(undefined)
-      setClipEnd(undefined)
-      
-      console.log('[MediaEnhancement] ✅ Successfully updated YouTube video clip timing')
-    } else if (hasExistingMedia) {
+    if (hasExistingMedia) {
       // Delete existing media first, then add new (same as handleReplaceConfirm)
       console.log('[MediaEnhancement] Deleting existing media before replacement:', existingPageMedia)
       for (const media of existingPageMedia) {
@@ -960,10 +961,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     console.log(`[YouTube Clip] handleClipInputFocus called:`, {
       mediaId,
       field,
-      previousFocus: focusedInput
+      previousFocus: null // focusedInput removed
     })
     
-    setFocusedInput({ mediaId, field })
+    // setFocusedInput removed - no longer needed
     
     // Initialize local input with current formatted value if not already present
     const media = existingPageMedia.find(m => m.id === mediaId)
@@ -981,7 +982,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         return updated
       })
     }
-  }, [focusedInput, existingPageMedia, formatSecondsToTime])
+  }, [existingPageMedia, formatSecondsToTime]) // focusedInput dependency removed
 
   // Function to update page in course content - moved here to fix temporal dead zone error
   const updatePageInCourseContent = (page: Page | Topic, media: Media[]) => {
@@ -1254,9 +1255,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       }
       
       // Clear focused input after everything else is done
-      if (focusedInput?.mediaId === mediaId && focusedInput?.field === field) {
-        setFocusedInput(null)
-      }
+      // focusedInput logic removed - no longer needed
 
       // MEDIA CLEARING FIX: Clear the clip timing update flag after a delay to allow state to settle
       setTimeout(() => {
@@ -1267,9 +1266,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     activeTimeInputs, 
     parseTimeToSeconds, 
     markDirty, 
-    focusedInput, 
     existingPageMedia, 
-    lastKnownGoodValues, 
+    lastKnownGoodValues, // focusedInput dependency removed 
     updateYouTubeVideoMetadata, 
     getCurrentPage, 
     updatePageInCourseContent
@@ -1840,11 +1838,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     })
     
     // Also clear focused input if it references non-existent media
-    if (focusedInput && !existingMediaIds.has(focusedInput.mediaId)) {
-      console.log(`[YouTube Clip] Clearing stale focusedInput for deleted media:`, focusedInput.mediaId)
-      setFocusedInput(null)
-    }
-  }, [existingPageMedia, focusedInput])
+    // focusedInput cleanup logic removed - no longer needed
+  }, [existingPageMedia]) // focusedInput dependency removed
   
   // Load prompt suggestions separated by type
   useEffect(() => {
@@ -2953,43 +2948,49 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           </p>
         </div>
 
-        {/* YouTube clip time inputs */}
+        {/* YouTube clip timing editor - single modal interface */}
         {media.type === 'video' && media.isYouTube && (
-          <div 
-            className={styles.youTubeClipContainer}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={styles.youTubeClipInputs}>
-              <div className={styles.clipInputWrapper}>
-                <label className={styles.clipInputLabel}>Start</label>
-                <Input
-                  type="text"
-                  placeholder="0:00"
-                  value={getInputValue(media, 'start')}
-                  onChange={(e) => handleClipInputChange(media.id, 'start', e.target.value)}
-                  onFocus={() => setFocusedInput({ mediaId: media.id, field: 'start' })}
-                  onBlur={() => handleClipInputBlur(media.id, 'start')}
-                  aria-label="Clip start time"
-                />
-              </div>
-              <div className={styles.clipInputWrapper}>
-                <label className={styles.clipInputLabel}>End</label>
-                <Input
-                  type="text"
-                  placeholder="0:00"
-                  value={getInputValue(media, 'end')}
-                  onChange={(e) => handleClipInputChange(media.id, 'end', e.target.value)}
-                  onFocus={() => setFocusedInput({ mediaId: media.id, field: 'end' })}
-                  onBlur={() => handleClipInputBlur(media.id, 'end')}
-                  aria-label="Clip end time"
-                />
-              </div>
-            </div>
+          <div className={styles.clipTimingButton} onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation()
+                // Open the lightbox modal for this specific video
+                setLightboxMedia({
+                  id: media.id,
+                  title: media.title,
+                  url: media.url,
+                  embedUrl: media.embedUrl,
+                  isYouTube: media.isYouTube,
+                  clipStart: media.clipStart,
+                  clipEnd: media.clipEnd,
+                  storageId: media.storageId,
+                  thumbnail: media.thumbnail || '',
+                  description: ''
+                } as SearchResult)
+                // Pre-fill the modal inputs with current values
+                setStartText(media.clipStart ? formatSecondsToTime(media.clipStart) : '')
+                setEndText(media.clipEnd ? formatSecondsToTime(media.clipEnd) : '')
+                setClipStart(media.clipStart)
+                setClipEnd(media.clipEnd)
+                setIsLightboxOpen(true)
+              }}
+              className={styles.editTimingButton}
+            >
+              Edit timing...
+            </Button>
+            {/* Show current timing if set */}
+            {(media.clipStart !== undefined || media.clipEnd !== undefined) && (
+              <span className={styles.timingDisplay}>
+                {formatSecondsToTime(media.clipStart || 0)} - {formatSecondsToTime(media.clipEnd || 0)}
+              </span>
+            )}
           </div>
         )}
       </div>
     ))
-  }, [existingPageMedia, blobUrls, handleMediaClick, handleClipInputChange, handleClipInputBlur, getInputValue, setFocusedInput, styles])
+  }, [existingPageMedia, blobUrls, handleMediaClick, setLightboxMedia, setStartText, setEndText, setClipStart, setClipEnd, setIsLightboxOpen, formatSecondsToTime, styles])
 
   return (
     <PageLayout
