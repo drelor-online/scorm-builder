@@ -607,18 +607,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // PREVIEW URL COMPUTATION: Dynamic clip-aware preview URL for lightbox
   const previewUrl = useMemo(() => {
-    if (!lightboxMedia?.isYouTube) return lightboxMedia?.embedUrl || lightboxMedia?.url || ''
+    if (!lightboxMedia?.isYouTube) {
+      return lightboxMedia?.embedUrl || lightboxMedia?.url || ''
+    }
     
-    // PRIORITY ORDER: Use temporary input state if available, otherwise fall back to persisted values
-    const startSeconds = startText ? parseTimeToSeconds(startText) : lightboxMedia.clipStart
-    const endSeconds = endText ? parseTimeToSeconds(endText) : lightboxMedia.clipEnd
-    
+    // Use direct clipStart/clipEnd state for immediate preview updates
     return buildYouTubeEmbed(
-      lightboxMedia.url || lightboxMedia.embedUrl || '', 
-      startSeconds, 
-      endSeconds
+      lightboxMedia.url || lightboxMedia.embedUrl || '',
+      clipStart,
+      clipEnd
     )
-  }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, lightboxMedia?.clipStart, lightboxMedia?.clipEnd, startText, endText])
+  }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, clipStart, clipEnd])
   
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const getMediaType = (page: Page | Topic | undefined): 'image' | 'video' => {
