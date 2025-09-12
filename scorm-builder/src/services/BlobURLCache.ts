@@ -36,7 +36,7 @@ interface PerformanceStats {
 export class BlobURLCache {
   private static instance: BlobURLCache | null = null
   private cache: Map<string, CacheEntry> = new Map()
-  private debugEnabled = true
+  private debugEnabled = process.env.NODE_ENV !== 'production'
   private maxSize = 50 // Default max items
   private memoryThreshold = 100 * 1024 * 1024 // Default 100MB
   private maxAge = 24 * 60 * 60 * 1000 // Default 24 hours
