@@ -28,6 +28,7 @@ export interface Notification {
     total: number
   }
   timestamp: number
+  count?: number // Number of times this notification was deduplicated
 }
 
 interface NotificationContextType {
@@ -57,16 +58,74 @@ export const useNotifications = () => {
   return context
 }
 
+// Deduplication constants
+const DEDUP_TTL_MS = 10000 // 10 seconds TTL for deduplication
+const MAX_DEDUP_CACHE_SIZE = 1000 // Prevent memory leaks
+
+interface DedupEntry {
+  id: string
+  count: number
+  lastSeen: number
+  cleanupTimer: NodeJS.Timeout
+}
+
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  
+  // Deduplication cache: key = "message|type", value = DedupEntry
+  const dedupCacheRef = useRef<Map<string, DedupEntry>>(new Map())
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp'>) => {
+    // Create deduplication key from message and type
+    const dedupKey = `${notification.message}|${notification.type}`
+    const now = Date.now()
+    
+    // Check for existing deduplication entry
+    const existingEntry = dedupCacheRef.current.get(dedupKey)
+    
+    if (existingEntry) {
+      // Found duplicate - increment counter and refresh TTL
+      console.log(`[Notifications] Deduplicating notification: "${notification.message}" (count: ${existingEntry.count + 1})`)
+      
+      const newCount = existingEntry.count + 1
+      
+      // Update the existing notification with new count
+      setNotifications(prev => prev.map(n => 
+        n.id === existingEntry.id 
+          ? { 
+              ...n, 
+              count: newCount,
+              message: `${notification.message} (${newCount})`,
+              timestamp: now // Update timestamp to latest occurrence
+            }
+          : n
+      ))
+      
+      // Clear old cleanup timer and create new one (refresh TTL)
+      clearTimeout(existingEntry.cleanupTimer)
+      const cleanupTimer = setTimeout(() => {
+        dedupCacheRef.current.delete(dedupKey)
+      }, DEDUP_TTL_MS)
+      
+      // Update dedup entry
+      dedupCacheRef.current.set(dedupKey, {
+        ...existingEntry,
+        count: newCount,
+        lastSeen: now,
+        cleanupTimer
+      })
+      
+      return existingEntry.id // Return existing ID
+    }
+    
+    // No duplicate found - create new notification
     const id = generateNotificationId()
     const newNotification: Notification = {
       ...notification,
       id,
-      timestamp: Date.now()
+      timestamp: now,
+      count: 1
     }
 
     setNotifications(prev => [...prev, newNotification])
@@ -78,8 +137,42 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }, notification.duration)
       timersRef.current.set(id, timer)
     }
+    
+    // Add to deduplication cache
+    const cleanupTimer = setTimeout(() => {
+      dedupCacheRef.current.delete(dedupKey)
+    }, DEDUP_TTL_MS)
+    
+    dedupCacheRef.current.set(dedupKey, {
+      id,
+      count: 1,
+      lastSeen: now,
+      cleanupTimer
+    })
+    
+    // Cleanup cache if it gets too large (prevent memory leaks)
+    if (dedupCacheRef.current.size > MAX_DEDUP_CACHE_SIZE) {
+      console.warn('[Notifications] Deduplication cache size exceeded, clearing old entries')
+      cleanupDedupCache()
+    }
 
     return id
+  }, [])
+  
+  // Helper function to clean up old deduplication entries
+  const cleanupDedupCache = useCallback(() => {
+    const entries = Array.from(dedupCacheRef.current.entries())
+    
+    // Sort by lastSeen timestamp and keep only recent half
+    entries.sort((a, b) => b[1].lastSeen - a[1].lastSeen)
+    const keepCount = Math.floor(MAX_DEDUP_CACHE_SIZE / 2)
+    
+    // Clear old entries
+    for (let i = keepCount; i < entries.length; i++) {
+      const [key, entry] = entries[i]
+      clearTimeout(entry.cleanupTimer)
+      dedupCacheRef.current.delete(key)
+    }
   }, [])
 
   const removeNotification = useCallback((id: string) => {

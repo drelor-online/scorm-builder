@@ -55,7 +55,7 @@ describe('StepNavigationContext - SCORM Bug', () => {
     mockStorage = createMockStorage()
   })
 
-  it('reproduces the bug: steps 1-5 are disabled when loading at SCORM with only step 0 visited', async () => {
+  it('FIXED: now backfills intermediate steps when navigating to step N', async () => {
     // Simulate the exact scenario from the user's project:
     // - visitedSteps saved as [0]
     // - current step is SCORM (6)
@@ -80,18 +80,18 @@ describe('StepNavigationContext - SCORM Bug', () => {
       result.current.navigateToStep(6)
     })
 
-    // After navigation, visitedSteps should be [0, 6]
-    expect(result.current.visitedSteps).toEqual([0, 6])
+    // FIXED: After navigation, all steps 0-6 should now be visited (backfilled)
+    expect(result.current.visitedSteps).toEqual([0, 1, 2, 3, 4, 5, 6])
     expect(result.current.currentStep).toBe(6)
 
-    // THE BUG: Steps 1-5 are NOT navigable even though we're at step 6
-    expect(result.current.canNavigateToStep(0)).toBe(true)  // OK
-    expect(result.current.canNavigateToStep(1)).toBe(false) // BUG: Should be true!
-    expect(result.current.canNavigateToStep(2)).toBe(false) // BUG: Should be true!
-    expect(result.current.canNavigateToStep(3)).toBe(false) // BUG: Should be true!
-    expect(result.current.canNavigateToStep(4)).toBe(false) // BUG: Should be true!
-    expect(result.current.canNavigateToStep(5)).toBe(false) // BUG: Should be true!
-    expect(result.current.canNavigateToStep(6)).toBe(true)  // OK
+    // FIXED: All steps 0-6 are now navigable
+    expect(result.current.canNavigateToStep(0)).toBe(true)  // ✓
+    expect(result.current.canNavigateToStep(1)).toBe(true)  // ✓ FIXED!
+    expect(result.current.canNavigateToStep(2)).toBe(true)  // ✓ FIXED!
+    expect(result.current.canNavigateToStep(3)).toBe(true)  // ✓ FIXED!
+    expect(result.current.canNavigateToStep(4)).toBe(true)  // ✓ FIXED!
+    expect(result.current.canNavigateToStep(5)).toBe(true)  // ✓ FIXED!
+    expect(result.current.canNavigateToStep(6)).toBe(true)  // ✓
   })
 
   it('shows the desired behavior: all steps 0-N should be visited when at step N', async () => {
@@ -125,5 +125,112 @@ describe('StepNavigationContext - SCORM Bug', () => {
     
     // Step 7 should still not be navigable (not visited yet)
     expect(result.current.canNavigateToStep(7)).toBe(false)
+  })
+
+  it('FIXED: automatically backfills visited steps when navigating to step N', async () => {
+    // Start with only step 0 visited (simulating saved state)
+    mockStorage.getContent.mockResolvedValueOnce({ steps: [0] })
+
+    const { result } = renderHook(() => useStepNavigation(), {
+      wrapper: ({ children }) => (
+        <StepNavigationProvider>{children}</StepNavigationProvider>
+      )
+    })
+
+    await waitFor(() => {
+      expect(mockStorage.getContent).toHaveBeenCalledWith('visitedSteps')
+    })
+
+    // Initial state: only step 0 visited
+    expect(result.current.visitedSteps).toEqual([0])
+    expect(result.current.currentStep).toBe(0)
+
+    // Navigate directly to step 6 (SCORM scenario)
+    act(() => {
+      result.current.navigateToStep(6)
+    })
+
+    // EXPECTED: All steps 0-6 should now be visited (backfilled)
+    expect(result.current.visitedSteps).toEqual([0, 1, 2, 3, 4, 5, 6])
+    expect(result.current.currentStep).toBe(6)
+
+    // EXPECTED: All steps 0-6 should be navigable
+    for (let i = 0; i <= 6; i++) {
+      expect(result.current.canNavigateToStep(i)).toBe(true)
+    }
+    
+    // Step 7 should still not be navigable
+    expect(result.current.canNavigateToStep(7)).toBe(false)
+
+    // Verify backfilled steps are persisted (with debounce delay)
+    await waitFor(() => {
+      expect(mockStorage.saveContent).toHaveBeenCalledWith('visitedSteps', {
+        steps: [0, 1, 2, 3, 4, 5, 6]
+      })
+    }, { timeout: 2000 }) // Allow time for debounced save
+  })
+
+  it('preserves higher visited steps when backfilling', async () => {
+    // Start with steps [0, 3, 8] visited (user jumped around)
+    mockStorage.getContent.mockResolvedValueOnce({ steps: [0, 3, 8] })
+
+    const { result } = renderHook(() => useStepNavigation(), {
+      wrapper: ({ children }) => (
+        <StepNavigationProvider>{children}</StepNavigationProvider>
+      )
+    })
+
+    await waitFor(() => {
+      expect(mockStorage.getContent).toHaveBeenCalledWith('visitedSteps')
+    })
+
+    // Navigate to step 5 (should backfill 1, 2, 4, 5 but keep 8)
+    act(() => {
+      result.current.navigateToStep(5)
+    })
+
+    // Should have [0, 1, 2, 3, 4, 5, 8] - backfilled 0-5 + preserved 8
+    expect(result.current.visitedSteps).toEqual([0, 1, 2, 3, 4, 5, 8])
+    
+    // All steps 0-5 and 8 should be navigable
+    for (let i = 0; i <= 5; i++) {
+      expect(result.current.canNavigateToStep(i)).toBe(true)
+    }
+    expect(result.current.canNavigateToStep(6)).toBe(false) // Not visited
+    expect(result.current.canNavigateToStep(7)).toBe(false) // Not visited
+    expect(result.current.canNavigateToStep(8)).toBe(true)  // Previously visited
+  })
+
+  it('handles backward navigation without losing backfilled steps', async () => {
+    // Start fresh with only step 0
+    mockStorage.getContent.mockResolvedValueOnce({ steps: [0] })
+
+    const { result } = renderHook(() => useStepNavigation(), {
+      wrapper: ({ children }) => (
+        <StepNavigationProvider>{children}</StepNavigationProvider>
+      )
+    })
+
+    await waitFor(() => {
+      expect(mockStorage.getContent).toHaveBeenCalledWith('visitedSteps')
+    })
+
+    // Navigate forward to step 4 (should backfill 0-4)
+    act(() => {
+      result.current.navigateToStep(4)
+    })
+    expect(result.current.visitedSteps).toEqual([0, 1, 2, 3, 4])
+
+    // Navigate backward to step 2 (should not remove any visited steps)
+    act(() => {
+      result.current.navigateToStep(2)
+    })
+    expect(result.current.visitedSteps).toEqual([0, 1, 2, 3, 4]) // Unchanged
+    expect(result.current.currentStep).toBe(2)
+
+    // All steps 0-4 should still be navigable
+    for (let i = 0; i <= 4; i++) {
+      expect(result.current.canNavigateToStep(i)).toBe(true)
+    }
   })
 })

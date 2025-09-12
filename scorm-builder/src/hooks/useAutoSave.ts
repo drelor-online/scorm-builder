@@ -39,10 +39,22 @@ export function useAutoSave<T>({
   const lastSaveTimeRef = useRef<number>(0) // Track last save time for debouncing
   const notifications = useNotifications()
   const currentNotificationRef = useRef<string | null>(null)
+  
+  // Race condition protection
+  const savingPromiseRef = useRef<Promise<any> | null>(null)
+  const pendingDataRef = useRef<T | null>(null)
 
-  // Perform save operation with debouncing
+  // Perform save operation with race condition protection
   const performSave = useCallback(async (dataToSave: T, skipDebounce = false) => {
     if (!mountedRef.current || disabled) return
+
+    // Race condition protection: if a save is already in flight
+    if (savingPromiseRef.current) {
+      console.log('[useAutoSave] Save already in progress, queuing data for coalescing')
+      // Store the latest data for coalescing
+      pendingDataRef.current = dataToSave
+      return
+    }
 
     // Check if we should debounce this save
     const now = Date.now()
@@ -61,7 +73,11 @@ export function useAutoSave<T>({
         currentNotificationRef.current = notifications.autoSaveStart()
       }
       
-      await onSave(dataToSave)
+      // Create and store the save promise
+      const savePromise = onSave(dataToSave)
+      savingPromiseRef.current = savePromise
+      
+      await savePromise
       
       if (mountedRef.current) {
         const saveTime = new Date()
@@ -102,17 +118,41 @@ export function useAutoSave<T>({
       if (mountedRef.current) {
         setIsSaving(false)
         currentNotificationRef.current = null
+        savingPromiseRef.current = null // Clear the save promise
+        
+        // Check if there's pending data to save (coalescing)
+        if (pendingDataRef.current) {
+          console.log('[useAutoSave] Processing queued save with latest data')
+          const queuedData = pendingDataRef.current
+          pendingDataRef.current = null
+          
+          // Schedule the queued save after a small delay to avoid immediate re-execution
+          setTimeout(() => {
+            performSave(queuedData, true)
+          }, 100)
+        }
       }
     }
   }, [onSave, onError, onConflict, disabled, minSaveInterval, notifications, showNotifications])
 
-  // Force save immediately (bypasses debouncing)
+  // Force save immediately (bypasses debouncing but respects race condition protection)
   const forceSave = useCallback(async () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
+    
     if (data !== null) {
+      // If a save is in progress, wait for it to complete then save latest data
+      if (savingPromiseRef.current) {
+        console.log('[useAutoSave] Force save waiting for in-flight save to complete')
+        try {
+          await savingPromiseRef.current
+        } catch {
+          // Ignore errors from the previous save, we'll try with new data
+        }
+      }
+      
       await performSave(data, true) // Skip debounce for forced saves
     }
   }, [data, performSave])

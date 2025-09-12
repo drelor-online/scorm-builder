@@ -78,12 +78,21 @@ export function StepNavigationProvider({ children, initialStep = 0 }: StepNaviga
     const oldStep = currentStep
     setCurrentStep(step)
     
-    // Add to visited steps if not already there
+    // Backfill visited steps: ensure all steps 0 through 'step' are marked as visited
+    // This fixes the SCORM jump bug where users can load directly into step N but 
+    // can't navigate back to intermediate steps
     setVisitedSteps(prev => {
-      if (!prev.includes(step)) {
-        return [...prev, step].sort((a, b) => a - b)
-      }
-      return prev
+      const maxVisitedStep = Math.max(...prev, step)
+      const allStepsToTarget = Array.from({ length: step + 1 }, (_, i) => i)
+      
+      // Merge existing visited steps with backfilled steps, ensuring no duplicates
+      const mergedSteps = [...new Set([...prev, ...allStepsToTarget])]
+      
+      // Keep any steps beyond the current target that were previously visited
+      const higherSteps = prev.filter(s => s > step)
+      const finalSteps = [...new Set([...mergedSteps, ...higherSteps])]
+      
+      return finalSteps.sort((a, b) => a - b)
     })
 
     // Notify all handlers
