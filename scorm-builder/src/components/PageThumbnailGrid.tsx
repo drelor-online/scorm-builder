@@ -25,8 +25,15 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
     const loadMedia = async () => {
       if (!page.id || !mediaItems.length) return
       
-      // Get first media reference
-      const firstMediaRef = mediaItems[0]
+      // Get first VISUAL media reference (filter for image, video, youtube only)
+      const visualMediaItems = mediaItems.filter(m => m.type === 'image' || m.type === 'video' || m.type === 'youtube')
+      const firstMediaRef = visualMediaItems[0]
+      
+      // Exit early if no visual media available
+      if (!firstMediaRef) {
+        console.log(`[PageThumbnailGrid] No visual media found for page ${page.id}, skipping thumbnail`)
+        return
+      }
       
       // Clear previous media URL to avoid showing stale content
       setMediaUrl(null)
