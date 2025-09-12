@@ -246,7 +246,10 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
       // Load media for each page using defensive filtering
       const mediaPromises = allPages.map(async (page) => {
         try {
-          const mediaItems = await getValidMediaForPage(page.id) || []
+          const mediaItems = await getValidMediaForPage(page.id, {
+            types: ['image', 'video', 'youtube'],
+            verifyExistence: false
+          }) || []
           return { pageId: page.id, mediaItems }
         } catch (error) {
           console.warn(`[PageThumbnailGrid] Failed to load media for page ${page.id}:`, error)

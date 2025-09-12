@@ -352,7 +352,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     getValidMediaForPage,
     populateFromCourseContent,
     createBlobUrl,
-    cleanContaminatedMedia
+    cleanContaminatedMedia,
+    setLoadingProfile
   } = useUnifiedMedia()
   
   const storage = useStorage()
@@ -399,6 +400,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       setBlobUrls(new Map())
     }
   }, [])
+  
+  // PERFORMANCE OPTIMIZATION: Set visual-only loading profile for Media step
+  useEffect(() => {
+    console.log('[MediaEnhancement] 🚀 Setting visual-only loading profile for Media step')
+    setLoadingProfile?.('visual-only')
+    
+    return () => {
+      console.log('[MediaEnhancement] 🔄 Restoring all loading profile on unmount')
+      setLoadingProfile?.('all')
+    }
+  }, [setLoadingProfile])
   
   // 🔧 CONTAMINATION CLEANUP: Clean any contaminated media on component mount
   useEffect(() => {

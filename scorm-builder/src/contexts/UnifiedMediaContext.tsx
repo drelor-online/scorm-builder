@@ -16,6 +16,18 @@ import { useStorage } from './PersistentStorageContext'
 // Track media IDs that have already been cleaned to prevent duplicate warnings
 const cleanedOnce = new Set<string>()
 
+// PERFORMANCE OPTIMIZATION: Loading profiles for step-specific optimization
+type LoadingProfile = 'visual-only' | 'all'
+
+// PERFORMANCE OPTIMIZATION: Idle contamination cleanup to avoid blocking UI
+const scheduleIdleCleanup = (id: string, cleanupFn: () => Promise<void>) => {
+  if (cleanedOnce.has(id)) return
+  cleanedOnce.add(id)
+  
+  const idleCallback = (window as any).requestIdleCallback || ((fn: () => void) => setTimeout(fn, 1500))
+  idleCallback(cleanupFn)
+}
+
 export interface UnifiedMediaContextType {
   // Core media operations
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
@@ -30,7 +42,7 @@ export interface UnifiedMediaContextType {
   
   // Query operations
   getMediaForPage: (pageId: string) => MediaItem[]
-  getValidMediaForPage: (pageId: string) => Promise<MediaItem[]>  // Defensive version that validates existence
+  getValidMediaForPage: (pageId: string, opts?: { types?: Array<'image' | 'video' | 'youtube'>; verifyExistence?: boolean }) => Promise<MediaItem[]>  // Defensive version that validates existence
   getAllMedia: () => MediaItem[]
   getMediaById: (mediaId: string) => MediaItem | undefined
   
@@ -48,6 +60,9 @@ export interface UnifiedMediaContextType {
   error: Error | null
   clearError: () => void
   refreshMedia: () => Promise<void>
+  
+  // Performance optimization
+  setLoadingProfile: (profile: LoadingProfile) => void
   
   // Cache management
   resetMediaCache: () => void
@@ -80,7 +95,8 @@ async function progressivelyLoadRemainingMedia(
   allMedia: MediaItem[],
   criticalMediaIds: string[],
   mediaService: MediaService,
-  blobCache: BlobURLCache
+  blobCache: BlobURLCache,
+  profile: LoadingProfile = 'all'
 ) {
   console.log('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
   
@@ -95,7 +111,7 @@ async function progressivelyLoadRemainingMedia(
   console.log(`[ProgressiveLoader] 📋 ${remainingMedia.length} media items to progressively load`)
   
   // 🎯 INTELLIGENT PRIORITIZATION ALGORITHM
-  const prioritizedBatches = prioritizeMediaForLoading(remainingMedia)
+  const prioritizedBatches = prioritizeMediaForLoading(remainingMedia, profile)
   
   // Load each batch with delays between them
   for (let i = 0; i < prioritizedBatches.length; i++) {
@@ -145,18 +161,25 @@ async function progressivelyLoadRemainingMedia(
 }
 
 // 🎯 PRIORITIZATION ALGORITHM: Sort media by importance for user experience  
-function prioritizeMediaForLoading(remainingMedia: MediaItem[]): MediaItem[][] {
+function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: LoadingProfile = 'all'): MediaItem[][] {
   const batches: MediaItem[][] = []
   
+  // PERFORMANCE OPTIMIZATION: Filter by loading profile
+  const filteredMedia = profile === 'visual-only'
+    ? remainingMedia.filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube')
+    : remainingMedia
+  
+  console.log(`[ProgressiveLoader] Profile: ${profile}, Filtering ${remainingMedia.length} → ${filteredMedia.length} items`)
+  
   // HIGH PRIORITY BATCH: Audio from welcome/objectives (immediate user needs)
-  const highPriority = remainingMedia.filter(item => 
+  const highPriority = filteredMedia.filter(item => 
     item.type === 'audio' && 
     (item.pageId === 'welcome' || item.pageId === 'objectives')
   )
   if (highPriority.length > 0) batches.push(highPriority)
   
   // MEDIUM PRIORITY BATCH: Visual media from early topics (likely to be seen soon)
-  const mediumPriority = remainingMedia.filter(item => 
+  const mediumPriority = filteredMedia.filter(item => 
     !highPriority.includes(item) &&
     (item.type === 'image' || item.type === 'video') &&
     item.pageId?.startsWith('topic-') &&
@@ -165,7 +188,7 @@ function prioritizeMediaForLoading(remainingMedia: MediaItem[]): MediaItem[][] {
   if (mediumPriority.length > 0) batches.push(mediumPriority)
   
   // AUDIO PRIORITY BATCH: Audio from early topics
-  const audioPriority = remainingMedia.filter(item => 
+  const audioPriority = filteredMedia.filter(item => 
     !highPriority.includes(item) &&
     item.type === 'audio' &&
     item.pageId?.startsWith('topic-') &&
@@ -174,7 +197,7 @@ function prioritizeMediaForLoading(remainingMedia: MediaItem[]): MediaItem[][] {
   if (audioPriority.length > 0) batches.push(audioPriority)
   
   // LOW PRIORITY BATCH: Everything else (later topics, captions, etc.)
-  const lowPriority = remainingMedia.filter(item => 
+  const lowPriority = filteredMedia.filter(item => 
     !highPriority.includes(item) &&
     !mediumPriority.includes(item) &&
     !audioPriority.includes(item)
@@ -241,6 +264,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const [mediaCache, setMediaCache] = useState<Map<string, MediaItem>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState<LoadingProfile>('all')
   
   // Track media loads to prevent infinite reloading
   const hasLoadedRef = useRef<Set<string>>(new Set())
@@ -462,7 +486,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         // 🚀 PROGRESSIVE LOADING: Start background loading of remaining media after UI is ready
         setTimeout(async () => {
           try {
-            await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache)
+            await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
           } catch (error) {
             logger.warn('[UnifiedMediaContext] Progressive loading failed:', error)
           }
@@ -791,7 +815,10 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     return Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
   }, [mediaCache])
   
-  const getValidMediaForPage = useCallback(async (pageId: string): Promise<MediaItem[]> => {
+  const getValidMediaForPage = useCallback(async (
+    pageId: string, 
+    opts?: { types?: Array<'image' | 'video' | 'youtube'>; verifyExistence?: boolean }
+  ): Promise<MediaItem[]> => {
     // 🔍 DEBUG: Log all cache contents for debugging page association issues
     const allCachedItems = Array.from(mediaCache.values())
     console.log(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - DEBUG INFO:`)
@@ -828,6 +855,23 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       })))
     }
     
+    // PERFORMANCE OPTIMIZATION: Apply optional filtering
+    let filteredMediaForPage = allMediaForPage
+    
+    // Filter by media types if specified
+    if (opts?.types && opts.types.length > 0) {
+      filteredMediaForPage = allMediaForPage.filter(item => 
+        opts.types!.includes(item.type as 'image' | 'video' | 'youtube')
+      )
+      console.log(`🔧 [UnifiedMediaContext] Type filtering: ${allMediaForPage.length} → ${filteredMediaForPage.length} items (types: ${opts.types.join(', ')})`)
+    }
+    
+    // Early return if no existence verification needed (lightweight mode)
+    if (opts?.verifyExistence === false) {
+      logger.log(`[UnifiedMediaContext] Lightweight mode: Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
+      return filteredMediaForPage
+    }
+    
     // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items
     let contaminatedCount = 0
     for (const item of allMediaForPage) {
@@ -850,10 +894,9 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       if (hasYouTubeMetadata) {
         contaminatedCount++
         
-        // RENDER LOOP FIX: Only warn once per media ID per session to prevent spam
-        if (!cleanedOnce.has(item.id)) {
-          cleanedOnce.add(item.id)
-          console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE!`)
+        // PERFORMANCE OPTIMIZATION: Schedule cleanup during idle time to avoid blocking UI
+        scheduleIdleCleanup(item.id, async () => {
+          console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE! (Deferred)`)
           console.warn(`   Media ID: ${item.id}`)
           console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
           console.warn(`   Page: ${pageId}`)
@@ -865,9 +908,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
           })
           console.warn('   🔧 This contaminated data will cause UI issues!')
-        } else {
-          console.log(`🔇 [UnifiedMediaContext] Contamination already reported for ${item.id} (suppressed)`)
-        }
+        })
       }
     }
     
@@ -887,9 +928,9 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     // 2. Modifying mediaCache during iteration (cache.delete) 
     // 3. Triggering useCallback dependency changes → PageThumbnailGrid re-render loop
     // Components should handle non-existent media gracefully instead
-    logger.log(`[UnifiedMediaContext] Returning ${allMediaForPage.length} cached media items for page ${pageId}`)
+    logger.log(`[UnifiedMediaContext] Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
     
-    return allMediaForPage
+    return filteredMediaForPage
   }, [mediaCache])
   
   const getAllMedia = useCallback((): MediaItem[] => {
@@ -1097,7 +1138,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     resetMediaCache,
     populateFromCourseContent,
     cleanContaminatedMedia,
-    setCriticalMediaLoadingCallback: setCriticalMediaLoadingCallback
+    setCriticalMediaLoadingCallback: setCriticalMediaLoadingCallback,
+    setLoadingProfile
   }), [
     storeMedia,
     updateMedia,
@@ -1122,7 +1164,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     resetMediaCache,
     populateFromCourseContent,
     cleanContaminatedMedia,
-    setCriticalMediaLoadingCallback
+    setCriticalMediaLoadingCallback,
+    setLoadingProfile
   ])
   
   // Set global context for TauriAudioPlayer
