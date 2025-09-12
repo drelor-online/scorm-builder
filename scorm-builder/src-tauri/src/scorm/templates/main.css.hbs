@@ -875,6 +875,34 @@ body.fullscreen-mode .main-area {
     color: #333;
 }
 
+/* Disabled seeking controls styles */
+.disabled-seeking {
+    opacity: 0.6;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.audio-button.disabled-seeking {
+    background: #f5f5f5 !important;
+    color: #999 !important;
+    cursor: not-allowed !important;
+}
+
+.audio-button.disabled-seeking:hover {
+    background: #f5f5f5 !important;
+    color: #999 !important;
+    transform: none !important;
+}
+
+.audio-progress-container.disabled-seeking {
+    cursor: not-allowed !important;
+    opacity: 0.7;
+}
+
+.audio-progress-container.disabled-seeking:hover {
+    cursor: not-allowed !important;
+}
+
 .audio-volume-container {
     display: flex;
     align-items: center;
@@ -1192,5 +1220,346 @@ body.fullscreen-mode .main-area {
     to {
         transform: translateX(0);
         opacity: 1;
+    }
+}
+
+/* Font Size Settings */
+.font-small {
+    font-size: 0.85em;
+}
+
+.font-small h1 {
+    font-size: 1.8em; /* Relative to base small size */
+}
+
+.font-small h2 {
+    font-size: 1.5em;
+}
+
+.font-small h3 {
+    font-size: 1.3em;
+}
+
+.font-large {
+    font-size: 1.15em;
+}
+
+.font-large h1 {
+    font-size: 2.2em; /* Relative to base large size */
+}
+
+.font-large h2 {
+    font-size: 1.8em;
+}
+
+.font-large h3 {
+    font-size: 1.5em;
+}
+
+/* Show Outline Setting - No Sidebar Layout */
+.main-area.no-sidebar {
+    margin-left: 0;
+    width: 100%;
+}
+
+/* Hide sidebar when outline disabled */
+.sidebar[style*="display: none"] {
+    display: none !important;
+}
+
+/* Session Timeout Auto-save Indicator */
+.auto-save-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4CAF50;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    animation: slideIn 0.3s ease-out;
+}
+
+.auto-save-indicator.show {
+    display: flex;
+}
+
+.auto-save-indicator .icon {
+    font-size: 1.1em;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Time Limit Display */
+.time-limit-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0f8ff;
+    border: 1px solid #4a9eff;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #2c5aa0;
+    margin-right: 12px;
+}
+
+.time-limit-display.warning {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
+}
+
+.time-limit-display.critical {
+    background: #f8d7da;
+    border-color: #dc3545;
+    color: #721c24;
+    animation: pulse 1s infinite;
+}
+
+.timer-icon {
+    font-size: 1.1em;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Minimum Time Progress Display */
+.minimum-time-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8f9fa;
+    border: 1px solid #6c757d;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #495057;
+    margin-right: 12px;
+    min-width: 200px;
+}
+
+.minimum-time-display.complete {
+    background: #d4edda;
+    border-color: #28a745;
+    color: #155724;
+}
+
+.progress-bar {
+    width: 60px;
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-left: 4px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #6c757d;
+    transition: width 0.3s ease-in-out;
+    width: 0%;
+}
+
+.minimum-time-display.complete .progress-fill {
+    background: #28a745;
+}
+
+/* Print Button Styling */
+.print-button {
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 0.9em;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.print-button:hover {
+    background: #218838;
+}
+
+.print-icon {
+    font-size: 1.1em;
+}
+
+/* Print-Specific Styles */
+@media print {
+    /* Hide UI elements that shouldn't be printed */
+    .header-toolbar,
+    .sidebar,
+    .footer,
+    .auto-save-indicator,
+    .scorm-modal-overlay,
+    .skip-link,
+    .audio-player-container,
+    button:not(.print-keep),
+    .nav-button {
+        display: none !important;
+    }
+    
+    /* Optimize layout for printing */
+    body {
+        font-family: 'Times New Roman', serif !important;
+        font-size: 12pt !important;
+        line-height: 1.5 !important;
+        color: black !important;
+        background: white !important;
+        margin: 0 !important;
+        padding: 20px !important;
+    }
+    
+    .main-area {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+    
+    .header {
+        background: none !important;
+        border-bottom: 2px solid #000 !important;
+        padding: 0 0 10px 0 !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .header h1 {
+        color: black !important;
+        font-size: 18pt !important;
+        margin: 0 !important;
+    }
+    
+    .content-container {
+        padding: 0 !important;
+        background: none !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    /* Optimize content for print */
+    h1, h2, h3, h4, h5, h6 {
+        color: black !important;
+        page-break-after: avoid !important;
+    }
+    
+    p, .content-text {
+        text-align: justify !important;
+        orphans: 3 !important;
+        widows: 3 !important;
+    }
+    
+    /* Handle page breaks */
+    .page-content {
+        page-break-inside: avoid !important;
+        margin-bottom: 30px !important;
+    }
+    
+    .page-separator {
+        page-break-before: always !important;
+        visibility: hidden !important;
+        height: 0 !important;
+    }
+    
+    /* Format images for print */
+    img {
+        max-width: 100% !important;
+        height: auto !important;
+        page-break-inside: avoid !important;
+    }
+    
+    /* Format videos and media for print */
+    .media-container {
+        border: 1px solid #ccc !important;
+        padding: 10px !important;
+        text-align: center !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .media-container::after {
+        content: "(Media content not available in print version)" !important;
+        font-style: italic !important;
+        color: #666 !important;
+    }
+    
+    /* Format knowledge checks for print */
+    .knowledge-check {
+        border: 2px solid #000 !important;
+        padding: 15px !important;
+        margin: 20px 0 !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .knowledge-check h3 {
+        margin-top: 0 !important;
+    }
+    
+    /* Format assessment questions for print */
+    .question-container {
+        border: 1px solid #ccc !important;
+        padding: 10px !important;
+        margin: 15px 0 !important;
+        page-break-inside: avoid !important;
+    }
+    
+    /* Add page numbers and course info */
+    @page {
+        margin: 1in;
+        
+        @top-center {
+            content: "{{course_title}}";
+            font-size: 10pt;
+        }
+        
+        @bottom-center {
+            content: "Page " counter(page);
+            font-size: 10pt;
+        }
+    }
+    
+    /* Print table of contents styling */
+    .print-toc {
+        page-break-after: always !important;
+        margin-bottom: 30px !important;
+    }
+    
+    .print-toc h2 {
+        border-bottom: 2px solid #000 !important;
+        padding-bottom: 5px !important;
+    }
+    
+    .print-toc ul {
+        list-style-type: none !important;
+        padding-left: 0 !important;
+    }
+    
+    .print-toc li {
+        margin: 5px 0 !important;
+        padding: 5px 0 !important;
+        border-bottom: 1px dotted #ccc !important;
     }
 }

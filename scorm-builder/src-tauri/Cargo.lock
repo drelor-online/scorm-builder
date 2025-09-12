@@ -4016,7 +4016,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scorm-builder"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "aes-gcm",
  "base64 0.21.7",

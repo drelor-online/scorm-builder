@@ -1555,3 +1555,52 @@
   margin: 0;
   font-style: italic;
 }
+
+/* Enhanced Clip Timing Display for Current Media Preview */
+.videoPreviewContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.clipTimingDisplay {
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+  text-align: center;
+  box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.clipTimingTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+  font-size: 0.9rem;
+}
+
+.clipTimingValues {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  font-family: var(--font-mono);
+}
+
+.timingValue {
+  background: var(--color-primary-bg);
+  color: var(--color-primary-text);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.timingDivider {
+  color: var(--text-tertiary);
+  font-weight: bold;
+}

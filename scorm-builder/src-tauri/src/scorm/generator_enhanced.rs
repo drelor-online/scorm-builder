@@ -77,6 +77,21 @@ pub struct GenerateScormRequest {
     pub navigation_mode: String,
     pub allow_retake: bool,
     pub enable_csp: Option<bool>,
+    pub require_audio_completion: Option<bool>,
+    // New comprehensive course settings
+    pub auto_advance: Option<bool>,
+    pub allow_previous_review: Option<bool>,
+    pub retake_delay: Option<u32>, // hours
+    pub completion_criteria: Option<String>,
+    pub show_progress: Option<bool>,
+    pub show_outline: Option<bool>,
+    pub confirm_exit: Option<bool>,
+    pub font_size: Option<String>, // "small", "medium", "large"
+    pub time_limit: Option<u32>, // minutes, 0 = unlimited
+    pub session_timeout: Option<u32>, // minutes for auto-save
+    pub minimum_time_spent: Option<u32>, // minutes
+    pub keyboard_navigation: Option<bool>,
+    pub printable: Option<bool>,
 }
 
 impl Default for GenerateScormRequest {
@@ -92,6 +107,21 @@ impl Default for GenerateScormRequest {
             navigation_mode: "linear".to_string(),
             allow_retake: true,
             enable_csp: Some(false), // Default to false for better LMS compatibility
+            require_audio_completion: Some(false), // Default to false for backward compatibility
+            // New comprehensive course settings with sensible defaults
+            auto_advance: Some(false),
+            allow_previous_review: Some(true),
+            retake_delay: Some(0), // Immediate retakes
+            completion_criteria: Some("view_and_pass".to_string()),
+            show_progress: Some(true),
+            show_outline: Some(true),
+            confirm_exit: Some(true),
+            font_size: Some("medium".to_string()),
+            time_limit: Some(0), // Unlimited
+            session_timeout: Some(30), // 30 minutes auto-save
+            minimum_time_spent: Some(0), // No minimum
+            keyboard_navigation: Some(true),
+            printable: Some(false),
         }
     }
 }
@@ -195,7 +225,7 @@ impl EnhancedScormGenerator {
 
             // Generate page HTML files
             if let Some(welcome) = &request.welcome_page {
-                let welcome_html = self.html_generator.generate_welcome_page(welcome)?;
+                let welcome_html = self.html_generator.generate_welcome_page(welcome, request.require_audio_completion.unwrap_or(false))?;
                 zip.start_file("pages/welcome.html", options)
                     .map_err(|e| format!("Failed to create welcome.html: {e}"))?;
                 zip.write_all(welcome_html.as_bytes())
@@ -203,7 +233,7 @@ impl EnhancedScormGenerator {
             }
 
             if let Some(objectives) = &request.learning_objectives_page {
-                let objectives_html = self.html_generator.generate_objectives_page(objectives)?;
+                let objectives_html = self.html_generator.generate_objectives_page(objectives, request.require_audio_completion.unwrap_or(false))?;
                 zip.start_file("pages/objectives.html", options)
                     .map_err(|e| format!("Failed to create objectives.html: {e}"))?;
                 zip.write_all(objectives_html.as_bytes())
@@ -212,7 +242,7 @@ impl EnhancedScormGenerator {
 
             // Generate topic pages
             for topic in &request.topics {
-                let topic_html = self.html_generator.generate_topic_page(topic)?;
+                let topic_html = self.html_generator.generate_topic_page(topic, request.require_audio_completion.unwrap_or(false))?;
                 zip.start_file(format!("pages/{}.html", topic.id), options)
                     .map_err(|e| format!("Failed to create topic page: {e}"))?;
                 zip.write_all(topic_html.as_bytes())
@@ -236,11 +266,23 @@ impl EnhancedScormGenerator {
                 .map_err(|e| format!("Failed to write manifest: {e}"))?;
 
             // Add media files
-            for (path, data) in media_files {
-                zip.start_file(&path, options)
+            eprintln!("[SCORM Generator] 📦 Adding {} media files to ZIP package", media_files.len());
+            for (idx, (path, data)) in media_files.iter().enumerate() {
+                eprintln!("[SCORM Generator] 📁 Adding media file {}/{}: {} ({} bytes)", 
+                    idx + 1, media_files.len(), path, data.len());
+                
+                zip.start_file(path.as_str(), options)
                     .map_err(|e| format!("Failed to create media file {path}: {e}"))?;
                 zip.write_all(&data)
                     .map_err(|e| format!("Failed to write media file {path}: {e}"))?;
+                    
+                eprintln!("[SCORM Generator] ✅ Successfully added media file: {}", path);
+            }
+            
+            if media_files.is_empty() {
+                eprintln!("[SCORM Generator] ⚠️  No media files to add - ZIP will contain no media directory");
+            } else {
+                eprintln!("[SCORM Generator] 🎉 All {} media files successfully added to ZIP", media_files.len());
             }
 
             zip.finish()

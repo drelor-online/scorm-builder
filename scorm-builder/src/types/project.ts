@@ -61,6 +61,7 @@ export interface ScormSettings {
   organization: string
   launchPage?: string
   passingScore?: number
+  requireAudioCompletion?: boolean
 }
 
 export interface SavedProject {

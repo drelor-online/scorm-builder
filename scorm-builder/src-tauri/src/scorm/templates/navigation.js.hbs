@@ -158,6 +158,16 @@
     window.addEventListener('beforeunload', function(e) {
         console.log('[SCORM] Page unloading - saving all progress');
         
+        // Show confirmation dialog if enabled
+        if (COURSE_SETTINGS.confirmExit) {
+            const message = 'Are you sure you want to exit the course? Your progress will be saved.';
+            e.preventDefault();
+            e.returnValue = message;
+            
+            // For older browsers
+            return message;
+        }
+        
         // Set session time
         const sessionTime = window.getSessionTime();
         SafeSCORM.setValue('cmi.core.session_time', sessionTime);
@@ -178,7 +188,55 @@
     window.answeredQuestions = {};
     window.assessmentAttempts = 0;
     window.assessmentData = { attempts: 0, scores: [], lastAnswers: {} };
+    window.sessionData = { 
+        startTime: Date.now(), 
+        totalTimeSpent: 0, 
+        pageStartTime: Date.now(),
+        pageTimers: {},
+        lastAutoSave: Date.now()
+    };
     window.hasRestoredProgress = false;
+    
+    // Auto-save timer management
+    window.autoSaveTimer = null;
+    
+    // Time limit timer variables
+    window.timeLimitTimer = null;
+    window.courseStartTime = null;
+    window.timeWarningsShown = {
+        tenMinute: false,
+        fiveMinute: false,
+        twoMinute: false
+    };
+    
+    // Audio completion tracking
+    window.completedAudio = new Set();
+    const REQUIRE_AUDIO_COMPLETION = {{require_audio_completion}};
+    
+    // Course settings configuration
+    const COURSE_SETTINGS = {
+        autoAdvance: {{auto_advance}},
+        allowPreviousReview: {{allow_previous_review}},
+        allowRetake: {{allow_retake}},
+        retakeDelay: {{retake_delay}}, // hours
+        completionCriteria: '{{completion_criteria}}',
+        showProgress: {{show_progress}},
+        showOutline: {{show_outline}},
+        confirmExit: {{confirm_exit}},
+        fontSize: '{{font_size}}',
+        timeLimit: {{time_limit}}, // minutes, 0 = unlimited
+        sessionTimeout: {{session_timeout}}, // minutes for auto-save
+        minimumTimeSpent: {{minimum_time_spent}}, // minutes
+        keyboardNavigation: {{keyboard_navigation}},
+        printable: {{printable}},
+        navigationMode: '{{navigation_mode}}',
+        passMark: {{pass_mark}}
+    };
+    
+    // Apply font size setting to document
+    if (COURSE_SETTINGS.fontSize !== 'medium') {
+        document.documentElement.classList.add(`font-${COURSE_SETTINGS.fontSize}`);
+    }
     
     // Course structure from Rust
     const COURSE_PAGES = [
@@ -229,7 +287,33 @@
     }
     
     // Check if navigation should be blocked
-    function shouldBlockNavigation() {
+    function shouldBlockNavigation(direction = 'forward') {
+        // Allow backward navigation if previous review is enabled
+        if (direction === 'backward' && COURSE_SETTINGS.allowPreviousReview) {
+            return false;
+        }
+        
+        // For linear navigation mode, don't allow jumping ahead
+        if (COURSE_SETTINGS.navigationMode === 'linear' && direction === 'jump') {
+            const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+            const targetIndex = arguments[1] || 0;
+            if (targetIndex > currentIndex) {
+                console.log('[SCORM Navigation] Blocking jump ahead in linear mode');
+                showNavigationMessage('Please complete pages in order.');
+                return true;
+            }
+        }
+        
+        // Check audio completion requirement for forward navigation
+        if (direction === 'forward' && REQUIRE_AUDIO_COMPLETION) {
+            const currentPageAudio = document.querySelector(`#topic-audio-${window.currentPage}`);
+            if (currentPageAudio && !window.completedAudio.has(window.currentPage)) {
+                console.log('[SCORM Navigation] Blocking - audio not completed on page:', window.currentPage);
+                showNavigationMessage('Please listen to the complete audio before continuing.');
+                return true;
+            }
+        }
+        
         const hasKnowledgeCheck = PAGES_WITH_KNOWLEDGE_CHECKS[window.currentPage];
         if (!hasKnowledgeCheck) {
             return false;
@@ -337,6 +421,17 @@
     function navigateToPage(pageId) {
         console.log('[SCORM Navigation] Navigating to:', pageId);
         
+        // Track time spent on previous page
+        if (window.currentPage && window.sessionData.pageStartTime) {
+            const timeSpent = Date.now() - window.sessionData.pageStartTime;
+            window.sessionData.totalTimeSpent += timeSpent;
+            window.sessionData.pageTimers[window.currentPage] = (window.sessionData.pageTimers[window.currentPage] || 0) + timeSpent;
+            console.log('[SCORM Time] Time on page', window.currentPage + ':', Math.round(timeSpent / 1000), 's');
+        }
+        
+        // Start timing for new page
+        window.sessionData.pageStartTime = Date.now();
+        
         const contentContainer = document.getElementById('content-container');
         if (!contentContainer) {
             console.error('[SCORM Navigation] Content container not found');
@@ -360,6 +455,7 @@
                 
                 // Initialize page-specific features
                 initializePageAudio(pageId);
+                initializePageVideo(pageId);
                 initializeKnowledgeChecks();
                 restoreAnsweredQuestions(pageId);
                 
@@ -405,6 +501,12 @@
     function handlePrevious() {
         console.log('[SCORM Navigation] Previous button clicked');
         
+        // Check if backward navigation is blocked
+        if (shouldBlockNavigation('backward')) {
+            showNavigationBlockedAlert();
+            return;
+        }
+        
         const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
         if (currentIndex > 0) {
             navigateToPage(COURSE_PAGES[currentIndex - 1]);
@@ -427,13 +529,20 @@
             isForward: targetIndex > currentIndex
         });
         
-        // Check if trying to navigate forward
-        if (targetIndex > currentIndex) {
-            if (shouldBlockForwardNavigation(currentIndex, targetIndex)) {
-                console.log('[SCORM Navigation] Navigation BLOCKED - knowledge check not completed');
-                showNavigationBlockedAlert();
-                return;
-            }
+        // Check navigation permissions for sidebar jumps
+        const direction = targetIndex > currentIndex ? 'jump' : targetIndex < currentIndex ? 'backward' : 'current';
+        
+        if (shouldBlockNavigation(direction, targetIndex)) {
+            console.log('[SCORM Navigation] Sidebar navigation BLOCKED');
+            showNavigationBlockedAlert();
+            return;
+        }
+        
+        // For forward jumps, also check intermediate pages
+        if (targetIndex > currentIndex && shouldBlockForwardNavigation(currentIndex, targetIndex)) {
+            console.log('[SCORM Navigation] Navigation BLOCKED - knowledge check not completed');
+            showNavigationBlockedAlert();
+            return;
         }
         
         console.log('[SCORM Navigation] Navigation ALLOWED');
@@ -542,6 +651,20 @@
         
         // Update navigation state
         updateNavigationState();
+        
+        // Auto-advance if enabled and all knowledge checks are complete
+        if (COURSE_SETTINGS.autoAdvance) {
+            setTimeout(() => {
+                const canAdvance = !shouldBlockNavigation('forward');
+                if (canAdvance) {
+                    console.log('[SCORM Navigation] Auto-advancing after multiple choice completion');
+                    const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+                    if (currentIndex < COURSE_PAGES.length - 1) {
+                        navigateToPage(COURSE_PAGES[currentIndex + 1]);
+                    }
+                }
+            }, 1500); // 1.5 second delay to allow user to see feedback
+        }
     };
     
     // Legacy handler for backward compatibility
@@ -637,6 +760,20 @@
         
         // Update navigation state
         updateNavigationState();
+        
+        // Auto-advance if enabled and all knowledge checks are complete
+        if (COURSE_SETTINGS.autoAdvance) {
+            setTimeout(() => {
+                const canAdvance = !shouldBlockNavigation('forward');
+                if (canAdvance) {
+                    console.log('[SCORM Navigation] Auto-advancing after knowledge check completion');
+                    const currentIndex = COURSE_PAGES.indexOf(window.currentPage);
+                    if (currentIndex < COURSE_PAGES.length - 1) {
+                        navigateToPage(COURSE_PAGES[currentIndex + 1]);
+                    }
+                }
+            }, 1500); // 1.5 second delay to allow user to see feedback
+        }
     };
     
     // Submit all knowledge checks on the page at once
@@ -849,6 +986,70 @@
         }
     }
     
+    // Initialize page video
+    function initializePageVideo(pageId) {
+        console.log('[SCORM Navigation] Initializing video for page:', pageId);
+        
+        // Find all YouTube iframes on the page
+        const videoContainers = document.querySelectorAll('.video-container');
+        const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+        
+        if (youtubeIframes.length > 0) {
+            console.log(`[SCORM Video] Found ${youtubeIframes.length} YouTube videos on page: ${pageId}`);
+            
+            youtubeIframes.forEach((iframe, index) => {
+                try {
+                    // Ensure iframe has proper attributes for YouTube
+                    if (!iframe.getAttribute('allowfullscreen')) {
+                        iframe.setAttribute('allowfullscreen', 'true');
+                    }
+                    
+                    // Add proper allow attributes for modern browsers
+                    if (!iframe.getAttribute('allow')) {
+                        iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                    }
+                    
+                    // Ensure iframe has a referrer policy for security
+                    if (!iframe.getAttribute('referrerpolicy')) {
+                        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+                    }
+                    
+                    // Add load event listener to detect successful loading
+                    iframe.addEventListener('load', function() {
+                        console.log(`[SCORM Video] YouTube iframe ${index} loaded successfully on page: ${pageId}`);
+                    });
+                    
+                    // Add error event listener to detect loading failures
+                    iframe.addEventListener('error', function(e) {
+                        console.error(`[SCORM Video] YouTube iframe ${index} failed to load on page: ${pageId}`, e);
+                    });
+                    
+                    console.log(`[SCORM Video] Initialized YouTube iframe ${index}:`, {
+                        src: iframe.src,
+                        width: iframe.style.width || iframe.width,
+                        height: iframe.style.height || iframe.height
+                    });
+                    
+                } catch (error) {
+                    console.error(`[SCORM Video] Error initializing iframe ${index} on page ${pageId}:`, error);
+                }
+            });
+        } else {
+            console.log(`[SCORM Video] No YouTube videos found on page: ${pageId}`);
+        }
+        
+        // Also check for regular video elements
+        const videoElements = document.querySelectorAll('video');
+        if (videoElements.length > 0) {
+            console.log(`[SCORM Video] Found ${videoElements.length} regular video elements on page: ${pageId}`);
+            videoElements.forEach((video, index) => {
+                video.addEventListener('loadeddata', function() {
+                    console.log(`[SCORM Video] Video ${index} loaded successfully on page: ${pageId}`);
+                });
+            });
+        }
+    }
+    
     // Advanced audio player functions
     window.togglePlayPause = function(pageId) {
         const audio = window.audioPlayers[pageId];
@@ -869,6 +1070,12 @@
     };
     
     window.seekAudio = function(pageId, event) {
+        // Block seeking if audio completion is required
+        if (REQUIRE_AUDIO_COMPLETION) {
+            console.log('[SCORM Audio] Seeking disabled - audio completion required');
+            return;
+        }
+        
         const audio = window.audioPlayers[pageId];
         if (!audio) return;
         
@@ -881,6 +1088,12 @@
     };
     
     window.skipBackward = function(pageId, seconds) {
+        // Block skip backward if audio completion is required
+        if (REQUIRE_AUDIO_COMPLETION) {
+            console.log('[SCORM Audio] Skip backward disabled - audio completion required');
+            return;
+        }
+        
         const audio = window.audioPlayers[pageId];
         if (audio) {
             audio.currentTime = Math.max(0, audio.currentTime - seconds);
@@ -888,6 +1101,12 @@
     };
     
     window.skipForward = function(pageId, seconds) {
+        // Block skip forward if audio completion is required
+        if (REQUIRE_AUDIO_COMPLETION) {
+            console.log('[SCORM Audio] Skip forward disabled - audio completion required');
+            return;
+        }
+        
         const audio = window.audioPlayers[pageId];
         if (audio) {
             audio.currentTime = Math.min(audio.duration, audio.currentTime + seconds);
@@ -980,6 +1199,18 @@
         
         playIcon.style.display = 'inline';
         pauseIcon.style.display = 'none';
+        
+        // Track audio completion for navigation blocking
+        if (REQUIRE_AUDIO_COMPLETION) {
+            window.completedAudio.add(pageId);
+            console.log('[SCORM Navigation] Audio completed for page:', pageId);
+            
+            // Save progress to SCORM data
+            saveProgress();
+            
+            // Update navigation state (enable next button if blocked)
+            updateNavigationState();
+        }
     };
     
     // Helper functions
@@ -992,6 +1223,34 @@
         const minutes = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    function showNavigationMessage(message) {
+        // Create a simple toast-style message for user feedback
+        const messageDiv = document.createElement('div');
+        messageDiv.textContent = message;
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #f44336;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            z-index: 10000;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        `;
+        
+        document.body.appendChild(messageDiv);
+        
+        // Remove message after 3 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.parentNode.removeChild(messageDiv);
+            }
+        }, 3000);
     }
     
     function loadCaptions(pageId, captionFile) {
@@ -1205,6 +1464,12 @@
                     console.log('[SCORM Progress] Restored answered questions:', Object.keys(data.answeredQuestions).length, 'questions');
                 }
                 
+                // Restore completed audio
+                if (data.completedAudio && Array.isArray(data.completedAudio)) {
+                    window.completedAudio = new Set(data.completedAudio);
+                    console.log('[SCORM Progress] Restored completed audio:', data.completedAudio);
+                }
+                
                 // Restore assessment data
                 if (data.assessmentAttempts !== undefined) {
                     window.assessmentData.attempts = data.assessmentAttempts;
@@ -1213,6 +1478,18 @@
                     console.log('[SCORM Progress] Restored assessment data:', {
                         attempts: window.assessmentData.attempts,
                         scores: window.assessmentData.scores
+                    });
+                }
+                
+                // Restore session data for time tracking
+                if (data.sessionData) {
+                    window.sessionData.totalTimeSpent = data.sessionData.totalTimeSpent || 0;
+                    window.sessionData.pageTimers = data.sessionData.pageTimers || {};
+                    // Reset page start time to current time
+                    window.sessionData.pageStartTime = Date.now();
+                    console.log('[SCORM Progress] Restored session data:', {
+                        totalTimeSpent: Math.round(window.sessionData.totalTimeSpent / 60000),
+                        pageTimers: Object.keys(window.sessionData.pageTimers).length
                     });
                 }
                 
@@ -1249,6 +1526,58 @@
         return progressLoaded;
     }
     
+    // Check if course completion criteria are met
+    function checkCompletionCriteria() {
+        const criteria = COURSE_SETTINGS.completionCriteria;
+        console.log('[SCORM Completion] Checking completion criteria:', criteria);
+        
+        switch (criteria) {
+            case 'view_all_pages':
+                return checkAllPagesViewed();
+            
+            case 'pass_assessment':
+                return checkAssessmentPassed();
+            
+            case 'time_spent':
+                return checkMinimumTimeSpent();
+            
+            case 'view_and_pass':
+                return checkAllPagesViewed() && checkAssessmentPassed();
+            
+            default:
+                console.warn('[SCORM Completion] Unknown completion criteria:', criteria);
+                return false;
+        }
+    }
+    
+    // Helper function: Check if all pages have been viewed
+    function checkAllPagesViewed() {
+        const requiredPages = COURSE_PAGES.filter(page => page !== 'assessment'); // Don't require assessment viewing for this check
+        const viewedAll = requiredPages.every(page => window.completedPages.has(page));
+        console.log('[SCORM Completion] All pages viewed:', viewedAll, 'Required:', requiredPages.length, 'Completed:', window.completedPages.size);
+        return viewedAll;
+    }
+    
+    // Helper function: Check if assessment was passed
+    function checkAssessmentPassed() {
+        const hasPassed = window.assessmentData.scores.some(score => score >= COURSE_SETTINGS.passMark);
+        console.log('[SCORM Completion] Assessment passed:', hasPassed, 'Best score:', Math.max(...window.assessmentData.scores, 0));
+        return hasPassed;
+    }
+    
+    // Helper function: Check if minimum time has been spent
+    function checkMinimumTimeSpent() {
+        if (COURSE_SETTINGS.minimumTimeSpent === 0) {
+            return true; // No minimum time requirement
+        }
+        
+        const totalTime = window.sessionData.totalTimeSpent || 0;
+        const minimumMs = COURSE_SETTINGS.minimumTimeSpent * 60 * 1000; // Convert minutes to milliseconds
+        const timeMet = totalTime >= minimumMs;
+        console.log('[SCORM Completion] Minimum time met:', timeMet, 'Spent:', Math.round(totalTime / 60000), 'min, Required:', COURSE_SETTINGS.minimumTimeSpent, 'min');
+        return timeMet;
+    }
+    
     // Save all progress to SCORM
     function saveProgress() {
         console.log('[SCORM Progress] Saving progress to SCORM');
@@ -1258,13 +1587,21 @@
             SafeSCORM.setValue('cmi.core.lesson_location', window.currentPage);
         }
         
+        // Update total time spent before saving
+        if (window.sessionData.pageStartTime) {
+            const currentPageTime = Date.now() - window.sessionData.pageStartTime;
+            window.sessionData.totalTimeSpent += currentPageTime;
+        }
+        
         // Prepare suspend data with all progress
         const progressData = {
             completedPages: Array.from(window.completedPages),
             answeredQuestions: window.answeredQuestions,
+            completedAudio: Array.from(window.completedAudio),
             assessmentAttempts: window.assessmentData.attempts,
             attemptHistory: window.assessmentData.scores,
             lastAnswers: window.assessmentData.lastAnswers,
+            sessionData: window.sessionData,
             timestamp: new Date().toISOString(),
             version: '1.0'
         };
@@ -1281,8 +1618,786 @@
             console.error('[SCORM Progress] Failed to save suspend data:', e);
         }
         
+        // Check if completion criteria are met
+        const isComplete = checkCompletionCriteria();
+        if (isComplete) {
+            console.log('[SCORM Completion] Course completed based on criteria:', COURSE_SETTINGS.completionCriteria);
+            SafeSCORM.setValue('cmi.core.lesson_status', 'completed');
+            
+            // Show completion notification
+            showAlert('success', 'Congratulations! You have completed the course.');
+        } else {
+            // Set incomplete status if not already set
+            const currentStatus = SafeSCORM.getValue('cmi.core.lesson_status');
+            if (!currentStatus || currentStatus === 'not attempted') {
+                SafeSCORM.setValue('cmi.core.lesson_status', 'incomplete');
+            }
+        }
+        
         // Commit changes
         SafeSCORM.commit();
+    }
+    
+    // Auto-save functionality
+    function initializeAutoSave() {
+        if (COURSE_SETTINGS.sessionTimeout > 0 && !window.autoSaveTimer) {
+            const intervalMs = COURSE_SETTINGS.sessionTimeout * 60 * 1000; // Convert minutes to milliseconds
+            console.log('[SCORM Auto-save] Initializing auto-save every', COURSE_SETTINGS.sessionTimeout, 'minutes');
+            
+            window.autoSaveTimer = setInterval(() => {
+                performAutoSave();
+            }, intervalMs);
+        }
+    }
+    
+    function performAutoSave() {
+        console.log('[SCORM Auto-save] Performing scheduled auto-save');
+        window.sessionData.lastAutoSave = Date.now();
+        saveProgress();
+        showAutoSaveIndicator();
+    }
+    
+    function showAutoSaveIndicator() {
+        // Create or update auto-save indicator
+        let indicator = document.getElementById('auto-save-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'auto-save-indicator';
+            indicator.className = 'auto-save-indicator';
+            document.body.appendChild(indicator);
+        }
+        
+        const time = new Date().toLocaleTimeString();
+        indicator.innerHTML = `
+            <span class="auto-save-icon">💾</span>
+            <span class="auto-save-text">Auto-saved at ${time}</span>
+        `;
+        indicator.classList.add('show');
+        
+        // Hide indicator after 3 seconds
+        setTimeout(() => {
+            indicator.classList.remove('show');
+        }, 3000);
+    }
+    
+    function stopAutoSave() {
+        if (window.autoSaveTimer) {
+            console.log('[SCORM Auto-save] Stopping auto-save timer');
+            clearInterval(window.autoSaveTimer);
+            window.autoSaveTimer = null;
+        }
+    }
+    
+    // Time Limit Management Functions
+    function initializeTimeLimit() {
+        const timeLimit = COURSE_SETTINGS.timeLimit;
+        
+        if (timeLimit > 0) {
+            console.log('[SCORM] Initializing time limit:', timeLimit, 'minutes');
+            
+            // Set course start time if not already set
+            if (!window.courseStartTime) {
+                window.courseStartTime = Date.now();
+                console.log('[SCORM] Course start time set:', new Date(window.courseStartTime));
+            }
+            
+            // Show time limit display
+            const displayEl = document.getElementById('time-limit-display');
+            if (displayEl) {
+                displayEl.style.display = 'flex';
+            }
+            
+            // Start countdown timer
+            startCountdownTimer();
+        }
+    }
+    
+    function startCountdownTimer() {
+        if (window.timeLimitTimer) {
+            clearInterval(window.timeLimitTimer);
+        }
+        
+        window.timeLimitTimer = setInterval(updateTimeDisplay, 1000);
+        updateTimeDisplay(); // Update immediately
+    }
+    
+    function updateTimeDisplay() {
+        const timeLimit = COURSE_SETTINGS.timeLimit;
+        if (timeLimit <= 0 || !window.courseStartTime) return;
+        
+        const elapsedMs = Date.now() - window.courseStartTime;
+        const timeLimitMs = timeLimit * 60 * 1000;
+        const remainingMs = timeLimitMs - elapsedMs;
+        
+        if (remainingMs <= 0) {
+            // Time limit exceeded - terminate course
+            handleTimeLimitExpired();
+            return;
+        }
+        
+        // Update display
+        const remainingMinutes = Math.floor(remainingMs / (60 * 1000));
+        const remainingSeconds = Math.floor((remainingMs % (60 * 1000)) / 1000);
+        const timeString = `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        
+        const timeEl = document.getElementById('time-remaining');
+        const displayEl = document.getElementById('time-limit-display');
+        
+        if (timeEl) {
+            timeEl.textContent = timeString;
+        }
+        
+        // Show warnings at specific intervals
+        if (displayEl) {
+            if (remainingMs <= 2 * 60 * 1000 && !window.timeWarningsShown.twoMinute) {
+                // 2 minutes remaining
+                displayEl.className = 'time-limit-display critical';
+                showTimeWarning('2 minutes remaining!', 'Critical: The course will close automatically in 2 minutes.');
+                window.timeWarningsShown.twoMinute = true;
+            } else if (remainingMs <= 5 * 60 * 1000 && !window.timeWarningsShown.fiveMinute) {
+                // 5 minutes remaining
+                displayEl.className = 'time-limit-display warning';
+                showTimeWarning('5 minutes remaining', 'Warning: You have 5 minutes left to complete the course.');
+                window.timeWarningsShown.fiveMinute = true;
+            } else if (remainingMs <= 10 * 60 * 1000 && !window.timeWarningsShown.tenMinute) {
+                // 10 minutes remaining
+                displayEl.className = 'time-limit-display warning';
+                showTimeWarning('10 minutes remaining', 'You have 10 minutes left to complete the course.');
+                window.timeWarningsShown.tenMinute = true;
+            }
+        }
+    }
+    
+    function showTimeWarning(title, message) {
+        console.log('[SCORM] Time warning:', title);
+        
+        // Use the existing modal system
+        if (typeof showModal === 'function') {
+            showModal(title, message, [
+                {
+                    text: 'Continue',
+                    type: 'primary',
+                    callback: null
+                }
+            ]);
+        } else {
+            // Fallback to alert
+            alert(`${title}\n\n${message}`);
+        }
+    }
+    
+    function handleTimeLimitExpired() {
+        console.log('[SCORM] Time limit expired - terminating course');
+        
+        // Stop the timer
+        if (window.timeLimitTimer) {
+            clearInterval(window.timeLimitTimer);
+            window.timeLimitTimer = null;
+        }
+        
+        // Set completion status
+        if (window.SafeSCORM) {
+            window.SafeSCORM.setValue('cmi.core.lesson_status', 'incomplete');
+            window.SafeSCORM.setValue('cmi.core.exit', 'time-out');
+            
+            // Set session time
+            if (window.getSessionTime) {
+                const sessionTime = window.getSessionTime();
+                window.SafeSCORM.setValue('cmi.core.session_time', sessionTime);
+            }
+            
+            window.SafeSCORM.commit();
+        }
+        
+        // Show termination message
+        if (typeof showModal === 'function') {
+            showModal(
+                'Time Limit Exceeded',
+                'The course has been terminated because the time limit has been reached. Your progress has been saved.',
+                [
+                    {
+                        text: 'Close Course',
+                        type: 'primary',
+                        callback: () => {
+                            if (window.SafeSCORM) {
+                                window.SafeSCORM.finish();
+                            }
+                            
+                            setTimeout(() => {
+                                window.close();
+                                window.location.href = 'about:blank';
+                            }, 500);
+                        }
+                    }
+                ]
+            );
+        } else {
+            alert('Time limit exceeded. The course will now close.');
+            if (window.SafeSCORM) {
+                window.SafeSCORM.finish();
+            }
+            window.close();
+        }
+    }
+    
+    function stopTimeLimit() {
+        console.log('[SCORM] Stopping time limit timer');
+        
+        if (window.timeLimitTimer) {
+            clearInterval(window.timeLimitTimer);
+            window.timeLimitTimer = null;
+        }
+    }
+    
+    // Minimum Time Spent Management Functions
+    function initializeMinimumTime() {
+        const minimumTime = COURSE_SETTINGS.minimumTimeSpent;
+        
+        if (minimumTime > 0) {
+            console.log('[SCORM] Initializing minimum time enforcement:', minimumTime, 'minutes');
+            
+            // Set course start time if not already set
+            if (!window.courseStartTime) {
+                window.courseStartTime = Date.now();
+                console.log('[SCORM] Course start time set for minimum time tracking:', new Date(window.courseStartTime));
+            }
+            
+            // Show minimum time progress display
+            const displayEl = document.getElementById('minimum-time-display');
+            if (displayEl) {
+                displayEl.style.display = 'flex';
+            }
+            
+            // Update progress immediately and periodically
+            updateMinimumTimeProgress();
+            
+            // Update progress every 30 seconds
+            setInterval(updateMinimumTimeProgress, 30000);
+        }
+    }
+    
+    function updateMinimumTimeProgress() {
+        const minimumTime = COURSE_SETTINGS.minimumTimeSpent;
+        if (minimumTime <= 0 || !window.courseStartTime) return;
+        
+        const elapsedMs = Date.now() - window.courseStartTime;
+        const minimumTimeMs = minimumTime * 60 * 1000;
+        const progressPercent = Math.min(100, Math.round((elapsedMs / minimumTimeMs) * 100));
+        
+        const progressTextEl = document.getElementById('time-progress');
+        const progressFillEl = document.getElementById('time-progress-fill');
+        const displayEl = document.getElementById('minimum-time-display');
+        
+        if (progressTextEl) {
+            progressTextEl.textContent = progressPercent + '%';
+        }
+        
+        if (progressFillEl) {
+            progressFillEl.style.width = progressPercent + '%';
+        }
+        
+        // Mark as complete when minimum time is met
+        if (displayEl && progressPercent >= 100) {
+            displayEl.classList.add('complete');
+            
+            // Show completion notification once
+            if (!window.minimumTimeNotificationShown) {
+                window.minimumTimeNotificationShown = true;
+                
+                if (typeof showModal === 'function') {
+                    showModal(
+                        'Minimum Time Requirement Met',
+                        'You have now spent the required minimum time in the course. You may proceed to complete the course.',
+                        [
+                            {
+                                text: 'Continue',
+                                type: 'primary',
+                                callback: null
+                            }
+                        ]
+                    );
+                }
+                
+                console.log('[SCORM] Minimum time requirement satisfied');
+            }
+        }
+    }
+    
+    function hasMetMinimumTime() {
+        const minimumTime = COURSE_SETTINGS.minimumTimeSpent;
+        
+        if (minimumTime <= 0) {
+            return true; // No minimum time requirement
+        }
+        
+        if (!window.courseStartTime) {
+            return false;
+        }
+        
+        const elapsedMs = Date.now() - window.courseStartTime;
+        const minimumTimeMs = minimumTime * 60 * 1000;
+        
+        return elapsedMs >= minimumTimeMs;
+    }
+    
+    // Keyboard Navigation System
+    function initializeKeyboardNavigation() {
+        if (!COURSE_SETTINGS.keyboardNavigation) {
+            console.log('[SCORM] Keyboard navigation disabled in settings');
+            return;
+        }
+        
+        console.log('[SCORM] Initializing keyboard navigation system');
+        
+        // Add keyboard event listeners
+        document.addEventListener('keydown', handleKeyboardNavigation);
+        
+        // Enhance focus visibility
+        addFocusEnhancements();
+        
+        // Add skip links for accessibility
+        addSkipLinks();
+    }
+    
+    function handleKeyboardNavigation(event) {
+        // Don't interfere if user is typing in input fields
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+            return;
+        }
+        
+        const key = event.key.toLowerCase();
+        const ctrlKey = event.ctrlKey || event.metaKey;
+        const altKey = event.altKey;
+        
+        // Handle keyboard shortcuts
+        switch (key) {
+            case 'arrowleft':
+            case 'p':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    navigatePrevious();
+                }
+                break;
+                
+            case 'arrowright':
+            case 'n':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    navigateNext();
+                }
+                break;
+                
+            case 'h':
+            case 'home':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    navigateToPage('welcome');
+                }
+                break;
+                
+            case 'end':
+            case 'a':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    navigateToPage('assessment');
+                }
+                break;
+                
+            case 'm':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    toggleSidebar();
+                }
+                break;
+                
+            case 'f':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    toggleFullscreen();
+                }
+                break;
+                
+            case 'escape':
+                event.preventDefault();
+                handleEscapeKey();
+                break;
+                
+            case '?':
+                if (!ctrlKey && !altKey) {
+                    event.preventDefault();
+                    showKeyboardHelp();
+                }
+                break;
+                
+            case 'tab':
+                // Enhance tab navigation
+                handleTabNavigation(event);
+                break;
+        }
+    }
+    
+    function navigatePrevious() {
+        const prevButton = document.getElementById('prev-button');
+        if (prevButton && !prevButton.disabled) {
+            prevButton.click();
+        }
+    }
+    
+    function navigateNext() {
+        const nextButton = document.getElementById('next-button');
+        if (nextButton && !nextButton.disabled) {
+            nextButton.click();
+        }
+    }
+    
+    function toggleSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            const isHidden = sidebar.style.display === 'none' || sidebar.classList.contains('hidden');
+            
+            if (isHidden) {
+                sidebar.style.display = 'block';
+                sidebar.classList.remove('hidden');
+                document.querySelector('.main-area').classList.remove('no-sidebar');
+            } else {
+                sidebar.style.display = 'none';
+                sidebar.classList.add('hidden');
+                document.querySelector('.main-area').classList.add('no-sidebar');
+            }
+        }
+    }
+    
+    function handleEscapeKey() {
+        // Close any open modals
+        const modal = document.getElementById('scorm-modal-overlay');
+        if (modal && modal.classList.contains('active')) {
+            modal.classList.remove('active');
+            return;
+        }
+        
+        // Focus on main content area
+        const contentContainer = document.getElementById('content-container');
+        if (contentContainer) {
+            contentContainer.focus();
+        }
+    }
+    
+    function handleTabNavigation(event) {
+        // Trap focus within modals if open
+        const modal = document.getElementById('scorm-modal-overlay');
+        if (modal && modal.classList.contains('active')) {
+            trapFocusInModal(event, modal);
+        }
+    }
+    
+    function trapFocusInModal(event, modal) {
+        const focusableElements = modal.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        
+        if (focusableElements.length === 0) return;
+        
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        
+        if (event.shiftKey) {
+            // Shift + Tab - moving backwards
+            if (document.activeElement === firstElement) {
+                event.preventDefault();
+                lastElement.focus();
+            }
+        } else {
+            // Tab - moving forwards
+            if (document.activeElement === lastElement) {
+                event.preventDefault();
+                firstElement.focus();
+            }
+        }
+    }
+    
+    function addFocusEnhancements() {
+        // Add focus indicators to interactive elements
+        const style = document.createElement('style');
+        style.textContent = `
+            .keyboard-focus {
+                outline: 3px solid #4A90E2 !important;
+                outline-offset: 2px !important;
+                box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.3) !important;
+            }
+            
+            .nav-item:focus,
+            .nav-button:focus,
+            button:focus {
+                outline: 2px solid #4A90E2 !important;
+                outline-offset: 2px !important;
+            }
+            
+            .skip-link {
+                position: absolute;
+                left: -9999px;
+                z-index: 999;
+                background: #000;
+                color: #fff;
+                padding: 8px 16px;
+                text-decoration: none;
+                border-radius: 4px;
+            }
+            
+            .skip-link:focus {
+                left: 16px;
+                top: 16px;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Add focus event listeners to enhance focus visibility
+        document.addEventListener('focusin', function(event) {
+            if (event.target.matches('button, a, input, select, textarea, [tabindex]')) {
+                event.target.classList.add('keyboard-focus');
+            }
+        });
+        
+        document.addEventListener('focusout', function(event) {
+            event.target.classList.remove('keyboard-focus');
+        });
+    }
+    
+    function addSkipLinks() {
+        // Add skip links for screen readers
+        const skipLinks = document.createElement('div');
+        skipLinks.innerHTML = `
+            <a href="#content-container" class="skip-link">Skip to main content</a>
+            <a href=".sidebar-nav" class="skip-link">Skip to navigation</a>
+            <a href=".footer" class="skip-link">Skip to footer</a>
+        `;
+        document.body.insertBefore(skipLinks, document.body.firstChild);
+        
+        // Make content container focusable
+        const contentContainer = document.getElementById('content-container');
+        if (contentContainer) {
+            contentContainer.setAttribute('tabindex', '-1');
+        }
+    }
+    
+    function showKeyboardHelp() {
+        const helpContent = `
+            <h3>Keyboard Shortcuts</h3>
+            <ul style="text-align: left; margin: 16px 0;">
+                <li><strong>→ or N</strong> - Next page</li>
+                <li><strong>← or P</strong> - Previous page</li>
+                <li><strong>Home or H</strong> - Go to welcome page</li>
+                <li><strong>End or A</strong> - Go to assessment</li>
+                <li><strong>M</strong> - Toggle navigation menu</li>
+                <li><strong>F</strong> - Toggle fullscreen</li>
+                <li><strong>Esc</strong> - Close dialogs or focus main content</li>
+                <li><strong>Tab</strong> - Navigate between interactive elements</li>
+                <li><strong>?</strong> - Show this help</li>
+            </ul>
+        `;
+        
+        if (typeof showModal === 'function') {
+            showModal('Keyboard Navigation Help', helpContent, [
+                {
+                    text: 'Close',
+                    type: 'primary',
+                    callback: null
+                }
+            ]);
+        }
+    }
+    
+    // Print Functionality
+    function initializePrintFeature() {
+        if (!COURSE_SETTINGS.printable) {
+            console.log('[SCORM] Print functionality disabled in settings');
+            return;
+        }
+        
+        console.log('[SCORM] Print functionality enabled');
+        
+        // Add print keyboard shortcut
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'p') {
+                event.preventDefault();
+                printCourse();
+            }
+        });
+    }
+    
+    window.printCourse = function() {
+        if (!COURSE_SETTINGS.printable) {
+            showAlert('warning', 'Printing is not enabled for this course.');
+            return;
+        }
+        
+        console.log('[SCORM] Preparing course for printing');
+        
+        // Show preparation modal
+        if (typeof showModal === 'function') {
+            showModal(
+                'Preparing for Print',
+                'The course content is being prepared for printing. This may take a moment...',
+                [
+                    {
+                        text: 'Cancel',
+                        type: 'secondary',
+                        callback: null
+                    }
+                ]
+            );
+        }
+        
+        // Prepare print content
+        preparePrintContent().then(() => {
+            // Close modal
+            const modal = document.getElementById('scorm-modal-overlay');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+            
+            // Trigger print
+            setTimeout(() => {
+                window.print();
+            }, 500);
+        });
+    }
+    
+    async function preparePrintContent() {
+        console.log('[SCORM] Generating print-optimized content');
+        
+        // Store current state
+        const originalContent = document.getElementById('content-container').innerHTML;
+        const contentContainer = document.getElementById('content-container');
+        
+        try {
+            // Generate table of contents
+            const toc = generateTableOfContents();
+            
+            // Compile all course content
+            const allContent = await compileAllContent();
+            
+            // Create print-optimized content
+            const printContent = `
+                ${toc}
+                <div class="page-separator"></div>
+                ${allContent}
+            `;
+            
+            // Temporarily replace content
+            contentContainer.innerHTML = printContent;
+            
+            // Add print-specific classes
+            document.body.classList.add('print-mode');
+            
+            // Clean up after printing
+            setTimeout(() => {
+                document.body.classList.remove('print-mode');
+                contentContainer.innerHTML = originalContent;
+            }, 1000);
+            
+        } catch (error) {
+            console.error('[SCORM] Error preparing print content:', error);
+            
+            // Restore original content
+            contentContainer.innerHTML = originalContent;
+            
+            showAlert('error', 'Failed to prepare content for printing. Please try again.');
+        }
+    }
+    
+    function generateTableOfContents() {
+        const pages = [];
+        
+        // Add welcome page
+        pages.push({ title: 'Welcome', type: 'page' });
+        
+        // Add learning objectives if available
+        if (COURSE_SETTINGS.hasObjectives) {
+            pages.push({ title: 'Learning Objectives', type: 'page' });
+        }
+        
+        // Add topic pages
+        COURSE_PAGES.forEach(pageId => {
+            if (pageId.startsWith('topic-')) {
+                const pageTitle = getPageTitle(pageId);
+                pages.push({ title: pageTitle, type: 'topic' });
+            }
+        });
+        
+        // Add assessment
+        pages.push({ title: 'Assessment', type: 'assessment' });
+        
+        // Generate TOC HTML
+        const tocItems = pages.map(page => {
+            const icon = page.type === 'topic' ? '📖' : 
+                        page.type === 'assessment' ? '✅' : '📋';
+            return `<li>${icon} ${page.title}</li>`;
+        }).join('');
+        
+        return `
+            <div class="print-toc page-content">
+                <h2>Table of Contents</h2>
+                <ul>
+                    ${tocItems}
+                </ul>
+            </div>
+        `;
+    }
+    
+    async function compileAllContent() {
+        const compiledPages = [];
+        
+        for (const pageId of COURSE_PAGES) {
+            try {
+                // Get page content (this would need to be adapted based on how content is structured)
+                const pageContent = await getPageContentForPrint(pageId);
+                const pageTitle = getPageTitle(pageId);
+                
+                const pageHtml = `
+                    <div class="page-content">
+                        <h2>${pageTitle}</h2>
+                        ${pageContent}
+                    </div>
+                    <div class="page-separator"></div>
+                `;
+                
+                compiledPages.push(pageHtml);
+            } catch (error) {
+                console.warn('[SCORM] Could not load content for page:', pageId, error);
+                compiledPages.push(`
+                    <div class="page-content">
+                        <h2>${getPageTitle(pageId)}</h2>
+                        <p><em>Content could not be loaded for printing.</em></p>
+                    </div>
+                    <div class="page-separator"></div>
+                `);
+            }
+        }
+        
+        return compiledPages.join('');
+    }
+    
+    async function getPageContentForPrint(pageId) {
+        // This is a simplified version - in a real implementation,
+        // you'd load the actual page content from your data source
+        
+        if (pageId === 'welcome') {
+            return '<p>Welcome to the course. This content would contain the actual welcome page content.</p>';
+        }
+        
+        if (pageId === 'objectives') {
+            return '<ul><li>Learning objective 1</li><li>Learning objective 2</li></ul>';
+        }
+        
+        if (pageId.startsWith('topic-')) {
+            return `<p>This is the content for ${pageId}. In a real implementation, this would contain the actual topic content, including any media references and knowledge checks.</p>`;
+        }
+        
+        if (pageId === 'assessment') {
+            return '<p>Assessment questions would be displayed here with space for answers.</p>';
+        }
+        
+        return '<p>Page content not available.</p>';
     }
     
     // Show notification when resuming progress
@@ -1377,14 +2492,50 @@
     window.submitAssessment = async function() {
         console.log('[SCORM Navigation] Submitting assessment');
         
+        // Check if retakes are allowed after first attempt
+        if (!COURSE_SETTINGS.allowRetake && window.assessmentData.attempts > 0) {
+            console.log('[SCORM Navigation] Retakes not allowed - blocking submission');
+            showAlert('error', 'Assessment retakes are not allowed for this course.');
+            return;
+        }
+        
+        // Check retake delay if this is a retake attempt
+        if (window.assessmentData.attempts > 0 && COURSE_SETTINGS.retakeDelay > 0) {
+            const lastAttemptTime = window.assessmentData.lastAttemptTime || 0;
+            const currentTime = Date.now();
+            const delayMs = COURSE_SETTINGS.retakeDelay * 60 * 60 * 1000; // Convert hours to milliseconds
+            const timeSinceLastAttempt = currentTime - lastAttemptTime;
+            
+            if (timeSinceLastAttempt < delayMs) {
+                const remainingTime = delayMs - timeSinceLastAttempt;
+                const remainingHours = Math.ceil(remainingTime / (60 * 60 * 1000));
+                console.log('[SCORM Navigation] Retake delay active - blocking submission');
+                showAlert('warning', `You must wait ${remainingHours} hour(s) before retaking this assessment.`);
+                return;
+            }
+        }
+        
+        // Check minimum time spent requirement
+        if (!hasMetMinimumTime()) {
+            const minimumTime = COURSE_SETTINGS.minimumTimeSpent;
+            const elapsedMs = window.courseStartTime ? Date.now() - window.courseStartTime : 0;
+            const elapsedMinutes = Math.floor(elapsedMs / (60 * 1000));
+            const remainingMinutes = minimumTime - elapsedMinutes;
+            
+            console.log('[SCORM Navigation] Minimum time not met - blocking assessment submission');
+            showAlert('warning', `You must spend at least ${minimumTime} minutes in the course before completing the assessment. You have ${remainingMinutes} minute(s) remaining.`);
+            return;
+        }
+        
         const questions = document.querySelectorAll('.question-container');
         let score = 0;
         let answered = 0;
         const passingScore = {{pass_mark}};
         const currentAnswers = {};
         
-        // Increment attempt counter
+        // Increment attempt counter and record timestamp
         window.assessmentData.attempts++;
+        window.assessmentData.lastAttemptTime = Date.now();
         
         // Save attempts data to SCORM later after we collect all answers
         
@@ -1522,13 +2673,37 @@
         window.assessmentData.scores.push(percentage);
         saveProgress();
         
-        // Don't hide submit button - allow resubmission
+        // Handle submit button based on retake settings
         const submitButton = document.querySelector('.submit-assessment');
         if (submitButton) {
-            // Change button text to indicate resubmission is possible
-            if (percentage < passingScore && window.assessmentData.attempts < 2) {
+            if (percentage >= passingScore) {
+                // Passed - hide submit button
+                submitButton.style.display = 'none';
+            } else if (!COURSE_SETTINGS.allowRetake) {
+                // Failed but retakes not allowed - hide/disable button
+                submitButton.style.display = 'none';
+            } else if (COURSE_SETTINGS.retakeDelay > 0) {
+                // Check if retake delay is still active
+                const delayMs = COURSE_SETTINGS.retakeDelay * 60 * 60 * 1000;
+                const timeSinceLastAttempt = Date.now() - window.assessmentData.lastAttemptTime;
+                
+                if (timeSinceLastAttempt < delayMs) {
+                    // Still in delay period - hide button with message
+                    const remainingHours = Math.ceil((delayMs - timeSinceLastAttempt) / (60 * 60 * 1000));
+                    submitButton.textContent = `Retake available in ${remainingHours}h`;
+                    submitButton.disabled = true;
+                    submitButton.style.opacity = '0.5';
+                } else {
+                    // Delay period over - allow retake
+                    submitButton.textContent = 'Submit Again';
+                    submitButton.disabled = false;
+                    submitButton.style.opacity = '1';
+                }
+            } else if (window.assessmentData.attempts < 2) {
+                // Failed but retakes allowed and under attempt limit
                 submitButton.textContent = 'Submit Again';
-            } else if (percentage >= passingScore) {
+            } else {
+                // Failed and over attempt limit
                 submitButton.style.display = 'none';
             }
         }
@@ -1779,10 +2954,36 @@
             initializeNavigation();
             // Initialize autoplay toggle
             updateAutoplayToggle();
+            // Initialize auto-save
+            initializeAutoSave();
+            // Initialize time limit
+            initializeTimeLimit();
+            // Initialize minimum time tracking
+            initializeMinimumTime();
+            // Initialize keyboard navigation
+            initializeKeyboardNavigation();
+            // Initialize print functionality
+            initializePrintFeature();
         });
     } else {
         initializeNavigation();
         // Initialize autoplay toggle
         updateAutoplayToggle();
+        // Initialize auto-save
+        initializeAutoSave();
+        // Initialize time limit
+        initializeTimeLimit();
+        // Initialize minimum time tracking
+        initializeMinimumTime();
+        // Initialize keyboard navigation
+        initializeKeyboardNavigation();
+        // Initialize print functionality
+        initializePrintFeature();
     }
+    
+    // Clean up timers on page unload
+    window.addEventListener('beforeunload', function() {
+        stopAutoSave();
+        stopTimeLimit();
+    });
 })();

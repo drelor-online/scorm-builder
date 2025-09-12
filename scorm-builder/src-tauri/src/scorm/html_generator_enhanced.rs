@@ -87,7 +87,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render index template: {e}"))
     }
 
-    pub fn generate_welcome_page(&self, welcome: &WelcomePage) -> Result<String, String> {
+    pub fn generate_welcome_page(&self, welcome: &WelcomePage, require_audio_completion: bool) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating welcome page");
         eprintln!(
             "[HTML Generator] Welcome has audio_file: {}",
@@ -143,7 +143,8 @@ impl<'a> HtmlGenerator<'a> {
             "caption_file": welcome.caption_file.as_ref().map(|f| Self::ensure_media_path(f)),
             "image_url": welcome.image_url.as_ref().map(|f| Self::ensure_media_path(f)),
             "media": processed_media,
-            "id": "welcome"  // Add ID for audio player
+            "id": "welcome",  // Add ID for audio player
+            "require_audio_completion": require_audio_completion
         });
 
         self.handlebars
@@ -151,7 +152,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render welcome template: {e}"))
     }
 
-    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage) -> Result<String, String> {
+    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage, require_audio_completion: bool) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating objectives page");
         eprintln!(
             "[HTML Generator] Objectives has audio_file: {}",
@@ -202,7 +203,8 @@ impl<'a> HtmlGenerator<'a> {
             "audio_file": objectives.audio_file.as_ref().map(|f| Self::ensure_media_path(f)),
             "caption_file": objectives.caption_file.as_ref().map(|f| Self::ensure_media_path(f)),
             "media": processed_media,
-            "id": "objectives"  // Add ID for audio player
+            "id": "objectives",  // Add ID for audio player
+            "require_audio_completion": require_audio_completion
         });
 
         self.handlebars
@@ -210,7 +212,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render objectives template: {e}"))
     }
 
-    pub fn generate_topic_page(&self, topic: &Topic) -> Result<String, String> {
+    pub fn generate_topic_page(&self, topic: &Topic, require_audio_completion: bool) -> Result<String, String> {
         // Use eprintln! for debugging - it goes to stderr which might be visible
         eprintln!("[HTML Generator] Processing topic: {}", topic.id);
         eprintln!(
@@ -358,7 +360,8 @@ impl<'a> HtmlGenerator<'a> {
                         "clip_end": item.clip_end
                     })
                 }).collect::<Vec<_>>()
-            })
+            }),
+            "require_audio_completion": require_audio_completion
         });
 
         eprintln!(

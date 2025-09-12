@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { CourseContent, Media } from '../types/aiPrompt'
+import { CourseContent, Media, Topic } from '../types/aiPrompt'
 import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
 import { save } from '@tauri-apps/plugin-dialog'
@@ -12,6 +12,7 @@ import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { sanitizeScormFileName } from '../utils/fileSanitizer'
+import { debugLogger } from '../utils/ultraSimpleLogger'
 
 import { PageLayout } from './PageLayout'
 import { 
@@ -24,6 +25,156 @@ import {
 import { Package, Download, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import type { CourseSeedData } from '../types/course'
+
+// Helper function to inject missing topic media from storage into course content
+function injectMissingTopicMedia(courseContent: CourseContent, storageMedia: any[]): CourseContent {
+  console.log('[SCORMPackageBuilder] Injecting missing topic media from storage')
+  
+  // Create a map of page_id to media for easy lookup
+  const mediaByPageId = new Map<string, any[]>()
+  storageMedia.forEach(media => {
+    const pageId = media.pageId || media.metadata?.page_id
+    if (pageId) {
+      if (!mediaByPageId.has(pageId)) {
+        mediaByPageId.set(pageId, [])
+      }
+      mediaByPageId.get(pageId)!.push(media)
+    }
+  })
+  
+  debugLogger.info('MEDIA_INJECTION', 'Storage media grouped by page ID', {
+    totalStorageMedia: storageMedia.length,
+    pageIdGroups: Array.from(mediaByPageId.entries()).map(([pageId, media]) => ({
+      pageId,
+      mediaCount: media.length,
+      mediaIds: media.map(m => m.id)
+    }))
+  })
+  
+  // Create a deep copy of course content to avoid mutating the original
+  const injectedContent = JSON.parse(JSON.stringify(courseContent))
+  
+  // Track injections for logging
+  const injectionLog: { topicId: string; injectedMediaIds: string[] }[] = []
+  
+  // Inject missing media into topics
+  injectedContent.topics.forEach((topic: Topic, index: number) => {
+    const topicPageId = topic.id
+    const storageMediaForTopic = mediaByPageId.get(topicPageId) || []
+    const existingMediaIds = new Set(topic.media?.map((m: Media) => m.id) || [])
+    
+    // Find media in storage that's not in course content
+    const missingMedia = storageMediaForTopic.filter((media: any) => !existingMediaIds.has(media.id))
+    
+    if (missingMedia.length > 0) {
+      console.log(`[SCORMPackageBuilder] Injecting ${missingMedia.length} missing media items into ${topicPageId}:`, missingMedia.map(m => m.id))
+      
+      // Add missing media to the topic
+      topic.media = topic.media || []
+      const injectedIds: string[] = []
+      
+      missingMedia.forEach((media: any) => {
+        const isYouTubeVideo = media.type === 'youtube' || media.metadata?.isYouTube
+        
+        let mediaItem: Media
+        
+        if (isYouTubeVideo) {
+          // Special handling for YouTube videos - preserve metadata properties
+          const embedUrl = media.metadata?.embedUrl || media.metadata?.embed_url
+          const youtubeUrl = media.metadata?.youtubeUrl || media.metadata?.youtube_url || media.url
+          
+          debugLogger.info('MEDIA_INJECTION', 'Injecting YouTube video with preserved metadata', {
+            mediaId: media.id,
+            mediaType: media.type,
+            topicPageId,
+            embedUrl,
+            youtubeUrl,
+            clipStart: media.metadata?.clipStart,
+            clipEnd: media.metadata?.clipEnd,
+            isYouTube: true
+          })
+          
+          // FIXED: Ensure URL is never undefined to prevent Rust deserialization errors
+          const fallbackUrl = `https://www.youtube.com/embed/${media.id.replace('video-', '')}`
+          const safeUrl = embedUrl || youtubeUrl || fallbackUrl
+          const safeEmbedUrl = embedUrl || safeUrl
+          const safeYoutubeUrl = youtubeUrl || (safeEmbedUrl.includes('/embed/') ? 
+            safeEmbedUrl.replace('/embed/', '/watch?v=').split('?')[0] + '?v=' + safeEmbedUrl.split('/embed/')[1].split('?')[0] : 
+            safeUrl)
+
+          debugLogger.info('MEDIA_INJECTION', 'YouTube URL fallback applied', {
+            mediaId: media.id,
+            originalEmbedUrl: embedUrl,
+            originalYoutubeUrl: youtubeUrl,
+            safeUrl,
+            safeEmbedUrl,
+            safeYoutubeUrl,
+            fallbackUsed: !embedUrl && !youtubeUrl
+          })
+
+          mediaItem = {
+            id: media.id,
+            type: media.type,
+            url: safeUrl, // FIXED: Never undefined, always has fallback
+            title: media.metadata?.title || `YouTube Video ${media.id}`,
+            storageId: media.id,
+            // Preserve YouTube-specific properties for extractCourseContentMedia()
+            embedUrl: safeEmbedUrl,
+            youtubeUrl: safeYoutubeUrl,
+            isYouTube: true,
+            clipStart: media.metadata?.clipStart,
+            clipEnd: media.metadata?.clipEnd,
+          } as any // Cast to allow extra properties
+        } else {
+          // Regular media handling (images, local videos, etc.)
+          const generatedUrl = media.url || (media.fileName ? `media/${media.fileName}` : `storage-ref-${media.id}`)
+          
+          debugLogger.info('MEDIA_INJECTION', 'Injecting regular media item', {
+            mediaId: media.id,
+            mediaType: media.type,
+            topicPageId,
+            hasFileName: !!media.fileName,
+            fileName: media.fileName,
+            originalUrl: media.url,
+            generatedUrl,
+            urlType: generatedUrl.startsWith('media/') ? 'relative-path' : 'storage-ref'
+          })
+          
+          mediaItem = {
+            id: media.id,
+            type: media.type,
+            url: generatedUrl,
+            title: media.metadata?.title || `${media.type} for ${topicPageId}`,
+            storageId: media.id
+          }
+        }
+        
+        topic.media!.push(mediaItem)
+        injectedIds.push(media.id)
+      })
+      
+      injectionLog.push({
+        topicId: topicPageId,
+        injectedMediaIds: injectedIds
+      })
+    }
+  })
+  
+  debugLogger.info('MEDIA_INJECTION', 'Media injection completed', {
+    totalTopics: injectedContent.topics.length,
+    topicsWithInjections: injectionLog.length,
+    injectionDetails: injectionLog,
+    totalMediaInjected: injectionLog.reduce((sum, entry) => sum + entry.injectedMediaIds.length, 0)
+  })
+  
+  console.log('[SCORMPackageBuilder] Media injection completed:', {
+    topicsWithInjections: injectionLog.length,
+    totalMediaInjected: injectionLog.reduce((sum, entry) => sum + entry.injectedMediaIds.length, 0),
+    injectionDetails: injectionLog
+  })
+  
+  return injectedContent
+}
 
 interface SCORMPackageBuilderProps {
   courseContent: CourseContent
@@ -304,6 +455,28 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     const allMediaItems = getAllMedia()
     console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items in storage')
     
+    // DEBUG: Log detailed course content media structure to identify missing mappings
+    debugLogger.info('MEDIA_LOADING', 'Course content vs storage media analysis', {
+      courseContentStructure: {
+        welcomeMedia: enhancedContent.welcome?.media || [],
+        objectivesMedia: enhancedContent.objectivesPage?.media || [],
+        topicsWithMedia: enhancedContent.topics?.map((topic, index) => ({
+          topicIndex: index,
+          topicId: topic.id,
+          mediaCount: topic.media?.length || 0,
+          mediaItems: topic.media?.map(m => ({ id: m.id, type: m.type })) || []
+        })) || []
+      },
+      allStorageMedia: allMediaItems.map(m => ({ 
+        id: m.id, 
+        pageId: m.pageId || m.metadata?.page_id, 
+        type: m.type,
+        fileName: m.fileName,
+        metadata: m.metadata
+      })),
+      storageProjectId: storage.currentProjectId
+    })
+    
     // Helper function to detect media type from URL
     const detectMediaType = (url: string): 'image' | 'video' | 'audio' => {
       const urlLower = url.toLowerCase()
@@ -567,8 +740,27 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           }
         }
         
+        // DEBUG: Log topic media processing details
+        debugLogger.info('MEDIA_LOADING', `Topic ${topicIndex} media processing`, {
+          topicIndex,
+          topicId: topic.id,
+          mediaCount: topicMedia.length,
+          mediaItems: topicMedia.map(m => ({ id: m.id, type: m.type, hasUrl: !!m.url }))
+        })
+        
         for (const mediaItem of topicMedia) {
           const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
+          
+          // DEBUG: Log each media item processing decision
+          debugLogger.info('MEDIA_LOADING', `Processing topic ${topicIndex} media item`, {
+            mediaId: mediaItem.id,
+            mediaType: mediaItem.type,
+            trackingKey,
+            hasId: !!mediaItem.id,
+            alreadyLoaded: loadedMediaIds.has(trackingKey),
+            hasUrl: !!mediaItem.url
+          })
+          
           if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
             loadedMediaIds.add(trackingKey)
             const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
@@ -578,9 +770,23 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
               mediaFilesRef.current.set(uniqueFilename, mediaBlob)
               console.log(`[SCORMPackageBuilder] Loaded topic ${topicIndex} media: ${mediaItem.id} as ${uniqueFilename}`)
+              debugLogger.info('MEDIA_LOADING', `Successfully loaded topic ${topicIndex} media`, {
+                mediaId: mediaItem.id,
+                filename: uniqueFilename,
+                blobSize: mediaBlob.size
+              })
+            } else {
+              debugLogger.error('MEDIA_LOADING', `Failed to load topic ${topicIndex} media`, {
+                mediaId: mediaItem.id,
+                reason: 'No blob returned from getMediaBlobFromRegistry'
+              })
             }
           } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
             console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id} (${mediaItem.type})`)
+            debugLogger.info('MEDIA_LOADING', `Skipped duplicate topic ${topicIndex} media`, {
+              mediaId: mediaItem.id,
+              trackingKey
+            })
           } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
             // Handle remote media
             const detectedType = detectMediaType(mediaItem.url)
@@ -607,10 +813,28 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     }
     console.log('[SCORMPackageBuilder] Total files in package:', mediaFilesRef.current.size)
     
+    // DEBUG: Final summary of media loading results
+    debugLogger.info('MEDIA_LOADING', 'Media loading summary', {
+      totalStorageMedia: allMediaItems.length,
+      mediaFilesRefSize: mediaFilesRef.current.size,
+      loadedCount,
+      failedCount: failedMedia.length,
+      failedMedia,
+      loadedMediaIds: Array.from(loadedMediaIds),
+      mediaFilesRefContents: Array.from(mediaFilesRef.current.keys())
+    })
+    
     return failedMedia
   }
 
   const generatePackage = async () => {
+    debugLogger.info('SCORM_PACKAGE', 'Starting SCORM package generation', {
+      courseTitle: courseContent.welcomePage?.title || courseSeedData?.courseTitle || 'Untitled Course',
+      topicCount: courseContent.topics?.length || 0,
+      hasMediaItems: !!(courseContent.topics?.some((topic: Topic) => topic.media && topic.media.length > 0) || courseContent.welcomePage?.media?.length || courseContent.learningObjectivesPage?.media?.length),
+      storageProjectId: storage.currentProjectId
+    })
+    
     // Clear previous messages and media files
     setMessages([])
     mediaFilesRef.current.clear()  // FIX: Use ref instead of global
@@ -648,6 +872,12 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const startTime = Date.now()
       const performanceMetrics: PerformanceMetrics = {}
       
+      debugLogger.info('SCORM_PACKAGE', 'SCORM generation pipeline started', {
+        courseTitle: courseContent.welcomePage?.title || courseSeedData?.courseTitle || 'Untitled Course',
+        timestamp: new Date().toISOString(),
+        projectId: storage.currentProjectId
+      })
+      
       // Enhanced course content for Rust
       performanceMetrics.conversionStart = Date.now()
       
@@ -682,11 +912,27 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       setGenerationProgress(10)
+      setLoadingMessage('Injecting missing topic media from storage...')
+      await yieldToUI()
+      
+      // Fix missing topic media by injecting from storage before conversion
+      const allMediaItems = getAllMedia()
+      const injectedCourseContent = injectMissingTopicMedia(courseContent, allMediaItems)
+      
       setLoadingMessage('Converting course content to enhanced format...')
       await yieldToUI()
       
-      const enhancedContent = await convertToEnhancedCourseContent(courseContent, metadata)
+      const enhancedContent = await convertToEnhancedCourseContent(injectedCourseContent, metadata)
       performanceMetrics.conversionDuration = Date.now() - (typeof performanceMetrics.conversionStart === 'number' ? performanceMetrics.conversionStart : Date.now())
+      
+      debugLogger.info('SCORM_PACKAGE', 'Course content conversion completed', {
+        projectId: storage.currentProjectId,
+        conversionDurationMs: performanceMetrics.conversionDuration,
+        hasWelcome: !!enhancedContent.welcome,
+        hasObjectives: !!enhancedContent.objectivesPage,
+        topicsCount: enhancedContent.topics?.length || 0
+      })
+      
       console.log('[SCORMPackageBuilder] Enhanced content ready:', enhancedContent)
       
       setGenerationProgress(15)
@@ -778,6 +1024,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           })
         }
       } catch (mediaError) {
+        debugLogger.error('SCORM_PACKAGE', 'Media loading failed during SCORM generation', {
+          projectId: storage.currentProjectId,
+          error: mediaError instanceof Error ? mediaError.message : String(mediaError),
+          stack: mediaError instanceof Error ? mediaError.stack : undefined,
+          mediaFilesLoaded: mediaFilesRef.current.size
+        })
+        
         console.error('[SCORMPackageBuilder] Error loading media:', mediaError)
         const warningMsg = 'Some media files could not be loaded. The SCORM package will be generated without them.'
         setMessages(prev => [...prev, {
@@ -792,30 +1045,56 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       setIsLoadingMedia(false)
       
       // FIX: Calculate accurate media count from enhanced content
-      let mediaCount = 0
-      
-      // Count welcome page media
-      if (enhancedContent.welcome) {
-        if (enhancedContent.welcome.audioFile || enhancedContent.welcome.audioId || enhancedContent.welcome.audioBlob) mediaCount++
-        if (enhancedContent.welcome.captionFile || enhancedContent.welcome.captionId || enhancedContent.welcome.captionBlob) mediaCount++
-        if (enhancedContent.welcome.media) mediaCount += enhancedContent.welcome.media.length
-      }
-      
-      // Count objectives page media
-      if (enhancedContent.objectivesPage) {
-        if (enhancedContent.objectivesPage.audioFile || enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioBlob) mediaCount++
-        if (enhancedContent.objectivesPage.captionFile || enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionBlob) mediaCount++
-        if (enhancedContent.objectivesPage.media) mediaCount += enhancedContent.objectivesPage.media.length
-      }
-      
-      // Count topic media
-      if (enhancedContent.topics) {
-        enhancedContent.topics.forEach(topic => {
-          if (topic.audioFile || topic.audioId || topic.audioBlob) mediaCount++
-          if (topic.captionFile || topic.captionId || topic.captionBlob) mediaCount++
-          if (topic.media) mediaCount += topic.media.length
+      // Calculate media count based on what will actually be included in SCORM package
+      // This includes both explicit content references AND auto-populated media from storage
+      const calculateTotalMediaCount = (): { total: number, binaryFiles: number, embeddedUrls: number } => {
+        let contentReferenced = 0
+        let binaryFiles = 0
+        let embeddedUrls = 0
+        
+        // Count welcome page media
+        if (enhancedContent.welcome) {
+          if (enhancedContent.welcome.audioFile || enhancedContent.welcome.audioId || enhancedContent.welcome.audioBlob) contentReferenced++
+          if (enhancedContent.welcome.captionFile || enhancedContent.welcome.captionId || enhancedContent.welcome.captionBlob) contentReferenced++
+          if (enhancedContent.welcome.media) contentReferenced += enhancedContent.welcome.media.length
+        }
+        
+        // Count objectives page media
+        if (enhancedContent.objectivesPage) {
+          if (enhancedContent.objectivesPage.audioFile || enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioBlob) contentReferenced++
+          if (enhancedContent.objectivesPage.captionFile || enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionBlob) contentReferenced++
+          if (enhancedContent.objectivesPage.media) contentReferenced += enhancedContent.objectivesPage.media.length
+        }
+        
+        // Count topic media
+        if (enhancedContent.topics) {
+          enhancedContent.topics.forEach(topic => {
+            if (topic.audioFile || topic.audioId || topic.audioBlob) contentReferenced++
+            if (topic.captionFile || topic.captionId || topic.captionBlob) contentReferenced++
+            if (topic.media) contentReferenced += topic.media.length
+          })
+        }
+        
+        // Get all media from storage (this matches what loadMediaFromRegistry will process)
+        const allStorageMedia = getAllMedia()
+        
+        allStorageMedia.forEach(mediaItem => {
+          if (mediaItem.metadata?.youtubeUrl || mediaItem.metadata?.mimeType === 'application/json') {
+            embeddedUrls++
+          } else {
+            binaryFiles++
+          }
         })
+        
+        return {
+          total: Math.max(contentReferenced, allStorageMedia.length),
+          binaryFiles,
+          embeddedUrls
+        }
       }
+      
+      const mediaCountInfo = calculateTotalMediaCount()
+      const mediaCount = mediaCountInfo.total
       
       // Check for cancellation before Rust generation
       if (generationAbortController.current?.signal.aborted) {
@@ -824,11 +1103,27 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       const estimatedSeconds = Math.round(60 + (mediaCount * 2)) // Reduced base time and per-file time
       setGenerationProgress(45)
-      setLoadingMessage(`Generating SCORM package (${mediaCount} media files, ${mediaFilesRef.current.size} loaded)...`)
+      debugLogger.info('SCORM_PACKAGE', 'Starting Rust SCORM generation phase', {
+        projectId: storage.currentProjectId,
+        mediaCount,
+        loadedMediaFiles: mediaFilesRef.current.size,
+        estimatedTimeSeconds: Math.round(60 + (mediaCount * 2))
+      })
+      
+      // Create descriptive message that shows both binary files and embedded URLs
+      const mediaDescription = mediaCountInfo.binaryFiles > 0 && mediaCountInfo.embeddedUrls > 0 
+        ? `${mediaCountInfo.binaryFiles} binary files + ${mediaCountInfo.embeddedUrls} embedded videos`
+        : mediaCountInfo.binaryFiles > 0 
+          ? `${mediaCountInfo.binaryFiles} binary files`
+          : mediaCountInfo.embeddedUrls > 0
+            ? `${mediaCountInfo.embeddedUrls} embedded videos`
+            : 'no media files'
+      
+      setLoadingMessage(`Generating SCORM package (${mediaDescription}, ${mediaFilesRef.current.size} loaded)...`)
       await yieldToUI()
       
       console.log('[SCORMPackageBuilder] === STARTING RUST GENERATION PHASE ===')
-      console.log(`[SCORMPackageBuilder] Media count: ${mediaCount}, Loaded files: ${mediaFilesRef.current.size}`)
+      console.log(`[SCORMPackageBuilder] Media count: ${mediaCount} (${mediaCountInfo.binaryFiles} binary + ${mediaCountInfo.embeddedUrls} embedded), Loaded files: ${mediaFilesRef.current.size}`)
       
       // Generate using Rust
       performanceMetrics.rustGenerationStart = Date.now()
@@ -853,6 +1148,15 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       })
       
+      // Retrieve course settings from storage
+      let courseSettings = null
+      try {
+        courseSettings = await storage.getContent('courseSettings')
+        console.log('[SCORMPackageBuilder] Loaded course settings:', courseSettings)
+      } catch (error) {
+        console.log('[SCORMPackageBuilder] No course settings found, using defaults')
+      }
+
       const result = await measureAsync(
         'scorm-generation',
         async () => {
@@ -869,7 +1173,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   setGenerationProgress(mappedProgress)
                   console.log('[SCORMPackageBuilder] Progress:', progress, message)
                 },
-                mediaFilesRef.current // Pass the pre-loaded media files
+                mediaFilesRef.current, // Pass the pre-loaded media files
+                courseSettings // Pass course settings for audio completion requirements
               ),
               timeoutPromise
             ])
@@ -918,6 +1223,20 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.warn('[SCORMPackageBuilder] Package generated with missing media:', failedMedia)
       }
     } catch (error) {
+      // Log critical SCORM package generation error to ultraSimpleLogger
+      debugLogger.error('SCORM_PACKAGE', 'SCORM package generation failed in UI', {
+        courseTitle: courseContent.welcomePage?.title || courseSeedData?.courseTitle || 'Untitled Course',
+        topicCount: courseContent.topics?.length || 0,
+        hasMediaItems: !!(
+          courseContent.topics?.some((topic: Topic) => topic.media && topic.media.length > 0) ||
+          courseContent.welcomePage?.media?.length ||
+          courseContent.learningObjectivesPage?.media?.length
+        ),
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      })
+      
       console.error('Error generating SCORM package:', error)
       
       // Handle timeout errors specifically
@@ -1049,6 +1368,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.log('[SCORMPackageBuilder] User cancelled save dialog or no path returned')
       }
     } catch (error: unknown) {
+      // Log file saving error to ultraSimpleLogger
+      debugLogger.error('SCORM_SAVE', 'Failed to save SCORM package to file system', {
+        error: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : undefined,
+        errorStack: error instanceof Error ? error.stack : undefined,
+        typeof: typeof error,
+        constructor: error && typeof error === 'object' && 'constructor' in error ? (error.constructor as any)?.name : undefined,
+        timestamp: new Date().toISOString()
+      })
+      
       console.error('[SCORMPackageBuilder] Error saving SCORM package:', error)
       console.error('[SCORMPackageBuilder] Error details:', {
         name: error instanceof Error ? error.name : undefined,
@@ -1103,7 +1432,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
 
   return (
     <PageLayout
-      currentStep={6}
+      currentStep={7}
       title="Generate SCORM Package"
       description="Export your course as a SCORM-compliant package"
       onBack={onBack}
@@ -1300,10 +1629,31 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   )}
                   <div className="flex flex-col items-center">
                     <div className="text-2xl font-bold text-green-600">
-                      {mediaFilesRef.current.size}
+                      {(() => {
+                        // Calculate total media count including both binary files and embedded URLs
+                        const allMedia = getAllMedia()
+                        const binaryFileCount = mediaFilesRef.current.size
+                        const totalMediaCount = allMedia.length
+                        const embeddedUrlCount = totalMediaCount - binaryFileCount
+                        
+                        // Log media count breakdown for debugging
+                        debugLogger.info('SCORM_PACKAGE', 'Completion screen media count display', {
+                          totalMediaCount,
+                          binaryFileCount,
+                          embeddedUrlCount,
+                          allMediaIds: allMedia.map(m => m.id),
+                          projectId: storage.currentProjectId
+                        })
+                        
+                        return totalMediaCount
+                      })()}
                     </div>
                     <div className="text-xs text-gray-500 uppercase tracking-wider">
-                      {mediaFilesRef.current.size === 1 ? 'Media File' : 'Media Files'}
+                      {(() => {
+                        const allMedia = getAllMedia()
+                        const totalCount = allMedia.length
+                        return totalCount === 1 ? 'Media File' : 'Media Files'
+                      })()}
                     </div>
                   </div>
                 </div>

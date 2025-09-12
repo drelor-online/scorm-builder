@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle, ChevronDown, ChevronUp, Copy, Save, Folder, Check, Minimize2, Maximize2, Bell } from 'lucide-react'
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle, ChevronDown, ChevronUp, Copy, Save, Folder, Check, Minimize2, Maximize2, Bell, MessageCircle, Circle, Zap, Bug, Wrench, Maximize, Minimize } from 'lucide-react'
 import { IconButton } from './DesignSystem/IconButton'
 import { Icon } from './DesignSystem/Icons'
 import { debugLogger } from '../utils/ultraSimpleLogger'
@@ -57,12 +57,23 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
   onUndock
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(() => {
+    try {
+      const saved = localStorage.getItem('statusPanel_maximized')
+      return saved === 'true'
+    } catch {
+      return false
+    }
+  })
   const [autoHideTimer, setAutoHideTimer] = useState<NodeJS.Timeout | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('activity')
   const [logs, setLogs] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
-  const [logLevelFilter, setLogLevelFilter] = useState<'ALL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG'>('ALL')
+  const [logLevelFilter, setLogLevelFilter] = useState<'ALL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'SUCCESS'>('ALL')
+  const [quickFilterActive, setQuickFilterActive] = useState<string | null>(null)
+  const [timeFilter, setTimeFilter] = useState<'ALL' | '5MIN' | '15MIN' | '1HOUR'>('ALL')
+  const [componentFilter, setComponentFilter] = useState<string>('All Components')
   const processedIds = useRef<Set<string>>(new Set())
   
   // Dragging and positioning state with localStorage persistence
@@ -102,20 +113,20 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
     return () => clearInterval(interval)
   }, [])
   
-  // Auto-hide after 30 seconds of no new messages
-  useEffect(() => {
-    if (visibleMessages.length > 0) {
-      if (autoHideTimer) clearTimeout(autoHideTimer)
-      
-      const timer = setTimeout(() => {
-        setIsCollapsed(true)
-      }, 30000) // 30 seconds
-      
-      setAutoHideTimer(timer)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [visibleMessages.length])
+  // Auto-hide disabled - keep panel expanded by default for better UX
+  // useEffect(() => {
+  //   if (visibleMessages.length > 0) {
+  //     if (autoHideTimer) clearTimeout(autoHideTimer)
+  //     
+  //     const timer = setTimeout(() => {
+  //       setIsCollapsed(true)
+  //     }, 30000) // 30 seconds
+  //     
+  //     setAutoHideTimer(timer)
+  //     
+  //     return () => clearTimeout(timer)
+  //   }
+  // }, [visibleMessages.length])
 
   // Keyboard shortcut to toggle panel (Ctrl+Shift+D)
   useEffect(() => {
@@ -215,18 +226,191 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
     }
   }
 
-  // Filter logs based on search and log level
+  // Enhanced filtering handlers
+  const handleQuickFilter = (level: string) => {
+    if (quickFilterActive === level) {
+      setQuickFilterActive(null) // Toggle off if already active
+    } else {
+      setQuickFilterActive(level)
+      setLogLevelFilter('ALL') // Reset dropdown filter
+    }
+  }
+
+  const handleTimeFilter = (time: '5MIN' | '15MIN' | '1HOUR' | 'ALL') => {
+    setTimeFilter(time)
+  }
+
+  const handleClearAllFilters = () => {
+    setQuickFilterActive(null)
+    setLogLevelFilter('ALL')
+    setTimeFilter('ALL')
+    setComponentFilter('All Components')
+    setSearchFilter('')
+  }
+
+  // Check if any filters are active
+  const hasActiveFilters = () => {
+    return quickFilterActive !== null || 
+           logLevelFilter !== 'ALL' || 
+           timeFilter !== 'ALL' || 
+           componentFilter !== 'All Components' || 
+           searchFilter !== ''
+  }
+
+  // Get active filter descriptions for display
+  const getActiveFilterText = () => {
+    const filters = []
+    if (quickFilterActive) {
+      filters.push(`${quickFilterActive.toLowerCase()} only`)
+    } else if (logLevelFilter !== 'ALL') {
+      filters.push(`${logLevelFilter.toLowerCase()} only`)
+    }
+    if (timeFilter !== 'ALL') {
+      const timeLabels = { '5MIN': 'last 5 minutes', '15MIN': 'last 15 minutes', '1HOUR': 'last hour' }
+      filters.push(timeLabels[timeFilter])
+    }
+    if (componentFilter !== 'All Components') {
+      filters.push(`${componentFilter} component`)
+    }
+    if (searchFilter) {
+      filters.push(`search: "${searchFilter}"`)
+    }
+    return filters.join(', ')
+  }
+
+  // Parse log entry to extract level, component, message, and timestamp
+  const parseLogEntry = (log: string) => {
+    // Handle REAL ultraSimpleLogger format: [2024-01-15T10:30:15.123Z] [Component] ERROR: message
+    
+    // Extract ISO timestamp if present (first bracketed item)
+    const isoTimestampMatch = log.match(/^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\]/)
+    let timestamp: number | null = null
+    if (isoTimestampMatch) {
+      timestamp = new Date(isoTimestampMatch[1]).getTime()
+    }
+    
+    // Extract component name - second bracketed item after timestamp
+    let componentMatch = null
+    if (isoTimestampMatch) {
+      // Look for component after timestamp: [timestamp] [Component] message
+      const afterTimestamp = log.substring(isoTimestampMatch[0].length).trim()
+      componentMatch = afterTimestamp.match(/^\[([A-Za-z][A-Za-z0-9_]*)\]/)
+    } else {
+      // Fallback: look for any [ComponentName] pattern (backwards compatibility)
+      componentMatch = log.match(/\[([A-Za-z][A-Za-z0-9_]*)\](?!\s*\[)/)
+    }
+    const component = componentMatch ? componentMatch[1] : null
+    
+    // Extract log level from message content (ERROR:, WARN:, DEBUG:, etc.)
+    let level = 'info' // Default to info
+    let message = log
+    
+    // Remove timestamp from message if present
+    if (isoTimestampMatch) {
+      message = message.substring(isoTimestampMatch[0].length).trim()
+    }
+    
+    // Remove component from message if present
+    if (componentMatch && message.startsWith(componentMatch[0])) {
+      message = message.substring(componentMatch[0].length).trim()
+    }
+    
+    // Check for explicit level markers in message content
+    const levelInMessageMatch = message.match(/^(ERROR|WARN|WARNING|DEBUG|SUCCESS):\s*(.+)$/)
+    if (levelInMessageMatch) {
+      level = levelInMessageMatch[1].toLowerCase()
+      if (level === 'warning') level = 'warn' // Normalize
+      message = levelInMessageMatch[2].trim() // Remove level prefix from message
+    }
+    // If no explicit level marker, check for old format [LEVEL] at start
+    else {
+      const oldFormatLevelMatch = log.match(/^\[?(ERROR|WARN|WARNING|INFO|DEBUG|SUCCESS)\]?/)
+      if (oldFormatLevelMatch) {
+        level = oldFormatLevelMatch[1].toLowerCase()
+        if (level === 'warning') level = 'warn' // Normalize
+      }
+    }
+    
+    return { level, component, message, timestamp, originalLog: log }
+  }
+
+  // Get unique components from logs for filter dropdown
+  const getUniqueComponents = () => {
+    const components = new Set<string>()
+    logs.forEach(log => {
+      const parsed = parseLogEntry(log)
+      if (parsed.component) {
+        components.add(parsed.component)
+      }
+    })
+    return Array.from(components).sort()
+  }
+
+  // Get icon for log level
+  const getLogIcon = (level: string) => {
+    switch (level.toLowerCase()) {
+      case 'error': return AlertCircle
+      case 'warn': case 'warning': return AlertTriangle  
+      case 'info': return Info
+      case 'debug': return Bug
+      case 'success': return CheckCircle
+      default: return Info
+    }
+  }
+
+  // Filter logs based on search, log level, time, component, and quick filters
   const getFilteredLogs = () => {
     let filtered = logs
     
-    // Apply log level filter
-    if (logLevelFilter !== 'ALL') {
+    // Apply quick filter (takes precedence over dropdown filter)
+    const activeFilter = quickFilterActive || logLevelFilter
+    if (activeFilter !== 'ALL') {
       filtered = filtered.filter(log => {
-        if (logLevelFilter === 'ERROR') return log.includes('[ERROR]') || log.includes('ERROR')
-        if (logLevelFilter === 'WARN') return log.includes('[WARN]') || log.includes('WARN')
-        if (logLevelFilter === 'INFO') return log.includes('[INFO]') || log.includes('INFO')
-        if (logLevelFilter === 'DEBUG') return log.includes('[DEBUG]') || log.includes('DEBUG')
+        const parsed = parseLogEntry(log)
+        const parsedLevel = parsed.level.toUpperCase()
+        
+        // Match based on parsed level
+        if (activeFilter === 'ERROR') return parsedLevel === 'ERROR'
+        if (activeFilter === 'WARN') return parsedLevel === 'WARN'
+        if (activeFilter === 'INFO') return parsedLevel === 'INFO'
+        if (activeFilter === 'DEBUG') return parsedLevel === 'DEBUG'
+        if (activeFilter === 'SUCCESS') return parsedLevel === 'SUCCESS'
         return true
+      })
+    }
+    
+    // Apply time-based filter
+    if (timeFilter !== 'ALL') {
+      const now = Date.now()
+      let timeThreshold = 0
+      
+      switch (timeFilter) {
+        case '5MIN':
+          timeThreshold = now - (5 * 60 * 1000)
+          break
+        case '15MIN':
+          timeThreshold = now - (15 * 60 * 1000)
+          break
+        case '1HOUR':
+          timeThreshold = now - (60 * 60 * 1000)
+          break
+      }
+      
+      filtered = filtered.filter(log => {
+        const parsed = parseLogEntry(log)
+        // Only include logs that have timestamps and are within the time window
+        if (!parsed.timestamp) {
+          return false // Exclude logs without timestamps when time filter is active
+        }
+        return parsed.timestamp >= timeThreshold
+      })
+    }
+    
+    // Apply component filter
+    if (componentFilter !== 'All Components') {
+      filtered = filtered.filter(log => {
+        const parsed = parseLogEntry(log)
+        return parsed.component === componentFilter
       })
     }
     
@@ -336,13 +520,30 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
     }
   }, [onUndock])
 
-  // Don't render if no visible messages and no debug logs (unless docked)
-  if (visibleMessages.length === 0 && logs.length === 0 && !isDocked) {
-    return null
-  }
+  // Maximize/minimize functionality
+  const handleMaximize = useCallback(() => {
+    setIsMaximized(true)
+    try {
+      localStorage.setItem('statusPanel_maximized', 'true')
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [])
 
-  // If docked, show fixed bell icon in bottom-right corner
-  if (isDocked) {
+  const handleMinimize = useCallback(() => {
+    setIsMaximized(false)
+    try {
+      localStorage.setItem('statusPanel_maximized', 'false')
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [])
+
+  // Always show the bell button - if undocked with no content, show as docked bell for accessibility
+  const shouldShowAsBell = isDocked || (visibleMessages.length === 0 && logs.length === 0)
+
+  // If docked OR no content to show, show fixed bell icon in bottom-right corner
+  if (shouldShowAsBell) {
     // Show total unread messages count, not just visible ones
     const messageCount = messages.filter(msg => !msg.dismissed).length
     const hasNotifications = messageCount > 0
@@ -358,7 +559,7 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
           aria-label={hasNotifications ? `${messageCount} unread notifications. Click to view` : "Status panel. Click to expand"}
           title={hasNotifications ? `${messageCount} unread messages` : "Expand status panel"}
         >
-          <Icon icon={Bell} size="md" />
+          <Icon icon={Bell} size="sm" />
           {hasNotifications && (
             <span 
               className={styles.bellNotificationBadge}
@@ -375,9 +576,9 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
   return (
     <div 
       ref={panelRef}
-      className={`${styles.statusPanel} ${isCollapsed ? styles.collapsed : ''} ${isDragging ? styles.dragging : ''} ${className || ''}`}
+      className={`${styles.statusPanel} ${isCollapsed ? styles.collapsed : ''} ${isMaximized ? styles.maximized : ''} ${isDragging ? styles.dragging : ''} ${className || ''}`}
       style={{
-        transform: `translateX(${position.x}px) translateY(${position.y}px)`
+        transform: isMaximized ? 'none' : `translateX(${position.x}px) translateY(${position.y}px)`
       }}
       data-testid="status-panel"
     >
@@ -419,6 +620,14 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
               Clear All
             </button>
           )}
+          <IconButton
+            icon={isMaximized ? Minimize : Maximize}
+            onClick={isMaximized ? handleMinimize : handleMaximize}
+            data-testid="status-maximize-button"
+            size="sm"
+            variant="ghost"
+            ariaLabel={isMaximized ? 'Minimize status panel' : 'Maximize status panel'}
+          />
           <IconButton
             icon={Minimize2}
             onClick={handleDock}
@@ -479,6 +688,7 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
             <div className={styles.debugPanel}>
               {/* Debug Controls */}
               <div className={styles.debugControls}>
+                {/* Enhanced Filtering Row 1: Search and Level Dropdown */}
                 <div className={styles.debugFilters}>
                   <input
                     type="text"
@@ -488,18 +698,216 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
                     className={styles.searchInput}
                   />
                   <select
-                    value={logLevelFilter}
-                    onChange={(e) => setLogLevelFilter(e.target.value as any)}
+                    value={quickFilterActive ? 'ALL' : logLevelFilter}
+                    onChange={(e) => {
+                      setLogLevelFilter(e.target.value as any)
+                      setQuickFilterActive(null)
+                    }}
                     className={styles.levelSelect}
+                    disabled={quickFilterActive !== null}
                   >
                     <option value="ALL">All Levels</option>
                     <option value="ERROR">Errors</option>
                     <option value="WARN">Warnings</option>
+                    <option value="SUCCESS">Success</option>
                     <option value="INFO">Info</option>
                     <option value="DEBUG">Debug</option>
                   </select>
+                  <select
+                    value={componentFilter}
+                    onChange={(e) => setComponentFilter(e.target.value)}
+                    className={styles.levelSelect}
+                    style={{ minWidth: '140px' }}
+                  >
+                    <option value="All Components">All Components</option>
+                    {getUniqueComponents().map(component => (
+                      <option key={component} value={component}>{component}</option>
+                    ))}
+                  </select>
                 </div>
+
+                {/* Enhanced Filtering Row 2: Quick Filters */}
+                <div className={styles.debugFilters} style={{ flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#a8a8a8', marginRight: '8px' }}>Quick:</span>
+                    <button 
+                      onClick={() => handleQuickFilter('ERROR')}
+                      className={`${styles.debugActionButton} ${quickFilterActive === 'ERROR' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: quickFilterActive === 'ERROR' ? '#ff6b6b' : undefined,
+                        opacity: quickFilterActive === 'ERROR' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Show only errors"
+                    >
+                      Errors
+                    </button>
+                    <button 
+                      onClick={() => handleQuickFilter('WARN')}
+                      className={`${styles.debugActionButton} ${quickFilterActive === 'WARN' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: quickFilterActive === 'WARN' ? '#ffd43b' : undefined,
+                        opacity: quickFilterActive === 'WARN' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Show only warnings"
+                    >
+                      Warnings
+                    </button>
+                    <button 
+                      onClick={() => handleQuickFilter('INFO')}
+                      className={`${styles.debugActionButton} ${quickFilterActive === 'INFO' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: quickFilterActive === 'INFO' ? '#74c0fc' : undefined,
+                        opacity: quickFilterActive === 'INFO' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Show only info"
+                    >
+                      Info
+                    </button>
+                    <button 
+                      onClick={() => handleQuickFilter('DEBUG')}
+                      className={`${styles.debugActionButton} ${quickFilterActive === 'DEBUG' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: quickFilterActive === 'DEBUG' ? '#9775fa' : undefined,
+                        opacity: quickFilterActive === 'DEBUG' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Show only debug"
+                    >
+                      Debug
+                    </button>
+                    <button 
+                      onClick={() => handleQuickFilter('SUCCESS')}
+                      className={`${styles.debugActionButton} ${quickFilterActive === 'SUCCESS' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: quickFilterActive === 'SUCCESS' ? '#51cf66' : undefined,
+                        opacity: quickFilterActive === 'SUCCESS' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Show only success"
+                    >
+                      Success
+                    </button>
+                    <button 
+                      onClick={() => handleQuickFilter('ALL')}
+                      className={styles.debugActionButton}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        opacity: 0.7
+                      }}
+                      role="button"
+                      aria-label="Show all levels"
+                    >
+                      All
+                    </button>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#a8a8a8', marginRight: '8px' }}>Time:</span>
+                    <button 
+                      onClick={() => handleTimeFilter('5MIN')}
+                      className={`${styles.debugActionButton} ${timeFilter === '5MIN' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: timeFilter === '5MIN' ? '#74c0fc' : undefined,
+                        opacity: timeFilter === '5MIN' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Last 5 minutes"
+                    >
+                      5 min
+                    </button>
+                    <button 
+                      onClick={() => handleTimeFilter('15MIN')}
+                      className={`${styles.debugActionButton} ${timeFilter === '15MIN' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: timeFilter === '15MIN' ? '#74c0fc' : undefined,
+                        opacity: timeFilter === '15MIN' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Last 15 minutes"
+                    >
+                      15 min
+                    </button>
+                    <button 
+                      onClick={() => handleTimeFilter('1HOUR')}
+                      className={`${styles.debugActionButton} ${timeFilter === '1HOUR' ? styles.activeFilter : ''}`}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        backgroundColor: timeFilter === '1HOUR' ? '#74c0fc' : undefined,
+                        opacity: timeFilter === '1HOUR' ? 1 : 0.7
+                      }}
+                      role="button"
+                      aria-label="Last hour"
+                    >
+                      1 hour
+                    </button>
+                    <button 
+                      onClick={() => handleTimeFilter('ALL')}
+                      className={styles.debugActionButton}
+                      style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px',
+                        opacity: 0.7
+                      }}
+                      role="button"
+                      aria-label="All time"
+                    >
+                      All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Filters Indicator */}
+                {hasActiveFilters() && (
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: '#74c0fc', 
+                    padding: '4px 8px',
+                    backgroundColor: 'rgba(116, 192, 252, 0.1)',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span>Active filters: {getActiveFilterText()}</span>
+                    <button
+                      onClick={handleClearAllFilters}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#74c0fc',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        marginLeft: '8px'
+                      }}
+                      role="button"
+                      aria-label="Clear all filters"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
                 
+                {/* Debug Actions */}
                 <div className={styles.debugActions}>
                   <button onClick={handleCopyLogs} className={styles.debugActionButton}>
                     {copied ? (
@@ -535,19 +943,63 @@ const StatusPanelComponent: React.FC<StatusPanelProps> = ({
                     {logs.length === 0 ? 'No debug logs yet...' : 'No logs match the current filter'}
                   </div>
                 ) : (
-                  getFilteredLogs().map((log, index) => (
-                    <div
-                      key={index}
-                      className={`${styles.logEntry} ${
-                        log.includes('ERROR') ? styles.logError :
-                        log.includes('WARN') ? styles.logWarn :
-                        log.includes('DEBUG') ? styles.logDebug :
-                        styles.logInfo
-                      }`}
-                    >
-                      {log}
-                    </div>
-                  ))
+                  getFilteredLogs().map((log, index) => {
+                    const parsedLog = parseLogEntry(log)
+                    const LogIcon = getLogIcon(parsedLog.level)
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`${styles.logEntry} ${
+                          parsedLog.level === 'error' ? styles.logError :
+                          parsedLog.level === 'warn' || parsedLog.level === 'warning' ? styles.logWarn :
+                          parsedLog.level === 'debug' ? styles.logDebug :
+                          parsedLog.level === 'success' ? styles.logSuccess :
+                          styles.logInfo
+                        }`}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          {/* Log level icon */}
+                          <Icon 
+                            icon={LogIcon} 
+                            size="xs" 
+                            style={{ 
+                              marginTop: '2px', 
+                              flexShrink: 0,
+                              opacity: 0.8 
+                            }} 
+                          />
+                          
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            {/* Component badge if available */}
+                            {parsedLog.component && (
+                              <span 
+                                style={{
+                                  display: 'inline-block',
+                                  fontSize: '9px',
+                                  padding: '2px 6px',
+                                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '3px',
+                                  marginRight: '8px',
+                                  color: 'rgba(255, 255, 255, 0.7)',
+                                  fontWeight: '500',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}
+                              >
+                                {parsedLog.component}
+                              </span>
+                            )}
+                            
+                            {/* Log message */}
+                            <span style={{ wordBreak: 'break-word' }}>
+                              {parsedLog.message || parsedLog.originalLog}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
                 )}
               </div>
 

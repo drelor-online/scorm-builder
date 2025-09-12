@@ -3,7 +3,7 @@ import { CourseContentUnion, Media, Topic } from '../types/aiPrompt'
 
 // Extended Media type to include caption type and MediaItem properties used in this component
 type ExtendedMedia = Media & { 
-  type: 'image' | 'video' | 'audio' | 'caption'
+  type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
   pageId?: string
   metadata?: any
   storageId?: string

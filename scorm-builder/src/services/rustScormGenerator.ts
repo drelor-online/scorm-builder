@@ -2,6 +2,81 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { CourseContent, EnhancedCourseContent } from '../types/scorm'
 import { downloadIfExternal, isExternalUrl } from './externalImageDownloader'
+import { debugLogger } from '../utils/ultraSimpleLogger'
+
+/**
+ * Converts YouTube watch URLs to embed URLs
+ * @param url - YouTube URL (watch or embed format)
+ * @param clipStart - Start time in seconds (optional)
+ * @param clipEnd - End time in seconds (optional)
+ * @returns Properly formatted YouTube embed URL
+ */
+export function normalizeYouTubeURL(url: string, clipStart?: number, clipEnd?: number): string {
+  if (!url) return ''
+  
+  // If already an embed URL, just add clip timing if needed
+  if (url.includes('/embed/')) {
+    const baseUrl = url.split('?')[0] // Remove existing parameters
+    const videoId = baseUrl.split('/embed/')[1]
+    
+    const params = new URLSearchParams()
+    params.set('rel', '0')
+    params.set('modestbranding', '1')
+    
+    if (clipStart !== undefined && clipStart > 0) {
+      params.set('start', clipStart.toString())
+    }
+    if (clipEnd !== undefined && clipEnd > 0) {
+      params.set('end', clipEnd.toString())
+    }
+    
+    return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+  }
+  
+  // Extract video ID from various YouTube URL formats
+  let videoId = ''
+  
+  try {
+    const urlObj = new URL(url)
+    
+    if (urlObj.hostname.includes('youtube.com')) {
+      if (urlObj.pathname === '/watch') {
+        videoId = urlObj.searchParams.get('v') || ''
+      } else if (urlObj.pathname.startsWith('/embed/')) {
+        videoId = urlObj.pathname.split('/embed/')[1]
+      }
+    } else if (urlObj.hostname.includes('youtu.be')) {
+      videoId = urlObj.pathname.substring(1) // Remove leading /
+    }
+  } catch (e) {
+    // If URL parsing fails, try regex extraction
+    const watchMatch = url.match(/[?&]v=([^&]+)/)
+    const embedMatch = url.match(/\/embed\/([^?&]+)/)
+    const shortMatch = url.match(/youtu\.be\/([^?&]+)/)
+    
+    videoId = (watchMatch?.[1] || embedMatch?.[1] || shortMatch?.[1] || '').split('&')[0]
+  }
+  
+  if (!videoId) {
+    console.warn('[YouTube URL] Could not extract video ID from:', url)
+    return url // Return original if we can't parse it
+  }
+  
+  // Build proper embed URL with parameters
+  const params = new URLSearchParams()
+  params.set('rel', '0')
+  params.set('modestbranding', '1')
+  
+  if (clipStart !== undefined && clipStart > 0) {
+    params.set('start', clipStart.toString())
+  }
+  if (clipEnd !== undefined && clipEnd > 0) {
+    params.set('end', clipEnd.toString())
+  }
+  
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`
+}
+import { generateYouTubeClipReport, logYouTubeClipReport, diagnoseYouTubeVideo } from '../utils/youTubeClippingDiagnostics'
 
 interface MediaFile {
   filename: string
@@ -12,11 +87,101 @@ interface MediaFile {
 const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
 
 /**
+ * Ensure the project is properly loaded in FileStorage before accessing media
+ * This is critical for MediaService to work correctly
+ */
+async function ensureProjectLoaded(projectId: string): Promise<void> {
+  try {
+    console.log(`[Rust SCORM] Ensuring project ${projectId} is loaded...`)
+    
+    // CRITICAL FIX: Extract numeric ID from any format to prevent double path construction
+    let numericProjectId = projectId
+    
+    // If projectId is a full path, extract just the numeric ID
+    if (projectId.includes('\\') || projectId.includes('/') || projectId.includes('.scormproj')) {
+      console.log(`[Rust SCORM] Extracting numeric ID from full path: ${projectId}`)
+      
+      // Try to extract from path like "Complex_Projects_-_1_-_49_CFR_192_1756944000180.scormproj"
+      const fileNameMatch = projectId.match(/_(\d+)\.scormproj$/i)
+      if (fileNameMatch) {
+        numericProjectId = fileNameMatch[1]
+        console.log(`[Rust SCORM] Extracted numeric ID from filename: ${numericProjectId}`)
+      } else {
+        // Try to extract from directory path like "C:\...\1756944000180"
+        const pathParts = projectId.split(/[\\/]/)
+        for (let i = pathParts.length - 1; i >= 0; i--) {
+          const part = pathParts[i].replace('.scormproj', '')
+          if (/^\d+$/.test(part)) {
+            numericProjectId = part
+            console.log(`[Rust SCORM] Extracted numeric ID from path: ${numericProjectId}`)
+            break
+          }
+        }
+      }
+    }
+    
+    console.log(`[Rust SCORM] Final numeric project ID: ${numericProjectId}`)
+    
+    // Import FileStorage and check if project is already loaded
+    const { FileStorage } = await import('./FileStorage')
+    const fileStorage = new FileStorage()
+    
+    // Check if project is already loaded (compare with numeric ID only)
+    const currentProjectId = (fileStorage as any)._currentProjectId
+    if (currentProjectId === numericProjectId) {
+      console.log(`[Rust SCORM] Project ${numericProjectId} is already loaded`)
+      return
+    }
+    
+    // Construct possible paths based on the numeric ID
+    console.log(`[Rust SCORM] Project not loaded, attempting to open project with ID: ${numericProjectId}`)
+    const projectsPath = `C:\\Users\\sierr\\Documents\\SCORM Projects`
+    const possiblePaths = [
+      `${projectsPath}\\${numericProjectId}.scormproj`,
+      `${projectsPath}\\Complex_Projects_-_1_-_49_CFR_192_${numericProjectId}.scormproj`,
+      // Add more patterns if needed based on user's project naming
+    ]
+    
+    let projectOpened = false
+    for (const projectPath of possiblePaths) {
+      try {
+        console.log(`[Rust SCORM] Trying to open: ${projectPath}`)
+        await fileStorage.openProject(projectPath)
+        
+        // Verify project was actually opened
+        const newProjectId = (fileStorage as any)._currentProjectId
+        if (newProjectId) {
+          console.log(`[Rust SCORM] ✅ Successfully opened project: ${projectPath}`)
+          projectOpened = true
+          break
+        }
+      } catch (error) {
+        console.log(`[Rust SCORM] Could not open ${projectPath}:`, error instanceof Error ? error.message : String(error))
+        continue
+      }
+    }
+    
+    if (!projectOpened) {
+      console.warn(`[Rust SCORM] ⚠️ Could not open project ${numericProjectId}. Media may not be accessible.`)
+      console.warn(`[Rust SCORM] This may cause MediaService to return empty results.`)
+    }
+    
+  } catch (error) {
+    console.error(`[Rust SCORM] Error ensuring project is loaded:`, error)
+    // Don't throw - let the function continue and fail gracefully if needed
+  }
+}
+
+/**
  * Clear the media cache (should be called after SCORM generation)
  */
 export function clearMediaCache(): void {
   mediaCache.clear()
-  console.log('[Rust SCORM] Media cache cleared')
+  debugLogger.debug('SCORM_MEDIA', 'Media cache cleared', { cacheSize: mediaCache.size })
+  // Only log cache operations in development
+  if (import.meta.env.DEV) {
+    console.log('[Rust SCORM] Media cache cleared')
+  }
 }
 
 /**
@@ -70,7 +235,10 @@ function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: 
   // Add clip timing parameters if provided
   if (clipStart !== undefined && clipStart >= 0) {
     params.set('start', Math.floor(clipStart).toString())
-    console.log(`[SCORM DEBUG] Added start parameter: ${Math.floor(clipStart)}`)
+    // Only log URL parameter details in development
+    if (import.meta.env.DEV) {
+      console.log(`[SCORM DEBUG] Added start parameter: ${Math.floor(clipStart)}`)
+    }
   }
   
   if (clipEnd !== undefined && clipEnd > 0) {
@@ -88,7 +256,10 @@ function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: 
  * This allows SCORMPackageBuilder to pass already-loaded media
  */
 export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<void> {
-  console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache`)
+  // Only log verbose cache operations in development
+  if (import.meta.env.DEV) {
+    console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache`)
+  }
   
   for (const [filename, blob] of mediaMap) {
     try {
@@ -102,44 +273,84 @@ export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<vo
       
       // Store in cache
       mediaCache.set(mediaId, { data, mimeType })
-      console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
+      // Only log individual cache operations in development
+      if (import.meta.env.DEV) {
+        console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
+      }
     } catch (error) {
       console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
     }
   }
   
-  console.log(`[Rust SCORM] Pre-loading complete. Cache size: ${mediaCache.size}`)
+  if (import.meta.env.DEV) {
+    console.log(`[Rust SCORM] Pre-loading complete. Cache size: ${mediaCache.size}`)
+  }
 }
 
 /**
  * Get file extension from MIME type
  */
 export function getExtensionFromMimeType(mimeType: string): string {
+  // Return empty string for invalid MIME types to allow fallback patterns to work
+  if (!mimeType || !mimeType.trim()) return ''
+  
   const mimeToExt: Record<string, string> = {
-    'image/png': 'png',
+    // Images
+    'image/svg+xml': 'svg',
+    'image/png': 'png', 
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
     'image/gif': 'gif',
-    'image/svg+xml': 'svg',
     'image/webp': 'webp',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tiff',
+    // Audio
     'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
     'audio/wav': 'wav',
     'audio/ogg': 'ogg',
-    'text/vtt': 'vtt'
+    'audio/aac': 'aac',
+    'audio/m4a': 'm4a',
+    // Video  
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/avi': 'avi',
+    'video/mov': 'mov',
+    'video/quicktime': 'mov',
+    // Captions
+    'text/vtt': 'vtt',
+    'text/srt': 'srt',
+    // JSON for YouTube metadata
+    'application/json': 'json',
+    'text/plain': 'txt'
   }
-  return mimeToExt[mimeType] || 'bin'
+  
+  const ext = mimeToExt[mimeType.toLowerCase()]
+  if (ext) {
+    console.log(`[rustScormGenerator] MIME type "${mimeType}" mapped to extension "${ext}"`)
+    return ext
+  }
+  
+  console.log(`[rustScormGenerator] Unknown MIME type "${mimeType}", returning empty for fallback`)
+  return '' // Return empty to allow fallback pattern to work
 }
 
 /**
  * Get extension from media ID (fallback when no MIME type)
+ * This should avoid .bin for known media types
  */
-function getExtensionFromMediaId(mediaId: string): string {
+export function getExtensionFromMediaId(mediaId: string): string {
   if (mediaId.startsWith('audio-')) return 'mp3'
   if (mediaId.startsWith('caption-')) return 'vtt'
-  if (mediaId.startsWith('image-')) return 'jpg'
-  if (mediaId.startsWith('video-')) return 'mp4'
+  if (mediaId.startsWith('image-')) return 'jpg' // Default to jpg for images
+  if (mediaId.startsWith('video-')) {
+    // Video IDs should not generate files - they should be YouTube embeds
+    console.warn(`[rustScormGenerator] Video ID "${mediaId}" should be handled as YouTube embed, not file`)
+    return 'json' // If it must be a file, store as JSON metadata
+  }
+  if (mediaId.startsWith('youtube-')) return 'json' // YouTube metadata
+  
+  console.warn(`[rustScormGenerator] Unknown media ID pattern "${mediaId}", defaulting to .bin`)
   return 'bin'
 }
 
@@ -249,10 +460,21 @@ async function resolveAudioCaptionFile(
         
         return `media/${filename}`
       } else {
+        debugLogger.warn('SCORM_MEDIA', 'Media file not found during audio/caption resolution', {
+          projectId,
+          fileId: cleanFileId,
+          originalFileId: fileId
+        })
         console.warn(`[Rust SCORM] Media not found: ${cleanFileId}, skipping`)
         return undefined
       }
     } catch (error) {
+      debugLogger.warn('SCORM_MEDIA', 'Failed to load audio/caption file', {
+        projectId,
+        fileId: cleanFileId,
+        originalFileId: fileId,
+        error: error instanceof Error ? error.message : String(error)
+      })
       console.warn(`[Rust SCORM] Failed to load audio/caption file ${cleanFileId}, skipping:`, error)
     }
   }
@@ -287,7 +509,7 @@ async function resolveImageUrl(
         const arrayBuffer = await blob.arrayBuffer()
         const uint8Array = new Uint8Array(arrayBuffer)
         const mimeType = blob.type || 'image/jpeg'
-        const ext = getExtensionFromMimeType(mimeType) || 'jpg'
+        const ext = getExtensionFromMimeType(mimeType) || 'jpg' // External images default to jpg
         
         if (!mediaCounter.image) mediaCounter.image = 0
         mediaCounter.image++
@@ -335,8 +557,8 @@ async function resolveImageUrl(
         }
       }
       
-      // Use proper extension based on MIME type
-      const ext = getExtensionFromMimeType(cached.mimeType) || 'bin'
+      // Use proper extension based on MIME type with MediaId fallback for consistency
+      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(imageUrl)
       const filename = `${imageUrl}.${ext}`
       
       // Add to mediaFiles if not already there
@@ -415,10 +637,20 @@ async function resolveImageUrl(
         
         return `media/${filename}`
       } else {
+        debugLogger.warn('SCORM_MEDIA', 'MediaService returned no data for image', {
+          projectId,
+          imageUrl,
+          mediaServiceResponse: !!fileData
+        })
         console.warn(`[Rust SCORM] MediaService returned no data for: ${imageUrl}, skipping`)
         return undefined
       }
     } catch (error) {
+      debugLogger.warn('SCORM_MEDIA', 'Failed to load image from MediaService', {
+        projectId,
+        imageUrl,
+        error: error instanceof Error ? error.message : String(error)
+      })
       console.warn(`[Rust SCORM] Failed to load media from MediaService for ${imageUrl}, skipping:`, error)
       return undefined
     }
@@ -440,9 +672,24 @@ async function resolveMedia(
 ): Promise<any[] | undefined> {
   if (!mediaItems || mediaItems.length === 0) return mediaItems
   
-  const resolvedMedia = []
+  debugLogger.debug('SCORM_MEDIA', 'Starting media resolution', {
+    projectId,
+    mediaItemsCount: mediaItems.length,
+    currentMediaFilesCount: mediaFiles.length,
+    mediaItems: mediaItems.map(m => ({ id: m.id, type: m.type, hasUrl: !!m.url, url: m.url }))
+  })
   
-  for (const media of mediaItems) {
+  console.log(`[SCORM Media Debug] Starting resolution for ${mediaItems.length} media items:`)
+  mediaItems.forEach((item, idx) => {
+    console.log(`  ${idx + 1}. ID: ${item.id}, Type: ${item.type}, URL: ${item.url || 'none'}, Title: ${item.title || 'none'}`)
+  })
+  
+  const resolvedMedia = []
+  const mediaLoadingErrors: string[] = []
+  
+  for (let i = 0; i < mediaItems.length; i++) {
+    const media = mediaItems[i]
+    console.log(`[SCORM Media Debug] Processing media ${i + 1}/${mediaItems.length}: ${media.id}`)
     if (!media.url) {
       // If no URL but we have an ID, try to load from MediaService
       if (media.id && media.id.match(/^(image|video|audio|caption)-[\w-]+$/)) {
@@ -473,9 +720,21 @@ async function resolveMedia(
           }
           
           // Load from MediaService
+          console.log(`[SCORM Media Debug] Loading from MediaService - Project: ${projectId}, Media ID: ${media.id}`)
           const { createMediaService } = await import('./MediaService')
           const mediaService = createMediaService(projectId)
+          
+          // Add debug logging for MediaService state
+          console.log(`[SCORM Media Debug] MediaService created for project: ${projectId}`)
+          
           const fileData = await mediaService.getMedia(media.id)
+          console.log(`[SCORM Media Debug] MediaService.getMedia result for ${media.id}:`, {
+            hasFileData: !!fileData,
+            hasData: !!fileData?.data,
+            dataSize: fileData?.data ? fileData.data.byteLength || fileData.data.length : 0,
+            mimeType: fileData?.metadata?.mimeType,
+            metadataKeys: fileData?.metadata ? Object.keys(fileData.metadata) : []
+          })
           
           if (fileData && fileData.data) {
             const uint8Data = new Uint8Array(fileData.data)
@@ -497,15 +756,42 @@ async function resolveMedia(
               url: `media/${filename}`,
               resolved_path: `media/${filename}`
             })
-            console.log(`[Rust SCORM] Successfully loaded media from MediaService: ${media.id}`)
+            
+            console.log(`[SCORM Media Debug] ✅ Successfully resolved media: ${media.id} -> ${filename} (${uint8Data.length} bytes)`)
+            debugLogger.info('SCORM_MEDIA', 'Media successfully resolved and added to package', {
+              projectId,
+              mediaId: media.id,
+              filename,
+              fileSize: uint8Data.length,
+              mimeType
+            })
             continue
           } else {
-            console.warn(`[Rust SCORM] Media not found: ${media.id}, skipping`)
+            const errorMsg = `Media not found: ${media.id}`
+            console.log(`[SCORM Media Debug] ❌ Media not found in MediaService: ${media.id}`)
+            debugLogger.warn('SCORM_MEDIA', 'Media not found during resolution', {
+              projectId,
+              mediaId: media.id,
+              mediaType: media.type,
+              fileDataReceived: !!fileData,
+              hasData: !!fileData?.data
+            })
+            console.warn(`[Rust SCORM] ${errorMsg}`)
+            mediaLoadingErrors.push(errorMsg)
             // Don't add to resolvedMedia - skip this item
             continue
           }
         } catch (error) {
-          console.warn(`[Rust SCORM] Failed to load media ${media.id}, skipping:`, error)
+          const errorMsg = `Failed to load media ${media.id}: ${error instanceof Error ? error.message : String(error)}`
+          debugLogger.error('SCORM_MEDIA', 'Media loading exception during resolution', {
+            projectId,
+            mediaId: media.id,
+            mediaType: media.type,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          })
+          console.warn(`[Rust SCORM] ${errorMsg}`)
+          mediaLoadingErrors.push(errorMsg)
           // Don't add to resolvedMedia - skip this item
           continue
         }
@@ -571,7 +857,7 @@ async function resolveMedia(
     }
     
     // Check if it's a YouTube video - extract the video ID
-    if (media.type === 'video' && media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be'))) {
+    if ((media.type === 'video' || media.type === 'youtube') && media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be'))) {
       let videoId = ''
       
       // Extract YouTube video ID
@@ -586,20 +872,45 @@ async function resolveMedia(
       console.log(`[SCORM DEBUG] Processing YouTube media for SCORM:`, {
         mediaId: media.id,
         videoId: videoId,
-        clipStart: media.clipStart,
-        clipEnd: media.clipEnd,
+        clipStart: media.clip_start || media.clipStart,  // Support both property formats
+        clipEnd: media.clip_end || media.clipEnd,        // Support both property formats
         originalUrl: media.url,
         isYouTube: media.isYouTube,
         embedUrl: media.embedUrl
       })
       
-      const embedUrl = generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd)
+      const embedUrl = generateYouTubeEmbedUrl(
+        videoId, 
+        media.clip_start || media.clipStart,  // Support both property formats
+        media.clip_end || media.clipEnd       // Support both property formats
+      )
       console.log(`[SCORM DEBUG] Generated YouTube embed URL:`, {
         videoId,
-        clipStart: media.clipStart,
-        clipEnd: media.clipEnd,
+        clipStart: media.clip_start || media.clipStart,  // Support both property formats
+        clipEnd: media.clip_end || media.clipEnd,        // Support both property formats
         generatedEmbedUrl: embedUrl
       })
+      
+      // Enhanced diagnostic logging for YouTube clipping
+      const diagnosis = diagnoseYouTubeVideo(media.url, media.clip_start || media.clipStart, media.clip_end || media.clipEnd, embedUrl)
+      if (!diagnosis.isProcessedCorrectly || diagnosis.errors.length > 0) {
+        console.warn(`[YOUTUBE DIAGNOSTICS] Issues detected with video ${videoId}:`, diagnosis)
+        debugLogger.warn('YOUTUBE_CLIPPING', 'YouTube video processing issues detected', {
+          projectId,
+          videoId,
+          originalUrl: media.url,
+          clipStart: media.clip_start || media.clipStart,
+          clipEnd: media.clip_end || media.clipEnd,
+          expectedEmbedUrl: diagnosis.expectedEmbedUrl,
+          actualEmbedUrl: embedUrl,
+          errors: diagnosis.errors,
+          warnings: diagnosis.warnings
+        })
+      } else if (diagnosis.warnings.length > 0) {
+        console.log(`[YOUTUBE DIAGNOSTICS] Warnings for video ${videoId}:`, diagnosis.warnings)
+      } else {
+        console.log(`[YOUTUBE DIAGNOSTICS] ✅ Video ${videoId} clipping processed correctly`)
+      }
       
       resolvedMedia.push({
         ...media,
@@ -630,7 +941,7 @@ async function resolveMedia(
       }
       
       if (videoId) {
-        const embedUrl = generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd)
+        const embedUrl = generateYouTubeEmbedUrl(videoId, media.clip_start || media.clipStart, media.clip_end || media.clipEnd)
         console.log(`[Rust SCORM] ✅ Successfully processed fallback YouTube video: ${videoId}`)
         
         resolvedMedia.push({
@@ -666,7 +977,7 @@ async function resolveMedia(
           const arrayBuffer = await blob.arrayBuffer()
           const uint8Array = new Uint8Array(arrayBuffer)
           const mimeType = blob.type || 'image/jpeg'
-          const ext = getExtensionFromMimeType(mimeType) || 'jpg'
+          const ext = getExtensionFromMimeType(mimeType) || 'jpg' // External media default to jpg
           
           const type = media.type || 'image'
           if (!mediaCounter[type]) mediaCounter[type] = 0
@@ -910,7 +1221,11 @@ async function resolveMedia(
         url: media.url, // Keep original URL
         is_youtube: true,
         youtube_id: videoId,
-        embed_url: videoId ? generateYouTubeEmbedUrl(videoId, media.clipStart, media.clipEnd) : ''
+        embed_url: videoId ? generateYouTubeEmbedUrl(
+          videoId, 
+          media.clip_start || media.clipStart,  // Support both property name formats
+          media.clip_end || media.clipEnd       // Support both property name formats
+        ) : ''
       })
     } else if (resolvedUrl) {
       // For non-YouTube media, only add if we have a valid resolved URL
@@ -919,8 +1234,82 @@ async function resolveMedia(
     // If resolvedUrl is undefined, skip this media item entirely
   }
   
+  // Check for critical media loading failures
+  debugLogger.debug('SCORM_MEDIA', 'Media resolution completed', {
+    projectId,
+    inputMediaCount: mediaItems.length,
+    resolvedMediaCount: resolvedMedia.length,
+    errorCount: mediaLoadingErrors.length,
+    finalMediaFilesCount: mediaFiles.length
+  })
+  
+  console.log(`[SCORM Media Debug] Resolution Summary:`)
+  console.log(`  📊 Input media items: ${mediaItems.length}`)
+  console.log(`  ✅ Successfully resolved: ${resolvedMedia.length}`)
+  console.log(`  📦 Binary files added: ${mediaFiles.length}`)
+  console.log(`  ❌ Failed to resolve: ${mediaLoadingErrors.length}`)
+  
+  if (mediaLoadingErrors.length > 0) {
+    const errorSummary = `${mediaLoadingErrors.length} media loading error${mediaLoadingErrors.length > 1 ? 's' : ''}:\n${mediaLoadingErrors.map(err => `  • ${err}`).join('\n')}`
+    
+    // Log to ultraSimpleLogger for persistence and troubleshooting  
+    debugLogger.warn('SCORM_MEDIA', 'Media loading failures detected - continuing with available media', {
+      projectId,
+      failedMediaCount: mediaLoadingErrors.length,
+      successfulMediaCount: mediaFiles.length,
+      errors: mediaLoadingErrors,
+      errorSummary
+    })
+    
+    // Log warnings but continue generation instead of throwing error
+    console.warn(`[Rust SCORM] Media loading failures detected:`)
+    console.warn(errorSummary)
+    console.warn(`[Rust SCORM] Continuing SCORM generation with ${mediaFiles.length} available media files`)
+    
+    // CHANGED: Don't throw error - allow graceful degradation
+    // Users can still get a working SCORM package with available media
+    // throw new Error(`Critical media loading failures:\n${errorSummary}`)
+  } else {
+    console.log(`[SCORM Media Debug] ✅ All media resolved successfully!`)
+  }
+  
   // Filter out media items with empty URLs
   const filteredMedia = resolvedMedia.filter(item => item.url && item.url.trim() !== '')
+  
+  // Generate YouTube clipping diagnostic report for all YouTube videos
+  const youtubeVideos = filteredMedia.filter(item => item.is_youtube && item.url)
+  if (youtubeVideos.length > 0) {
+    const youtubeReport = generateYouTubeClipReport(
+      projectId,
+      youtubeVideos.map(video => ({
+        url: video.url,
+        clipStart: video.clip_start || video.clipStart,  // Support both snake_case and camelCase
+        clipEnd: video.clip_end || video.clipEnd,        // Support both snake_case and camelCase
+        actualEmbedUrl: video.embed_url
+      }))
+    )
+    
+    // Log the comprehensive report
+    logYouTubeClipReport(youtubeReport)
+    
+    // If there are any issues, also log to debugLogger for persistence
+    if (!youtubeReport.summary.allClippingWorking) {
+      debugLogger.warn('YOUTUBE_DIAGNOSTICS', 'YouTube clipping issues detected in media resolution', {
+        projectId,
+        totalVideos: youtubeReport.totalVideos,
+        clippedVideos: youtubeReport.clippedVideos,
+        successfullyProcessed: youtubeReport.successfullyProcessed,
+        issues: youtubeReport.summary.issues,
+        recommendations: youtubeReport.summary.recommendations
+      })
+    } else {
+      debugLogger.info('YOUTUBE_DIAGNOSTICS', 'All YouTube videos processed successfully', {
+        projectId,
+        totalVideos: youtubeReport.totalVideos,
+        clippedVideos: youtubeReport.clippedVideos
+      })
+    }
+  }
   
   // Return undefined if no valid media items remain (so the template's {{or}} helper works correctly)
   return filteredMedia.length > 0 ? filteredMedia : undefined
@@ -929,9 +1318,38 @@ async function resolveMedia(
 /**
  * Convert TypeScript course content to Rust-compatible format
  */
-export async function convertToRustFormat(courseContent: CourseContent | EnhancedCourseContent, projectId: string) {
+export async function convertToRustFormat(courseContent: CourseContent | EnhancedCourseContent, projectId: string, courseSettings?: any) {
+  debugLogger.info('SCORM_CONVERSION', 'Starting course content conversion to Rust format', {
+    projectId,
+    hasCourseSettings: !!courseSettings,
+    contentType: 'objectives' in courseContent ? 'enhanced' : 'standard'
+  })
+  
+  // Run diagnostic scan of MediaService before processing
+  console.log(`[SCORM Media Debug] 🔍 Running MediaService diagnostic for project: ${projectId}`)
+  try {
+    const { diagnoseMedieServiceForProject } = await import('../utils/mediaServiceDiagnostics')
+    const diagnostic = await diagnoseMedieServiceForProject(projectId)
+    
+    console.log(`[SCORM Media Debug] 📊 MediaService contains ${diagnostic.totalMediaCount} total media items`)
+    if (diagnostic.mediaDetails.length > 0) {
+      console.log(`[SCORM Media Debug] 📋 Available media:`)
+      diagnostic.mediaDetails.forEach((media, idx) => {
+        console.log(`  ${idx + 1}. ${media.id} (${media.type}, ${media.size} bytes, ${media.mimeType || 'unknown type'})`)
+      })
+    }
+    
+    if (diagnostic.errors.length > 0) {
+      console.warn(`[SCORM Media Debug] ⚠️  MediaService diagnostic found ${diagnostic.errors.length} errors:`)
+      diagnostic.errors.forEach(error => console.warn(`  • ${error}`))
+    }
+  } catch (error) {
+    console.warn(`[SCORM Media Debug] ⚠️  Failed to run MediaService diagnostic: ${error}`)
+  }
+  
   // Validate required fields
   if (!courseContent) {
+    debugLogger.error('SCORM_CONVERSION', 'Course content validation failed', { projectId, error: 'Course content is required' })
     throw new Error('Course content is required')
   }
   
@@ -939,11 +1357,17 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   const isEnhanced = 'objectives' in courseContent && Array.isArray(courseContent.objectives)
   
   if (isEnhanced) {
-    return convertEnhancedToRustFormat(courseContent as EnhancedCourseContent, projectId)
+    debugLogger.debug('SCORM_CONVERSION', 'Using enhanced content conversion path', { projectId })
+    return convertEnhancedToRustFormat(courseContent as EnhancedCourseContent, projectId, courseSettings)
   }
   
   const cc = courseContent as any
   
+  // Auto-populate any missing YouTube videos from storage before processing
+  console.log(`[Rust SCORM] Starting YouTube recovery for standard format`)
+  await autoPopulateYouTubeFromStorage(cc, projectId)
+  console.log(`[Rust SCORM] YouTube recovery completed for standard format`)
+
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
   const mediaCounter: { [type: string]: number } = {}
@@ -951,9 +1375,24 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   const result = {
     course_title: cc.courseTitle || cc.title || cc.courseName || 'Untitled Course',
     course_description: cc.courseDescription || cc.description,
-    pass_mark: cc.passMark || 80,
-    navigation_mode: cc.navigationMode || 'linear',
-    allow_retake: cc.allowRetake !== false,
+    pass_mark: courseSettings?.passMark || cc.passMark || 80,
+    navigation_mode: courseSettings?.navigationMode || cc.navigationMode || 'linear',
+    allow_retake: courseSettings?.allowRetake ?? (cc.allowRetake !== false ? true : false),
+    require_audio_completion: courseSettings?.requireAudioCompletion || false,
+    // New comprehensive course settings
+    auto_advance: courseSettings?.autoAdvance || false,
+    allow_previous_review: courseSettings?.allowPreviousReview ?? true,
+    retake_delay: courseSettings?.retakeDelay || 0,
+    completion_criteria: courseSettings?.completionCriteria || 'view_and_pass',
+    show_progress: courseSettings?.showProgress ?? true,
+    show_outline: courseSettings?.showOutline ?? true,
+    confirm_exit: courseSettings?.confirmExit ?? true,
+    font_size: courseSettings?.fontSize || 'medium',
+    time_limit: courseSettings?.timeLimit || 0,
+    session_timeout: courseSettings?.sessionTimeout || 30,
+    minimum_time_spent: courseSettings?.minimumTimeSpent || 0,
+    keyboard_navigation: courseSettings?.keyboardNavigation ?? true,
+    printable: courseSettings?.printable || false,
     
     welcome_page: cc.welcome || cc.welcomePage || cc.welcomeMedia ? {
       title: cc.welcome?.title || cc.welcomePage?.title || 'Welcome',
@@ -1073,15 +1512,15 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
             type: m.type,
             url: m.url || '',
             title: m.title || '',
-            clipStart: m.clipStart,
-            clipEnd: m.clipEnd
+            clipStart: m.clip_start || m.clipStart,
+            clipEnd: m.clip_end || m.clipEnd
           })) : (topic as any).media && (topic as any).media.type !== 'image' ? [{
             id: (topic as any).media.id,
             type: (topic as any).media.type,
             url: (topic as any).media.url || '',
             title: (topic as any).media.title || '',
-            clipStart: (topic as any).media.clipStart,
-            clipEnd: (topic as any).media.clipEnd
+            clipStart: (topic as any).media.clip_start || (topic as any).media.clipStart,
+            clipEnd: (topic as any).media.clip_end || (topic as any).media.clipEnd
           }] : undefined, 
           projectId, 
           mediaFiles, 
@@ -1146,13 +1585,681 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
     } : undefined,
   }
   
+  // Auto-populate any missing media from storage
+  console.log(`[Rust SCORM] Before auto-population: mediaFiles.length = ${mediaFiles.length}`)
+  await autoPopulateMediaFromStorage(projectId, mediaFiles, mediaCounter)
+  console.log(`[Rust SCORM] After auto-population: mediaFiles.length = ${mediaFiles.length}`)
+  
+  // Inject orphaned media into course content structure
+  console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
+  await injectOrphanedMediaIntoCourseContent(projectId, result)
+  console.log(`[Rust SCORM] Media injection complete`)
+  
   return { courseData: result, mediaFiles }
+}
+
+/**
+ * Auto-populate missing media from MediaService
+ * This ensures that media stored in MediaService but not referenced in course content gets included
+ */
+async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: MediaFile[], mediaCounter: { [type: string]: number }) {
+  console.log(`[Rust SCORM] Auto-population called for project: ${projectId}`)
+  try {
+    // CRITICAL FIX: Ensure project is loaded before accessing media
+    await ensureProjectLoaded(projectId)
+    
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId)
+    console.log(`[Rust SCORM] MediaService created successfully`)
+    
+    // Get all stored media items
+    console.log(`[Rust SCORM] Calling listAllMedia()...`)
+    const allMediaItems = await mediaService.listAllMedia()
+    console.log(`[Rust SCORM] listAllMedia() returned:`, allMediaItems)
+    if (!allMediaItems || allMediaItems.length === 0) {
+      console.log(`[Rust SCORM] Auto-population: no media items found in storage`)
+      return
+    }
+    console.log(`[Rust SCORM] Auto-populating media: found ${allMediaItems.length} stored media items`)
+    
+    for (const mediaItem of allMediaItems) {
+      // Check if this media is already in mediaFiles
+      // Check if media file already exists in mediaFiles array
+      const expectedExtension = getExtensionFromMimeType(mediaItem.metadata?.mimeType || '') || getExtensionFromMediaId(mediaItem.id)
+      const existingFile = mediaFiles.find(f => 
+        f.filename.startsWith(mediaItem.id) || 
+        f.filename === `${mediaItem.id}.${expectedExtension}`
+      )
+      
+      if (existingFile) {
+        console.log(`[Rust SCORM] Media ${mediaItem.id} already processed, skipping`)
+        continue
+      }
+      
+      // Load the media data
+      const fileData = await mediaService.getMedia(mediaItem.id)
+      if (fileData && fileData.data) {
+        const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
+        const uint8Data = new Uint8Array(fileData.data)
+        
+        // For YouTube videos stored as JSON, skip adding to mediaFiles (they're handled as URLs)
+        if (mediaItem.id.startsWith('video-') && (mimeType === 'application/json' || mimeType === 'text/plain')) {
+          console.log(`[Rust SCORM] Skipping YouTube video metadata: ${mediaItem.id}`)
+          continue
+        }
+        
+        const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(mediaItem.id)
+        const filename = `${mediaItem.id}.${ext}`
+        
+        mediaFiles.push({
+          filename,
+          content: uint8Data,
+        })
+        
+        console.log(`[Rust SCORM] Auto-populated media: ${mediaItem.id} (${mimeType}, ${uint8Data.length} bytes)`)
+      }
+    }
+    
+    console.log(`[Rust SCORM] Auto-population complete: ${mediaFiles.length} total media files`)
+  } catch (error) {
+    console.warn(`[Rust SCORM] Failed to auto-populate media from storage:`, error)
+  }
+}
+
+/**
+ * Auto-populate missing YouTube videos from MediaService storage
+ * This ensures that YouTube videos stored in MediaService get included in course content
+ */
+async function autoPopulateYouTubeFromStorage(
+  courseData: any, 
+  projectId: string
+): Promise<void> {
+  console.log(`[Rust SCORM] YouTube auto-population called for project: ${projectId}`)
+  try {
+    // CRITICAL FIX: Ensure project is loaded before accessing media
+    await ensureProjectLoaded(projectId)
+    
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId)
+    console.log(`[Rust SCORM] MediaService created successfully for YouTube recovery`)
+    
+    // Get all stored media items
+    console.log(`[Rust SCORM] Calling listAllMedia() for YouTube recovery...`)
+    const allMediaItems = await mediaService.listAllMedia()
+    console.log(`[Rust SCORM] listAllMedia() returned:`, allMediaItems)
+    if (!allMediaItems || allMediaItems.length === 0) {
+      console.log(`[Rust SCORM] YouTube auto-population: no media items found in storage`)
+      return
+    }
+    
+    // Filter for video items (potential YouTube videos)
+    const videoItems = allMediaItems.filter(item => item.id.startsWith('video-'))
+    if (videoItems.length === 0) {
+      console.log(`[Rust SCORM] YouTube auto-population: no video items found in storage`)
+      return
+    }
+    
+    console.log(`[Rust SCORM] YouTube auto-population: found ${videoItems.length} video items`)
+    
+    for (const videoItem of videoItems) {
+      try {
+        // Load the video metadata
+        const fileData = await mediaService.getMedia(videoItem.id)
+        if (!fileData) {
+          console.warn(`[Rust SCORM] No data found for video: ${videoItem.id}`)
+          continue
+        }
+        
+        // FIXED: YouTube videos don't have binary data, only metadata
+        // Check if this is a YouTube video by looking at metadata first
+        const isLikelyYouTube = fileData.metadata?.isYouTube || 
+                               fileData.metadata?.source === 'youtube' ||
+                               fileData.metadata?.embedUrl?.includes('youtube.com') ||
+                               fileData.metadata?.youtubeUrl?.includes('youtube.com')
+        
+        if (isLikelyYouTube) {
+          console.log(`[Rust SCORM] Found YouTube video ${videoItem.id} in metadata (no binary data expected)`)
+          
+          // Process YouTube video directly from metadata
+          // FIXED: Ensure URL is never undefined to prevent Rust deserialization errors
+          const embedUrl = fileData.metadata.embedUrl
+          const youtubeUrl = fileData.metadata.youtubeUrl
+          const fallbackUrl = `https://www.youtube.com/embed/${videoItem.id.replace('video-', '')}`
+          const safeUrl = embedUrl || youtubeUrl || fallbackUrl
+          
+          // Debug logging for URL fallback usage
+          if (!embedUrl && !youtubeUrl) {
+            console.log(`[Rust SCORM] 🔄 Using URL fallback for YouTube video ${videoItem.id}:`, {
+              embedUrl,
+              youtubeUrl,
+              fallbackUrl,
+              safeUrl
+            })
+          }
+          
+          // Generate safe youtubeUrl from embedUrl if needed
+          let safeYoutubeUrl = youtubeUrl
+          if (!safeYoutubeUrl && embedUrl) {
+            try {
+              const url = new URL(embedUrl)
+              const pathMatch = url.pathname.match(/\/embed\/([^\/\?]+)/)
+              if (pathMatch && pathMatch[1]) {
+                const videoId = pathMatch[1]
+                safeYoutubeUrl = `https://www.youtube.com/watch?v=${videoId}`
+              } else {
+                safeYoutubeUrl = embedUrl.replace('/embed/', '/watch?v=')
+              }
+            } catch (error) {
+              safeYoutubeUrl = embedUrl.replace('/embed/', '/watch?v=')
+            }
+          }
+          if (!safeYoutubeUrl) {
+            safeYoutubeUrl = safeUrl.replace('/embed/', '/watch?v=')
+          }
+          
+          const youtubeMedia = {
+            id: videoItem.id,
+            type: 'youtube',  // FIXED: Use 'youtube' type instead of 'video'
+            title: fileData.metadata.title || 'YouTube Video',
+            url: safeUrl, // FIXED: Never undefined, always has fallback
+            embedUrl: embedUrl || safeUrl,
+            youtubeUrl: safeYoutubeUrl,
+            isYouTube: true,
+            mimeType: 'video/mp4',
+            clipStart: fileData.metadata.clipStart,
+            clipEnd: fileData.metadata.clipEnd
+          }
+          
+          console.log(`[Rust SCORM] Processed YouTube video from metadata:`, {
+            id: youtubeMedia.id,
+            title: youtubeMedia.title,
+            embedUrl: youtubeMedia.embedUrl,
+            clipStart: youtubeMedia.clipStart,
+            clipEnd: youtubeMedia.clipEnd,
+            pageId: fileData.metadata.pageId
+          })
+          
+          // Add video to the appropriate page based on pageId
+          const pageId = fileData.metadata.pageId
+          if (pageId === 'learning-objectives') {
+            // Handle both enhanced format (objectivesPage) and standard format (objectives_page)
+            const objectivesPage = courseData.objectivesPage || courseData.objectives_page
+            if (objectivesPage) {
+              if (!objectivesPage.media) {
+                objectivesPage.media = []
+              }
+              // Check if video is already present
+              const exists = objectivesPage.media.some((m: any) => m.id === youtubeMedia.id)
+              if (!exists) {
+                objectivesPage.media.push(youtubeMedia)
+                console.log(`[Rust SCORM] Added YouTube video ${youtubeMedia.id} to objectives page`)
+              } else {
+                console.log(`[Rust SCORM] YouTube video ${youtubeMedia.id} already exists in objectives page`)
+              }
+            }
+          } else if (pageId && pageId.startsWith('topic-')) {
+            // Find the matching topic
+            const topicIndex = parseInt(pageId.replace('topic-', '')) - 1
+            if (courseData.topics && courseData.topics[topicIndex]) {
+              const topic = courseData.topics[topicIndex]
+              if (!topic.media) {
+                topic.media = []
+              }
+              // Check if video is already present
+              const exists = topic.media.some((m: any) => m.id === youtubeMedia.id)
+              if (!exists) {
+                topic.media.push(youtubeMedia)
+                console.log(`[Rust SCORM] Added YouTube video ${youtubeMedia.id} to topic ${topicIndex + 1}`)
+              } else {
+                console.log(`[Rust SCORM] YouTube video ${youtubeMedia.id} already exists in topic ${topicIndex + 1}`)
+              }
+            }
+          }
+          
+          continue // Skip the rest of the processing for YouTube videos
+        }
+        
+        // For non-YouTube videos, we still expect binary data
+        if (!fileData.data) {
+          console.warn(`[Rust SCORM] No binary data found for non-YouTube video: ${videoItem.id}`)
+          continue
+        }
+        
+        console.log(`[Rust SCORM] Processing non-YouTube video with binary data: ${videoItem.id}`)
+        
+        // Handle regular video files (non-YouTube) that have binary data
+        const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
+        console.log(`[Rust SCORM] Regular video MIME type: ${mimeType}`)
+        
+        // This would be for regular video files, but for now we're focusing on the YouTube fix
+        // Add additional processing here if needed for regular video files
+        
+      } catch (error) {
+        console.error(`[Rust SCORM] Failed to process video metadata for ${videoItem.id}:`, error)
+      }
+    }
+    
+    console.log(`[Rust SCORM] YouTube auto-population complete`)
+  } catch (error) {
+    console.warn(`[Rust SCORM] Failed to auto-populate YouTube videos from storage:`, error)
+  }
+}
+
+/**
+ * Validates media page associations and fixes any inconsistencies
+ * This prevents the kind of cross-contamination where video-5 appears on topic-1
+ */
+export async function validateMediaPageAssociations(allMediaItems: any[]): Promise<any[]> {
+  console.log(`[Rust SCORM] 🔍 Validating page associations for ${allMediaItems.length} media items`)
+  
+  const validatedItems = []
+  const inconsistencies = []
+  
+  for (const mediaItem of allMediaItems) {
+    const rootPageId = mediaItem.pageId
+    const metadataPageId = mediaItem.metadata?.pageId || mediaItem.metadata?.page_id
+    
+    // Check for inconsistencies between root pageId and metadata pageId
+    if (rootPageId && metadataPageId && rootPageId !== metadataPageId) {
+      inconsistencies.push({
+        mediaId: mediaItem.id,
+        rootPageId,
+        metadataPageId,
+        conflict: 'pageId mismatch'
+      })
+      
+      // Use metadata pageId as authoritative (it's closer to the source)
+      console.log(`[Rust SCORM] 🔧 Fixing pageId inconsistency for ${mediaItem.id}: root='${rootPageId}' → metadata='${metadataPageId}'`)
+      validatedItems.push({
+        ...mediaItem,
+        pageId: metadataPageId
+      })
+    } else {
+      // No inconsistency, use as-is
+      validatedItems.push(mediaItem)
+    }
+  }
+  
+  if (inconsistencies.length > 0) {
+    console.log(`[Rust SCORM] ⚠️ Found ${inconsistencies.length} page association inconsistencies:`, inconsistencies)
+  } else {
+    console.log(`[Rust SCORM] ✅ All page associations are consistent`)
+  }
+  
+  return validatedItems
+}
+
+/**
+ * Inject orphaned media into course content structure based on pageId metadata
+ * This ensures that media files included via auto-population are also referenced in HTML
+ */
+async function injectOrphanedMediaIntoCourseContent(projectId: string, courseData: any): Promise<void> {
+  console.log(`[Rust SCORM] Media injection called for project: ${projectId}`)
+  try {
+    // CRITICAL FIX: Ensure project is loaded before accessing media
+    await ensureProjectLoaded(projectId)
+    
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId)
+    console.log(`[Rust SCORM] MediaService created successfully for media injection`)
+    
+    // Get all stored media items
+    console.log(`[Rust SCORM] Calling listAllMedia() for media injection...`)
+    const allMediaItems = await mediaService.listAllMedia()
+    console.log(`[Rust SCORM] listAllMedia() returned:`, allMediaItems)
+    if (!allMediaItems || allMediaItems.length === 0) {
+      console.log(`[Rust SCORM] Media injection: no media items found in storage`)
+      return
+    }
+    console.log(`[Rust SCORM] Media injection: found ${allMediaItems.length} stored media items`)
+    
+    // Filter to only image/video media that should be displayed in topics
+    const rawVisualItems = allMediaItems.filter(item => 
+      item.id.startsWith('image-') || (item.id.startsWith('video-') && item.metadata?.mimeType !== 'application/json')
+    )
+    
+    console.log(`[Rust SCORM] Raw visual media items: ${rawVisualItems.length}`)
+    
+    // ✅ CRITICAL: Validate and fix page associations before injection
+    const visualMediaItems = await validateMediaPageAssociations(rawVisualItems)
+    
+    console.log(`[Rust SCORM] Validated visual media items for injection: ${visualMediaItems.length}`)
+    
+    for (const mediaItem of visualMediaItems) {
+      // Enhanced debugging for page ID extraction
+      const pageIdFromRoot = mediaItem.pageId
+      const pageIdFromMetadata = mediaItem.metadata?.pageId || mediaItem.metadata?.page_id
+      const finalPageId = pageIdFromRoot || pageIdFromMetadata
+      
+      console.log(`[Rust SCORM] 🔍 Media ${mediaItem.id} page ID extraction:`, {
+        pageIdFromRoot,
+        pageIdFromMetadata,
+        finalPageId,
+        mediaItemStructure: {
+          id: mediaItem.id,
+          type: mediaItem.type,
+          fileName: mediaItem.fileName,
+          hasMetadata: !!mediaItem.metadata,
+          metadataKeys: mediaItem.metadata ? Object.keys(mediaItem.metadata) : []
+        }
+      })
+      
+      if (!finalPageId) {
+        console.log(`[Rust SCORM] Skipping media ${mediaItem.id} - no pageId found`)
+        continue
+      }
+      
+      console.log(`[Rust SCORM] Processing media ${mediaItem.id} for page ${finalPageId}`)
+      
+      // Find the target page in course content
+      let targetPage = null
+      if (finalPageId === 'welcome') {
+        targetPage = courseData.welcome_page
+      } else if (finalPageId === 'objectives' || finalPageId === 'learning-objectives' || finalPageId === 'content-1') {
+        // Handle multiple possible names for learning objectives page
+        targetPage = courseData.learning_objectives_page || courseData.objectives_page
+        if (targetPage) {
+          console.log(`[Rust SCORM] ✅ Found learning objectives page for pageId '${finalPageId}'`)
+        }
+      } else if (finalPageId && typeof finalPageId === 'string' && finalPageId.startsWith('topic-')) {
+        // Extract topic index from pageId like 'topic-0' → index 0, 'topic-1' → index 1
+        const topicIndex = parseInt(finalPageId.replace('topic-', ''))
+        console.log(`[Rust SCORM] 🔍 Topic mapping for ${mediaItem.id}: pageId='${finalPageId}' → topicIndex=${topicIndex}`)
+        if (courseData.topics && courseData.topics[topicIndex]) {
+          targetPage = courseData.topics[topicIndex]
+          console.log(`[Rust SCORM] ✅ Found topic page at index ${topicIndex} for media ${mediaItem.id}`)
+        } else {
+          console.log(`[Rust SCORM] ❌ Topic index ${topicIndex} not found in courseData.topics (length: ${courseData.topics?.length || 0})`)
+        }
+      }
+      
+      if (!targetPage) {
+        console.log(`[Rust SCORM] Could not find target page for ${finalPageId}, skipping media ${mediaItem.id}`)
+        continue
+      }
+      
+      // Initialize media array if it doesn't exist
+      if (!targetPage.media) {
+        targetPage.media = []
+      }
+      
+      // Check if media is already referenced
+      const alreadyExists = targetPage.media.some((m: any) => 
+        m.id === mediaItem.id || m.url === mediaItem.id || (m.url && m.url.includes(mediaItem.id))
+      )
+      
+      if (alreadyExists) {
+        console.log(`[Rust SCORM] Media ${mediaItem.id} already referenced in ${finalPageId}, skipping`)
+        continue
+      }
+      
+      // Detect YouTube videos - they should be handled as embeds with metadata
+      const isYouTubeVideo = mediaItem.type === 'youtube' || 
+                            (mediaItem.metadata?.isYouTube === true) ||
+                            (mediaItem.metadata?.type === 'youtube') ||
+                            (mediaItem.metadata?.embed_url && 
+                             typeof mediaItem.metadata.embed_url === 'string' && (
+                               mediaItem.metadata.embed_url.includes('youtube.com') || 
+                               mediaItem.metadata.embed_url.includes('youtu.be')
+                             ))
+      
+      let mediaReference
+      if (isYouTubeVideo) {
+        // Inject YouTube videos with embed metadata for iframe display
+        console.log(`[Rust SCORM] Injecting YouTube video ${mediaItem.id} with embed metadata`)
+        
+        // Get various URL formats from metadata
+        const embedUrl = mediaItem.metadata?.embed_url || mediaItem.metadata?.embedUrl
+        const youtubeUrl = mediaItem.metadata?.youtubeUrl
+        const originalUrl = embedUrl || youtubeUrl
+        const clipStart = (mediaItem.metadata?.clipStart || mediaItem.metadata?.clip_start) as number | undefined
+        const clipEnd = (mediaItem.metadata?.clipEnd || mediaItem.metadata?.clip_end) as number | undefined
+        
+        // Always normalize to proper embed URL with clip timing
+        const normalizedEmbedUrl = originalUrl && typeof originalUrl === 'string'
+          ? normalizeYouTubeURL(originalUrl, clipStart, clipEnd)
+          : `https://www.youtube.com/embed/${mediaItem.id.replace('video-', '')}`
+        
+        // Debug logging for URL processing
+        console.log(`[Rust SCORM] 🔄 YouTube URL processing for ${mediaItem.id}:`, {
+          originalEmbedUrl: embedUrl,
+          originalYoutubeUrl: youtubeUrl,
+          clipStart,
+          clipEnd,
+          normalizedEmbedUrl
+        })
+        
+        mediaReference = {
+          id: mediaItem.id,
+          type: 'video',
+          is_youtube: true,
+          url: normalizedEmbedUrl, // Always use normalized embed URL
+          embed_url: normalizedEmbedUrl, // Ensure consistency
+          title: mediaItem.metadata?.title || `YouTube Video ${mediaItem.id}`,
+          alt: mediaItem.metadata?.alt || mediaItem.metadata?.title || `YouTube Video ${mediaItem.id}`,
+          // Include YouTube-specific properties (keep original youtubeUrl for reference)
+          youtubeUrl: youtubeUrl,
+          clipStart: clipStart,
+          clipEnd: clipEnd
+        }
+      } else {
+        // Create media reference for regular media (images, local videos)
+        // Fix: Use getExtensionFromMediaId instead of getExtensionFromMimeType
+        // to ensure consistency between HTML template URLs and actual ZIP file names
+        const extension = getExtensionFromMediaId(mediaItem.id)
+        mediaReference = {
+          id: mediaItem.id,
+          type: mediaItem.id.startsWith('image-') ? 'image' : 'video',
+          url: `media/${mediaItem.id}.${extension}`,
+          title: mediaItem.metadata?.title || `Media ${mediaItem.id}`,
+          alt: mediaItem.metadata?.alt || mediaItem.metadata?.title || `Media ${mediaItem.id}`,
+          // For regular videos, mark as non-YouTube
+          ...(mediaItem.id.startsWith('video-') && {
+            is_youtube: false
+          })
+        }
+      }
+      
+      // Add media reference to the page
+      targetPage.media.push(mediaReference)
+      
+      // ✅ FINAL VALIDATION: Check for cross-contamination after injection
+      const mediaCount = targetPage.media.length
+      const uniqueMediaIds = new Set(targetPage.media.map((m: any) => m.id))
+      if (mediaCount !== uniqueMediaIds.size) {
+        console.log(`[Rust SCORM] ⚠️ Duplicate media detected in ${finalPageId} after injection: ${mediaCount} items, ${uniqueMediaIds.size} unique IDs`)
+      }
+      
+      console.log(`[Rust SCORM] ✅ Successfully injected media ${mediaItem.id} into page '${finalPageId}':`, {
+        mediaId: mediaReference.id,
+        mediaType: mediaReference.type,
+        isYouTube: mediaReference.is_youtube,
+        url: mediaReference.url,
+        targetPageType: (finalPageId && typeof finalPageId === 'string' && finalPageId.startsWith('topic-')) 
+          ? `topic-${parseInt(finalPageId.replace('topic-', ''))}` 
+          : finalPageId,
+        totalMediaOnPage: mediaCount,
+        uniqueMediaOnPage: uniqueMediaIds.size
+      })
+    }
+    
+    console.log(`[Rust SCORM] Media injection complete`)
+  } catch (error) {
+    console.warn(`[Rust SCORM] Failed to inject orphaned media into course content:`, error)
+  }
+}
+
+/**
+ * Extract media from course content and store in MediaService for injection system
+ * This bridges the gap between MediaEnhancementWizard and SCORM generation
+ */
+async function extractCourseContentMedia(courseContent: EnhancedCourseContent, projectId: string) {
+  try {
+    console.log(`[Course Media Bridge] 🚀 STARTING media extraction for project: ${projectId}`)
+    console.log(`[Course Media Bridge] Course content structure:`)
+    console.log(`  - Title: ${courseContent.title || 'No title'}`)
+    console.log(`  - Topics count: ${courseContent.topics?.length || 0}`)
+    console.log(`  - Welcome page: ${!!courseContent.welcome}`)
+    console.log(`  - Objectives page: ${!!courseContent.objectivesPage}`)
+    
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId)
+    console.log(`[Course Media Bridge] ✅ MediaService created successfully`)
+    
+    let extractedCount = 0
+    
+    // Helper function to extract media from a page
+    const extractMediaFromPage = async (page: any, pageId: string, pageName: string) => {
+      console.log(`[Course Media Bridge] 🔍 Checking ${pageName} for media...`)
+      
+      if (!page) {
+        console.log(`[Course Media Bridge]   - Page is null/undefined`)
+        return
+      }
+      
+      if (!page.media) {
+        console.log(`[Course Media Bridge]   - Page has no media property`)
+        return
+      }
+      
+      if (!Array.isArray(page.media)) {
+        console.log(`[Course Media Bridge]   - Page media is not an array: ${typeof page.media}`)
+        return
+      }
+      
+      if (page.media.length === 0) {
+        console.log(`[Course Media Bridge]   - Page media array is empty`)
+        return
+      }
+      
+      console.log(`[Course Media Bridge] 📊 Found ${page.media.length} media items in ${pageName}:`)
+      page.media.forEach((item: any, index: number) => {
+        console.log(`  [${index}] ${item.id || 'no-id'} (${item.type || 'no-type'}) - isYouTube: ${item.isYouTube}, embedUrl: ${item.embedUrl || 'none'}`)
+      })
+      
+      for (const mediaItem of page.media) {
+        try {
+          console.log(`[Course Media Bridge] 🎬 Processing ${mediaItem.id || 'unknown-id'}...`)
+          
+          if (mediaItem.isYouTube || mediaItem.type === 'youtube') {
+            console.log(`[Course Media Bridge] 🎯 Found YouTube video!`)
+            console.log(`  - ID: ${mediaItem.id}`)
+            console.log(`  - Title: ${mediaItem.title}`)
+            console.log(`  - isYouTube: ${mediaItem.isYouTube}`)
+            console.log(`  - type: ${mediaItem.type}`)
+            
+            // Store YouTube videos with proper metadata
+            const embedUrl = mediaItem.embedUrl || mediaItem.embed_url
+            
+            // FIXED: Proper URL conversion that handles parameters correctly
+            let youtubeUrl = mediaItem.youtubeUrl || mediaItem.url
+            if (!youtubeUrl && embedUrl) {
+              try {
+                // Extract video ID from embed URL and create clean watch URL
+                const url = new URL(embedUrl)
+                const pathMatch = url.pathname.match(/\/embed\/([^\/\?]+)/)
+                if (pathMatch && pathMatch[1]) {
+                  const videoId = pathMatch[1]
+                  youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`
+                } else {
+                  // Fallback to simple replacement if regex fails
+                  youtubeUrl = embedUrl.replace('/embed/', '/watch?v=')
+                }
+              } catch (error) {
+                // If URL parsing fails, use simple replacement as fallback
+                youtubeUrl = embedUrl.replace('/embed/', '/watch?v=')
+              }
+            }
+            
+            console.log(`  - embedUrl: ${embedUrl}`)
+            console.log(`  - youtubeUrl: ${youtubeUrl}`)
+            console.log(`  - clipStart: ${mediaItem.clipStart}`)
+            console.log(`  - clipEnd: ${mediaItem.clipEnd}`)
+            
+            if (embedUrl) {
+              console.log(`[Course Media Bridge] 📤 Calling mediaService.storeYouTubeVideo...`)
+              
+              const storedItem = await mediaService.storeYouTubeVideo(
+                youtubeUrl || embedUrl,
+                embedUrl,
+                pageId,
+                {
+                  title: mediaItem.title,
+                  clipStart: mediaItem.clipStart,
+                  clipEnd: mediaItem.clipEnd,
+                  thumbnail: mediaItem.thumbnail
+                }
+              )
+              
+              console.log(`[Course Media Bridge] ✅ Successfully stored YouTube video:`)
+              console.log(`  - Stored ID: ${storedItem.id}`)
+              console.log(`  - Page ID: ${pageId}`)
+              console.log(`  - Type: ${storedItem.type}`)
+              console.log(`  - Metadata embedUrl: ${storedItem.metadata?.embedUrl}`)
+              console.log(`  - Metadata isYouTube: ${storedItem.metadata?.isYouTube}`)
+              
+              extractedCount++
+            } else {
+              console.warn(`[Course Media Bridge] ⚠️ No embedUrl found for YouTube video ${mediaItem.id}`)
+            }
+          } else if (mediaItem.type === 'image' && mediaItem.url) {
+            // For images, create a reference without blob (they're already stored)
+            console.log(`[Course Media Bridge] ✅ Noted image reference: ${mediaItem.id} for ${pageId}`)
+            extractedCount++
+          } else if (mediaItem.type === 'video' && !mediaItem.isYouTube) {
+            // For regular videos, create a reference without blob (they're already stored)
+            console.log(`[Course Media Bridge] ✅ Noted video reference: ${mediaItem.id} for ${pageId}`)
+            extractedCount++
+          }
+        } catch (error) {
+          console.warn(`[Course Media Bridge] Failed to extract ${mediaItem.id}:`, error)
+        }
+      }
+    }
+    
+    // Extract from welcome page
+    if (courseContent.welcome) {
+      await extractMediaFromPage(courseContent.welcome, 'welcome', 'welcome page')
+    }
+    
+    // Extract from objectives page
+    if (courseContent.objectivesPage) {
+      await extractMediaFromPage(courseContent.objectivesPage, 'objectives', 'objectives page')
+    }
+    
+    // Extract from topics
+    for (const topic of courseContent.topics) {
+      await extractMediaFromPage(topic, topic.id, `topic "${topic.title}"`)
+    }
+    
+    console.log('')
+    console.log(`[Course Media Bridge] 🎉 EXTRACTION COMPLETED:`)
+    console.log(`  - Total media items processed: ${extractedCount}`)
+    console.log(`  - Project ID: ${projectId}`)
+    console.log(`  - Course title: ${courseContent.title || 'Untitled'}`)
+    console.log('')
+    
+    if (extractedCount === 0) {
+      console.warn(`[Course Media Bridge] ⚠️  WARNING: No media items were extracted!`)
+      console.warn(`  This could mean:`)
+      console.warn(`    1. Course content has no media arrays`)
+      console.warn(`    2. Media arrays are empty`)
+      console.warn(`    3. No YouTube videos were found in course content`)
+      console.warn(`    4. MediaEnhancementWizard data is not being stored in course content`)
+    }
+    
+  } catch (error) {
+    console.error('[Course Media Bridge] ❌ FAILED to extract course content media:')
+    console.error('  Error details:', error)
+    console.error('  Stack:', error instanceof Error ? error.stack : 'No stack trace')
+    // Don't throw - this should not break SCORM generation if it fails
+  }
 }
 
 /**
  * Convert enhanced format to Rust-compatible format
  */
-async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent, projectId: string) {
+async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent, projectId: string, courseSettings?: any) {
   console.log('[Rust SCORM] Converting enhanced format, topics:', courseContent.topics.length)
   
   // Debug: Log audio IDs being extracted
@@ -1178,6 +2285,17 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   const topicsWithKC = courseContent.topics.filter(t => t.knowledgeCheck).length
   console.log('[Rust SCORM] Topics with knowledge checks:', topicsWithKC)
   
+  // Auto-populate any missing YouTube videos from storage before processing
+  console.log(`[Rust SCORM] Starting YouTube recovery for enhanced format`)
+  await autoPopulateYouTubeFromStorage(courseContent, projectId)
+  console.log(`[Rust SCORM] YouTube recovery completed for enhanced format`)
+
+  // CRITICAL FIX: Extract media from course content and store in MediaService
+  // This bridges the gap between MediaEnhancementWizard and media injection system
+  console.log(`[Rust SCORM] Extracting course content media for injection system`)
+  await extractCourseContentMedia(courseContent, projectId)
+  console.log(`[Rust SCORM] Course content media extraction completed`)
+
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
   const mediaCounter: { [type: string]: number } = {}
@@ -1185,9 +2303,24 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   const result = {
     course_title: courseContent.title || 'Untitled Course',
     course_description: undefined, // Enhanced format doesn't have description
-    pass_mark: courseContent.passMark || 80,
-    navigation_mode: courseContent.navigationMode || 'linear',
-    allow_retake: courseContent.allowRetake !== false,
+    pass_mark: courseSettings?.passMark || courseContent.passMark || 80,
+    navigation_mode: courseSettings?.navigationMode || courseContent.navigationMode || 'linear',
+    allow_retake: courseSettings?.allowRetake ?? (courseContent.allowRetake !== false ? true : false),
+    require_audio_completion: courseSettings?.requireAudioCompletion || false,
+    // New comprehensive course settings
+    auto_advance: courseSettings?.autoAdvance || false,
+    allow_previous_review: courseSettings?.allowPreviousReview ?? true,
+    retake_delay: courseSettings?.retakeDelay || 0,
+    completion_criteria: courseSettings?.completionCriteria || 'view_and_pass',
+    show_progress: courseSettings?.showProgress ?? true,
+    show_outline: courseSettings?.showOutline ?? true,
+    confirm_exit: courseSettings?.confirmExit ?? true,
+    font_size: courseSettings?.fontSize || 'medium',
+    time_limit: courseSettings?.timeLimit || 0,
+    session_timeout: courseSettings?.sessionTimeout || 30,
+    minimum_time_spent: courseSettings?.minimumTimeSpent || 0,
+    keyboard_navigation: courseSettings?.keyboardNavigation ?? true,
+    printable: courseSettings?.printable || false,
     
     welcome_page: courseContent.welcome ? {
       title: courseContent.welcome.title || 'Welcome',
@@ -1285,8 +2418,8 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
           type: m.type,
           url: m.url || '',
           title: m.title || '',
-          clipStart: m.clipStart,
-          clipEnd: m.clipEnd
+          clipStart: (m as any).clip_start || m.clipStart,
+          clipEnd: (m as any).clip_end || m.clipEnd
         })), projectId, mediaFiles, mediaCounter)
       }
       
@@ -1511,6 +2644,16 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
     } : undefined,
   }
   
+  // Auto-populate any missing media from storage
+  console.log(`[Rust SCORM] Before auto-population: mediaFiles.length = ${mediaFiles.length}`)
+  await autoPopulateMediaFromStorage(projectId, mediaFiles, mediaCounter)
+  console.log(`[Rust SCORM] After auto-population: mediaFiles.length = ${mediaFiles.length}`)
+  
+  // Inject orphaned media into course content structure
+  console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
+  await injectOrphanedMediaIntoCourseContent(projectId, result)
+  console.log(`[Rust SCORM] Media injection complete`)
+  
   return { courseData: result, mediaFiles }
 }
 
@@ -1521,8 +2664,16 @@ export async function generateRustSCORM(
   courseContent: CourseContent | EnhancedCourseContent,
   projectId: string,
   onProgress?: (message: string, progress: number) => void,
-  preloadedMedia?: Map<string, Blob>
+  preloadedMedia?: Map<string, Blob>,
+  courseSettings?: any
 ): Promise<Uint8Array> {
+  debugLogger.info('SCORM_GENERATION', 'Starting SCORM generation process', {
+    projectId,
+    hasPreloadedMedia: !!preloadedMedia,
+    preloadedMediaCount: preloadedMedia?.size || 0,
+    hasCourseSettings: !!courseSettings,
+    contentType: 'objectives' in courseContent ? 'enhanced' : 'standard'
+  })
   // Pre-load media cache if provided
   if (preloadedMedia && preloadedMedia.size > 0) {
     await preloadMediaCache(preloadedMedia)
@@ -1547,12 +2698,19 @@ export async function generateRustSCORM(
   let mediaFiles: MediaFile[] = []
   
   try {
+    debugLogger.info('SCORM_GENERATION', 'Converting course content to Rust format', { projectId })
     console.log('[Rust SCORM] Converting course content to Rust format')
     if (onProgress && typeof onProgress === 'function') {
       onProgress('Converting course content...', 10)
     }
-    const { courseData: rustCourseData, mediaFiles: convertedMediaFiles } = await convertToRustFormat(courseContent, projectId)
+    const { courseData: rustCourseData, mediaFiles: convertedMediaFiles } = await convertToRustFormat(courseContent, projectId, courseSettings)
     mediaFiles = convertedMediaFiles
+    
+    debugLogger.info('SCORM_GENERATION', 'Course content conversion completed', {
+      projectId,
+      mediaFilesCount: mediaFiles.length,
+      hasCourseData: !!rustCourseData
+    })
     
     // Debug: Log the converted data to see what's being sent
     console.log('[Rust SCORM] Converted data:', JSON.stringify(rustCourseData, null, 2))
@@ -1605,7 +2763,30 @@ export async function generateRustSCORM(
     console.log(`[Rust SCORM] Dynamic timeout calculated: ${calculatedTimeout}ms (${Math.round(calculatedTimeout / 1000)}s) for ${mediaFiles.length} media files`)
     
     if (onProgress && typeof onProgress === 'function') {
-      onProgress(`Generating SCORM package (${mediaFiles.length} media files)...`, 50)
+      // Create more descriptive progress message
+      let mediaDescription = 'no media files'
+      
+      if (mediaFiles.length > 0) {
+        // Count total media including YouTube videos by accessing MediaService
+        try {
+          const { createMediaService } = await import('./MediaService')
+          const mediaService = createMediaService(projectId)
+          const allMedia = await mediaService.listAllMedia()
+          const totalMedia = allMedia.length
+          const embeddedVideos = totalMedia - mediaFiles.length
+          
+          if (embeddedVideos > 0) {
+            mediaDescription = `${mediaFiles.length} binary files + ${embeddedVideos} embedded videos`
+          } else {
+            mediaDescription = `${mediaFiles.length} binary files`
+          }
+        } catch (error) {
+          // Fallback to basic count if MediaService access fails
+          mediaDescription = `${mediaFiles.length} binary files`
+        }
+      }
+      
+      onProgress(`Generating SCORM package (${mediaDescription})...`, 50)
     }
     
     // Create a timeout promise
@@ -1620,18 +2801,96 @@ export async function generateRustSCORM(
       }, calculatedTimeout)
     })
     
+    // VALIDATION: Check for undefined URLs before sending to Rust
+    console.log('[Rust SCORM] 🔍 Validating media URLs before Rust generation...')
+    const validationErrors: string[] = []
+    
+    // Helper function to validate media array
+    const validateMediaArray = (mediaArray: any[], context: string) => {
+      if (!mediaArray) return
+      mediaArray.forEach((media, index) => {
+        if (!media.url || media.url === undefined) {
+          validationErrors.push(`${context}[${index}]: Media '${media.id}' has undefined URL`)
+          console.log(`❌ [URL VALIDATION] ${context}[${index}]: Media '${media.id}' has undefined URL:`, {
+            id: media.id,
+            type: media.type,
+            url: media.url,
+            embedUrl: media.embedUrl,
+            youtubeUrl: media.youtubeUrl
+          })
+        } else {
+          console.log(`✅ [URL VALIDATION] ${context}[${index}]: Media '${media.id}' URL is valid: ${media.url}`)
+        }
+      })
+    }
+    
+    // Validate welcome page media
+    if (rustCourseData.welcome_page?.media) {
+      validateMediaArray(rustCourseData.welcome_page.media, 'welcome_page.media')
+    }
+    
+    // Validate objectives page media
+    if (rustCourseData.learning_objectives_page?.media) {
+      validateMediaArray(rustCourseData.learning_objectives_page.media, 'learning_objectives_page.media')
+    }
+    
+    // Validate topics media
+    if (rustCourseData.topics) {
+      rustCourseData.topics.forEach((topic: any, topicIndex: number) => {
+        if (topic.media) {
+          validateMediaArray(topic.media, `topics[${topicIndex}].media`)
+        }
+      })
+    }
+    
+    // If validation errors found, reject immediately
+    if (validationErrors.length > 0) {
+      const errorMessage = `URL validation failed before Rust generation:\n${validationErrors.join('\n')}`
+      console.log(`❌ [URL VALIDATION] ${validationErrors.length} validation errors found:`)
+      validationErrors.forEach(error => console.log(`   - ${error}`))
+      throw new Error(`Failed to generate SCORM package. Media URL validation failed: ${validationErrors.length} media items have undefined URLs. This would cause "missing field 'url'" errors in Rust deserialization.`)
+    }
+    
+    console.log('✅ [URL VALIDATION] All media URLs are valid, proceeding with Rust generation')
+    
     // Race between the actual invoke and the timeout
+    debugLogger.info('SCORM_GENERATION', 'Invoking Rust SCORM generator', {
+      projectId,
+      mediaFilesCount: mediaFiles.length,
+      timeoutSeconds: Math.round(calculatedTimeout / 1000)
+    })
+    
+    // Enhanced logging for media files being passed to Rust
+    console.log(`[SCORM Media Debug] 🚀 Invoking Rust backend with:`)
+    console.log(`  📁 Project ID: ${projectId}`)
+    console.log(`  📦 Media files count: ${mediaFiles.length}`)
+    if (mediaFiles.length > 0) {
+      console.log(`  📋 Media files being included:`)
+      mediaFiles.forEach((file, idx) => {
+        console.log(`    ${idx + 1}. ${file.filename} (${file.content.length} bytes)`)
+      })
+    } else {
+      console.log(`  ⚠️  No media files to include (empty array - this will prevent disk fallback)`)
+    }
+    
     const result = await Promise.race([
       invoke<number[]>('generate_scorm_enhanced', {
         courseData: rustCourseData,
         projectId: projectId,
-        mediaFiles: mediaFiles.length > 0 ? mediaFiles : undefined,
+        mediaFiles: mediaFiles, // Always pass array, even if empty - prevents fallback to disk loading
       }),
       timeoutPromise
     ])
     
     // Convert number array to Uint8Array
     const buffer = new Uint8Array(result)
+    
+    debugLogger.info('SCORM_GENERATION', 'SCORM package generated successfully', {
+      projectId,
+      packageSize: buffer.length,
+      mediaFilesIncluded: mediaFiles.length
+    })
+    
     console.log('[Rust SCORM] Generated package size:', buffer.length)
     
     // Unlock blob URLs after successful generation
@@ -1645,6 +2904,14 @@ export async function generateRustSCORM(
   } catch (error) {
     // Always unlock blob URLs, even on error
     blobUrlManager.unlockAll()
+    
+    // Log critical SCORM error to ultraSimpleLogger for persistence
+    debugLogger.error('SCORM_GENERATION', 'SCORM generation process failed', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      mediaFilesCount: mediaFiles.length,
+      timestamp: new Date().toISOString()
+    })
     
     console.error('[Rust SCORM] Generation failed:', error)
     console.error('[Rust SCORM] Error details:', {
@@ -1665,6 +2932,14 @@ export async function generateRustSCORM(
         `Original error: ${error.message}`
       )
     } else {
+      // Log critical SCORM generation failure to ultraSimpleLogger
+      debugLogger.error('SCORM_GENERATION', 'SCORM package generation failed', {
+        mediaFileCount: mediaFiles.length,
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      })
+      
       throw new Error(
         `Failed to generate SCORM package with ${mediaFiles.length} media files. ` +
         `Error: ${error instanceof Error ? error.message : String(error)}. ` +

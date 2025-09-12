@@ -14,6 +14,15 @@ pub mod style_generator;
 mod generator_guard_test;
 
 #[cfg(test)]
+pub mod test_helpers;
+
+#[cfg(test)]
+mod settings_matrix_tests;
+
+#[cfg(test)]
+mod core_settings_test;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

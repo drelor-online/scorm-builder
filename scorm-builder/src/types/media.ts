@@ -3,7 +3,7 @@
 // Media metadata structure that matches the Rust backend
 export interface MediaMetadata {
   page_id: string
-  type: 'image' | 'video' | 'audio' | 'caption'
+  type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
   original_name: string
   mime_type?: string
   source?: 'upload' | 'search' | 'library'

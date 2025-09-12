@@ -59,7 +59,7 @@
                         <span class="pause-icon" style="display:none">❚❚</span>
                     </button>
                     
-                    <div class="audio-progress-container" onclick="window.seekAudio('welcome', event)">
+                    <div class="audio-progress-container{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#unless require_audio_completion}} onclick="window.seekAudio('welcome', event)"{{/unless}}>
                         <div class="audio-progress" id="progress-welcome"></div>
                     </div>
                     
@@ -70,11 +70,11 @@
                 </div>
                 
                 <div class="audio-secondary-controls">
-                    <button class="audio-button" onclick="window.skipBackward('welcome', 10)">
+                    <button class="audio-button{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#if require_audio_completion}} disabled{{/if}} onclick="window.skipBackward('welcome', 10)">
                         ⏪ 10s
                     </button>
                     
-                    <button class="audio-button" onclick="window.skipForward('welcome', 10)">
+                    <button class="audio-button{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#if require_audio_completion}} disabled{{/if}} onclick="window.skipForward('welcome', 10)">
                         10s ⏩
                     </button>
                     

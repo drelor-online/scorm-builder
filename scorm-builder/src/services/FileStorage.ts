@@ -770,24 +770,39 @@ export class FileStorage {
       // Use chunked encoding for large files to avoid blocking UI
       const base64Data = await this.encodeFileAsBase64Chunked(blob, onProgress);
       
+      const rustMetadata = {
+        page_id: metadata?.page_id || '',
+        type: mediaType,
+        original_name: metadata?.original_name || 'unknown',
+        mime_type: blob.type || undefined,
+        source: metadata?.source || undefined,
+        embed_url: metadata?.embed_url || undefined,
+        title: metadata?.title || undefined,
+        isYouTube: metadata?.isYouTube || undefined,
+        thumbnail: metadata?.thumbnail || undefined,
+        // Preserve YouTube clip timing (support both formats for robust persistence)
+        clip_start: metadata?.clip_start ?? metadata?.clipStart ?? undefined,
+        clip_end: metadata?.clip_end ?? metadata?.clipEnd ?? undefined
+      }
+      
+      console.log('🔍 [CLIP DEBUG] FileStorage.storeMedia - About to call Rust backend with:', {
+        id,
+        mediaType,
+        inputMetadata: metadata,
+        rustMetadata,
+        clip_start_raw: metadata?.clip_start,
+        clipStart_raw: metadata?.clipStart,
+        clip_start_final: rustMetadata.clip_start,
+        clip_end_final: rustMetadata.clip_end,
+        clip_start_type: typeof rustMetadata.clip_start,
+        clip_end_type: typeof rustMetadata.clip_end
+      })
+      
       await invoke('store_media_base64', {
         id: id,
         projectId: this._currentProjectPath || this._currentProjectId,
         dataBase64: base64Data,
-        metadata: {
-          page_id: metadata?.page_id || '',
-          type: mediaType,
-          original_name: metadata?.original_name || 'unknown',
-          mime_type: blob.type || undefined,
-          source: metadata?.source || undefined,
-          embed_url: metadata?.embed_url || undefined,
-          title: metadata?.title || undefined,
-          isYouTube: metadata?.isYouTube || undefined,
-          thumbnail: metadata?.thumbnail || undefined,
-          // Preserve YouTube clip timing (support both formats for robust persistence)
-          clip_start: metadata?.clip_start ?? metadata?.clipStart ?? undefined,
-          clip_end: metadata?.clip_end ?? metadata?.clipEnd ?? undefined
-        }
+        metadata: rustMetadata
       });
       
       debugLogger.info('FileStorage.storeMedia', `Media stored successfully: ${id}`);
@@ -907,6 +922,17 @@ export class FileStorage {
         return null;
       }
       
+      console.log('🔍 [CLIP DEBUG] FileStorage.getMedia - Retrieved from Rust backend:', {
+        id,
+        media,
+        metadata: media?.metadata,
+        clip_start: media?.metadata?.clip_start,
+        clip_end: media?.metadata?.clip_end,
+        clip_start_type: typeof media?.metadata?.clip_start,
+        clip_end_type: typeof media?.metadata?.clip_end,
+        allMetadataKeys: media?.metadata ? Object.keys(media.metadata) : []
+      })
+      
       debugLogger.info('FileStorage.getMedia', 'Media retrieved successfully', {
         id,
         mediaId: media.id,
@@ -950,7 +976,19 @@ export class FileStorage {
       const result = {
         id: media.id,
         mediaType: media.metadata?.type || 'image',
-        metadata: media.metadata,
+        metadata: {
+          ...media.metadata,
+          // 🔧 FIX: Convert snake_case back to camelCase for clip timing fields
+          // Frontend expects clipStart/clipEnd (camelCase), but Rust backend returns clip_start/clip_end (snake_case)
+          clipStart: media.metadata?.clip_start ?? media.metadata?.clipStart,
+          clipEnd: media.metadata?.clip_end ?? media.metadata?.clipEnd,
+          // Convert other common snake_case fields to camelCase for consistency
+          pageId: media.metadata?.page_id ?? media.metadata?.pageId,
+          // Remove snake_case versions to avoid confusion and data duplication
+          clip_start: undefined,
+          clip_end: undefined,
+          page_id: undefined
+        },
         size: data?.byteLength || media.data?.length,
         data // Include the actual data
       } as MediaInfo & { data?: ArrayBuffer };
@@ -1412,14 +1450,33 @@ export class FileStorage {
   async storeYouTubeVideo(id: string, youtubeUrl: string, metadata?: any): Promise<void> {
     if (!this._currentProjectId) throw new Error('No project open');
     try {
+      console.log('🔍 [CLIP DEBUG] FileStorage.storeYouTubeVideo called with:', {
+        id,
+        youtubeUrl,
+        metadata,
+        clip_start: metadata?.clip_start,
+        clip_end: metadata?.clip_end,
+        clipStartType: typeof metadata?.clip_start,
+        clipEndType: typeof metadata?.clip_end
+      })
+      
       // Store YouTube URL as text data
       const urlBlob = new Blob([youtubeUrl], { type: 'text/plain' });
-      await this.storeMedia(id, urlBlob, 'youtube', {
+      const metadataForStore = {
         ...metadata,
         embed_url: youtubeUrl,
         source: 'youtube',
         isYouTube: true  // Mark as YouTube video
-      });
+      }
+      
+      console.log('🔍 [CLIP DEBUG] About to call storeMedia with metadata:', {
+        id,
+        metadataForStore,
+        clip_start: metadataForStore.clip_start,
+        clip_end: metadataForStore.clip_end
+      })
+      
+      await this.storeMedia(id, urlBlob, 'youtube', metadataForStore);
       
       debugLogger.info('FileStorage.storeYouTubeVideo', `YouTube video stored: ${id}`, {
         url: youtubeUrl,

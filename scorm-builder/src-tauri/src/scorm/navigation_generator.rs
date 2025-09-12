@@ -46,7 +46,24 @@ impl<'a> NavigationGenerator<'a> {
         let data = json!({
             "has_objectives": request.learning_objectives_page.is_some(),
             "topics": topics_data,
-            "pass_mark": request.pass_mark
+            "pass_mark": request.pass_mark,
+            "allow_retake": request.allow_retake,
+            "require_audio_completion": request.require_audio_completion.unwrap_or(false),
+            // New comprehensive course settings for template
+            "auto_advance": request.auto_advance.unwrap_or(false),
+            "allow_previous_review": request.allow_previous_review.unwrap_or(true),
+            "retake_delay": request.retake_delay.unwrap_or(0),
+            "completion_criteria": request.completion_criteria.as_ref().unwrap_or(&"view_and_pass".to_string()),
+            "show_progress": request.show_progress.unwrap_or(true),
+            "show_outline": request.show_outline.unwrap_or(true),
+            "confirm_exit": request.confirm_exit.unwrap_or(true),
+            "font_size": request.font_size.as_ref().unwrap_or(&"medium".to_string()),
+            "time_limit": request.time_limit.unwrap_or(0),
+            "session_timeout": request.session_timeout.unwrap_or(30),
+            "minimum_time_spent": request.minimum_time_spent.unwrap_or(0),
+            "keyboard_navigation": request.keyboard_navigation.unwrap_or(true),
+            "printable": request.printable.unwrap_or(false),
+            "navigation_mode": request.navigation_mode.as_str()
         });
 
         self.handlebars

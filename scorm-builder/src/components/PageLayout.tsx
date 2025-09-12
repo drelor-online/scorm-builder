@@ -11,7 +11,7 @@ const WorkflowProgress: React.FC<{ currentStep: number; isDarkMode: boolean; onS
   currentStep, 
   onStepClick 
 }) => {
-  const steps = ['Seed', 'Prompt', 'JSON', 'Media', 'Audio', 'Activities', 'SCORM']
+  const steps = ['Seed', 'Prompt', 'JSON', 'Media', 'Audio', 'Activities', 'Settings', 'SCORM']
   const navigation = useStepNavigation()
   const visitedSteps = navigation?.visitedSteps || []
   

@@ -103,8 +103,11 @@
                             <iframe 
                                 src="{{embed_url}}" 
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                allowfullscreen>
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                allowfullscreen
+                                referrerpolicy="strict-origin-when-cross-origin"
+                                loading="lazy"
+                                onerror="console.error('Failed to load YouTube video:', this.src); this.parentElement.style.display='none';">
                             </iframe>
                         </div>
                         {{else}}
@@ -134,7 +137,7 @@
                         <span class="pause-icon" style="display:none">❚❚</span>
                     </button>
                     
-                    <div class="audio-progress-container" onclick="window.seekAudio('{{id}}', event)">
+                    <div class="audio-progress-container{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#unless require_audio_completion}} onclick="window.seekAudio('{{id}}', event)"{{/unless}}>
                         <div class="audio-progress" id="progress-{{id}}"></div>
                     </div>
                     
@@ -145,11 +148,11 @@
                 </div>
                 
                 <div class="audio-secondary-controls">
-                    <button class="audio-button" onclick="window.skipBackward('{{id}}', 10)">
+                    <button class="audio-button{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#if require_audio_completion}} disabled{{/if}} onclick="window.skipBackward('{{id}}', 10)">
                         ⏪ 10s
                     </button>
                     
-                    <button class="audio-button" onclick="window.skipForward('{{id}}', 10)">
+                    <button class="audio-button{{#if require_audio_completion}} disabled-seeking{{/if}}"{{#if require_audio_completion}} disabled{{/if}} onclick="window.skipForward('{{id}}', 10)">
                         10s ⏩
                     </button>
                     

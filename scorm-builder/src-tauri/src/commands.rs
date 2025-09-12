@@ -245,14 +245,24 @@ pub async fn generate_scorm_enhanced(
     let media_files_map =
         if let Some(files) = media_files {
             eprintln!(
-                "[generate_scorm_enhanced] Received {} media files from TypeScript",
+                "[generate_scorm_enhanced] 📦 Received {} media files from TypeScript",
                 files.len()
             );
+            
+            // Log each file being processed for detailed debugging
+            if files.len() > 0 {
+                eprintln!("[generate_scorm_enhanced] 📋 Media files received:");
+                for (idx, file) in files.iter().enumerate() {
+                    eprintln!("  {}. {} ({} bytes)", idx + 1, file.filename, file.content.len());
+                }
+            } else {
+                eprintln!("[generate_scorm_enhanced] ⚠️  Empty media files array received (no binary files to include)");
+            }
 
             let _ = app.emit(
                 "scorm-generation-progress",
                 serde_json::json!({
-                    "message": format!("Processing {} media files...", files.len()),
+                    "message": format!("Processing {} binary files...", files.len()),
                     "progress": 40
                 }),
             );
@@ -286,7 +296,22 @@ pub async fn generate_scorm_enhanced(
             map
         } else {
             // Fallback to loading from disk
-            load_project_media_files(&project_id).await?
+            eprintln!("[generate_scorm_enhanced] ⚠️  No media files provided from TypeScript - falling back to disk loading");
+            eprintln!("[generate_scorm_enhanced] 📁 Searching for media files in project directory: {}/media/", project_id);
+            
+            let disk_files = load_project_media_files(&project_id).await?;
+            eprintln!("[generate_scorm_enhanced] 💾 Found {} media files on disk", disk_files.len());
+            
+            if disk_files.len() > 0 {
+                eprintln!("[generate_scorm_enhanced] 📋 Disk media files found:");
+                for (idx, (path, content)) in disk_files.iter().enumerate() {
+                    eprintln!("  {}. {} ({} bytes)", idx + 1, path, content.len());
+                }
+            } else {
+                eprintln!("[generate_scorm_enhanced] ❌ No media files found on disk - SCORM package will have no media");
+            }
+            
+            disk_files
         };
 
     // Emit progress event

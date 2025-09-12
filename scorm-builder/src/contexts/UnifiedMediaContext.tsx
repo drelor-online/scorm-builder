@@ -47,6 +47,7 @@ interface UnifiedMediaContextType {
   
   // Cache management
   resetMediaCache: () => void
+  populateFromCourseContent: (mediaItems: any[], pageId: string) => Promise<void>
   
   // Cleanup utilities
   cleanContaminatedMedia: () => Promise<{ cleaned: string[], errors: string[] }>
@@ -235,11 +236,17 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       // Now get all media from the service (which will also scan file system)
       // This will include both cached items and file system discovery
       const allMedia = await mediaService.listAllMedia()
+      console.log(`🔍 [DEBUG] MediaService.listAllMedia() returned ${allMedia.length} items:`)
+      allMedia.forEach(item => {
+        console.log(`🔍 [DEBUG] MediaService item: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
+      })
+      
       const newCache = new Map<string, MediaItem>()
       allMedia.forEach(item => {
         newCache.set(item.id, item)
       })
       setMediaCache(newCache)
+      console.log(`🔍 [DEBUG] Updated cache with ${allMedia.length} items from MediaService`)
       logger.info('[UnifiedMediaContext] Loaded', allMedia.length, 'media items')
       
       // PERFORMANCE OPTIMIZATION: Preload all media blob URLs
@@ -259,9 +266,19 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             }
             
             // Skip YouTube videos without proper URLs (they don't need blob preloading)
-            if ((item.metadata?.type as string) === 'youtube' && !item.metadata?.url) {
-              logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id)
-              return false
+            if ((item.metadata?.type as string) === 'youtube') {
+              const hasYouTubeUrl = item.metadata?.url || 
+                                   item.metadata?.embedUrl || 
+                                   item.metadata?.embed_url ||
+                                   item.metadata?.youtubeUrl ||
+                                   item.metadata?.youtube_url
+              if (!hasYouTubeUrl) {
+                logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id, {
+                  availableKeys: Object.keys(item.metadata || {}),
+                  metadataType: item.metadata?.type
+                })
+                return false
+              }
             }
             
             return true
@@ -436,6 +453,103 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     logger.info('[UnifiedMediaContext] Media cache and refs completely reset')
   }, [blobCache])
 
+  const populateFromCourseContent = useCallback(async (mediaItems: any[], pageId: string) => {
+    // 🔧 SAFEGUARD: Check if we've already populated this page to prevent infinite loops
+    const cacheKey = `${pageId}-${mediaItems.length}-${mediaItems.map(i => i.id).join(',')}`
+    const alreadyPopulated = hasLoadedRef.current.has(cacheKey)
+    
+    if (alreadyPopulated) {
+      logger.debug(`[UnifiedMediaContext] Skipping duplicate population for page: ${pageId}`)
+      return
+    }
+    
+    logger.info(`[UnifiedMediaContext] Populating media cache from course content for page: ${pageId}`, {
+      itemCount: mediaItems.length,
+      items: mediaItems.map(item => ({ id: item.id, type: item.type, title: item.title }))
+    })
+    
+    try {
+      // Convert course content media items to MediaItem format and add to cache
+      const convertedItems: MediaItem[] = mediaItems
+        .filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube') // Only include image/video/youtube
+        .map(item => {
+          // Extract metadata safely
+          const metadata = (item as any).metadata || {}
+          const itemAny = item as any
+          
+          // 🔧 CRITICAL FIX: Only add YouTube-related fields for actual YouTube videos
+          // This prevents contamination false positives that cause infinite loops
+          
+          const isActualYouTubeVideo = !!(
+            itemAny.isYouTube || 
+            metadata.isYouTube || 
+            itemAny.url?.includes('youtube.com') || 
+            itemAny.url?.includes('youtu.be') ||
+            metadata.youtubeUrl ||
+            itemAny.youtubeUrl
+          )
+          
+          // Base metadata that all items get
+          const baseMetadata = {
+            type: item.type,
+            title: metadata.title || itemAny.title || item.title || 'Untitled',
+            pageId: pageId,
+            uploadedAt: metadata.uploadedAt || itemAny.uploadedAt || new Date().toISOString()
+          }
+          
+          // YouTube-specific metadata (only for actual YouTube videos)
+          // 🔧 CRITICAL FIX: Don't extract clip timing from course content - it doesn't exist there
+          // Clip timing data is stored separately in FileStorage and loaded by MediaService
+          const youtubeMetadata = isActualYouTubeVideo ? {
+            source: 'youtube',
+            isYouTube: true,
+            youtubeUrl: metadata.youtubeUrl || itemAny.youtubeUrl || itemAny.url,
+            embedUrl: metadata.embedUrl || itemAny.embedUrl,
+            thumbnail: metadata.thumbnail || itemAny.thumbnail,
+            // clipStart/clipEnd intentionally omitted - will be loaded by MediaService from FileStorage
+          } : {}
+          
+          // Non-YouTube metadata (for images and regular videos)
+          const regularMetadata = !isActualYouTubeVideo ? {
+            // Only add fields that are NOT YouTube-related to avoid contamination detection
+            thumbnail: metadata.thumbnail || itemAny.thumbnail
+          } : {}
+          
+          return {
+            id: item.id,
+            type: item.type as MediaType,
+            pageId: pageId,
+            fileName: metadata.title || itemAny.title || item.fileName || 'untitled',
+            mimeType: metadata.mimeType || itemAny.mimeType || (item.type === 'image' ? 'image/jpeg' : 'video/mp4'),
+            metadata: {
+              ...baseMetadata,
+              ...youtubeMetadata,
+              ...regularMetadata
+            }
+          } as MediaItem
+        })
+      
+      // Add items to the media cache
+      setMediaCache(prev => {
+        const updated = new Map(prev)
+        convertedItems.forEach(item => {
+          updated.set(item.id, item)
+          logger.debug(`[UnifiedMediaContext] Added to cache from course content: ${item.id} (${item.type}) - clip timing will be loaded by MediaService`)
+          console.log(`🔍 [DEBUG] Cache ADD: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
+        })
+        return updated
+      })
+      
+      // Mark this page as populated to prevent duplicate calls
+      hasLoadedRef.current.add(cacheKey)
+      
+      logger.info(`[UnifiedMediaContext] Successfully populated cache with ${convertedItems.length} items for page ${pageId}`)
+    } catch (error) {
+      logger.error('[UnifiedMediaContext] Failed to populate from course content:', error)
+      throw error
+    }
+  }, [])
+
   const cleanContaminatedMedia = useCallback(async (): Promise<{ cleaned: string[], errors: string[] }> => {
     try {
       const mediaService = mediaServiceRef.current
@@ -526,25 +640,66 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   }, [mediaCache])
   
   const getValidMediaForPage = useCallback(async (pageId: string): Promise<MediaItem[]> => {
-    const allMediaForPage = Array.from(mediaCache.values()).filter(item => item.pageId === pageId)
+    // 🔍 DEBUG: Log all cache contents for debugging page association issues
+    const allCachedItems = Array.from(mediaCache.values())
+    console.log(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - DEBUG INFO:`)
+    console.log(`   Total cached items: ${allCachedItems.length}`)
+    console.log(`   All cached item IDs and pages:`, allCachedItems.map(item => ({
+      id: item.id,
+      type: item.type,
+      pageId: item.pageId,
+      fileName: item.fileName,
+      hasMetadata: !!item.metadata,
+      metadataPageId: item.metadata?.pageId,
+      metadataKeys: item.metadata ? Object.keys(item.metadata) : []
+    })))
+    
+    // Apply page ID mapping for learning objectives (same logic as rustScormGenerator)
+    const normalizedPageIds = [pageId]
+    if (pageId === 'learning-objectives' || pageId === 'content-1') {
+      normalizedPageIds.push('objectives') // Also match 'objectives' pageId
+      console.log(`🔧 [UnifiedMediaContext] Applied page ID mapping: '${pageId}' → also searching for 'objectives'`)
+    } else if (pageId === 'objectives') {
+      normalizedPageIds.push('learning-objectives', 'content-1') // Also match these variations
+      console.log(`🔧 [UnifiedMediaContext] Applied page ID mapping: '${pageId}' → also searching for 'learning-objectives', 'content-1'`)
+    }
+    
+    const allMediaForPage = Array.from(mediaCache.values()).filter(item => 
+      normalizedPageIds.includes(item.pageId)
+    )
+    console.log(`   Items matching pageId '${pageId}': ${allMediaForPage.length}`)
+    if (allMediaForPage.length > 0) {
+      console.log(`   Matching items:`, allMediaForPage.map(item => ({
+        id: item.id,
+        type: item.type,
+        pageId: item.pageId
+      })))
+    }
     
     // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items
     let contaminatedCount = 0
     for (const item of allMediaForPage) {
+      // 🔧 CRITICAL FIX: Skip contamination detection for legitimate YouTube videos
+      // YouTube videos are SUPPOSED to have these fields - they're not contamination!
+      const isLegitimateYouTubeVideo = item.type === 'video' || item.type === 'youtube'
+      if (isLegitimateYouTubeVideo) {
+        continue
+      }
+      
+      // 🔧 CONTAMINATION FIX: Only flag actual YouTube-specific metadata
+      // clipStart/clipEnd are legitimate for any media type (presentations, etc.)
       const hasYouTubeMetadata = !!(
         item.metadata?.source === 'youtube' ||
         item.metadata?.youtubeUrl ||
         item.metadata?.embedUrl ||
-        item.metadata?.clipStart ||
-        item.metadata?.clipEnd ||
-        item.metadata?.isYouTube
+        (item.metadata?.isYouTube === true) // Only flag TRUE values, not false
       )
       
-      if (hasYouTubeMetadata && item.type !== 'video' && item.type !== 'youtube') {
+      if (hasYouTubeMetadata) {
         contaminatedCount++
         console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE!`)
         console.warn(`   Media ID: ${item.id}`)
-        console.warn(`   Type: ${item.type} (should be 'video' for YouTube)`)
+        console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
         console.warn(`   Page: ${pageId}`)
         console.warn(`   Contaminated fields:`, {
           source: item.metadata?.source,
@@ -567,45 +722,16 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       console.warn(`   Types: ${JSON.stringify(typeCounts)}`)
     }
     
-    // DEFENSIVE FILTERING: Only return media that actually exists
-    // This prevents components from trying to load deleted media files
-    const validMedia: MediaItem[] = []
-    const orphanedMedia: string[] = []
+    // 🔧 FIX INFINITE LOOP: Return all cached media without async existence checks
+    // The expensive async existence checks were causing infinite re-renders by:
+    // 1. Making async calls to getMedia() for every item on every render
+    // 2. Modifying mediaCache during iteration (cache.delete) 
+    // 3. Triggering useCallback dependency changes → PageThumbnailGrid re-render loop
+    // Components should handle non-existent media gracefully instead
+    logger.log(`[UnifiedMediaContext] Returning ${allMediaForPage.length} cached media items for page ${pageId}`)
     
-    for (const item of allMediaForPage) {
-      try {
-        // Quick existence check - if getMedia returns data, the media exists
-        const mediaData = await getMedia(item.id)
-        if (mediaData) {
-          validMedia.push(item)
-        } else {
-          logger.log(`[UnifiedMediaContext] Filtered out non-existent media: ${item.id} for page ${pageId}`)
-          orphanedMedia.push(item.id)
-        }
-      } catch (error) {
-        // If getMedia throws, the media doesn't exist - filter it out
-        logger.log(`[UnifiedMediaContext] Filtered out errored media: ${item.id} for page ${pageId}`, error)
-        orphanedMedia.push(item.id)
-      }
-    }
-    
-    // Clean up orphaned entries from cache to prevent future issues
-    if (orphanedMedia.length > 0) {
-      logger.log(`[UnifiedMediaContext] Cleaning ${orphanedMedia.length} orphaned entries from cache`)
-      orphanedMedia.forEach(mediaId => {
-        mediaCache.delete(mediaId)
-        // Also clear any cached URLs for this media
-        blobCache.revoke(mediaId)
-      })
-    }
-    
-    // If we filtered out some media, log the difference for debugging
-    if (validMedia.length !== allMediaForPage.length) {
-      logger.log(`[UnifiedMediaContext] Defensive filtering for page ${pageId}: ${allMediaForPage.length} → ${validMedia.length} media items`)
-    }
-    
-    return validMedia
-  }, [mediaCache, getMedia, blobCache])
+    return allMediaForPage
+  }, [mediaCache])
   
   const getAllMedia = useCallback((): MediaItem[] => {
     return Array.from(mediaCache.values())
@@ -810,6 +936,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     clearError,
     refreshMedia,
     resetMediaCache,
+    populateFromCourseContent,
     cleanContaminatedMedia
   }), [
     storeMedia,
@@ -833,6 +960,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     clearError,
     refreshMedia,
     resetMediaCache,
+    populateFromCourseContent,
     cleanContaminatedMedia
   ])
   

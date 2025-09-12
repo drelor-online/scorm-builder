@@ -45,6 +45,9 @@ const ActivitiesEditor = lazy(() =>
 const SCORMPackageBuilder = lazy(() => 
   import('./components/SCORMPackageBuilder').then(m => ({ default: m.SCORMPackageBuilder }))
 )
+const CourseSettingsWizard = lazy(() => 
+  import('./components/CourseSettingsWizard').then(m => ({ default: m.CourseSettingsWizard }))
+)
 // Types
 import type { CourseSeedData } from '@/types/course'
 import type { CourseContent, CourseContentUnion, Topic } from '@/types/aiPrompt'
@@ -122,7 +125,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
-  const { deleteAllMedia, getMedia, resetMediaCache } = useUnifiedMedia();
+  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -265,7 +268,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     media: 3,
     audio: 4,
     activities: 5,
-    scorm: 6
+    settings: 6,
+    scorm: 7
   }
   
   // Track last saved time separately to avoid triggering auto-save
@@ -992,6 +996,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
       
+      // Clean contaminated media before final project save
+      try {
+        debugLogger.info('App.handleSave', 'Running contamination cleanup before save...')
+        const cleanupResult = await cleanContaminatedMedia()
+        if (cleanupResult.cleaned.length > 0) {
+          debugLogger.info('App.handleSave', 'Cleaned contaminated media', cleanupResult.cleaned)
+        }
+        if (cleanupResult.errors.length > 0) {
+          debugLogger.warn('App.handleSave', 'Cleanup errors', cleanupResult.errors)
+        }
+      } catch (cleanupError) {
+        debugLogger.error('App.handleSave', 'Contamination cleanup failed', cleanupError)
+        // Continue with save even if cleanup fails
+      }
+      
       await storage.saveProject()
       debugLogger.info('App.handleSave', 'Manual save completed successfully', {
         projectId: storage.currentProjectId,
@@ -1045,6 +1064,17 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
+      
+      // Clean contaminated media before final project save (silent for autosave)
+      try {
+        const cleanupResult = await cleanContaminatedMedia()
+        if (cleanupResult.cleaned.length > 0) {
+          debugLogger.info('App.handleAutosave', 'Auto-cleaned contaminated media', cleanupResult.cleaned)
+        }
+      } catch (cleanupError) {
+        debugLogger.error('App.handleAutosave', 'Auto-cleanup failed', cleanupError)
+        // Continue with save even if cleanup fails
+      }
       
       await storage.saveProject()
       debugLogger.info('App.handleAutosave', 'Auto-save completed successfully', {
@@ -1449,13 +1479,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleActivitiesNext = async (data: CourseContentUnion) => {
     // Note: ActivitiesEditor component handles marking 'activities' section dirty automatically
     setCourseContent(data as CourseContent)
-    setCurrentStep('scorm')
-    navigation.navigateToStep(stepNumbers.scorm)
+    setCurrentStep('settings')
+    navigation.navigateToStep(stepNumbers.settings)
     
     // Save to PersistentStorage
     if (storage.currentProjectId) {
       try {
-        await storage.saveContent('currentStep', { step: 'scorm' })
+        await storage.saveContent('currentStep', { step: 'settings' })
         
         const courseData = data as CourseContent
         // Save complete course content using unified method
@@ -1484,6 +1514,38 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }
 
+  const handleSettingsNext = async (settings: any) => {
+    // Save course settings and proceed to SCORM generation
+    setCurrentStep('scorm')
+    navigation.navigateToStep(stepNumbers.scorm)
+    
+    // Save to PersistentStorage
+    if (storage.currentProjectId) {
+      try {
+        await storage.saveContent('currentStep', { step: 'scorm' })
+        // Save the course settings  
+        await storage.saveContent('courseSettings', settings)
+      } catch (error) {
+        console.error('Failed to save course settings:', error)
+        showError('Failed to save settings')
+      }
+    }
+  }
+
+  const handleSettingsBack = async () => {
+    setCurrentStep('activities')
+    navigation.navigateToStep(stepNumbers.activities)
+    
+    // Save current step to PersistentStorage
+    if (storage.currentProjectId) {
+      try {
+        await storage.saveContent('currentStep', { step: 'activities' })
+      } catch (error) {
+        console.error('Failed to save current step:', error)
+      }
+    }
+  }
+
   const handleSCORMNext = async () => {
     // Could show a completion screen or download the package
     success('SCORM package built successfully!')
@@ -1500,13 +1562,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }
 
   const handleSCORMBack = async () => {
-    setCurrentStep('activities')
-    navigation.navigateToStep(stepNumbers.activities)
+    setCurrentStep('settings')
+    navigation.navigateToStep(stepNumbers.settings)
     
     // Save current step to PersistentStorage
     if (storage.currentProjectId) {
       try {
-        await storage.saveContent('currentStep', { step: 'activities' })
+        await storage.saveContent('currentStep', { step: 'settings' })
       } catch (error) {
         console.error('Failed to save current step:', error)
       }
@@ -2178,6 +2240,49 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     </p>
                     <Button onClick={handleActivitiesBack} variant="secondary">
                       Go Back to JSON Import
+                    </Button>
+                  </div>
+                )}
+              </Suspense>
+            )}
+            
+            {currentStep === 'settings' && (
+              <Suspense fallback={<LoadingComponent />}>
+                {courseContent && courseSeedData ? (
+                  <CourseSettingsWizard
+                    courseContent={createMutationSafeContent(courseContent)}
+                    courseSeedData={courseSeedData}
+                    onNext={handleSettingsNext}
+                    onBack={handleSettingsBack}
+                    onSettingsClick={() => showDialog('settings')}
+                    onHelp={() => showDialog('help')}
+                    onSave={(content?: any, silent?: boolean) => {
+                      // Course settings don't modify course content directly
+                      // Settings are handled in onNext
+                      if (!silent) {
+                        handleManualSave();
+                      }
+                    }}
+                    onOpen={handleOpen}
+                    onStepClick={handleStepClick}
+                  />
+                ) : (
+                  <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center',
+                    backgroundColor: COLORS.background,
+                    minHeight: '100vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <h2 style={{ color: COLORS.text, marginBottom: SPACING.lg }}>Course Settings Locked</h2>
+                    <p style={{ color: COLORS.textMuted, marginBottom: SPACING.xl }}>
+                      {!courseContent ? 'Please import JSON data first to unlock this page.' : 'Course seed data is missing.'}
+                    </p>
+                    <Button onClick={handleSettingsBack} variant="secondary">
+                      Go Back to Activities Editor
                     </Button>
                   </div>
                 )}

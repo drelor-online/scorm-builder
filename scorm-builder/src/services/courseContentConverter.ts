@@ -96,8 +96,11 @@ function convertNewFormat(
         captionUrl: m.captionUrl,
         captionBlob: m.captionBlob,
         storageId: m.storageId,
-        clipStart: m.clipStart,  // Include clip timing
-        clipEnd: m.clipEnd       // Include clip timing
+        clipStart: m.clipStart,    // Include clip timing
+        clipEnd: m.clipEnd,        // Include clip timing
+        // CRITICAL FIX: Preserve YouTube-specific properties for extractCourseContentMedia()
+        isYouTube: (m as any).isYouTube,   // Required for YouTube video detection
+        youtubeUrl: (m as any).youtubeUrl  // Required for YouTube video metadata
       }))
     }
     
@@ -144,8 +147,11 @@ function convertNewFormat(
         captionUrl: m.captionUrl,
         captionBlob: m.captionBlob,
         storageId: m.storageId,
-        clipStart: m.clipStart,  // Include clip timing
-        clipEnd: m.clipEnd       // Include clip timing
+        clipStart: m.clipStart,    // Include clip timing
+        clipEnd: m.clipEnd,        // Include clip timing
+        // CRITICAL FIX: Preserve YouTube-specific properties for extractCourseContentMedia()
+        isYouTube: (m as any).isYouTube,   // Required for YouTube video detection
+        youtubeUrl: (m as any).youtubeUrl  // Required for YouTube video metadata
       }))
     }
     
@@ -211,7 +217,10 @@ function convertNewFormat(
           captionBlob: (m as any).captionBlob,
           storageId: (m as any).storageId,
           clipStart: (m as any).clipStart,  // Include clip timing
-          clipEnd: (m as any).clipEnd       // Include clip timing
+          clipEnd: (m as any).clipEnd,      // Include clip timing
+          // CRITICAL FIX: Preserve YouTube-specific properties for extractCourseContentMedia()
+          isYouTube: (m as any).isYouTube,   // Required for YouTube video detection
+          youtubeUrl: (m as any).youtubeUrl  // Required for YouTube video metadata
         }))
       }
     })

@@ -85,6 +85,7 @@ interface IconProps {
   color?: string
   className?: string
   strokeWidth?: number
+  style?: React.CSSProperties
 }
 
 const sizeMap = {
@@ -100,7 +101,8 @@ export const Icon: React.FC<IconProps> = ({
   size = 'md',
   color = 'currentColor',
   className = '',
-  strokeWidth = 2
+  strokeWidth = 2,
+  style
 }) => {
   return (
     <IconComponent 
@@ -108,6 +110,7 @@ export const Icon: React.FC<IconProps> = ({
       color={color}
       strokeWidth={strokeWidth}
       className={className}
+      style={style}
     />
   )
 }

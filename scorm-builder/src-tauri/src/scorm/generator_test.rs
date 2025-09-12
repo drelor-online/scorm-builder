@@ -33,7 +33,7 @@ async fn test_direct_file_streaming_into_zip() {
             file_path: large_file_path.to_str().unwrap().to_string(),
             mime_type: "video/mp4".to_string(),
         }],
-        generated_files: vec![],
+        generated_files: crate::scorm::test_helpers::create_test_generated_files(),
     };
 
     // Track memory usage before generation

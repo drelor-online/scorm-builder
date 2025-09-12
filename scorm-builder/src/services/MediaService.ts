@@ -249,8 +249,8 @@ export class MediaService {
         progressCallback({ loaded: 0, total: file.size, percent: 0 })
       }
       
-      // Get filename
-      const fileName = file instanceof File ? file.name : `${id}.${this.getExtension(type)}`
+      // Get filename with proper extension based on MIME type
+      const fileName = file instanceof File ? file.name : `${id}.${this.getExtension(type, file.type)}`
       
       // Store directly using FileStorage for efficiency with large files
       await this.fileStorage.storeMedia(id, file, type, {
@@ -553,12 +553,12 @@ export class MediaService {
       const safePageId = typeof pageId === 'string' ? pageId : ''
       const mediaItem: MediaItem = {
         id,
-        type: 'video',
+        type: 'youtube',
         pageId: safePageId,
         fileName: (typeof metadata?.title === 'string' ? metadata.title : '') || 'YouTube Video',
         metadata: {
           uploadedAt: new Date().toISOString(),
-          type: 'video',
+          type: 'youtube',
           pageId: safePageId,
           youtubeUrl,
           embedUrl,  // Include embedUrl
@@ -586,6 +586,16 @@ export class MediaService {
     mediaId: string,
     updates: Partial<Pick<MediaMetadata, 'clipStart' | 'clipEnd' | 'title' | 'embedUrl'>>
   ): Promise<MediaItem> {
+    console.log('🔍 [CLIP DEBUG] MediaService.updateYouTubeVideoMetadata called with:', {
+      mediaId,
+      updates,
+      clipStart: updates.clipStart,
+      clipEnd: updates.clipEnd,
+      updatesType: typeof updates,
+      clipStartType: typeof updates.clipStart,
+      clipEndType: typeof updates.clipEnd
+    })
+    
     debugLogger.info('MediaService.updateYouTubeVideoMetadata', 'Updating YouTube video metadata', {
       mediaId,
       updates
@@ -602,6 +612,18 @@ export class MediaService {
         throw new Error(`Media ${mediaId} is not a YouTube video`)
       }
       
+      // 🔒 CONTAMINATION PREVENTION: Additional validation
+      if (existingMedia.type !== 'video' && existingMedia.type !== 'youtube') {
+        throw new Error(`Cannot update YouTube metadata for media type '${existingMedia.type}'. Only 'video' and 'youtube' types are allowed.`)
+      }
+      
+      console.log('🔒 [VALIDATION] YouTube metadata update validated:', {
+        mediaId,
+        mediaType: existingMedia.type,
+        isYouTube: existingMedia.metadata.isYouTube,
+        pageId: existingMedia.pageId
+      })
+      
       // Prepare updated metadata
       const updatedMetadata = {
         ...existingMedia.metadata,
@@ -609,7 +631,7 @@ export class MediaService {
       }
       
       // Update the metadata in file storage
-      await this.fileStorage.storeYouTubeVideo(mediaId, updatedMetadata.youtubeUrl!, {
+      const metadataToStore = {
         page_id: updatedMetadata.pageId,
         title: updatedMetadata.title,
         thumbnail: updatedMetadata.thumbnail,
@@ -617,14 +639,43 @@ export class MediaService {
         duration: updatedMetadata.duration,
         clip_start: updatedMetadata.clipStart,
         clip_end: updatedMetadata.clipEnd
+      }
+      
+      console.log('🔍 [CLIP DEBUG] About to call storeYouTubeVideo with metadata:', {
+        mediaId,
+        youtubeUrl: updatedMetadata.youtubeUrl,
+        metadataToStore,
+        clipStart: metadataToStore.clip_start,
+        clipEnd: metadataToStore.clip_end,
+        clipStartType: typeof metadataToStore.clip_start,
+        clipEndType: typeof metadataToStore.clip_end
       })
       
-      // Update cache
+      await this.fileStorage.storeYouTubeVideo(mediaId, updatedMetadata.youtubeUrl!, metadataToStore)
+      
+      // Update cache with additional contamination prevention
       const updatedItem: MediaItem = {
         ...existingMedia,
         metadata: updatedMetadata
       }
+      
+      // 🔒 CONTAMINATION PREVENTION: Verify we're only updating the intended item
+      const beforeCacheSize = this.mediaCache.size
       this.mediaCache.set(mediaId, updatedItem)
+      const afterCacheSize = this.mediaCache.size
+      
+      if (beforeCacheSize !== afterCacheSize) {
+        console.warn('🚨 [CACHE WARNING] Cache size changed during YouTube metadata update! This should not happen.')
+      }
+      
+      console.log('🔍 [CACHE DEBUG] MediaService.updateYouTubeVideoMetadata - Cache updated for:', {
+        mediaId,
+        itemType: updatedItem.type,
+        hasYouTubeMetadata: !!(updatedItem.metadata?.isYouTube || updatedItem.metadata?.source === 'youtube'),
+        clipStart: updatedItem.metadata?.clipStart,
+        clipEnd: updatedItem.metadata?.clipEnd,
+        cacheSize: afterCacheSize
+      })
       
       debugLogger.info('MediaService.updateYouTubeVideoMetadata', 'YouTube video metadata updated successfully', {
         mediaId,
@@ -1071,7 +1122,25 @@ export class MediaService {
       for (const mediaItem of allMedia) {
         // AGGRESSIVE CONTAMINATION DETECTION
         // Check for ALL possible YouTube-related contamination patterns
-        const metadata = mediaItem.metadata as any
+        // 🔧 FIX: Get RAW metadata directly from FileStorage to see true contamination
+        let metadata = mediaItem.metadata as any
+        
+        try {
+          // Get raw metadata from FileStorage to bypass MediaService processing
+          const rawMediaData = await this.fileStorage.getMedia(mediaItem.id)
+          if (rawMediaData) {
+            console.log(`[MediaService] 🔍 RAW METADATA from FileStorage for ${mediaItem.id}:`, {
+              fileStorageMetadata: rawMediaData.metadata,
+              fileStorageKeys: Object.keys(rawMediaData.metadata || {}),
+              processedMetadata: metadata,
+              processedKeys: Object.keys(metadata)
+            })
+            // Use raw metadata for contamination detection
+            metadata = rawMediaData.metadata || metadata
+          }
+        } catch (error) {
+          console.warn(`[MediaService] ⚠️ Could not get raw metadata for ${mediaItem.id}, using processed:`, error)
+        }
         
         // Build comprehensive list of YouTube contamination indicators
         const contaminationFields = [
@@ -1085,14 +1154,41 @@ export class MediaService {
           'CLIP_START', 'CLIP_END', 'EMBED_URL', 'IS_YOUTUBE'
         ]
         
-        // Check if ANY contamination fields are present
+        // Check each contamination field for debugging
+        console.log(`[MediaService] 🔬 Scanning contamination fields for ${mediaItem.id}:`, 
+          contaminationFields.filter(field => field in metadata))
+        
+        // 🔧 FIXED CONTAMINATION DETECTION
+        // For non-video/non-YouTube media, the mere PRESENCE of YouTube fields indicates contamination
+        // regardless of their values (empty strings, nulls, etc. are still contamination)
+        const isLegitimateYouTubeVideo = mediaItem.type === 'video' || mediaItem.type === 'youtube'
         const hasYouTubeContamination = contaminationFields.some(field => {
           const value = metadata[field]
-          if (value === undefined || value === null) return false
+          const exists = field in metadata
           
-          // Special handling for source field - only 'youtube' source is contamination
-          if (field === 'source' || field.toLowerCase().includes('source')) {
-            return value === 'youtube'
+          // Skip fields that don't exist
+          if (!exists) return false
+          
+          // 🔧 CRITICAL FIX: Skip contamination detection for legitimate YouTube videos
+          // YouTube videos are SUPPOSED to have these fields - they're not contamination!
+          if (isLegitimateYouTubeVideo) {
+            return false
+          }
+          
+          // Special handling for source field - only 'youtube' source is contamination for source field
+          if (field === 'source') {
+            const isYouTubeSource = value === 'youtube'
+            if (isYouTubeSource) console.log(`[MediaService] ✅ CONTAMINATION: YouTube source field on non-video media`)
+            return isYouTubeSource
+          }
+          
+          // 🔧 FIX: For YouTube-specific fields, existence on non-video media IS contamination
+          // These fields should not exist on image files at all
+          const youtubeSpecificFields = ['embed_url', 'youtube_url', 'embedUrl', 'youtubeUrl', 
+                                         'clip_start', 'clip_end', 'clipStart', 'clipEnd']
+          if (youtubeSpecificFields.includes(field)) {
+            console.log(`[MediaService] ✅ CONTAMINATION: YouTube-specific field ${field} exists on non-video media`)
+            return true
           }
           
           // For boolean fields, any truthy value is contamination
@@ -1100,14 +1196,14 @@ export class MediaService {
             return value === true
           }
           
-          // For URL fields, check if it contains youtube
-          if (field.toLowerCase().includes('url')) {
-            return typeof value === 'string' && value.includes('youtube')
+          // For URL fields, existence is contamination
+          if (field.toLowerCase().includes('url') && field !== 'source') {
+            return exists
           }
           
-          // For numeric fields (clip timing), any number is contamination
+          // For numeric fields (clip timing), existence is contamination
           if (field.toLowerCase().includes('clip') || field.toLowerCase().includes('start') || field.toLowerCase().includes('end')) {
-            return typeof value === 'number' && value >= 0
+            return exists
           }
           
           // Any other truthy value is potential contamination
@@ -1116,8 +1212,25 @@ export class MediaService {
         
         // CONTAMINATION SCOPE CHECK
         // Only clean non-video/non-YouTube media that has YouTube contamination
-        const isLegitimateYouTubeVideo = mediaItem.type === 'video' || mediaItem.type === 'youtube'
         const shouldClean = hasYouTubeContamination && !isLegitimateYouTubeVideo
+        
+        console.log(`[MediaService] 🔍 CLEANUP SCAN: ${mediaItem.id} (type: ${mediaItem.type})`, {
+          hasYouTubeContamination,
+          isLegitimateYouTubeVideo,
+          shouldClean,
+          contaminatedFields: contaminationFields.filter(field => !!metadata[field]),
+          metadataKeys: Object.keys(metadata),
+          metadataSourceValue: metadata.source,
+          metadataEmbedUrl: metadata.embed_url,
+          metadataClipStart: metadata.clip_start,
+          metadataClipEnd: metadata.clip_end,
+          sampleValues: {
+            source: metadata.source,
+            embed_url: metadata.embed_url, 
+            clip_start: metadata.clip_start,
+            clip_end: metadata.clip_end
+          }
+        })
         
         if (shouldClean) {
           console.log(`[MediaService] 🧹 AGGRESSIVE: Cleaning contaminated ${mediaItem.type}: ${mediaItem.id}`)
@@ -1168,8 +1281,22 @@ export class MediaService {
             
             console.log(`[MediaService] 🧽 Clean metadata keys:`, Object.keys(cleanMetadata))
             
-            // Update the file storage with clean metadata
-            await this.fileStorage.storeMedia(mediaItem.id, new Blob([]), mediaItem.type, {
+            // 🔧 CRITICAL FIX: Preserve original media data, only update metadata
+            const existingMediaInfo = await this.fileStorage.getMedia(mediaItem.id)
+            let mediaBlob: Blob
+            
+            if (existingMediaInfo?.data) {
+              // Preserve original image data
+              mediaBlob = new Blob([existingMediaInfo.data], { type: existingMediaInfo.mediaType || mediaItem.type })
+              console.log(`[MediaService] ✅ Preserving original media data: ${existingMediaInfo.data.byteLength} bytes`)
+            } else {
+              // Fallback: get from cache or create empty blob (shouldn't happen for existing media)
+              console.warn(`[MediaService] ⚠️ No existing data found for ${mediaItem.id}, using empty blob`)
+              mediaBlob = new Blob([])
+            }
+            
+            // Update the file storage with clean metadata BUT preserve data
+            await this.fileStorage.storeMedia(mediaItem.id, mediaBlob, mediaItem.type, {
               page_id: mediaItem.pageId,
               ...cleanMetadata
             })
@@ -1180,6 +1307,10 @@ export class MediaService {
               metadata: cleanMetadata as MediaMetadata
             }
             this.mediaCache.set(mediaItem.id, cleanedItem)
+            
+            // 🔄 FORCE CACHE REFRESH: Invalidate any stale blob URLs
+            blobUrlManager.revokeUrl(mediaItem.id)
+            console.log(`[MediaService] 🔄 Revoked stale blob URL for cleaned media: ${mediaItem.id}`)
             
             cleaned.push(mediaItem.id)
             console.log(`[MediaService] ✅ AGGRESSIVELY cleaned contaminated media: ${mediaItem.id}`)
@@ -1195,6 +1326,18 @@ export class MediaService {
       if (cleaned.length > 0) {
         console.log(`[MediaService] 🎯 Cleaned items:`, cleaned)
       }
+      if (errors.length > 0) {
+        console.log(`[MediaService] ❌ Cleanup errors:`, errors)
+      }
+      
+      // Summary of all media processed
+      console.log(`[MediaService] 📊 Cleanup summary: Processed ${allMedia.length} total media items`)
+      const mediaByType = allMedia.reduce((acc, item) => {
+        acc[item.type] = (acc[item.type] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      console.log(`[MediaService] 📊 Media by type:`, mediaByType)
+      
       return { cleaned, errors }
     } catch (error) {
       const errorMsg = `Failed to enumerate media for cleaning: ${error}`
@@ -1872,6 +2015,32 @@ export class MediaService {
           if (Array.isArray(mediaArray)) {
             for (const mediaData of mediaArray) {
               if (mediaData && typeof mediaData === 'object') {
+                // 🔍 CONTAMINATION DEBUG: Check if metadata has YouTube fields for non-YouTube media
+                const hasYouTubeMetadata = !!(
+                  mediaData.metadata?.source === 'youtube' ||
+                  mediaData.metadata?.youtubeUrl ||
+                  mediaData.metadata?.embedUrl ||
+                  mediaData.metadata?.clipStart ||
+                  mediaData.metadata?.clipEnd ||
+                  mediaData.metadata?.isYouTube
+                )
+                
+                if (hasYouTubeMetadata && (mediaData.type !== 'video' && mediaData.type !== 'youtube')) {
+                  console.error('🔍 [CONTAMINATION SOURCE] Found contaminated metadata during project load:', {
+                    mediaId: mediaData.id,
+                    type: mediaData.type,
+                    pageId: pageId,
+                    contaminatedMetadata: mediaData.metadata,
+                    youtubeFields: {
+                      source: mediaData.metadata?.source,
+                      isYouTube: mediaData.metadata?.isYouTube,
+                      clipStart: mediaData.metadata?.clipStart,
+                      clipEnd: mediaData.metadata?.clipEnd,
+                      embedUrl: !!mediaData.metadata?.embedUrl
+                    }
+                  })
+                }
+
                 const mediaItem: MediaItem = {
                   id: mediaData.id,
                   type: mediaData.type || 'image',
@@ -2145,31 +2314,54 @@ export class MediaService {
   
   private getExtension(type: MediaType, mimeType?: string): string {
     // Check MIME type first for more accurate extension
-    if (mimeType) {
+    if (mimeType && mimeType.trim()) {
       const mimeToExt: Record<string, string> = {
+        // Images
         'image/svg+xml': 'svg',
-        'image/png': 'png',
+        'image/png': 'png', 
         'image/jpeg': 'jpg',
         'image/jpg': 'jpg',
         'image/gif': 'gif',
         'image/webp': 'webp',
+        'image/bmp': 'bmp',
+        'image/tiff': 'tiff',
+        // Audio
         'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
         'audio/wav': 'wav',
+        'audio/ogg': 'ogg',
+        'audio/aac': 'aac',
+        'audio/m4a': 'm4a',
+        // Video  
         'video/mp4': 'mp4',
         'video/webm': 'webm',
-        'text/vtt': 'vtt'
+        'video/avi': 'avi',
+        'video/mov': 'mov',
+        'video/quicktime': 'mov',
+        // Captions
+        'text/vtt': 'vtt',
+        'text/srt': 'srt',
+        // Unknown MIME types should not default to bin if we know the MediaType
+        'application/octet-stream': type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : 'bin'
       }
-      const ext = mimeToExt[mimeType]
-      if (ext) return ext
+      const ext = mimeToExt[mimeType.toLowerCase()]
+      if (ext) {
+        console.log(`[MediaService] MIME type "${mimeType}" mapped to extension "${ext}"`)
+        return ext
+      }
+      console.log(`[MediaService] Unknown MIME type "${mimeType}", falling back to MediaType-based extension`)
     }
     
-    // Fallback to type-based extension
+    // Fallback to type-based extension (should avoid .bin for known types)
     switch (type) {
-      case 'image': return 'jpg'
-      case 'video': return 'mp4'
-      case 'audio': return 'mp3'
-      case 'caption': return 'vtt'
-      default: return 'bin'
+      case 'image': return 'jpg' // Default to jpg for images
+      case 'video': return 'mp4' // Default to mp4 for videos
+      case 'audio': return 'mp3' // Default to mp3 for audio
+      case 'caption': return 'vtt' // Default to vtt for captions
+      case 'youtube': return 'json' // YouTube metadata stored as JSON
+      default: 
+        console.warn(`[MediaService] Unknown MediaType "${type}", defaulting to .bin extension`)
+        return 'bin'
     }
   }
 }

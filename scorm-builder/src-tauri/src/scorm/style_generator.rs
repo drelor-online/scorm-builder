@@ -20,12 +20,26 @@ impl<'a> StyleGenerator<'a> {
         Ok(Self { handlebars })
     }
 
-    pub fn generate_main_css(&self, _request: &GenerateScormRequest) -> Result<String, String> {
-        // Currently the CSS is mostly static, but we can inject theme colors etc
+    pub fn generate_main_css(&self, request: &GenerateScormRequest) -> Result<String, String> {
+        // Pass course settings to CSS for font sizes and interface options
+        let font_size = request.font_size.as_ref().map(|s| s.as_str()).unwrap_or("medium");
+        let show_progress = request.show_progress.unwrap_or(true);
+        let show_outline = request.show_outline.unwrap_or(true);
+        let printable = request.printable.unwrap_or(false);
+        
         let data = json!({
             "primary_color": "#8fbb40",
             "secondary_color": "#241f20",
-            "sidebar_width": "200px"
+            "sidebar_width": if show_outline { "200px" } else { "0px" },
+            "font_size": font_size,
+            "show_progress": show_progress,
+            "show_outline": show_outline,
+            "printable": printable,
+            "base_font_size": match font_size {
+                "small" => "14px",
+                "large" => "18px",
+                _ => "16px" // medium
+            }
         });
 
         self.handlebars

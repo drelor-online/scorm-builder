@@ -62,7 +62,7 @@ export interface Media {
   id: string
   url: string
   title: string
-  type: 'image' | 'video' | 'audio' | 'caption'
+  type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
   thumbnail?: string
   embedUrl?: string
   photographer?: string

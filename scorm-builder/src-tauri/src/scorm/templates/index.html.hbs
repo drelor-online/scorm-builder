@@ -18,6 +18,12 @@
     <!-- Alert Container -->
     <div id="scorm-alert-container"></div>
     
+    <!-- Auto-save Indicator -->
+    <div id="auto-save-indicator" class="auto-save-indicator">
+        <span class="icon">💾</span>
+        <span class="message">Progress saved</span>
+    </div>
+    
     <!-- Modal Dialog Container -->
     <div id="scorm-modal-overlay" class="scorm-modal-overlay">
         <div class="scorm-modal">
@@ -28,7 +34,9 @@
     </div>
     
     <!-- Sidebar -->
-    <nav class="sidebar">
+    {{#if show_outline}}
+    <nav class="sidebar">{{else}}
+    <nav class="sidebar" style="display: none;">{{/if}}
         <div class="sidebar-header">
             <div class="progress-circle-container">
                 <svg class="progress-circle" width="100" height="100">
@@ -54,18 +62,41 @@
     </nav>
     
     <!-- Main Content Area -->
-    <main class="main-area">
+    <main class="main-area{{#unless show_outline}} no-sidebar{{/unless}}">
         <!-- Header -->
         <header class="header">
             <h1>{{course_title}}</h1>
             
             <!-- Header Toolbar -->
             <div class="header-toolbar">
+                <!-- Time Limit Countdown (only shown when timeLimit > 0) -->
+                <div id="time-limit-display" class="time-limit-display" style="display: none;">
+                    <span class="timer-icon">⏰</span>
+                    <span class="timer-text">Time remaining: <span id="time-remaining">--:--</span></span>
+                </div>
+                
+                <!-- Minimum Time Progress (only shown when minimumTimeSpent > 0) -->
+                <div id="minimum-time-display" class="minimum-time-display" style="display: none;">
+                    <span class="timer-icon">📊</span>
+                    <span class="progress-text">Progress: <span id="time-progress">0%</span></span>
+                    <div class="progress-bar">
+                        <div id="time-progress-fill" class="progress-fill"></div>
+                    </div>
+                </div>
+                
                 <!-- Audio Autoplay Toggle -->
                 <button class="audio-autoplay-toggle" onclick="toggleAudioAutoplay()" title="Toggle audio autoplay">
                     <span class="autoplay-icon">🔊</span>
                     <span class="autoplay-label">Autoplay</span>
                 </button>
+                
+                <!-- Print Button (only shown when printable is enabled) -->
+                {{#if printable}}
+                <button class="print-button" onclick="printCourse()" title="Print Course">
+                    <span class="print-icon">🖨️</span>
+                    <span class="print-label">Print</span>
+                </button>
+                {{/if}}
                 
                 <!-- Exit Course Button -->
                 <button class="exit-course-button" onclick="exitCourse()" title="Exit Course">

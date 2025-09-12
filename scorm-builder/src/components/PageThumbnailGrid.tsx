@@ -15,21 +15,21 @@ interface PageThumbnailGridProps {
   onPageSelect: (pageId: string) => void
 }
 
-// Media Preview Component - Simplified approach using mediaItems[0]
+// Media Preview Component - Enhanced with YouTube metadata fetching
 const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo(({ page, mediaItems }) => {
-  const { createBlobUrl } = useUnifiedMedia()
+  const { createBlobUrl, getMedia } = useUnifiedMedia()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
-  // Simplified - no retry logic needed
+  const [enrichedMetadata, setEnrichedMetadata] = useState<Map<string, any>>(new Map())
   
   useEffect(() => {
     const loadMedia = async () => {
       if (!page.id || !mediaItems.length) return
       
+      // Get first media reference
+      const firstMediaRef = mediaItems[0]
+      
       // Clear previous media URL to avoid showing stale content
       setMediaUrl(null)
-      
-      // Use mediaItems[0] as specified - much simpler approach
-      const firstMediaRef = mediaItems[0]
       
       console.log(`[PageThumbnailGrid] Processing first media item for page ${page.id}:`, {
         id: firstMediaRef.id,
@@ -37,11 +37,12 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
         storageId: firstMediaRef.storageId,
         isYouTube: firstMediaRef.metadata?.isYouTube,
         url: firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl,
-        hasAllProperties: !!(firstMediaRef.id && firstMediaRef.type)
+        hasAllProperties: !!(firstMediaRef.id && firstMediaRef.type),
+        fullMetadata: firstMediaRef.metadata
       })
       
       if (firstMediaRef) {
-        // Check if it's a YouTube video - simplified logic
+        // Check if it's a YouTube video
         const isYouTubeVideo = (
           firstMediaRef.type === 'youtube' ||
           firstMediaRef.type === 'video' && (
@@ -52,16 +53,73 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
         
         if (isYouTubeVideo) {
           // YouTube → thumbnail via img.youtube.com/vi/ID/hqdefault.jpg
-          const youtubeUrl = firstMediaRef.metadata?.youtubeUrl || firstMediaRef.metadata?.embedUrl
+          // Try multiple metadata locations for YouTube URL
+          let youtubeUrl = firstMediaRef.metadata?.youtubeUrl || 
+                          firstMediaRef.metadata?.embedUrl ||
+                          firstMediaRef.metadata?.url ||
+                          firstMediaRef.url
+          
+          console.log('[PageThumbnailGrid] YouTube URL extraction (initial):', {
+            youtubeUrl: firstMediaRef.metadata?.youtubeUrl,
+            embedUrl: firstMediaRef.metadata?.embedUrl,
+            metadataUrl: firstMediaRef.metadata?.url,
+            directUrl: firstMediaRef.url,
+            selectedUrl: youtubeUrl
+          })
+          
+          // If no YouTube URL found in basic metadata, fetch enriched metadata via context
+          if (!youtubeUrl) {
+            console.log('[PageThumbnailGrid] 🔄 Fetching enriched YouTube metadata for:', firstMediaRef.id)
+            
+            try {
+              // Check if we already have enriched metadata cached
+              const cachedMetadata = enrichedMetadata.get(firstMediaRef.id)
+              let enrichedData = cachedMetadata
+              
+              if (!enrichedData) {
+                console.log('[PageThumbnailGrid] 📡 Calling getMedia() from context for enrichment...')
+                enrichedData = await getMedia(firstMediaRef.id)
+                
+                if (enrichedData) {
+                  // Cache the enriched metadata
+                  setEnrichedMetadata(prev => new Map(prev.set(firstMediaRef.id, enrichedData)))
+                  console.log('[PageThumbnailGrid] ✅ Cached enriched metadata for:', firstMediaRef.id)
+                }
+              } else {
+                console.log('[PageThumbnailGrid] 📦 Using cached enriched metadata for:', firstMediaRef.id)
+              }
+              
+              if (enrichedData?.metadata) {
+                // Extract YouTube URL from enriched metadata
+                youtubeUrl = enrichedData.metadata.youtubeUrl || 
+                            enrichedData.metadata.embedUrl ||
+                            enrichedData.url
+                
+                console.log('[PageThumbnailGrid] 🎬 Enriched YouTube metadata extracted:', {
+                  enrichedYoutubeUrl: enrichedData.metadata.youtubeUrl,
+                  enrichedEmbedUrl: enrichedData.metadata.embedUrl,
+                  enrichedDirectUrl: enrichedData.url,
+                  finalUrl: youtubeUrl
+                })
+              }
+            } catch (error) {
+              console.error('[PageThumbnailGrid] ❌ Failed to fetch enriched YouTube metadata:', error)
+            }
+          }
+          
           if (youtubeUrl) {
             const videoIdMatch = youtubeUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
             if (videoIdMatch) {
               const videoId = videoIdMatch[1]
               const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-              console.log('[PageThumbnailGrid] Setting YouTube thumbnail:', thumbnailUrl)
+              console.log('[PageThumbnailGrid] 🎯 Setting YouTube thumbnail:', thumbnailUrl)
               setMediaUrl(thumbnailUrl)
               return
+            } else {
+              console.warn('[PageThumbnailGrid] Could not extract video ID from YouTube URL:', youtubeUrl)
             }
+          } else {
+            console.warn('[PageThumbnailGrid] No YouTube URL found in metadata for video:', firstMediaRef.id)
           }
         } else {
           // For all other media, call createBlobUrl(first.storageId || first.id)
@@ -90,10 +148,10 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
     return () => {
       // No cleanup needed for simplified approach
     }
-  }, [page.id, mediaItems, createBlobUrl])
+  }, [page.id, mediaItems, createBlobUrl, getMedia, enrichedMetadata])
   
-  // Check for video in media items passed as props
-  const hasVideo = mediaItems.some(m => m.type === 'video')
+  // Check for video in media items passed as props - include YouTube videos
+  const hasVideo = mediaItems.some(m => m.type === 'video' || m.type === 'youtube')
   
   if (!mediaUrl) {
     return (
@@ -196,12 +254,12 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     }
   }, [allPages, getValidMediaForPage])
   
-  // Helper to get media count (only image/video, not audio/captions) - memoized
+  // Helper to get media count (only image/video/youtube, not audio/captions) - memoized
   const getMediaCount = useCallback((page: Page | Topic): number => {
     // Get media from memoized map instead of calling getMediaForPage repeatedly
     const mediaItems = pageMediaMap.get(page.id) || []
-    // Only count image and video media types for enhancement purposes
-    return mediaItems.filter(m => m.type === 'image' || m.type === 'video').length
+    // Only count image, video, and YouTube media types for enhancement purposes
+    return mediaItems.filter(m => m.type === 'image' || m.type === 'video' || m.type === 'youtube').length
   }, [pageMediaMap])
 
   // Helper to check if page has media - memoized

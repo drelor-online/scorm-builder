@@ -28,7 +28,7 @@ export interface EnhancedCourseContent {
       id: string
       url: string
       title: string
-      type: 'image' | 'video' | 'audio' | 'caption'
+      type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
       embedUrl?: string
       blob?: Blob
       captionUrl?: string
@@ -51,7 +51,7 @@ export interface EnhancedCourseContent {
       id: string
       url: string
       title: string
-      type: 'image' | 'video' | 'audio' | 'caption'
+      type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
       embedUrl?: string
       blob?: Blob
       captionUrl?: string
@@ -72,7 +72,7 @@ export interface EnhancedCourseContent {
       id: string
       url: string
       title: string
-      type: 'image' | 'video' | 'audio' | 'caption'
+      type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
       embedUrl?: string
       blob?: Blob
       captionUrl?: string
@@ -115,7 +115,7 @@ export interface EnhancedCourseContent {
       id: string
       url: string
       title: string
-      type: 'image' | 'video' | 'audio' | 'caption'
+      type: 'image' | 'video' | 'audio' | 'caption' | 'youtube'
       embedUrl?: string
       blob?: Blob
       captionUrl?: string

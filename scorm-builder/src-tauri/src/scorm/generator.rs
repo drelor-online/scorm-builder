@@ -524,12 +524,12 @@ mod tests {
                 scorm_version: None,
             },
             media_files: vec![],
-            generated_files: vec![],
+            generated_files: crate::scorm::test_helpers::create_test_generated_files(),
         };
 
         let result = generate_scorm_package(request).await;
 
-        // This should fail until we implement the function
+        // This should succeed with proper generated files
         assert!(result.is_ok(), "SCORM generation should succeed");
 
         let scorm_result = result.unwrap();
@@ -561,7 +561,7 @@ mod tests {
                 scorm_version: None,
             },
             media_files: vec![],
-            generated_files: vec![],
+            generated_files: crate::scorm::test_helpers::create_test_generated_files(),
         };
 
         let result = generate_scorm_package(request).await;
