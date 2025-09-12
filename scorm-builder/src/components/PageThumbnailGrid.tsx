@@ -228,6 +228,12 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   // Load media for all pages when allPages changes
   useEffect(() => {
     const loadMediaForAllPages = async () => {
+      // Add safety check for getValidMediaForPage
+      if (!getValidMediaForPage) {
+        console.warn('[PageThumbnailGrid] getValidMediaForPage not available yet')
+        return
+      }
+      
       const newMap = new Map<string, any[]>()
       
       // Load media for each page using defensive filtering
@@ -252,7 +258,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     if (allPages.length > 0) {
       loadMediaForAllPages()
     }
-  }, [allPages, getValidMediaForPage])
+  }, [allPages]) // FIXED: Removed getValidMediaForPage to prevent infinite loop
   
   // Helper to get media count (only image/video/youtube, not audio/captions) - memoized
   const getMediaCount = useCallback((page: Page | Topic): number => {
