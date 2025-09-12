@@ -1822,6 +1822,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     if (!currentPage) return
     
+    // Add safety checks for context functions to prevent errors during renders
+    if (!getValidMediaForPage || !populateFromCourseContent || !createBlobUrl) {
+      console.warn('[MediaEnhancement] Context functions not available yet, skipping media load')
+      return
+    }
+    
     const pageId = getPageId(currentPage)
     console.log('[MediaEnhancement] Loading media for page:', pageId)
     
@@ -2022,7 +2028,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     setIsLoadingMedia(false)
     setLoadingProgress({ current: 0, total: 0 })
-  }, [currentPageIndex, courseContent, getValidMediaForPage, populateFromCourseContent, createBlobUrl])
+  }, [currentPageIndex, courseContent]) // FIXED: Removed function deps to prevent infinite loop
   
   // Load existing media on mount and page change
   useEffect(() => {
