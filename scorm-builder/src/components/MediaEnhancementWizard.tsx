@@ -3159,11 +3159,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }, [onNext, resetDirty, getCurrentPage, existingPageMedia])
 
+  // RENDER FIX: Filter to visual media only to prevent empty src warnings for audio/caption
+  const visualMedia = useMemo(
+    () => (existingPageMedia || []).filter(m => m.type === 'image' || m.type === 'video'),
+    [existingPageMedia]
+  )
+
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const renderedExistingMedia = useMemo(() => {
-    console.log('[MediaEnhancement] 🎨 Rendering existing media items:', {
-      count: existingPageMedia.length,
-      items: existingPageMedia.map(media => ({
+    console.log('[MediaEnhancement] 🎨 Rendering visual media items only:', {
+      totalCount: existingPageMedia.length,
+      visualCount: visualMedia.length,
+      filteredTypes: visualMedia.map(m => m.type),
+      items: visualMedia.map(media => ({
         id: media.id,
         type: media.type,
         title: media.title,
@@ -3177,7 +3185,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       }))
     })
     
-    return existingPageMedia.map((media) => (
+    return visualMedia.map((media) => (
       <div 
         key={media.id} 
         className={styles.mediaItem}
@@ -3218,24 +3226,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               )
             })()
           ) : (
-            // Regular image or other media
+            // Regular image (only render <img> when a non-empty URL exists)
             <div className={styles.mediaItemInner}>
-              {blobUrls.has(media.storageId || media.id) ? (
-                <img
-                  src={blobUrls.get(media.storageId || media.id)}
-                  alt={media.title || 'Media'}
-                  className={styles.mediaThumbnail}
-                  onError={(e) => {
-                    console.log('[MediaEnhancement] Media thumbnail failed to load')
-                    const target = e.target as HTMLImageElement
-                    target.style.display = 'none'
-                  }}
-                />
-              ) : (
-                <div className={styles.mediaPlaceholder}>
-                  <span>Loading...</span>
-                </div>
-              )}
+              {(() => {
+                const id = media.storageId || media.id
+                const url = id ? blobUrls.get(id) : undefined
+                return url ? (
+                  <img
+                    src={url}                // <-- guaranteed non-empty here
+                    alt={media.title || 'Media'}
+                    className={styles.mediaThumbnail}
+                    onError={(e) => {
+                      console.log('[MediaEnhancement] Media thumbnail failed to load:', url)
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  <div className={styles.mediaPlaceholder}>
+                    <span>Loading...</span>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -3345,7 +3357,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
 
       </div>
     ))
-  }, [existingPageMedia, blobUrls, handleMediaClick, setLightboxMedia, setStartText, setEndText, setClipStart, setClipEnd, setIsLightboxOpen, formatSecondsToTime, styles])
+  }, [visualMedia, blobUrls, handleMediaClick, setLightboxMedia, setStartText, setEndText, setClipStart, setClipEnd, setIsLightboxOpen, formatSecondsToTime, styles])
 
   return (
     <PageLayout
@@ -3457,8 +3469,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               </Card>
             )}
             
-            {/* Existing Media */}
-            {!isLoadingMedia && existingPageMedia.length > 0 && (
+            {/* Existing Visual Media */}
+            {!isLoadingMedia && visualMedia.length > 0 && (
             <Card className={styles.mediaCard}>
               <h3 className={styles.mediaTitle}>Current Media</h3>
               <div className={styles.mediaGrid}>
@@ -3467,8 +3479,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             </Card>
           )}
           
-          {/* Show "No media" message when page has no media */}
-          {existingPageMedia.length === 0 && (
+          {/* Show "No media" message when page has no visual media */}
+          {visualMedia.length === 0 && (
             <Card className={styles.noMediaCard}>
               <h3 className={styles.cardTitle}>Current Media</h3>
               <div className={styles.noMediaMessage}>
