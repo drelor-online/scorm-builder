@@ -232,7 +232,7 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   // State to track media data for all pages (async loading)
   const [pageMediaMap, setPageMediaMap] = useState<Map<string, any[]>>(new Map())
   
-  // Load media for all pages when allPages changes
+  // PERFORMANCE OPTIMIZATION: Batch load media with reduced priority  
   useEffect(() => {
     const loadMediaForAllPages = async () => {
       // Add safety check for getValidMediaForPage
@@ -241,32 +241,46 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
         return
       }
       
+      console.log(`[PageThumbnailGrid] Loading media for ${allPages.length} pages with lightweight fetching`)
+      
       const newMap = new Map<string, any[]>()
       
-      // Load media for each page using defensive filtering
-      const mediaPromises = allPages.map(async (page) => {
-        try {
-          const mediaItems = await getValidMediaForPage(page.id, {
-            types: ['image', 'video', 'youtube'],
-            verifyExistence: false
-          }) || []
-          return { pageId: page.id, mediaItems }
-        } catch (error) {
-          console.warn(`[PageThumbnailGrid] Failed to load media for page ${page.id}:`, error)
-          return { pageId: page.id, mediaItems: [] }
+      // PERFORMANCE OPTIMIZATION: Process pages in smaller batches to avoid blocking UI
+      const batchSize = 5
+      for (let i = 0; i < allPages.length; i += batchSize) {
+        const batch = allPages.slice(i, i + batchSize)
+        
+        const batchPromises = batch.map(async (page) => {
+          try {
+            const mediaItems = await getValidMediaForPage(page.id, {
+              types: ['image', 'video', 'youtube'],
+              verifyExistence: false
+            }) || []
+            return { pageId: page.id, mediaItems }
+          } catch (error) {
+            console.warn(`[PageThumbnailGrid] Failed to load media for page ${page.id}:`, error)
+            return { pageId: page.id, mediaItems: [] }
+          }
+        })
+        
+        const batchResults = await Promise.all(batchPromises)
+        batchResults.forEach(({ pageId, mediaItems }) => {
+          newMap.set(pageId, mediaItems)
+        })
+        
+        // Small delay between batches to keep UI responsive
+        if (i + batchSize < allPages.length) {
+          await new Promise(resolve => setTimeout(resolve, 10))
         }
-      })
-      
-      const results = await Promise.all(mediaPromises)
-      results.forEach(({ pageId, mediaItems }) => {
-        newMap.set(pageId, mediaItems)
-      })
+      }
       
       setPageMediaMap(newMap)
+      console.log(`[PageThumbnailGrid] Completed loading media for ${allPages.length} pages`)
     }
     
     if (allPages.length > 0) {
-      loadMediaForAllPages()
+      // Add slight delay to let other critical operations complete first
+      setTimeout(() => loadMediaForAllPages(), 100)
     }
   }, [allPages]) // FIXED: Removed getValidMediaForPage to prevent infinite loop
   

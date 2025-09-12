@@ -2086,11 +2086,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           return
         }
         
-        console.log(`[MediaEnhancement] Loading ${items.length} media items for page: ${pageId}`)
-        setLoadingProgress({ current: 0, total: items.length })
+        // PERFORMANCE OPTIMIZATION: Filter to visual items only for progress calculation
+        const visualItems = items.filter(item => 
+          item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+        )
+        
+        console.log(`[MediaEnhancement] Loading ${visualItems.length} visual items for page: ${pageId} (filtered from ${items.length} total)`)
+        setLoadingProgress({ current: 0, total: visualItems.length })
 
-        // Convert to display format
-        const mediaItems: Media[] = items.map((item, index) => ({
+        // Convert to display format  
+        const mediaItems: Media[] = visualItems.map((item, index) => ({
           id: item.id,
           type: item.type as 'image' | 'video',
           title: (item.metadata?.title || item.metadata?.original_name || `Media ${index + 1}`) as string,
@@ -2107,13 +2112,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           setExistingPageMedia(mediaItems)
         }
 
-        // Load each item with abandonment check
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i]
+        // Load each visual item with abandonment check
+        for (let i = 0; i < visualItems.length; i++) {
+          const item = visualItems[i]
           await createBlobUrl?.(item.id)
           
           if (seq !== loadSeqRef.current) {
-            console.log(`[MediaEnhancement] Abandoning sequence ${seq} at item ${i + 1}/${items.length}`)
+            console.log(`[MediaEnhancement] Abandoning sequence ${seq} at visual item ${i + 1}/${visualItems.length}`)
             return
           }
           

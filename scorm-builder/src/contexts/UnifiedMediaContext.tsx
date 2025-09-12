@@ -62,6 +62,7 @@ export interface UnifiedMediaContextType {
   refreshMedia: () => Promise<void>
   
   // Performance optimization
+  loadingProfile: LoadingProfile
   setLoadingProfile: (profile: LoadingProfile) => void
   
   // Cache management
@@ -101,10 +102,17 @@ async function progressivelyLoadRemainingMedia(
   console.log('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
   
   // Filter out already loaded critical media
-  const remainingMedia = allMedia.filter(item => !criticalMediaIds.includes(item.id))
+  const baseRemainingMedia = allMedia.filter(item => !criticalMediaIds.includes(item.id))
+  
+  // PERFORMANCE OPTIMIZATION: Filter by profile before batching
+  const remainingMedia = profile === 'visual-only'
+    ? baseRemainingMedia.filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube')
+    : baseRemainingMedia
+    
+  console.log(`[ProgressiveLoader] Profile: ${profile}, Filtering ${baseRemainingMedia.length} → ${remainingMedia.length} items`)
   
   if (remainingMedia.length === 0) {
-    console.log('[ProgressiveLoader] ✅ No remaining media to load')
+    console.log('[ProgressiveLoader] ✅ No remaining media to load after profile filtering')
     return
   }
   
@@ -164,22 +172,17 @@ async function progressivelyLoadRemainingMedia(
 function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: LoadingProfile = 'all'): MediaItem[][] {
   const batches: MediaItem[][] = []
   
-  // PERFORMANCE OPTIMIZATION: Filter by loading profile
-  const filteredMedia = profile === 'visual-only'
-    ? remainingMedia.filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube')
-    : remainingMedia
-  
-  console.log(`[ProgressiveLoader] Profile: ${profile}, Filtering ${remainingMedia.length} → ${filteredMedia.length} items`)
+  // NOTE: Profile filtering now happens in progressivelyLoadRemainingMedia before this function is called
   
   // HIGH PRIORITY BATCH: Audio from welcome/objectives (immediate user needs)
-  const highPriority = filteredMedia.filter(item => 
+  const highPriority = remainingMedia.filter(item => 
     item.type === 'audio' && 
     (item.pageId === 'welcome' || item.pageId === 'objectives')
   )
   if (highPriority.length > 0) batches.push(highPriority)
   
   // MEDIUM PRIORITY BATCH: Visual media from early topics (likely to be seen soon)
-  const mediumPriority = filteredMedia.filter(item => 
+  const mediumPriority = remainingMedia.filter(item => 
     !highPriority.includes(item) &&
     (item.type === 'image' || item.type === 'video') &&
     item.pageId?.startsWith('topic-') &&
@@ -188,7 +191,7 @@ function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: Loading
   if (mediumPriority.length > 0) batches.push(mediumPriority)
   
   // AUDIO PRIORITY BATCH: Audio from early topics
-  const audioPriority = filteredMedia.filter(item => 
+  const audioPriority = remainingMedia.filter(item => 
     !highPriority.includes(item) &&
     item.type === 'audio' &&
     item.pageId?.startsWith('topic-') &&
@@ -197,7 +200,7 @@ function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: Loading
   if (audioPriority.length > 0) batches.push(audioPriority)
   
   // LOW PRIORITY BATCH: Everything else (later topics, captions, etc.)
-  const lowPriority = filteredMedia.filter(item => 
+  const lowPriority = remainingMedia.filter(item => 
     !highPriority.includes(item) &&
     !mediumPriority.includes(item) &&
     !audioPriority.includes(item)
@@ -1139,6 +1142,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     populateFromCourseContent,
     cleanContaminatedMedia,
     setCriticalMediaLoadingCallback: setCriticalMediaLoadingCallback,
+    loadingProfile,
     setLoadingProfile
   }), [
     storeMedia,
