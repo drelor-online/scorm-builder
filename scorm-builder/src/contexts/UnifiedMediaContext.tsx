@@ -822,57 +822,45 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     pageId: string, 
     opts?: { types?: Array<'image' | 'video' | 'youtube'>; verifyExistence?: boolean }
   ): Promise<MediaItem[]> => {
-    // 🔍 DEBUG: Log all cache contents for debugging page association issues
-    const allCachedItems = Array.from(mediaCache.values())
-    console.log(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - DEBUG INFO:`)
-    console.log(`   Total cached items: ${allCachedItems.length}`)
-    console.log(`   All cached item IDs and pages:`, allCachedItems.map(item => ({
-      id: item.id,
-      type: item.type,
-      pageId: item.pageId,
-      fileName: item.fileName,
-      hasMetadata: !!item.metadata,
-      metadataPageId: item.metadata?.pageId,
-      metadataKeys: item.metadata ? Object.keys(item.metadata) : []
-    })))
-    
     // Apply page ID mapping for learning objectives (same logic as rustScormGenerator)
     const normalizedPageIds = [pageId]
     if (pageId === 'learning-objectives' || pageId === 'content-1') {
       normalizedPageIds.push('objectives') // Also match 'objectives' pageId
-      console.log(`🔧 [UnifiedMediaContext] Applied page ID mapping: '${pageId}' → also searching for 'objectives'`)
     } else if (pageId === 'objectives') {
       normalizedPageIds.push('learning-objectives', 'content-1') // Also match these variations
-      console.log(`🔧 [UnifiedMediaContext] Applied page ID mapping: '${pageId}' → also searching for 'learning-objectives', 'content-1'`)
     }
     
     const allMediaForPage = Array.from(mediaCache.values()).filter(item => 
       normalizedPageIds.includes(item.pageId)
     )
-    console.log(`   Items matching pageId '${pageId}': ${allMediaForPage.length}`)
-    if (allMediaForPage.length > 0) {
-      console.log(`   Matching items:`, allMediaForPage.map(item => ({
-        id: item.id,
-        type: item.type,
-        pageId: item.pageId
-      })))
-    }
     
-    // PERFORMANCE OPTIMIZATION: Apply optional filtering
+    // PERFORMANCE OPTIMIZATION: Apply type filtering early to minimize processing
     let filteredMediaForPage = allMediaForPage
     
-    // Filter by media types if specified
+    // Filter by media types if specified - EARLY FILTERING for performance
     if (opts?.types && opts.types.length > 0) {
       filteredMediaForPage = allMediaForPage.filter(item => 
         opts.types!.includes(item.type as 'image' | 'video' | 'youtube')
       )
-      console.log(`🔧 [UnifiedMediaContext] Type filtering: ${allMediaForPage.length} → ${filteredMediaForPage.length} items (types: ${opts.types.join(', ')})`)
+      console.log(`🔧 [UnifiedMediaContext] Visual-only filtering: ${allMediaForPage.length} → ${filteredMediaForPage.length} items (types: ${opts.types.join(', ')}) for page ${pageId}`)
     }
     
-    // Early return if no existence verification needed (lightweight mode)
+    // LIGHTWEIGHT MODE: Early return if no existence verification needed
+    // This prevents expensive getMedia() calls for audio/caption files during Media step
     if (opts?.verifyExistence === false) {
-      logger.log(`[UnifiedMediaContext] Lightweight mode: Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
+      console.log(`🚀 [UnifiedMediaContext] Lightweight mode: Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
       return filteredMediaForPage
+    }
+    
+    // DEBUG logging (only when not in lightweight mode to reduce noise)
+    console.log(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - Full verification mode:`)
+    console.log(`   Items matching pageId '${pageId}': ${allMediaForPage.length}`)
+    if (filteredMediaForPage.length > 0) {
+      console.log(`   Filtered items:`, filteredMediaForPage.map(item => ({
+        id: item.id,
+        type: item.type,
+        pageId: item.pageId
+      })))
     }
     
     // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items

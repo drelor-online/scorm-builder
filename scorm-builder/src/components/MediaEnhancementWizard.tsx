@@ -1866,8 +1866,11 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Get media items for the current page (using defensive version)
     let pageMediaItems: Media[] = []
     try {
-      // DEFENSIVE FIX: Use getValidMediaForPage to filter out orphaned media references
-      const result = await getValidMediaForPage(pageId)
+      // PERFORMANCE FIX: Use lightweight visual-only mode to prevent audio/caption loading
+      const result = await getValidMediaForPage(pageId, { 
+        types: ['image', 'video', 'youtube'], 
+        verifyExistence: false 
+      })
       pageMediaItems = result as unknown as Media[]
       
       // Ensure it's always an array
@@ -2078,7 +2081,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         if (pageMediaFromCourseContent.length > 0) {
           await populateFromCourseContent?.(pageMediaFromCourseContent, pageId)
         }
-        const items = await getValidMediaForPage?.(pageId) ?? []
+        const items = await getValidMediaForPage?.(pageId, { 
+          types: ['image', 'video', 'youtube'], 
+          verifyExistence: false 
+        }) ?? []
 
         // Abandon if newer run started
         if (seq !== loadSeqRef.current) {
@@ -2339,7 +2345,10 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Check if there's existing media on the current page
     const currentPage = getCurrentPage()
     const pageId = getPageId(currentPage!)
-    const existingMedia = await getValidMediaForPage(pageId)
+    const existingMedia = await getValidMediaForPage(pageId, { 
+      types: ['image', 'video', 'youtube'], 
+      verifyExistence: false 
+    })
     
     if (results.length > 0) {
       // Store uploaded media and open lightbox for preview
@@ -3209,12 +3218,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         onClick={() => handleMediaClick(media.id)}
       >
         <div className={styles.mediaThumbnailContainer}>
-          {media.type === 'video' && media.isYouTube && media.url ? (
-            // YouTube video thumbnail
+          {media.type === 'video' && media.isYouTube ? (
+            // YouTube video thumbnail - enhanced with URL fallback logic
             (() => {
-              const videoIdMatch = media.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
+              // Try multiple URL locations for YouTube URL (same logic as PageThumbnailGrid)
+              // Media interface has direct properties, not nested metadata
+              const youtubeUrl = (media as any).youtubeUrl || 
+                                media.embedUrl ||
+                                media.url
+              
+              const videoIdMatch = youtubeUrl?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
               const videoId = videoIdMatch ? videoIdMatch[1] : null
-              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+              const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null
+              
+              console.log('[MediaEnhancement] YouTube thumbnail extraction:', {
+                mediaId: media.id,
+                youtubeUrl: (media as any).youtubeUrl,
+                embedUrl: media.embedUrl,
+                directUrl: media.url,
+                selectedUrl: youtubeUrl,
+                videoId,
+                thumbnailUrl
+              })
               
               return thumbnailUrl ? (
                 <div className={styles.mediaItemInner}>
