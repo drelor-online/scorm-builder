@@ -103,6 +103,7 @@ interface AppProps {
   onBackToDashboard?: () => void
   pendingProjectId?: string | null
   onPendingProjectHandled?: () => void
+  skipInitialLoad?: boolean
 }
 
 // Stable empty objects to prevent unnecessary projectData recalculations
@@ -114,7 +115,7 @@ const EMPTY_CUSTOM_TOPICS: string[] = []
 let loadProjectCallCount = 0
 
 // Inner component that uses StepNavigationContext
-function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled }: AppProps) {
+function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled, skipInitialLoad }: AppProps) {
   const storage = useStorage()
   const navigation = useStepNavigation()
   const { hasUnsavedChanges, resetAll: resetAllUnsavedChanges, markDirty } = useUnsavedChanges()
@@ -377,6 +378,53 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (loadProjectCallCount > 3) {
       console.error('[ERROR] loadProject called too many times! This indicates an infinite loop.')
       console.trace('Stack trace for excessive loadProject calls')
+      return
+    }
+    
+    // COORDINATION FIX: Skip initial loading if Dashboard has already handled the coordination
+    if (skipInitialLoad && storage.currentProjectId) {
+      debugLogger.info('App.loadProject', 'Skipping initial load - Dashboard coordination handled loading', {
+        currentProjectId: storage.currentProjectId,
+        skipInitialLoad
+      })
+      
+      // Still need to load data silently in background without showing loading overlay
+      // This ensures App has the data it needs without showing duplicate loading UI
+      const loadDataSilently = async () => {
+        try {
+          debugLogger.info('App.loadProject', 'Loading project data silently after coordination')
+          
+          // Load course seed data
+          const seedData = await storage.getCourseSeedData()
+          if (seedData) {
+            if (seedData && typeof seedData === 'object' && 'data' in seedData && typeof seedData.data === 'object') {
+              setCourseSeedData(seedData.data as CourseSeedData)
+            } else {
+              setCourseSeedData(seedData as CourseSeedData)
+            }
+          }
+          
+          // Load course content
+          const content = await storage.getCourseContent()
+          if (content) {
+            if (content && typeof content === 'object' && 'data' in content && typeof content.data === 'object') {
+              setCourseContent(content.data as CourseContent)
+            } else {
+              setCourseContent(content as CourseContent)
+            }
+          }
+          
+          // Mark as loaded to prevent future duplicate loads
+          hasLoadedProjectRef.current = storage.currentProjectId
+          
+          debugLogger.info('App.loadProject', 'Silent data loading completed')
+        } catch (error) {
+          debugLogger.error('App.loadProject', 'Failed to load data silently after coordination', error)
+        }
+      }
+      
+      // Don't await - let it load in background
+      loadDataSilently()
       return
     }
     

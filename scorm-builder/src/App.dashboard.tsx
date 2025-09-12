@@ -403,6 +403,7 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
             onBackToDashboard={handleBackToDashboard}
             pendingProjectId={pendingProjectId}
             onPendingProjectHandled={() => setPendingProjectId(null)}
+            skipInitialLoad={true}
           />
         </UnifiedMediaProvider>
       ) : (
@@ -410,6 +411,7 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
           onBackToDashboard={handleBackToDashboard}
           pendingProjectId={pendingProjectId}
           onPendingProjectHandled={() => setPendingProjectId(null)}
+          skipInitialLoad={false}
         />
       )}
       
