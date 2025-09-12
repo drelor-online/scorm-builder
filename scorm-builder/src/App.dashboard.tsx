@@ -182,17 +182,16 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
     
     // Close overlay as soon as we have clear evidence the project is ready
     // This prevents getting stranded on React state update timing issues
-    if (storage.currentProjectId || storage.currentProject) {
+    if (storage.currentProjectId) {
       console.log('[Dashboard] 🔐 Safety trigger: Project data detected, closing overlay', {
         hasCurrentProjectId: !!storage.currentProjectId,
-        hasCurrentProject: !!storage.currentProject,
         loadingProgress: loadingProgress.percent
       })
       setIsLoadingProject(false)
       isLoadingRef.current = false
       showInfo('Project opened successfully')
     }
-  }, [isLoadingProject, storage.currentProjectId, storage.currentProject, loadingProgress.percent])
+  }, [isLoadingProject, storage.currentProjectId, loadingProgress.percent])
   
   const checkForCrashRecovery = async () => {
     try {

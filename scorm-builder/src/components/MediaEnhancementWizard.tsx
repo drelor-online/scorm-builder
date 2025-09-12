@@ -293,6 +293,14 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     currentPageIndexRef.current = currentPageIndex
   }, [currentPageIndex])
   
+  // RENDER LOOP FIX: Page-based gating with sequence tokens to prevent courseContent dependency loops
+  const loadSeqRef = useRef(0)
+  const pageId = useMemo(() => {
+    if (currentPageIndex === 0) return 'welcome'
+    if (currentPageIndex === 1) return 'learning-objectives'  
+    return `topic-${currentPageIndex - 2}`
+  }, [currentPageIndex])
+  
   // Reset video container ready state when preview media changes
   useEffect(() => {
     setVideoContainerReady(false)
@@ -2028,37 +2036,101 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     
     setIsLoadingMedia(false)
     setLoadingProgress({ current: 0, total: 0 })
-  }, [currentPageIndex, courseContent]) // FIXED: Removed function deps to prevent infinite loop
+  }, [currentPageIndex]) // RENDER LOOP FIX: Removed courseContent dependency to prevent cleanup writes from restarting loader
   
-  // Load existing media on mount and page change
+  // RENDER LOOP FIX: Page-based loading with sequence tokens to prevent courseContent dependency loops
   useEffect(() => {
+    if (!pageId) return
+    
     // MEDIA CLEARING FIX: Skip loading during clip timing updates to prevent UI flickering
     if (isUpdatingClipTimingRef.current) {
-      console.log('[MediaEnhancement] Skipping loadExistingMedia during clip timing update')
+      console.log('[MediaEnhancement] Skipping media load during clip timing update')
       return
     }
+    
+    const seq = ++loadSeqRef.current
+    console.log(`[MediaEnhancement] Starting load sequence ${seq} for page: ${pageId}`)
+
+    // Cancel previous run and start fresh
+    setIsLoadingMedia(true)
+    setLoadingProgress({ current: 0, total: 0 })
     
     // Clear enriched metadata cache when page changes to prevent stale data
     enrichedMetadataCacheRef.current.clear()
     console.log('[MediaEnhancement] Cleared enriched metadata cache for page change')
-    
-    loadExistingMedia()
+
+    ;(async () => {
+      try {
+        // Ensure cache is populated first
+        const pageMediaFromCourseContent = _getPageMedia(getCurrentPage())
+        if (pageMediaFromCourseContent.length > 0) {
+          await populateFromCourseContent?.(pageMediaFromCourseContent, pageId)
+        }
+        const items = await getValidMediaForPage?.(pageId) ?? []
+
+        // Abandon if newer run started
+        if (seq !== loadSeqRef.current) {
+          console.log(`[MediaEnhancement] Abandoning sequence ${seq} (current: ${loadSeqRef.current})`)
+          return
+        }
+        
+        console.log(`[MediaEnhancement] Loading ${items.length} media items for page: ${pageId}`)
+        setLoadingProgress({ current: 0, total: items.length })
+
+        // Convert to display format
+        const mediaItems: Media[] = items.map((item, index) => ({
+          id: item.id,
+          type: item.type as 'image' | 'video',
+          title: (item.metadata?.title || item.metadata?.original_name || `Media ${index + 1}`) as string,
+          url: '', // Will be populated by createBlobUrl
+          storageId: item.id,
+          isYouTube: item.metadata?.isYouTube || false,
+          embedUrl: item.metadata?.embedUrl,
+          clipStart: (item.metadata?.clipStart || item.metadata?.clip_start) as number | undefined,
+          clipEnd: (item.metadata?.clipEnd || item.metadata?.clip_end) as number | undefined
+        }))
+
+        // Set the media items first
+        if (seq === loadSeqRef.current) {
+          setExistingPageMedia(mediaItems)
+        }
+
+        // Load each item with abandonment check
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i]
+          await createBlobUrl?.(item.id)
+          
+          if (seq !== loadSeqRef.current) {
+            console.log(`[MediaEnhancement] Abandoning sequence ${seq} at item ${i + 1}/${items.length}`)
+            return
+          }
+          
+          setLoadingProgress(p => ({ current: p.current + 1, total: p.total }))
+        }
+
+        if (seq !== loadSeqRef.current) return
+        
+        console.log(`[MediaEnhancement] Completed load sequence ${seq} for page: ${pageId}`)
+        setIsLoadingMedia(false)
+        
+      } catch (error) {
+        if (seq !== loadSeqRef.current) return
+        console.error(`[MediaEnhancement] Error in load sequence ${seq}:`, error)
+        setIsLoadingMedia(false)
+        setExistingPageMedia([])
+      }
+    })()
     
     // Cleanup when page changes or component unmounts
     return () => {
-      // DO NOT revoke blob URLs here!
-      // They are cached and may be needed when returning to this page
-      // The UnifiedMediaContext manages the blob URL cache globally
-      
       // Only clear blob URLs if we're actually changing pages, not during save operations
-      // This prevents the "Loading..." state after saves
       if (isUpdatingClipTimingRef.current) {
         console.log('[MediaEnhancement] Preserving blob URLs during clip timing update')
       } else {
         setBlobUrls(new Map())
       }
     }
-  }, [loadExistingMedia])
+  }, [pageId]) // Only depend on stable pageId, not courseContent
   
   // Auto-trigger search when suggestion is clicked
   useEffect(() => {

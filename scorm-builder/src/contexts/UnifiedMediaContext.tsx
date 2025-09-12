@@ -12,6 +12,10 @@ import { BlobURLCache } from '../services/BlobURLCache'
 import type { MediaType } from '../utils/idGenerator'
 import { useStorage } from './PersistentStorageContext'
 
+// RENDER LOOP FIX: One-shot contamination warning cache to prevent spam
+// Track media IDs that have already been cleaned to prevent duplicate warnings
+const cleanedOnce = new Set<string>()
+
 export interface UnifiedMediaContextType {
   // Core media operations
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
@@ -845,18 +849,25 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       
       if (hasYouTubeMetadata) {
         contaminatedCount++
-        console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE!`)
-        console.warn(`   Media ID: ${item.id}`)
-        console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
-        console.warn(`   Page: ${pageId}`)
-        console.warn(`   Contaminated fields:`, {
-          source: item.metadata?.source,
-          isYouTube: item.metadata?.isYouTube,
-          hasYouTubeUrl: !!item.metadata?.youtubeUrl,
-          hasEmbedUrl: !!item.metadata?.embedUrl,
-          hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
-        })
-        console.warn('   🔧 This contaminated data will cause UI issues!')
+        
+        // RENDER LOOP FIX: Only warn once per media ID per session to prevent spam
+        if (!cleanedOnce.has(item.id)) {
+          cleanedOnce.add(item.id)
+          console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE!`)
+          console.warn(`   Media ID: ${item.id}`)
+          console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
+          console.warn(`   Page: ${pageId}`)
+          console.warn(`   Contaminated fields:`, {
+            source: item.metadata?.source,
+            isYouTube: item.metadata?.isYouTube,
+            hasYouTubeUrl: !!item.metadata?.youtubeUrl,
+            hasEmbedUrl: !!item.metadata?.embedUrl,
+            hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
+          })
+          console.warn('   🔧 This contaminated data will cause UI issues!')
+        } else {
+          console.log(`🔇 [UnifiedMediaContext] Contamination already reported for ${item.id} (suppressed)`)
+        }
       }
     }
     
