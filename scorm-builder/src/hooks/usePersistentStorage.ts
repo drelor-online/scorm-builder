@@ -83,6 +83,10 @@ export function usePersistentStorage() {
       
       setCurrentProjectId(projectId);
       
+      // RACE CONDITION FIX: Ensure React state update flushes before completion signal
+      // This prevents coordination wrapper from declaring success before currentProjectId is set
+      await Promise.resolve(); // Flush microtask queue to ensure state update propagates
+      
       // Small delay to ensure smooth transition (skip in tests)
       if (!import.meta.env.VITEST) {
         await new Promise(resolve => setTimeout(resolve, 200));

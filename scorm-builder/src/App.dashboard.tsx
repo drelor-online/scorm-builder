@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ProjectDashboard } from './components/ProjectDashboard'
 import { ProjectLoadingDialog } from './components/ProjectLoadingDialog'
 import { PersistentStorageProvider, useStorage } from './contexts/PersistentStorageContext'
@@ -38,6 +38,9 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
     itemsLoaded?: number
     totalItems?: number
   }>({ phase: 'loading', percent: 0, message: 'Initializing...' })
+  
+  // StrictMode protection: Prevent duplicate project loading calls
+  const isLoadingRef = useRef(false)
   
   useEffect(() => {
     // Check if we have a current project
@@ -106,7 +109,15 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
   
   const handleProjectSelected = async (projectId: string) => {
     console.log('[App.dashboard] handleProjectSelected called with:', projectId)
+    
+    // StrictMode protection: Ignore duplicate calls during loading
+    if (isLoadingRef.current) {
+      console.log('[App.dashboard] ⚠️ Ignoring duplicate project loading call (StrictMode protection)')
+      return
+    }
+    
     try {
+      isLoadingRef.current = true
       setIsLoadingProject(true)
       setLoadingProgress({ phase: 'loading', percent: 0, message: 'Initializing...' })
       
@@ -137,6 +148,7 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
       // The dialog will close when progress reaches 100%
       setShowDashboard(false)
     } catch (err: unknown) {
+      isLoadingRef.current = false
       if (err instanceof Error && err.message === 'UNSAVED_CHANGES') {
         // Store the pending project ID to open after saving/discarding
         setPendingProjectId(projectId)
@@ -163,6 +175,24 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
       }, 300)
     }
   }, [isLoadingProject, loadingProgress])
+  
+  // SAFETY: Close overlay if project data is clearly ready (prevents race condition stranding)
+  useEffect(() => {
+    if (!isLoadingProject) return
+    
+    // Close overlay as soon as we have clear evidence the project is ready
+    // This prevents getting stranded on React state update timing issues
+    if (storage.currentProjectId || storage.currentProject) {
+      console.log('[Dashboard] 🔐 Safety trigger: Project data detected, closing overlay', {
+        hasCurrentProjectId: !!storage.currentProjectId,
+        hasCurrentProject: !!storage.currentProject,
+        loadingProgress: loadingProgress.percent
+      })
+      setIsLoadingProject(false)
+      isLoadingRef.current = false
+      showInfo('Project opened successfully')
+    }
+  }, [isLoadingProject, storage.currentProjectId, storage.currentProject, loadingProgress.percent])
   
   const checkForCrashRecovery = async () => {
     try {
