@@ -693,12 +693,18 @@ export class MediaService {
     }
   }
   
+  // 🚀 EFFICIENCY FIX: Add batch-aware media loading to prevent "loading all audio again" 
+  private pendingBatchRequests = new Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>>()
+  private batchRequestTimer: NodeJS.Timeout | null = null
+  private batchResolvers = new Map<string, { resolve: Function, reject: Function }>()
+
   /**
-   * Get media from file system with asset URL
+   * Get media from file system with automatic batching optimization
    * Includes persistent caching for audio files to prevent reloading
+   * 🚀 NEW: Automatically batches concurrent requests to reduce backend calls
    */
   async getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
-    debugLogger.debug('MediaService.getMedia', 'Getting media', { mediaId })
+    debugLogger.debug('MediaService.getMedia', 'Getting media with batch optimization', { mediaId })
     
     // Enhanced debug logging to track caller context
     const stack = new Error().stack
@@ -712,16 +718,203 @@ export class MediaService {
       return existingPromise
     }
     
-    // Create the loading promise and cache it immediately
-    const loadingPromise = this.getMediaInternal(mediaId)
-    this.mediaLoadingPromises.set(mediaId, loadingPromise)
+    // 🚀 BATCH OPTIMIZATION: Check if this request can be batched
+    const batchedPromise = this.pendingBatchRequests.get(mediaId)
+    if (batchedPromise) {
+      console.log(`[MediaService] ⚡ Using batched request for ${mediaId}`)
+      return batchedPromise
+    }
     
-    // Clean up the promise when done (success or failure)
-    loadingPromise.finally(() => {
+    // Add to pending batch and set up batch timer
+    const mediaPromise = new Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>((resolve, reject) => {
+      // Store the resolver for this media ID
+      this.addToBatch(mediaId, resolve, reject)
+    })
+    
+    this.pendingBatchRequests.set(mediaId, mediaPromise)
+    this.mediaLoadingPromises.set(mediaId, mediaPromise)
+    
+    // Clean up when done
+    mediaPromise.finally(() => {
+      this.pendingBatchRequests.delete(mediaId)
       this.mediaLoadingPromises.delete(mediaId)
     })
     
-    return loadingPromise
+    return mediaPromise
+  }
+
+  // 🚀 BATCH PROCESSING: Collect requests and process in batches
+  private addToBatch(mediaId: string, resolve: Function, reject: Function) {
+    this.batchResolvers.set(mediaId, { resolve, reject })
+    
+    // Set up batch processing timer with adaptive timeout based on batch size
+    if (this.batchRequestTimer) {
+      clearTimeout(this.batchRequestTimer)
+    }
+    
+    // 🚀 STARTUP OPTIMIZATION: Use longer timeout for larger batches (startup scenario)
+    const currentBatchSize = this.batchResolvers.size
+    const adaptiveTimeout = this.calculateBatchTimeout(currentBatchSize)
+    
+    console.log(`[MediaService] 📊 Batch size: ${currentBatchSize}, timeout: ${adaptiveTimeout}ms`)
+    this.batchRequestTimer = setTimeout(() => this.processBatch(), adaptiveTimeout)
+  }
+  
+  // 🚀 STARTUP OPTIMIZATION: Calculate optimal batch timeout based on request volume
+  private calculateBatchTimeout(batchSize: number): number {
+    if (batchSize >= 20) {
+      // Startup scenario - use longer timeout to collect more requests
+      console.log('[MediaService] 🚀 STARTUP DETECTED: Using extended batch timeout')
+      return 100 // 100ms for startup batching
+    } else if (batchSize >= 10) {
+      // Medium batch - moderate timeout
+      return 50 // 50ms for medium batches
+    } else {
+      // Small batch - quick timeout
+      return 10 // 10ms for small batches (original behavior)
+    }
+  }
+  
+  // 🚀 PRODUCTION FIX: Robust Tauri environment detection
+  private async detectTauriEnvironment(): Promise<boolean> {
+    try {
+      // Check if we're in Tauri environment by trying to import and use invoke
+      const { invoke } = await import('@tauri-apps/api/core')
+      
+      // Test if invoke actually works by calling a simple command
+      await invoke('get_cli_args')
+      
+      console.log('[MediaService] ✅ Tauri environment detected and working')
+      return true
+    } catch (error) {
+      console.log('[MediaService] ❌ Tauri environment not available:', (error as Error).message)
+      return false
+    }
+  }
+
+  private async processBatch() {
+    const batchIds = Array.from(this.batchResolvers.keys())
+    if (batchIds.length === 0) return
+    
+    console.log(`[MediaService] 🚀 Processing batch of ${batchIds.length} media requests:`, batchIds)
+    
+    try {
+      // 🚀 PRODUCTION FIX: Better Tauri environment detection
+      const isTauriEnvironment = await this.detectTauriEnvironment()
+      
+      if (isTauriEnvironment) {
+        console.log(`[MediaService] ✅ Using Tauri batch operations for ${batchIds.length} items`)
+        await this.processBatchWithTauri(batchIds)
+      } else {
+        console.log(`[MediaService] ⚠️ Tauri not available, falling back to individual processing for ${batchIds.length} items`)
+        // Fallback to individual processing for testing/browser-only environments
+        await this.processBatchFallback(batchIds)
+      }
+    } catch (error) {
+      console.error('[MediaService] Batch processing failed:', error)
+      // Reject all pending requests
+      for (const [mediaId, { reject }] of this.batchResolvers) {
+        reject(error)
+      }
+    } finally {
+      this.batchResolvers.clear()
+      this.batchRequestTimer = null
+    }
+  }
+  
+  private async processBatchWithTauri(batchIds: string[]) {
+    const { invoke } = await import('@tauri-apps/api/core')
+    
+    try {
+      // Use exists check first for ultra-fast filtering
+      const existenceFlags = await invoke<boolean[]>('media_exists_batch', {
+        projectId: this.projectId,
+        mediaIds: batchIds
+      })
+      
+      const existingIds = batchIds.filter((_, index) => existenceFlags[index])
+      const missingIds = batchIds.filter((_, index) => !existenceFlags[index])
+      
+      console.log(`[MediaService] ⚡ BATCH EXISTS CHECK: ${existingIds.length} exist, ${missingIds.length} missing`)
+      
+      // Resolve missing media as null immediately
+      for (const missingId of missingIds) {
+        const resolver = this.batchResolvers.get(missingId)
+        if (resolver) {
+          console.log(`[MediaService] ❌ Media not found: ${missingId}`)
+          resolver.resolve(null)
+          this.batchResolvers.delete(missingId)
+        }
+      }
+      
+      if (existingIds.length === 0) return
+      
+      // Load existing media in batch
+      const mediaDataArray = await invoke<any[]>('get_media_batch', {
+        projectId: this.projectId,
+        mediaIds: existingIds
+      })
+      
+      console.log(`[MediaService] 🚀 BATCH LOADED: ${mediaDataArray.length} media items successfully`)
+      
+      // Process and resolve each media item
+      for (const mediaData of mediaDataArray) {
+        const resolver = this.batchResolvers.get(mediaData.id)
+        if (resolver) {
+          const result = await this.processBatchMediaItem(mediaData)
+          resolver.resolve(result)
+          this.batchResolvers.delete(mediaData.id)
+        }
+      }
+      
+    } catch (error) {
+      console.error('[MediaService] Tauri batch processing failed:', error)
+      // Fall back to individual processing
+      await this.processBatchFallback(batchIds)
+    }
+  }
+  
+  private async processBatchFallback(batchIds: string[]) {
+    console.log(`[MediaService] 🔄 Falling back to individual processing for ${batchIds.length} items`)
+    
+    for (const mediaId of batchIds) {
+      const resolver = this.batchResolvers.get(mediaId)
+      if (resolver) {
+        try {
+          const result = await this.getMediaInternal(mediaId)
+          resolver.resolve(result)
+        } catch (error) {
+          resolver.reject(error)
+        }
+        this.batchResolvers.delete(mediaId)
+      }
+    }
+  }
+  
+  private async processBatchMediaItem(mediaData: any): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
+    if (!mediaData) return null
+    
+    // Convert Rust media data to MediaService format
+    const processedMetadata = this.processMetadata({
+      metadata: mediaData.metadata,
+      data: new Uint8Array(mediaData.data),
+      mediaType: mediaData.metadata.type || mediaData.metadata.media_type
+    })
+    
+    // Store in audio cache if it's audio
+    if (mediaData.id?.startsWith('audio-') || mediaData.id?.includes('audio')) {
+      this.audioDataCache.set(mediaData.id, {
+        data: new Uint8Array(mediaData.data),
+        metadata: processedMetadata
+      })
+      console.log(`[MediaService] ⚡ BATCH: Cached audio data for ${mediaData.id}`)
+    }
+    
+    return {
+      data: new Uint8Array(mediaData.data),
+      metadata: processedMetadata,
+      url: undefined // Will be created by UnifiedMediaContext
+    }
   }
   
   /**

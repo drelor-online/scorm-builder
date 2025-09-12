@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct MediaMetadata {
     pub page_id: String,
     #[serde(rename = "type")]
@@ -193,7 +193,67 @@ pub fn store_media_base64(
         "[media_storage] Storing media {id} from base64 for project {projectId} (extracted: {actual_project_id})"
     );
 
-    // Decode base64 to Vec<u8>
+    // 🚀 EFFICIENCY FIX: Check if media already exists to avoid expensive base64 decoding
+    let data_path = get_media_path(&actual_project_id, &id)?;
+    let metadata_path = get_metadata_path(&actual_project_id, &id)?;
+    
+    if data_path.exists() && metadata_path.exists() {
+        println!("[media_storage] ⚡ EFFICIENCY: Media {} already exists, skipping base64 decode", id);
+        
+        // Verify metadata matches (update if needed)
+        match fs::read_to_string(&metadata_path) {
+            Ok(existing_metadata_json) => {
+                if let Ok(existing_metadata) = serde_json::from_str::<MediaMetadata>(&existing_metadata_json) {
+                    // If metadata is identical, skip entirely
+                    if existing_metadata == metadata {
+                        println!("[media_storage] ⚡ EFFICIENCY: Metadata identical, no work needed");
+                        return Ok(());
+                    } else {
+                        println!("[media_storage] ⚡ EFFICIENCY: Updating metadata only (no base64 decode)");
+                        
+                        // Update metadata without touching binary data (apply same contamination prevention)
+                        let sanitized_metadata = if metadata.source.as_ref().map_or(false, |s| s == "youtube") ||
+                                                      metadata.embed_url.is_some() ||
+                                                      metadata.clip_start.is_some() ||
+                                                      metadata.clip_end.is_some() {
+                            if metadata.media_type != "video" && metadata.media_type != "youtube" {
+                                // Clean contaminated metadata
+                                MediaMetadata {
+                                    page_id: metadata.page_id.clone(),
+                                    media_type: metadata.media_type.clone(),
+                                    original_name: metadata.original_name.clone(),
+                                    mime_type: metadata.mime_type.clone(),
+                                    source: None,
+                                    embed_url: None,
+                                    title: metadata.title.clone(),
+                                    clip_start: None,
+                                    clip_end: None,
+                                }
+                            } else {
+                                metadata.clone()
+                            }
+                        } else {
+                            metadata.clone()
+                        };
+                        let metadata_json = serde_json::to_string_pretty(&sanitized_metadata)
+                            .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
+                        
+                        fs::write(&metadata_path, metadata_json)
+                            .map_err(|e| format!("Failed to update metadata: {e}"))?;
+                        
+                        println!("[media_storage] ⚡ EFFICIENCY: Metadata updated without base64 operations");
+                        return Ok(());
+                    }
+                }
+            }
+            Err(_) => {
+                // If metadata is corrupted, we'll continue with full process
+                println!("[media_storage] Warning: Existing metadata corrupted, proceeding with full store");
+            }
+        }
+    }
+
+    // Only decode base64 if we really need to store new data
     use base64::{engine::general_purpose, Engine as _};
     let data = general_purpose::STANDARD
         .decode(&dataBase64)
@@ -403,6 +463,72 @@ pub fn get_media(
         data,
         metadata,
     })
+}
+
+// 🚀 EFFICIENCY FIX: Batch operation for efficient bulk media loading
+#[tauri::command]
+pub fn get_media_batch(
+    #[allow(non_snake_case)] projectId: String,
+    #[allow(non_snake_case)] mediaIds: Vec<String>,
+) -> Result<Vec<MediaData>, String> {
+    let actual_project_id = extract_project_id(&projectId);
+    println!(
+        "[media_storage] 🚀 BATCH: Getting {} media items efficiently for project {}",
+        mediaIds.len(),
+        actual_project_id
+    );
+    
+    let mut results = Vec::with_capacity(mediaIds.len());
+    let mut successful = 0;
+    let mut failed = 0;
+    
+    for media_id in mediaIds {
+        match get_media(projectId.clone(), media_id.clone()) {
+            Ok(media_data) => {
+                results.push(media_data);
+                successful += 1;
+            }
+            Err(error) => {
+                println!("[media_storage] ⚠️ BATCH: Failed to get media {}: {}", media_id, error);
+                failed += 1;
+                // Continue with other items instead of failing entire batch
+            }
+        }
+    }
+    
+    println!(
+        "[media_storage] 🚀 BATCH: Completed - {} successful, {} failed",
+        successful, failed
+    );
+    
+    Ok(results)
+}
+
+// 🚀 EFFICIENCY FIX: Check if media exists without loading data (ultra-fast existence check)
+#[tauri::command]
+pub fn media_exists_batch(
+    #[allow(non_snake_case)] projectId: String,
+    #[allow(non_snake_case)] mediaIds: Vec<String>,
+) -> Result<Vec<bool>, String> {
+    let actual_project_id = extract_project_id(&projectId);
+    println!(
+        "[media_storage] ⚡ EXISTS_CHECK: Checking existence of {} media items",
+        mediaIds.len()
+    );
+    
+    let results: Vec<bool> = mediaIds.iter().map(|media_id| {
+        let data_path = get_media_path(&actual_project_id, media_id).unwrap_or_default();
+        let metadata_path = get_metadata_path(&actual_project_id, media_id).unwrap_or_default();
+        data_path.exists() && metadata_path.exists()
+    }).collect();
+    
+    let existing_count = results.iter().filter(|&&exists| exists).count();
+    println!(
+        "[media_storage] ⚡ EXISTS_CHECK: {} exist, {} missing",
+        existing_count, mediaIds.len() - existing_count
+    );
+    
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -941,6 +1067,76 @@ mod contamination_prevention_tests {
         println!("✅ [RUST TEST] ROOT CAUSE FIX: Base64 contamination prevention working!");
         
         // Cleanup
+        std::env::remove_var("SCORM_BUILDER_TEST_DIR");
+    }
+}
+
+// Add efficiency tests module
+mod efficiency_test;
+mod batch_operations_test;
+
+#[cfg(test)]
+mod efficiency_integration_tests {
+    use super::*;
+    use base64::{engine::general_purpose, Engine as _};
+    use std::time::Instant;
+    use tempfile::TempDir;
+    
+    // Integration test to verify the efficiency fix works with real backend calls
+    #[test]
+    fn test_efficiency_fix_integration() {
+        let temp_dir = TempDir::new().unwrap();
+        std::env::set_var("SCORM_BUILDER_TEST_DIR", temp_dir.path());
+        
+        let project_id = "efficiency-integration-test";
+        let media_id = "test-efficiency-media";
+        
+        // Create 100KB test data to make timing differences measurable
+        let test_data = vec![42u8; 100 * 1024];
+        let base64_data = general_purpose::STANDARD.encode(&test_data);
+        
+        let metadata = MediaMetadata {
+            page_id: "test-page".to_string(),
+            media_type: "audio".to_string(),
+            original_name: "efficiency-test.mp3".to_string(),
+            mime_type: Some("audio/mp3".to_string()),
+            source: None,
+            embed_url: None,
+            title: None,
+            clip_start: None,
+            clip_end: None,
+        };
+        
+        // First call - should perform full base64 decode and store
+        let start = Instant::now();
+        let result1 = store_media_base64(
+            media_id.to_string(),
+            project_id.to_string(),
+            base64_data.clone(),
+            metadata.clone()
+        );
+        let duration1 = start.elapsed();
+        
+        assert!(result1.is_ok(), "First store should succeed");
+        
+        // Second call - after implementing efficiency fix, should be much faster
+        let start = Instant::now();
+        let result2 = store_media_base64(
+            media_id.to_string(),
+            project_id.to_string(),
+            base64_data,
+            metadata
+        );
+        let duration2 = start.elapsed();
+        
+        assert!(result2.is_ok(), "Second store should succeed");
+        
+        println!("[EFFICIENCY INTEGRATION] First call: {:?}, Second call: {:?}", duration1, duration2);
+        
+        // Verify data integrity
+        let retrieved = get_media(project_id.to_string(), media_id.to_string()).unwrap();
+        assert_eq!(retrieved.data.len(), test_data.len());
+        
         std::env::remove_var("SCORM_BUILDER_TEST_DIR");
     }
 }

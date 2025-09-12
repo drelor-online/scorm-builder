@@ -275,6 +275,19 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     template
   })
   
+  // 🚀 MOUNTING STABILITY FIX: Use refs to capture latest callbacks without triggering re-renders
+  const onSaveRef = useRef(onSave)
+  const markDirtyRef = useRef(markDirty)
+  
+  // Update refs when callbacks change
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+  
+  useEffect(() => {
+    markDirtyRef.current = markDirty  
+  }, [markDirty])
+  
   // Auto-save course metadata when values change
   useEffect(() => {
     // Skip the initial mount
@@ -337,13 +350,15 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
           }
           
           // Mark section as dirty to enable manual save button
-          markDirty('courseSeed')
+          if (markDirtyRef.current) {
+            markDirtyRef.current('courseSeed')
+          }
           
           // Call onSave callback to trigger unified save through App.tsx
           // This ensures both App state synchronization AND storage persistence
           // The parent's handleManualSave will handle the actual storage operation
-          if (onSave) {
-            onSave(seedData)
+          if (onSaveRef.current) {
+            onSaveRef.current(seedData)
             savedSuccessfully = true
           } else {
             // Fallback: if no parent callback, save directly to storage
@@ -380,7 +395,7 @@ export const CourseSeedInput: React.FC<CourseSeedInputProps> = ({
     // Debounce the save (5 seconds to give users more time to type)
     const timer = setTimeout(saveMetadata, 5000)
     return () => clearTimeout(timer)
-  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized, onSave, markDirty])
+  }, [courseTitle, difficulty, customTopics, template, storage?.currentProjectId, storage?.isInitialized]) // 🚀 REMOVED callback dependencies to prevent excessive re-renders
   
   // Wrapped navigation handlers
   const handleStepClick = (stepIndex: number) => {
