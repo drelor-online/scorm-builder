@@ -12,7 +12,7 @@ import { BlobURLCache } from '../services/BlobURLCache'
 import type { MediaType } from '../utils/idGenerator'
 import { useStorage } from './PersistentStorageContext'
 
-interface UnifiedMediaContextType {
+export interface UnifiedMediaContextType {
   // Core media operations
   storeMedia: (file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
   updateMedia: (existingId: string, file: File | Blob, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback) => Promise<MediaItem>
@@ -51,6 +51,10 @@ interface UnifiedMediaContextType {
   
   // Cleanup utilities
   cleanContaminatedMedia: () => Promise<{ cleaned: string[], errors: string[] }>
+  
+  // LOADING COORDINATION: Critical media loading completion callback
+  onCriticalMediaLoaded?: () => void
+  setCriticalMediaLoadingCallback: (callback?: () => void) => void
 }
 
 const UnifiedMediaContext = createContext<UnifiedMediaContextType | null>(null)
@@ -65,6 +69,126 @@ let globalMediaContext: UnifiedMediaContextType | null = null
 
 export function getMediaFromContext() {
   return globalMediaContext
+}
+
+// 🚀 PROGRESSIVE LOADING: Load remaining media in prioritized batches after critical media
+async function progressivelyLoadRemainingMedia(
+  allMedia: MediaItem[],
+  criticalMediaIds: string[],
+  mediaService: MediaService,
+  blobCache: BlobURLCache
+) {
+  console.log('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
+  
+  // Filter out already loaded critical media
+  const remainingMedia = allMedia.filter(item => !criticalMediaIds.includes(item.id))
+  
+  if (remainingMedia.length === 0) {
+    console.log('[ProgressiveLoader] ✅ No remaining media to load')
+    return
+  }
+  
+  console.log(`[ProgressiveLoader] 📋 ${remainingMedia.length} media items to progressively load`)
+  
+  // 🎯 INTELLIGENT PRIORITIZATION ALGORITHM
+  const prioritizedBatches = prioritizeMediaForLoading(remainingMedia)
+  
+  // Load each batch with delays between them
+  for (let i = 0; i < prioritizedBatches.length; i++) {
+    const batch = prioritizedBatches[i]
+    const batchName = getBatchName(i)
+    
+    console.log(`[ProgressiveLoader] 🔄 Loading ${batchName} (${batch.length} items)...`)
+    
+    try {
+      // Load batch in parallel
+      const batchIds = batch.map(item => item.id)
+      const preloadedUrls = await blobCache.preloadMedia(batchIds, async (id) => {
+        const media = await mediaService.getMedia(id)
+        if (!media || !media.data) return null
+        
+        // Determine MIME type
+        let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
+        
+        // Fix common MIME type issues
+        if (media.metadata?.type === 'image' && !mimeType.startsWith('image/')) {
+          mimeType = 'image/jpeg'
+        } else if (media.metadata?.type === 'audio' && !mimeType.startsWith('audio/')) {
+          mimeType = 'audio/mpeg'
+        } else if (media.metadata?.type === 'video' && !mimeType.startsWith('video/')) {
+          mimeType = 'video/mp4'
+        } else if (media.metadata?.type === 'caption') {
+          mimeType = 'text/vtt'
+        }
+        
+        return { data: media.data, mimeType }
+      })
+      
+      const successCount = preloadedUrls.filter(url => url !== null).length
+      console.log(`[ProgressiveLoader] ✅ ${batchName} loaded: ${successCount}/${batch.length} items`)
+      
+    } catch (error) {
+      console.warn(`[ProgressiveLoader] ⚠️ ${batchName} failed:`, error)
+    }
+    
+    // Add delay between batches to not overwhelm the system
+    if (i < prioritizedBatches.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 1000)) // 1s between batches
+    }
+  }
+  
+  console.log('[ProgressiveLoader] 🎉 Progressive loading completed!')
+}
+
+// 🎯 PRIORITIZATION ALGORITHM: Sort media by importance for user experience  
+function prioritizeMediaForLoading(remainingMedia: MediaItem[]): MediaItem[][] {
+  const batches: MediaItem[][] = []
+  
+  // HIGH PRIORITY BATCH: Audio from welcome/objectives (immediate user needs)
+  const highPriority = remainingMedia.filter(item => 
+    item.type === 'audio' && 
+    (item.pageId === 'welcome' || item.pageId === 'objectives')
+  )
+  if (highPriority.length > 0) batches.push(highPriority)
+  
+  // MEDIUM PRIORITY BATCH: Visual media from early topics (likely to be seen soon)
+  const mediumPriority = remainingMedia.filter(item => 
+    !highPriority.includes(item) &&
+    (item.type === 'image' || item.type === 'video') &&
+    item.pageId?.startsWith('topic-') &&
+    getTopicNumber(item.pageId) <= 3 // First 3 topics
+  )
+  if (mediumPriority.length > 0) batches.push(mediumPriority)
+  
+  // AUDIO PRIORITY BATCH: Audio from early topics
+  const audioPriority = remainingMedia.filter(item => 
+    !highPriority.includes(item) &&
+    item.type === 'audio' &&
+    item.pageId?.startsWith('topic-') &&
+    getTopicNumber(item.pageId) <= 5 // First 5 topics
+  )
+  if (audioPriority.length > 0) batches.push(audioPriority)
+  
+  // LOW PRIORITY BATCH: Everything else (later topics, captions, etc.)
+  const lowPriority = remainingMedia.filter(item => 
+    !highPriority.includes(item) &&
+    !mediumPriority.includes(item) &&
+    !audioPriority.includes(item)
+  )
+  if (lowPriority.length > 0) batches.push(lowPriority)
+  
+  return batches
+}
+
+// Helper functions
+function getBatchName(batchIndex: number): string {
+  const names = ['High Priority', 'Medium Priority', 'Audio Priority', 'Low Priority']
+  return names[batchIndex] || `Batch ${batchIndex + 1}`
+}
+
+function getTopicNumber(pageId: string): number {
+  const match = pageId.match(/topic-(\d+)/)
+  return match ? parseInt(match[1], 10) : 999
 }
 
 export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProviderProps) {
@@ -116,6 +240,9 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   // Track media loads to prevent infinite reloading
   const hasLoadedRef = useRef<Set<string>>(new Set())
+  
+  // LOADING COORDINATION: Critical media loading callback
+  const [criticalMediaLoadingCallback, setCriticalMediaLoadingCallback] = useState<(() => void) | undefined>()
   
   // Load initial media list when projectId changes
   useEffect(() => {
@@ -249,54 +376,37 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       console.log(`🔍 [DEBUG] Updated cache with ${allMedia.length} items from MediaService`)
       logger.info('[UnifiedMediaContext] Loaded', allMedia.length, 'media items')
       
-      // PERFORMANCE OPTIMIZATION: Preload all media blob URLs
+      // 🚀 STARTUP PERFORMANCE FIX: Replace aggressive preloading with lazy loading
       if (allMedia.length > 0) {
-        logger.info('[UnifiedMediaContext] Preloading blob URLs for', allMedia.length, 'media items...')
-        const mediaIds = allMedia
+        logger.info('[UnifiedMediaContext] ✅ Media catalog loaded with', allMedia.length, 'items (lazy loading enabled)')
+        
+        // 🚀 NEW APPROACH: Only preload critical media (images/videos for welcome page)
+        const criticalMediaIds = allMedia
           .filter(item => {
-            // Guard against undefined/null/empty IDs
-            if (!item.id || item.id === '') return false
+            // Only preload visual media for the welcome page (user sees first)
+            const isCritical = item.pageId === 'welcome' && 
+                              (item.type === 'image' || item.type === 'video') &&
+                              item.id && item.id !== ''
             
-            // Skip invalid placeholder IDs that don't correspond to actual media files
-            if (item.id === 'learning-objectives' || 
-                item.id === 'welcome' || 
-                item.id === 'objectives') {
-              logger.warn('[UnifiedMediaContext] Skipping placeholder media ID:', item.id)
-              return false
+            if (isCritical) {
+              console.log(`[UnifiedMediaContext] 🎯 Marking as critical for preload: ${item.id} (${item.type})`)
             }
             
-            // Skip YouTube videos without proper URLs (they don't need blob preloading)
-            if ((item.metadata?.type as string) === 'youtube') {
-              const hasYouTubeUrl = item.metadata?.url || 
-                                   item.metadata?.embedUrl || 
-                                   item.metadata?.embed_url ||
-                                   item.metadata?.youtubeUrl ||
-                                   item.metadata?.youtube_url
-              if (!hasYouTubeUrl) {
-                logger.warn('[UnifiedMediaContext] Skipping YouTube item without URL:', item.id, {
-                  availableKeys: Object.keys(item.metadata || {}),
-                  metadataType: item.metadata?.type
-                })
-                return false
-              }
-            }
-            
-            return true
+            return isCritical
           })
           .map(item => item.id)
         
-        // Skip if no valid media IDs
-        if (mediaIds.length === 0) {
-          logger.info('[UnifiedMediaContext] No valid media IDs found, skipping preload')
-          return
-        }
-        
-        // Use BlobURLCache to preload all media
-        const preloadedUrls = await blobCache.preloadMedia(mediaIds, async (id) => {
-          const media = await mediaService.getMedia(id)
-          if (!media || !media.data) return null
+        if (criticalMediaIds.length > 0) {
+          logger.info('[UnifiedMediaContext] 🚀 Preloading', criticalMediaIds.length, 'critical media items...')
           
-          // Determine MIME type
+          // Preload only critical media in background
+          setTimeout(async () => {
+            try {
+              const preloadedUrls = await blobCache.preloadMedia(criticalMediaIds, async (id) => {
+                const media = await mediaService.getMedia(id)
+                if (!media || !media.data) return null
+                
+                // Determine MIME type
           let mimeType = media.metadata?.mimeType || media.metadata?.mime_type || 'application/octet-stream'
           
           // Fix common MIME type issues
@@ -310,11 +420,49 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             mimeType = 'text/vtt'
           }
           
-          return { data: media.data, mimeType }
-        })
+                return { data: media.data, mimeType }
+              })
+              
+              const successCount = preloadedUrls.filter(url => url !== null).length
+              logger.info('[UnifiedMediaContext] ✅ Preloaded', successCount, 'critical media items')
+              
+              // LOADING COORDINATION: Notify that critical media loading is complete
+              if (criticalMediaLoadingCallback) {
+                logger.info('[UnifiedMediaContext] 🔔 Notifying that critical media loading is complete')
+                criticalMediaLoadingCallback()
+              }
+              
+            } catch (error) {
+              logger.warn('[UnifiedMediaContext] Critical media preloading failed:', error)
+              
+              // Still notify callback even on error so loading doesn't hang
+              if (criticalMediaLoadingCallback) {
+                logger.info('[UnifiedMediaContext] 🔔 Notifying callback despite preload error')
+                criticalMediaLoadingCallback()
+              }
+            }
+          }, 100) // Small delay to not block UI
+        } else {
+          logger.info('[UnifiedMediaContext] 💡 No critical media found, full lazy loading mode')
+          
+          // LOADING COORDINATION: Still notify callback if no critical media to preload
+          if (criticalMediaLoadingCallback) {
+            logger.info('[UnifiedMediaContext] 🔔 Notifying callback (no critical media to load)')
+            // Small delay to match the preload timing
+            setTimeout(() => {
+              criticalMediaLoadingCallback()
+            }, 100)
+          }
+        }
         
-        const successCount = preloadedUrls.filter(url => url !== null).length
-        logger.info('[UnifiedMediaContext] Preloaded', successCount, 'of', allMedia.length, 'blob URLs')
+        // 🚀 PROGRESSIVE LOADING: Start background loading of remaining media after UI is ready
+        setTimeout(async () => {
+          try {
+            await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache)
+          } catch (error) {
+            logger.warn('[UnifiedMediaContext] Progressive loading failed:', error)
+          }
+        }, 2000) // 2 second delay to ensure UI is interactive
       }
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to load media:', err)
@@ -937,7 +1085,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     refreshMedia,
     resetMediaCache,
     populateFromCourseContent,
-    cleanContaminatedMedia
+    cleanContaminatedMedia,
+    setCriticalMediaLoadingCallback: setCriticalMediaLoadingCallback
   }), [
     storeMedia,
     updateMedia,
@@ -961,7 +1110,8 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     refreshMedia,
     resetMediaCache,
     populateFromCourseContent,
-    cleanContaminatedMedia
+    cleanContaminatedMedia,
+    setCriticalMediaLoadingCallback
   ])
   
   // Set global context for TauriAudioPlayer

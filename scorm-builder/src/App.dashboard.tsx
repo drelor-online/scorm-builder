@@ -14,6 +14,7 @@ import { useStatusMessages } from './hooks/useStatusMessages'
 import { NotificationToStatusBridge } from './components/NotificationToStatusBridge'
 import { WorkflowRecorder } from './components/WorkflowRecorder'
 import App from './App'
+import { openProjectWithCoordination } from './utils/coordinatedProjectLoading'
 
 interface DashboardContentProps {
   onSecretClick?: () => void
@@ -21,6 +22,7 @@ interface DashboardContentProps {
 
 function DashboardContent({ onSecretClick }: DashboardContentProps) {
   const storage = useStorage()
+  // Note: Media context not available during dashboard phase - will be null during project selection
   const [showDashboard, setShowDashboard] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingFilePath, setPendingFilePath] = useState<string | null>(null)
@@ -108,11 +110,28 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
       setIsLoadingProject(true)
       setLoadingProgress({ phase: 'loading', percent: 0, message: 'Initializing...' })
       
-      console.log('[App.dashboard] Opening project:', projectId)
-      await storage.openProject(projectId, (progress) => {
-        setLoadingProgress(progress as any)
+      console.log('[App.dashboard] Opening project with coordination:', projectId)
+      
+      // LOADING COORDINATION FIX: Use coordinated loading instead of direct storage call
+      // Note: Media context is null during dashboard phase - coordination will handle this gracefully
+      await openProjectWithCoordination({
+        projectId,
+        storage,
+        mediaContext: null, // No media context available during dashboard phase
+        onProgress: (progress) => {
+          setLoadingProgress(progress as any)
+        }
       })
-      console.log('[App.dashboard] Project opened, currentProjectId:', storage.currentProjectId)
+      
+      console.log('[App.dashboard] Coordinated project loading completed, currentProjectId:', storage.currentProjectId)
+      
+      // Verify that currentProjectId is set after coordination
+      if (!storage.currentProjectId) {
+        console.error('[App.dashboard] ⚠️ WARNING: currentProjectId is null after coordinated loading!')
+        console.error('[App.dashboard] This may indicate a coordination issue - the project may not have opened properly')
+      } else {
+        console.log('[App.dashboard] ✅ Project ID verified after coordination:', storage.currentProjectId)
+      }
       
       // Don't close the dialog yet - wait for media to load
       // The dialog will close when progress reaches 100%
