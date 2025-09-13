@@ -353,7 +353,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     populateFromCourseContent,
     createBlobUrl,
     cleanContaminatedMedia,
-    setLoadingProfile
+    setLoadingProfile,
+    loadingProfile
   } = useUnifiedMedia()
   
   const storage = useStorage()
@@ -404,7 +405,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // PERFORMANCE OPTIMIZATION: Set visual-only loading profile for Media step
   useEffect(() => {
     console.log('[MediaEnhancement] 🚀 Setting visual-only loading profile for Media step')
+    console.log('[MediaEnhancement] 🔍 PROFILE DEBUG: setLoadingProfile function available:', !!setLoadingProfile)
     setLoadingProfile?.('visual-only')
+    console.log('[MediaEnhancement] ✅ PROFILE DEBUG: Called setLoadingProfile("visual-only")')
     
     return () => {
       console.log('[MediaEnhancement] 🔄 Restoring all loading profile on unmount')
@@ -413,9 +416,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }, [setLoadingProfile])
   
   // 🔧 CONTAMINATION CLEANUP: Clean any contaminated media on component mount
+  // 🚀 FIX 7: SKIP CLEANUP IN VISUAL-ONLY MODE (prevents backend audio/caption scanning)
   useEffect(() => {
     const runContaminationCleanup = async () => {
       try {
+        // 🚀 FIX 7: Skip contamination cleanup in visual-only mode
+        // This prevents the backend from scanning audio/caption files during Media Enhancement
+        if (loadingProfile === 'visual-only') {
+          console.log('[MediaEnhancement] 🚀 FIX 7: SKIPPING contamination cleanup in visual-only mode')
+          console.log('[MediaEnhancement] ✅ Audio/caption files will not be scanned - backend scanning prevented!')
+          return
+        }
+        
         console.log('[MediaEnhancement] 🧹 Running contamination cleanup on startup...')
         const result = await cleanContaminatedMedia()
         
@@ -441,7 +453,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Run cleanup after a short delay to allow media context to initialize
     const cleanupTimer = setTimeout(runContaminationCleanup, 1000)
     return () => clearTimeout(cleanupTimer)
-  }, [cleanContaminatedMedia, success])
+  }, [cleanContaminatedMedia, success, loadingProfile])
   
   // 🚨 CONTAMINATION DETECTION: Check for contamination in loaded media
   useEffect(() => {
@@ -1164,8 +1176,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Ensure each Media object has a proper URL for display and preserves all flags
     const mediaWithUrls = media.map(item => ({
       ...item,
-      // Preserve isYouTube flag explicitly
-      isYouTube: item.isYouTube || false,
+      // CRITICAL FIX: Ensure YouTube videos get isYouTube flag set correctly
+      isYouTube: item.isYouTube || item.type === 'youtube' || false,
       // CRITICAL FIX: Explicitly preserve YouTube clip timing properties
       clipStart: item.clipStart,
       clipEnd: item.clipEnd,
@@ -2107,7 +2119,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           title: (item.metadata?.title || item.metadata?.original_name || `Media ${index + 1}`) as string,
           url: '', // Will be populated by createBlobUrl
           storageId: item.id,
-          isYouTube: item.metadata?.isYouTube || false,
+          // CRITICAL FIX: Ensure YouTube videos get isYouTube flag set correctly
+          isYouTube: item.metadata?.isYouTube || item.type === 'youtube' || false,
           embedUrl: item.metadata?.embedUrl,
           clipStart: (item.metadata?.clipStart || item.metadata?.clip_start) as number | undefined,
           clipEnd: (item.metadata?.clipEnd || item.metadata?.clip_end) as number | undefined
@@ -3187,7 +3200,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
 
   // RENDER FIX: Filter to visual media only to prevent empty src warnings for audio/caption
   const visualMedia = useMemo(
-    () => (existingPageMedia || []).filter(m => m.type === 'image' || m.type === 'video'),
+    () => (existingPageMedia || []).filter(m => m.type === 'image' || m.type === 'video' || m.type === 'youtube'),
     [existingPageMedia]
   )
 

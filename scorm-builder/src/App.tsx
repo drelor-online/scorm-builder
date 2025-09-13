@@ -126,7 +126,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
-  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia } = useUnifiedMedia();
+  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia, setLoadingProfile } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -890,6 +890,13 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         })
         setCourseContent(finalCourseContent)
         setCourseSeedData(loadedCourseSeedData)
+        
+        // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only if loading directly into media step
+        if (loadedStep === 'media') {
+          console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile for loaded media step')
+          setLoadingProfile('visual-only')
+        }
+        
         setCurrentStep(loadedStep)
         
         // Update autosave ref immediately with loaded data
@@ -1375,6 +1382,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const handleJSONNext = async (data: CourseContent) => {
     // Note: JSONImportValidator component handles marking 'courseContent' section dirty automatically
     setCourseContent(data)
+    
+    // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only BEFORE media step renders
+    console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile before media step')
+    setLoadingProfile('visual-only')
+    
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
     
@@ -1511,6 +1523,10 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   }, [storage, courseSeedData, navigation, stepNumbers.activities])
 
   const handleAudioBack = useCallback(async () => {
+    // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only BEFORE media step renders
+    console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile before media step (back from audio)')
+    setLoadingProfile('visual-only')
+    
     setCurrentStep('media')
     navigation.navigateToStep(stepNumbers.media)
     
@@ -1834,6 +1850,12 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       (entry) => entry[1] === stepIndex
     )
     if (stepMapping) {
+      // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only if navigating to media step via breadcrumb
+      if (stepMapping[0] === 'media') {
+        console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile for breadcrumb navigation to media step')
+        setLoadingProfile('visual-only')
+      }
+      
       setCurrentStep(stepMapping[0])
       navigation.navigateToStep(stepIndex)
       

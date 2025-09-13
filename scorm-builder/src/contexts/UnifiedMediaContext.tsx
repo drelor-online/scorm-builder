@@ -100,16 +100,49 @@ async function progressivelyLoadRemainingMedia(
   profile: LoadingProfile = 'all'
 ) {
   console.log('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
+  console.log(`[ProgressiveLoader] 🔍 PROFILE DEBUG: Received profile="${profile}"`)
   
   // Filter out already loaded critical media
   const baseRemainingMedia = allMedia.filter(item => !criticalMediaIds.includes(item.id))
   
-  // PERFORMANCE OPTIMIZATION: Filter by profile before batching
+  // EMERGENCY DEBUG: Log all items before filtering
+  console.log(`[ProgressiveLoader] 📊 BEFORE FILTERING: ${baseRemainingMedia.length} items:`)
+  baseRemainingMedia.forEach((item, i) => {
+    if (i < 10) { // Limit logging to first 10 items
+      console.log(`  - ${item.id} (${item.type})`)
+    }
+  })
+  if (baseRemainingMedia.length > 10) {
+    console.log(`  ... and ${baseRemainingMedia.length - 10} more items`)
+  }
+  
+  // 🔧 FIX 4: FORCE PROGRESSIVE LOADER TO RESPECT VISUAL-ONLY PROFILE
+  // Enhanced filtering with emergency circuit breaker
   const remainingMedia = profile === 'visual-only'
-    ? baseRemainingMedia.filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube')
+    ? baseRemainingMedia.filter(item => {
+        const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+        
+        // EMERGENCY CIRCUIT BREAKER: Block ALL audio/caption items
+        const isBlockedType = item.type === 'audio' || item.type === 'caption'
+        if (isBlockedType) {
+          console.log(`[ProgressiveLoader] 🚫 FIX 4: EMERGENCY BLOCK - ${item.id} (${item.type}) blocked in visual-only mode`)
+          return false
+        }
+        
+        if (!isVisual) {
+          console.log(`[ProgressiveLoader] 🚫 VISUAL-ONLY: Excluding ${item.id} (${item.type})`)
+        }
+        return isVisual
+      })
     : baseRemainingMedia
     
   console.log(`[ProgressiveLoader] Profile: ${profile}, Filtering ${baseRemainingMedia.length} → ${remainingMedia.length} items`)
+  
+  // EMERGENCY DEBUG: Log what's still in the list after filtering
+  console.log(`[ProgressiveLoader] 📊 AFTER FILTERING: ${remainingMedia.length} items to load:`)
+  remainingMedia.forEach(item => {
+    console.log(`  ✅ ${item.id} (${item.type})`)
+  })
   
   if (remainingMedia.length === 0) {
     console.log('[ProgressiveLoader] ✅ No remaining media to load after profile filtering')
@@ -128,10 +161,33 @@ async function progressivelyLoadRemainingMedia(
     
     console.log(`[ProgressiveLoader] 🔄 Loading ${batchName} (${batch.length} items)...`)
     
+    // 🔧 FIX 4: PROGRESSIVE LOADER TIMING FIX
+    // Validate profile before each batch to prevent race conditions
+    console.log(`[ProgressiveLoader] 🔧 FIX 4: Pre-batch profile validation - current: "${profile}"`)
+    
+    if (profile === 'visual-only') {
+      // Double-check that this batch contains only visual items
+      const nonVisualItems = batch.filter(item => !(item.type === 'image' || item.type === 'video' || item.type === 'youtube'))
+      if (nonVisualItems.length > 0) {
+        console.log(`[ProgressiveLoader] 🚨 FIX 4: ABORT - Found ${nonVisualItems.length} non-visual items in visual-only batch:`)
+        nonVisualItems.forEach(item => console.log(`  - ${item.id} (${item.type})`))
+        console.log('[ProgressiveLoader] 🚨 FIX 4: Skipping contaminated batch to prevent audio/caption loading')
+        continue
+      }
+    }
+    
     try {
       // Load batch in parallel
       const batchIds = batch.map(item => item.id)
+      console.log(`[ProgressiveLoader] 🔧 FIX 4: Processing batch with items: ${batchIds.join(', ')}`)
+      
       const preloadedUrls = await blobCache.preloadMedia(batchIds, async (id) => {
+        // 🔧 FIX 4: Final safety check before individual item loading
+        if (profile === 'visual-only' && (id.startsWith('audio-') || id.startsWith('caption-'))) {
+          console.log(`[ProgressiveLoader] 🚫 FIX 4: Emergency block - refusing to load ${id} in visual-only mode`)
+          return null
+        }
+        
         const media = await mediaService.getMedia(id)
         if (!media || !media.data) return null
         
@@ -171,6 +227,27 @@ async function progressivelyLoadRemainingMedia(
 // 🎯 PRIORITIZATION ALGORITHM: Sort media by importance for user experience  
 function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: LoadingProfile = 'all'): MediaItem[][] {
   const batches: MediaItem[][] = []
+  
+  // 🔧 FIX 4: Skip audio/caption batching in visual-only mode
+  if (profile === 'visual-only') {
+    console.log(`[ProgressiveLoader] 🔧 FIX 4: Visual-only mode - creating single batch of ${remainingMedia.length} visual items`)
+    
+    // In visual-only mode, just group all visual media into priority batches
+    const visualMedia = remainingMedia.filter(item => 
+      item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+    )
+    
+    if (visualMedia.length > 0) {
+      // Split visual media into smaller batches for better UX
+      const batchSize = 5
+      for (let i = 0; i < visualMedia.length; i += batchSize) {
+        const batch = visualMedia.slice(i, i + batchSize)
+        batches.push(batch)
+      }
+    }
+    
+    return batches
+  }
   
   // NOTE: Profile filtering now happens in progressivelyLoadRemainingMedia before this function is called
   
@@ -269,6 +346,13 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const [error, setError] = useState<Error | null>(null)
   const [loadingProfile, setLoadingProfile] = useState<LoadingProfile>('all')
   
+  // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Set global flag for MediaService blocking
+  useEffect(() => {
+    const isVisualOnly = loadingProfile === 'visual-only'
+    globalThis._scormBuilderVisualOnlyMode = isVisualOnly
+    console.log(`[UnifiedMediaContext] 🔧 FIX 5: Setting global visual-only flag: ${isVisualOnly}`)
+  }, [loadingProfile])
+  
   // Track media loads to prevent infinite reloading
   const hasLoadedRef = useRef<Set<string>>(new Set())
   
@@ -307,9 +391,16 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       ;(mediaServiceRef.current as any).clearAudioCache()
     }
     
-    // Update the media service if needed
-    const newService = createMediaService(actualProjectId, storage.fileStorage)
-    mediaServiceRef.current = newService
+    // 🔧 FIX 3: PREVENT MULTIPLE MEDIASERVICE INITIALIZATIONS
+    // Only create a new MediaService if we don't have one or the project ID changed
+    if (!mediaServiceRef.current || lastLoadedProjectIdRef.current !== actualProjectId) {
+      console.log(`🔧 [UnifiedMediaContext] FIX 3: Creating MediaService for project ${actualProjectId} (previous: ${lastLoadedProjectIdRef.current})`)
+      const newService = createMediaService(actualProjectId, storage.fileStorage)
+      mediaServiceRef.current = newService
+      console.log(`✅ [UnifiedMediaContext] FIX 3: MediaService created/reused for project ${actualProjectId}`)
+    } else {
+      console.log(`♻️  [UnifiedMediaContext] FIX 3: Reusing existing MediaService for project ${actualProjectId}`)
+    }
     
     // Update the last loaded project ID
     lastLoadedProjectIdRef.current = actualProjectId
@@ -391,28 +482,59 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         await mediaService.loadMediaFromCourseContent(courseContent)
       }
       
-      // Now get all media from the service (which will also scan file system)
-      // This will include both cached items and file system discovery
-      const allMedia = await mediaService.listAllMedia()
-      console.log(`🔍 [DEBUG] MediaService.listAllMedia() returned ${allMedia.length} items:`)
-      allMedia.forEach(item => {
+      // 🚀 FIX 6: SMART BACKEND CALL PREVENTION (UPGRADED)
+      // Pass excludeTypes directly to MediaService to prevent backend scanning unwanted files
+      const isVisualOnly = loadingProfile === 'visual-only'
+      const excludeTypes = isVisualOnly ? ['audio', 'caption'] : []
+      
+      console.log(`[UnifiedMediaContext] 🚀 FIX 6: Calling MediaService.listAllMedia() with smart filtering:`, {
+        loadingProfile,
+        isVisualOnly,
+        excludeTypes
+      })
+      
+      // Now get media with smart backend filtering - this prevents unwanted backend scanning
+      const allMedia = await mediaService.listAllMedia({ excludeTypes })
+      
+      console.log(`[UnifiedMediaContext] 🚀 FIX 6: MediaService returned ${allMedia.length} items after smart backend filtering`)
+      
+      // Legacy filtering logic (now redundant but kept for safety)
+      // The filtering should already be done by MediaService, but double-check
+      const finalMedia = isVisualOnly 
+        ? allMedia.filter(item => {
+            const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+            if (!isVisual) {
+              console.log(`[UnifiedMediaContext] 🚨 UNEXPECTED: Found non-visual item after MediaService filtering: ${item.id} (${item.type})`)
+            }
+            return isVisual
+          })
+        : allMedia
+        
+      if (isVisualOnly && finalMedia.length !== allMedia.length) {
+        console.log(`[UnifiedMediaContext] 🚨 MediaService filtering may not be working - had to filter ${allMedia.length - finalMedia.length} additional items`)
+      } else if (isVisualOnly) {
+        console.log(`[UnifiedMediaContext] ✅ FIX 6: Perfect filtering - all ${allMedia.length} items were visual media`)
+      }
+      
+      console.log(`🔍 [DEBUG] MediaService.listAllMedia() returned ${allMedia.length} items after backend filtering, final count: ${finalMedia.length}:`)
+      finalMedia.forEach(item => {
         console.log(`🔍 [DEBUG] MediaService item: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
       })
       
       const newCache = new Map<string, MediaItem>()
-      allMedia.forEach(item => {
+      finalMedia.forEach(item => {
         newCache.set(item.id, item)
       })
       setMediaCache(newCache)
-      console.log(`🔍 [DEBUG] Updated cache with ${allMedia.length} items from MediaService`)
-      logger.info('[UnifiedMediaContext] Loaded', allMedia.length, 'media items')
+      console.log(`🔍 [DEBUG] Updated cache with ${finalMedia.length} items from MediaService`)
+      logger.info('[UnifiedMediaContext] Loaded', finalMedia.length, 'media items')
       
       // 🚀 STARTUP PERFORMANCE FIX: Replace aggressive preloading with lazy loading
-      if (allMedia.length > 0) {
-        logger.info('[UnifiedMediaContext] ✅ Media catalog loaded with', allMedia.length, 'items (lazy loading enabled)')
+      if (finalMedia.length > 0) {
+        logger.info('[UnifiedMediaContext] ✅ Media catalog loaded with', finalMedia.length, 'items (lazy loading enabled)')
         
         // 🚀 NEW APPROACH: Only preload critical media (images/videos for welcome page)
-        const criticalMediaIds = allMedia
+        const criticalMediaIds = finalMedia
           .filter(item => {
             // Only preload visual media for the welcome page (user sees first)
             const isCritical = item.pageId === 'welcome' && 
@@ -486,10 +608,30 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           }
         }
         
-        // 🚀 PROGRESSIVE LOADING: Start background loading of remaining media after UI is ready
+        // 🔧 FIX 2: ENHANCED REFRESHMEDIA CIRCUIT BREAKER
+        // Check loading profile before starting progressive loading
         setTimeout(async () => {
           try {
-            await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
+            console.log(`[UnifiedMediaContext] 🔧 FIX 2: RefreshMedia circuit breaker - current profile: "${loadingProfile}"`)
+            
+            if (loadingProfile === 'visual-only') {
+              console.log('[UnifiedMediaContext] 🚫 FIX 2: Visual-only mode detected - filtering media before progressive loading')
+              
+              // Filter out audio/caption items before progressive loading
+              const visualOnlyMedia = allMedia.filter(item => {
+                const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+                if (!isVisual) {
+                  console.log(`[UnifiedMediaContext] 🚫 FIX 2: Circuit breaker excluding ${item.id} (${item.type}) from progressive loading`)
+                }
+                return isVisual
+              })
+              
+              console.log(`[UnifiedMediaContext] 🔧 FIX 2: Circuit breaker filtered ${allMedia.length} → ${visualOnlyMedia.length} items`)
+              await progressivelyLoadRemainingMedia(visualOnlyMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
+            } else {
+              console.log('[UnifiedMediaContext] 🔧 FIX 2: Full loading mode - proceeding with all media types')
+              await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
+            }
           } catch (error) {
             logger.warn('[UnifiedMediaContext] Progressive loading failed:', error)
           }
@@ -539,6 +681,16 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   
   const getMedia = useCallback(async (mediaId: string) => {
     try {
+      // 🔧 FIX 5: EMERGENCY CIRCUIT BREAKER for audio/caption IDs in visual-only mode
+      if (loadingProfile === 'visual-only') {
+        // Check if this is an audio or caption ID by pattern
+        const isAudioOrCaption = mediaId.startsWith('audio-') || mediaId.startsWith('caption-')
+        if (isAudioOrCaption) {
+          console.log(`🚫 [UnifiedMediaContext] FIX 5: EMERGENCY CIRCUIT BREAKER - Blocking getMedia(${mediaId}) in visual-only mode`)
+          return null
+        }
+      }
+      
       const mediaService = mediaServiceRef.current
       if (!mediaService) {
         throw new Error('Media service not initialized')
@@ -549,7 +701,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       setError(err as Error)
       return null
     }
-  }, [])
+  }, [loadingProfile])
   
   const deleteMedia = useCallback(async (mediaId: string): Promise<boolean> => {
     try {
@@ -863,54 +1015,63 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       })))
     }
     
-    // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items
-    let contaminatedCount = 0
-    for (const item of allMediaForPage) {
-      // 🔧 CRITICAL FIX: Skip contamination detection for legitimate YouTube videos
-      // YouTube videos are SUPPOSED to have these fields - they're not contamination!
-      const isLegitimateYouTubeVideo = item.type === 'video' || item.type === 'youtube'
-      if (isLegitimateYouTubeVideo) {
-        continue
-      }
-      
-      // 🔧 CONTAMINATION FIX: Only flag actual YouTube-specific metadata
-      // clipStart/clipEnd are legitimate for any media type (presentations, etc.)
-      const hasYouTubeMetadata = !!(
-        item.metadata?.source === 'youtube' ||
-        item.metadata?.youtubeUrl ||
-        item.metadata?.embedUrl ||
-        (item.metadata?.isYouTube === true) // Only flag TRUE values, not false
-      )
-      
-      if (hasYouTubeMetadata) {
-        contaminatedCount++
-        
-        // PERFORMANCE OPTIMIZATION: Schedule cleanup during idle time to avoid blocking UI
-        scheduleIdleCleanup(item.id, async () => {
-          console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE! (Deferred)`)
-          console.warn(`   Media ID: ${item.id}`)
-          console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
-          console.warn(`   Page: ${pageId}`)
-          console.warn(`   Contaminated fields:`, {
-            source: item.metadata?.source,
-            isYouTube: item.metadata?.isYouTube,
-            hasYouTubeUrl: !!item.metadata?.youtubeUrl,
-            hasEmbedUrl: !!item.metadata?.embedUrl,
-            hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
-          })
-          console.warn('   🔧 This contaminated data will cause UI issues!')
-        })
-      }
-    }
+    // 🚨 FIX 2: DISABLE CONTAMINATION DETECTION ON MEDIA STEP
+    // Only run contamination detection if NOT in visual-only mode (when types filter is present)
+    const isVisualOnlyMode = opts?.types && opts.types.length > 0 && 
+                             opts.types.every(type => ['image', 'video', 'youtube'].includes(type))
     
-    if (contaminatedCount > 0) {
-      console.warn(`🚨 [UnifiedMediaContext] Found ${contaminatedCount} contaminated items for page ${pageId}`)
-      console.warn('   📊 Page media summary:')
-      const typeCounts: Record<string, number> = {}
-      allMediaForPage.forEach(item => {
-        typeCounts[item.type] = (typeCounts[item.type] || 0) + 1
-      })
-      console.warn(`   Types: ${JSON.stringify(typeCounts)}`)
+    if (!isVisualOnlyMode) {
+      // 🚨 CONTAMINATION DETECTION: Check for metadata contamination in cached media items
+      let contaminatedCount = 0
+      for (const item of allMediaForPage) {
+        // 🔧 CRITICAL FIX: Skip contamination detection for legitimate YouTube videos
+        // YouTube videos are SUPPOSED to have these fields - they're not contamination!
+        const isLegitimateYouTubeVideo = item.type === 'video' || item.type === 'youtube'
+        if (isLegitimateYouTubeVideo) {
+          continue
+        }
+        
+        // 🔧 CONTAMINATION FIX: Only flag actual YouTube-specific metadata
+        // clipStart/clipEnd are legitimate for any media type (presentations, etc.)
+        const hasYouTubeMetadata = !!(
+          item.metadata?.source === 'youtube' ||
+          item.metadata?.youtubeUrl ||
+          item.metadata?.embedUrl ||
+          (item.metadata?.isYouTube === true) // Only flag TRUE values, not false
+        )
+        
+        if (hasYouTubeMetadata) {
+          contaminatedCount++
+          
+          // PERFORMANCE OPTIMIZATION: Schedule cleanup during idle time to avoid blocking UI
+          scheduleIdleCleanup(item.id, async () => {
+            console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE! (Deferred)`)
+            console.warn(`   Media ID: ${item.id}`)
+            console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
+            console.warn(`   Page: ${pageId}`)
+            console.warn(`   Contaminated fields:`, {
+              source: item.metadata?.source,
+              isYouTube: item.metadata?.isYouTube,
+              hasYouTubeUrl: !!item.metadata?.youtubeUrl,
+              hasEmbedUrl: !!item.metadata?.embedUrl,
+              hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
+            })
+            console.warn('   🔧 This contaminated data will cause UI issues!')
+          })
+        }
+      }
+      
+      if (contaminatedCount > 0) {
+        console.warn(`🚨 [UnifiedMediaContext] Found ${contaminatedCount} contaminated items for page ${pageId}`)
+        console.warn('   📊 Page media summary:')
+        const typeCounts: Record<string, number> = {}
+        allMediaForPage.forEach(item => {
+          typeCounts[item.type] = (typeCounts[item.type] || 0) + 1
+        })
+        console.warn(`   Types: ${JSON.stringify(typeCounts)}`)
+      }
+    } else {
+      console.log(`🔕 [UnifiedMediaContext] FIX 2: Skipping contamination detection - visual-only mode detected for page ${pageId}`)
     }
     
     // 🔧 FIX INFINITE LOOP: Return all cached media without async existence checks

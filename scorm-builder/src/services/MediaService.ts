@@ -8,6 +8,11 @@
 import { FileStorage } from './FileStorage'
 import { generateMediaId, type MediaType } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
+
+// 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Global flag declaration
+declare global {
+  var _scormBuilderVisualOnlyMode: boolean | undefined
+}
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { blobUrlManager } from '../utils/blobUrlManager'
 
@@ -113,6 +118,7 @@ export class MediaService {
     
     const existing = mediaServiceInstances.get(extractedId)
     if (existing) {
+      console.log(`♻️  [MediaService] FIX 3: Returning existing singleton instance for project ${extractedId}`)
       debugLogger.debug('MediaService.getInstance', 'Returning existing instance', {
         originalProjectId: config.projectId,
         extractedId: extractedId
@@ -120,6 +126,7 @@ export class MediaService {
       return existing
     }
     
+    console.log(`🔧 [MediaService] FIX 3: Creating NEW singleton instance for project ${extractedId}`)
     debugLogger.debug('MediaService.getInstance', 'Creating new instance', {
       originalProjectId: config.projectId,
       extractedId: extractedId
@@ -710,6 +717,19 @@ export class MediaService {
     const stack = new Error().stack
     const caller = stack?.split('\n')[2]?.trim() || 'unknown'
     console.log(`🔍 [MediaService] getMedia called for ${mediaId} from: ${caller}`)
+    
+    // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Global pattern-based blocking
+    // This is a safety net to prevent audio/caption access regardless of calling context
+    const isAudioOrCaption = mediaId.startsWith('audio-') || mediaId.startsWith('caption-')
+    if (isAudioOrCaption) {
+      // Check if we're in a context where visual-only loading should be enforced
+      // Use a global flag or environment check to determine if blocking is needed
+      const shouldBlock = globalThis._scormBuilderVisualOnlyMode || false
+      if (shouldBlock) {
+        console.log(`🚨 [MediaService] FIX 5: ULTIMATE CIRCUIT BREAKER - Blocking ${mediaId} (visual-only mode active)`)
+        return null
+      }
+    }
     
     // Check if we're already loading this media (deduplication)
     const existingPromise = this.mediaLoadingPromises.get(mediaId)
@@ -1743,34 +1763,85 @@ export class MediaService {
   
   /**
    * List all media in the project
+   * @param options Options for filtering media types
+   * @param options.excludeTypes Array of media types to exclude (e.g., ['audio', 'caption'])
    */
-  async listAllMedia(): Promise<MediaItem[]> {
-    debugLogger.debug('MediaService.listAllMedia', 'Listing all media')
+  async listAllMedia(options: { excludeTypes?: string[] } = {}): Promise<MediaItem[]> {
+    const { excludeTypes = [] } = options
+    const isVisualOnly = excludeTypes.includes('audio') && excludeTypes.includes('caption')
+    
+    debugLogger.debug('MediaService.listAllMedia', 'Listing all media', { 
+      excludeTypes,
+      visualOnlyMode: isVisualOnly
+    })
+    
+    // 🚀 FIX 6: SMART BACKEND CALL PREVENTION
+    if (isVisualOnly) {
+      console.log('[MediaService] 🚀 FIX 6: SMART BACKEND CALL PREVENTION - Visual-only mode detected')
+      
+      // Check global flag first
+      const globalVisualMode = (globalThis as any)._scormBuilderVisualOnlyMode
+      if (globalVisualMode) {
+        console.log('[MediaService] ✅ Global visual-only flag confirmed, implementing smart filtering')
+      }
+    }
     
     try {
       // Start with cached items
       const cachedItems = Array.from(this.mediaCache.values())
       const itemsMap = new Map<string, MediaItem>()
       
-      // Add cached items to map
+      // Add cached items to map (with filtering if specified)
       cachedItems.forEach(item => {
+        // Apply excludeTypes filter
+        if (excludeTypes.length > 0 && excludeTypes.includes(item.type)) {
+          debugLogger.debug('MediaService.listAllMedia', 'Excluding cached item', { 
+            id: item.id, 
+            type: item.type,
+            reason: 'Type excluded'
+          })
+          return
+        }
         itemsMap.set(item.id, item)
       })
       
-      // Check if FileStorage has getAllProjectMedia method (for file system discovery)
-      if (this.fileStorage && typeof (this.fileStorage as any).getAllProjectMedia === 'function') {
+      // 🚀 FIX 6: SMART BACKEND CALL LOGIC
+      // Only call backend if we need types that aren't excluded
+      const shouldCallBackend = !isVisualOnly || cachedItems.length === 0
+      
+      if (shouldCallBackend && this.fileStorage && typeof (this.fileStorage as any).getAllProjectMedia === 'function') {
         try {
-          debugLogger.debug('MediaService.listAllMedia', 'Fetching media from file system')
+          debugLogger.debug('MediaService.listAllMedia', 'Fetching media from file system', {
+            reason: isVisualOnly ? 'Cache empty, need initial scan' : 'Full scan requested'
+          })
+          
+          console.log(`[MediaService] 🔍 Calling backend getAllProjectMedia() - Visual-only: ${isVisualOnly}`)
           const fileSystemMedia = await (this.fileStorage as any).getAllProjectMedia()
           
           if (Array.isArray(fileSystemMedia)) {
-            // Convert file system media to MediaItem format and merge
+            let excludedCount = 0
+            let includedCount = 0
+            
+            // Convert file system media to MediaItem format and merge (with filtering)
             fileSystemMedia.forEach((fsMedia: any) => {
               if (!itemsMap.has(fsMedia.id)) {
+                const mediaType = fsMedia.mediaType || fsMedia.metadata?.type || 'image'
+                
+                // Apply excludeTypes filter  
+                if (excludeTypes.length > 0 && excludeTypes.includes(mediaType)) {
+                  excludedCount++
+                  debugLogger.debug('MediaService.listAllMedia', 'Excluding file system item', { 
+                    id: fsMedia.id, 
+                    type: mediaType,
+                    reason: 'Type excluded'
+                  })
+                  return
+                }
+                
                 // Convert to MediaItem format
                 const mediaItem: MediaItem = {
                   id: fsMedia.id,
-                  type: fsMedia.mediaType || fsMedia.metadata?.type || 'image',
+                  type: mediaType,
                   pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || '',
                   fileName: fsMedia.metadata?.fileName || fsMedia.metadata?.original_name || '',
                   metadata: {
@@ -1779,29 +1850,45 @@ export class MediaService {
                   }
                 }
                 itemsMap.set(fsMedia.id, mediaItem)
+                includedCount++
               }
             })
             
-            debugLogger.info('MediaService.listAllMedia', 'Merged file system media', {
+            debugLogger.info('MediaService.listAllMedia', 'Merged file system media with filtering', {
               cachedCount: cachedItems.length,
-              fileSystemCount: fileSystemMedia.length,
-              totalCount: itemsMap.size
+              fileSystemTotal: fileSystemMedia.length,
+              fileSystemIncluded: includedCount,
+              fileSystemExcluded: excludedCount,
+              finalCount: itemsMap.size,
+              excludeTypes
             })
+            
+            if (isVisualOnly && excludedCount > 0) {
+              console.log(`[MediaService] 🚀 FIX 6: Successfully excluded ${excludedCount} audio/caption items from results`)
+            }
           }
         } catch (error) {
           // Log error but continue with cached items
           debugLogger.error('MediaService.listAllMedia', 'Failed to fetch file system media', error)
           logger.warn('[MediaService] Failed to fetch file system media, using cache only:', error)
         }
+      } else if (!shouldCallBackend) {
+        console.log('[MediaService] 🚀 FIX 6: BACKEND CALL SKIPPED - Using cached visual media only')
+        debugLogger.info('MediaService.listAllMedia', 'Skipped backend call', {
+          reason: 'Visual-only mode with sufficient cache',
+          cachedItems: cachedItems.length
+        })
       }
       
       const items = Array.from(itemsMap.values())
       
-      debugLogger.info('MediaService.listAllMedia', 'Media listed', {
-        count: items.length
+      debugLogger.info('MediaService.listAllMedia', 'Media listed with filtering', {
+        totalCount: items.length,
+        excludeTypes,
+        visualOnlyMode: isVisualOnly
       })
       
-      logger.info('[MediaService] Listed all media, count:', items.length)
+      console.log(`[MediaService] Listed media with filtering - Total: ${items.length}, Excluded types: [${excludeTypes.join(', ')}]`)
       return items
     } catch (error) {
       debugLogger.error('MediaService.listAllMedia', 'Failed to list media', error)
