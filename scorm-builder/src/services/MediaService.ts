@@ -16,6 +16,13 @@ declare global {
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { blobUrlManager } from '../utils/blobUrlManager'
 
+const shouldLogMediaServiceDebug = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true';
+const mediaServiceDebugLog = (...args: unknown[]) => {
+  if (shouldLogMediaServiceDebug) {
+    console.log(...args);
+  }
+};
+
 export interface MediaMetadata {
   size?: number
   uploadedAt: string
@@ -48,6 +55,7 @@ export interface MediaItem {
 export interface MediaServiceConfig {
   projectId: string
   fileStorage?: FileStorage  // Optional shared FileStorage instance
+  generationMode?: boolean   // 🚀 PHASE 3: Enable optimized batching for SCORM generation
 }
 
 /**
@@ -82,6 +90,24 @@ export const __testing = {
   getInstances: () => mediaServiceInstances
 }
 
+// 🚀 PHASE 3: Request Queue Types (moved outside class for TypeScript compatibility)
+enum RequestPriority {
+  HIGH = 3,    // Current page thumbnails
+  MEDIUM = 2,  // Visible page thumbnails
+  LOW = 1      // Off-screen thumbnails
+}
+
+interface QueuedRequest {
+  mediaId: string
+  priority: RequestPriority
+  pageId?: string
+  isVisible?: boolean
+  isCurrent?: boolean
+  timestamp: number
+  cancellationToken: { cancelled: boolean }
+  resolver: { resolve: (value: any) => void, reject: (reason?: any) => void }
+}
+
 export class MediaService {
   public readonly projectId: string
   private fileStorage: FileStorage
@@ -91,21 +117,37 @@ export class MediaService {
   private audioDataCache: Map<string, { data: Uint8Array; metadata: MediaMetadata }> = new Map() // Persistent audio cache
   private audioLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate concurrent audio loads
   private mediaLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate ALL media loads
+
+  // 🚀 PHASE 3: Generation mode for optimized batching
+  private readonly isGenerationMode: boolean
+
+  // Error recovery properties
+  private failedMediaList: Array<{
+    id: string
+    originalName: string
+    pageId: string
+    error: string
+    timestamp: string
+  }> = []
   
   private constructor(config: MediaServiceConfig) {
     // VERSION MARKER: v2.0.5 - MediaService with forced URL generation and fallbacks
     // Project ID should already be extracted by getInstance
     this.projectId = config.projectId
     // Use provided FileStorage or create new one
-    this.fileStorage = config.fileStorage || new FileStorage()
-    
+    this.fileStorage = config.fileStorage || FileStorage.getInstance()
+
+    // 🚀 PHASE 3: Initialize generation mode for optimized batching
+    this.isGenerationMode = config.generationMode || false
+
     debugLogger.info('MediaService.constructor v2.0.5', 'Initialized MediaService', {
       projectId: this.projectId,
       storageType: 'FILE_STORAGE_ONLY',
       sharedInstance: !!config.fileStorage,
+      generationMode: this.isGenerationMode,
       version: 'v2.0.5'
     })
-    console.log('[MediaService v2.0.5] Initialized with project ID:', this.projectId)
+    mediaServiceDebugLog('[MediaService v2.0.5] Initialized with project ID:', this.projectId)
     
     logger.info('[MediaService] Initialized for project:', this.projectId, 'using FILE STORAGE ONLY', 
       config.fileStorage ? '(shared instance)' : '(new instance)')
@@ -118,7 +160,7 @@ export class MediaService {
     
     const existing = mediaServiceInstances.get(extractedId)
     if (existing) {
-      console.log(`♻️  [MediaService] FIX 3: Returning existing singleton instance for project ${extractedId}`)
+      mediaServiceDebugLog(`♻️  [MediaService] FIX 3: Returning existing singleton instance for project ${extractedId}`)
       debugLogger.debug('MediaService.getInstance', 'Returning existing instance', {
         originalProjectId: config.projectId,
         extractedId: extractedId
@@ -126,7 +168,7 @@ export class MediaService {
       return existing
     }
     
-    console.log(`🔧 [MediaService] FIX 3: Creating NEW singleton instance for project ${extractedId}`)
+    mediaServiceDebugLog(`🔧 [MediaService] FIX 3: Creating NEW singleton instance for project ${extractedId}`)
     debugLogger.debug('MediaService.getInstance', 'Creating new instance', {
       originalProjectId: config.projectId,
       extractedId: extractedId
@@ -235,7 +277,7 @@ export class MediaService {
       delete cleanedMetadata.clipEnd
       delete cleanedMetadata.isYouTube
       
-      console.log('   ✅ Cleaned metadata:', Object.keys(cleanedMetadata))
+      mediaServiceDebugLog('   ✅ Cleaned metadata:', Object.keys(cleanedMetadata))
       metadata = cleanedMetadata
     }
     
@@ -593,7 +635,7 @@ export class MediaService {
     mediaId: string,
     updates: Partial<Pick<MediaMetadata, 'clipStart' | 'clipEnd' | 'title' | 'embedUrl'>>
   ): Promise<MediaItem> {
-    console.log('🔍 [CLIP DEBUG] MediaService.updateYouTubeVideoMetadata called with:', {
+    mediaServiceDebugLog('🔍 [CLIP DEBUG] MediaService.updateYouTubeVideoMetadata called with:', {
       mediaId,
       updates,
       clipStart: updates.clipStart,
@@ -624,31 +666,36 @@ export class MediaService {
         throw new Error(`Cannot update YouTube metadata for media type '${existingMedia.type}'. Only 'video' and 'youtube' types are allowed.`)
       }
       
-      console.log('🔒 [VALIDATION] YouTube metadata update validated:', {
+      mediaServiceDebugLog('🔒 [VALIDATION] YouTube metadata update validated:', {
         mediaId,
         mediaType: existingMedia.type,
         isYouTube: existingMedia.metadata.isYouTube,
         pageId: existingMedia.pageId
       })
       
-      // Prepare updated metadata
+      // 🔧 FIX: Normalize clip timing values before storing
+      const normalizedClipStart = this.normalizeClipTiming(updates.clipStart)
+      const normalizedClipEnd = this.normalizeClipTiming(updates.clipEnd)
+
+      // Prepare updated metadata with normalized values
       const updatedMetadata = {
         ...existingMedia.metadata,
-        ...updates
+        ...updates,
+        clipStart: normalizedClipStart,
+        clipEnd: normalizedClipEnd
       }
-      
-      // Update the metadata in file storage
+
       const metadataToStore = {
         page_id: updatedMetadata.pageId,
         title: updatedMetadata.title,
         thumbnail: updatedMetadata.thumbnail,
         embed_url: updatedMetadata.embedUrl,
         duration: updatedMetadata.duration,
-        clip_start: updatedMetadata.clipStart,
-        clip_end: updatedMetadata.clipEnd
+        clip_start: normalizedClipStart,
+        clip_end: normalizedClipEnd
       }
       
-      console.log('🔍 [CLIP DEBUG] About to call storeYouTubeVideo with metadata:', {
+      mediaServiceDebugLog('🔍 [CLIP DEBUG] About to call storeYouTubeVideo with metadata:', {
         mediaId,
         youtubeUrl: updatedMetadata.youtubeUrl,
         metadataToStore,
@@ -675,7 +722,7 @@ export class MediaService {
         console.warn('🚨 [CACHE WARNING] Cache size changed during YouTube metadata update! This should not happen.')
       }
       
-      console.log('🔍 [CACHE DEBUG] MediaService.updateYouTubeVideoMetadata - Cache updated for:', {
+      mediaServiceDebugLog('🔍 [CACHE DEBUG] MediaService.updateYouTubeVideoMetadata - Cache updated for:', {
         mediaId,
         itemType: updatedItem.type,
         hasYouTubeMetadata: !!(updatedItem.metadata?.isYouTube || updatedItem.metadata?.source === 'youtube'),
@@ -703,7 +750,22 @@ export class MediaService {
   // 🚀 EFFICIENCY FIX: Add batch-aware media loading to prevent "loading all audio again" 
   private pendingBatchRequests = new Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>>()
   private batchRequestTimer: NodeJS.Timeout | null = null
-  private batchResolvers = new Map<string, { resolve: Function, reject: Function }>()
+  private batchResolvers = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>()
+  // 🔧 FIX: Promise tracking to prevent deduplication deadlocks
+  private promiseTracker = new Map<string, { promise: Promise<any>, createdAt: number, resolved: boolean }>()
+
+  // 🚀 PHASE 3: Request Queue with Prioritization and Cancellation
+  private requestQueue: QueuedRequest[] = []
+  private queueProcessingTimer: NodeJS.Timeout | null = null
+  private maxConcurrentRequests = 3
+  private activeRequests = new Set<string>()
+
+  // 🚀 PHASE 5: Backend Call Optimization
+  private projectExistenceCache = new Map<string, boolean>() // Cache media existence checks
+  private batchCoalescingTimer: NodeJS.Timeout | null = null
+  private pendingCoalescedRequests = new Set<string>() // Track requests being coalesced
+  private lastBatchProcessTime = 0
+  private MIN_BATCH_INTERVAL = 300 // Minimum time between batch calls (300ms)
 
   /**
    * Get media from file system with automatic batching optimization
@@ -716,7 +778,7 @@ export class MediaService {
     // Enhanced debug logging to track caller context
     const stack = new Error().stack
     const caller = stack?.split('\n')[2]?.trim() || 'unknown'
-    console.log(`🔍 [MediaService] getMedia called for ${mediaId} from: ${caller}`)
+    mediaServiceDebugLog(`🔍 [MediaService] getMedia called for ${mediaId} from: ${caller}`)
     
     // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Global pattern-based blocking
     // This is a safety net to prevent audio/caption access regardless of calling context
@@ -726,45 +788,141 @@ export class MediaService {
       // Use a global flag or environment check to determine if blocking is needed
       const shouldBlock = globalThis._scormBuilderVisualOnlyMode || false
       if (shouldBlock) {
-        console.log(`🚨 [MediaService] FIX 5: ULTIMATE CIRCUIT BREAKER - Blocking ${mediaId} (visual-only mode active)`)
+        mediaServiceDebugLog(`🚨 [MediaService] FIX 5: ULTIMATE CIRCUIT BREAKER - Blocking ${mediaId} (visual-only mode active)`)
         return null
       }
     }
     
-    // Check if we're already loading this media (deduplication)
+    // 🔧 FIX: Enhanced deduplication with stale promise detection
     const existingPromise = this.mediaLoadingPromises.get(mediaId)
     if (existingPromise) {
-      console.log(`[MediaService] 🔄 Deduplicating concurrent request for ${mediaId}`)
-      return existingPromise
+      const tracker = this.promiseTracker.get(mediaId)
+      const now = Date.now()
+
+      // Check if promise is stale (older than 5 seconds and not resolved)
+      if (tracker && (now - tracker.createdAt > 5000) && !tracker.resolved) {
+        mediaServiceDebugLog(`[MediaService] ⚠️ STALE PROMISE DETECTED: ${mediaId} (${now - tracker.createdAt}ms old) - creating fresh request`)
+        // Clean up stale promise
+        this.mediaLoadingPromises.delete(mediaId)
+        this.pendingBatchRequests.delete(mediaId)
+        this.promiseTracker.delete(mediaId)
+        // Continue to create fresh request below
+      } else {
+        mediaServiceDebugLog(`[MediaService] 🔄 Deduplicating concurrent request for ${mediaId}`)
+        // 🔧 FIX: Return original promise directly to avoid timeout race conditions
+        // The original promise should resolve properly when batch processing completes
+        return existingPromise
+      }
     }
     
     // 🚀 BATCH OPTIMIZATION: Check if this request can be batched
     const batchedPromise = this.pendingBatchRequests.get(mediaId)
     if (batchedPromise) {
-      console.log(`[MediaService] ⚡ Using batched request for ${mediaId}`)
+      mediaServiceDebugLog(`[MediaService] ⚡ Using batched request for ${mediaId}`)
       return batchedPromise
     }
     
-    // Add to pending batch and set up batch timer
+    // Add to pending batch and set up batch timer with deadlock prevention
     const mediaPromise = new Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>((resolve, reject) => {
       // Store the resolver for this media ID
       this.addToBatch(mediaId, resolve, reject)
+
+      // 🚀 PHASE 3: Enhanced timeout handling with generation mode support
+      let timeoutMs: number
+      if (this.isGenerationMode) {
+        // In generation mode, use much longer timeouts for stability
+        if (mediaId.startsWith('caption-')) {
+          timeoutMs = 60000 // 60s for captions in generation mode
+        } else {
+          timeoutMs = 45000 // 45s for other media in generation mode
+        }
+        mediaServiceDebugLog(`[MediaService] 🚀 GENERATION MODE: Using ${timeoutMs}ms timeout for ${mediaId}`)
+      } else {
+        // Normal mode - existing logic
+        if (mediaId.startsWith('caption-')) {
+          // Captions need more time and retry logic
+          const isBulkScenario = this.batchResolvers.size >= 10
+          timeoutMs = isBulkScenario ? 30000 : 20000 // 30s during bulk ops, 20s otherwise
+        } else {
+          // Check if we're in a bulk loading scenario by looking at batch size
+          const isBulkScenario = this.batchResolvers.size >= 10
+          timeoutMs = isBulkScenario ? 15000 : 10000 // 15s during bulk ops, 10s otherwise
+        }
+      }
+
+      const timeoutId = setTimeout(() => {
+        const resolver = this.batchResolvers.get(mediaId)
+        if (resolver) {
+          if (mediaId.startsWith('caption-')) {
+            // For captions, log warning but don't immediately resolve as null
+            mediaServiceDebugLog(`[MediaService] ⚠️ CAPTION TIMEOUT: ${mediaId} taking longer than ${timeoutMs}ms - will retry individually`)
+            this.batchResolvers.delete(mediaId)
+            // Try individual loading as fallback instead of resolving as null
+            this.getMediaInternal(mediaId)
+              .then(result => resolve(result))
+              .catch(() => {
+                mediaServiceDebugLog(`[MediaService] ❌ CAPTION RETRY FAILED: ${mediaId} - resolving as null`)
+                resolve(null)
+              })
+          } else {
+            // For non-captions, use original behavior but with better logging
+            mediaServiceDebugLog(`[MediaService] ⏰ TIMEOUT: Resolving ${mediaId} as null after ${timeoutMs}ms`)
+            this.batchResolvers.delete(mediaId)
+            resolve(null)
+          }
+        }
+      }, timeoutMs)
     })
     
     this.pendingBatchRequests.set(mediaId, mediaPromise)
     this.mediaLoadingPromises.set(mediaId, mediaPromise)
-    
+
+    // 🔧 FIX: Track promise creation and resolution to prevent deadlocks
+    this.promiseTracker.set(mediaId, {
+      promise: mediaPromise,
+      createdAt: Date.now(),
+      resolved: false
+    })
+
     // Clean up when done
     mediaPromise.finally(() => {
       this.pendingBatchRequests.delete(mediaId)
       this.mediaLoadingPromises.delete(mediaId)
+      // Mark as resolved in tracker (keep for a bit to detect stale promises)
+      const tracker = this.promiseTracker.get(mediaId)
+      if (tracker) {
+        tracker.resolved = true
+        // Clean up after 10 seconds to allow stale detection
+        setTimeout(() => this.promiseTracker.delete(mediaId), 10000)
+      }
     })
     
     return mediaPromise
   }
 
+  // 🔧 FIX: Wrap promises with timeout to prevent hanging deduplicated requests
+  private wrapPromiseWithTimeout<T>(
+    promise: Promise<T>,
+    mediaId: string,
+    timeoutMs: number
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        setTimeout(() => {
+          mediaServiceDebugLog(`[MediaService] ⏰ DEDUPE TIMEOUT: ${mediaId} timed out after ${timeoutMs}ms - cleaning up`)
+          // Clean up stale promise tracking
+          this.mediaLoadingPromises.delete(mediaId)
+          this.pendingBatchRequests.delete(mediaId)
+          this.promiseTracker.delete(mediaId)
+          reject(new Error(`Deduplicated request for ${mediaId} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+      })
+    ])
+  }
+
   // 🚀 BATCH PROCESSING: Collect requests and process in batches
-  private addToBatch(mediaId: string, resolve: Function, reject: Function) {
+  private addToBatch(mediaId: string, resolve: (value: any) => void, reject: (reason?: any) => void) {
     this.batchResolvers.set(mediaId, { resolve, reject })
     
     // Set up batch processing timer with adaptive timeout based on batch size
@@ -776,22 +934,56 @@ export class MediaService {
     const currentBatchSize = this.batchResolvers.size
     const adaptiveTimeout = this.calculateBatchTimeout(currentBatchSize)
     
-    console.log(`[MediaService] 📊 Batch size: ${currentBatchSize}, timeout: ${adaptiveTimeout}ms`)
+    mediaServiceDebugLog(`[MediaService] 📊 Batch size: ${currentBatchSize}, timeout: ${adaptiveTimeout}ms`)
     this.batchRequestTimer = setTimeout(() => this.processBatch(), adaptiveTimeout)
   }
   
-  // 🚀 STARTUP OPTIMIZATION: Calculate optimal batch timeout based on request volume
+  // 🚀 PHASE 3 & 5: Enhanced batch timeout calculation with generation mode support
   private calculateBatchTimeout(batchSize: number): number {
-    if (batchSize >= 20) {
-      // Startup scenario - use longer timeout to collect more requests
-      console.log('[MediaService] 🚀 STARTUP DETECTED: Using extended batch timeout')
-      return 100 // 100ms for startup batching
-    } else if (batchSize >= 10) {
-      // Medium batch - moderate timeout
-      return 50 // 50ms for medium batches
+    // 🚀 PHASE 3: Use much longer timeouts in generation mode for maximum batching efficiency
+    if (this.isGenerationMode) {
+      // In generation mode, prioritize large batches over speed
+      if (batchSize >= 20) {
+        const timeout = 3000 // 3 seconds for very large batches
+        mediaServiceDebugLog(`[MediaService] 🚀 GENERATION MODE - MEGA BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+        return timeout
+      } else if (batchSize >= 10) {
+        const timeout = 2000 // 2 seconds for large batches
+        mediaServiceDebugLog(`[MediaService] 🚀 GENERATION MODE - LARGE BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+        return timeout
+      } else if (batchSize >= 5) {
+        const timeout = 1500 // 1.5 seconds for medium batches
+        mediaServiceDebugLog(`[MediaService] 🚀 GENERATION MODE - MEDIUM BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+        return timeout
+      } else {
+        const timeout = 1000 // 1 second minimum in generation mode
+        mediaServiceDebugLog(`[MediaService] 🚀 GENERATION MODE - SMALL BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+        return timeout
+      }
+    }
+
+    // Normal mode - existing logic for interactive use
+    const timeSinceLastBatch = Date.now() - this.lastBatchProcessTime
+    const shouldExtendTimeout = timeSinceLastBatch < this.MIN_BATCH_INTERVAL
+
+    if (batchSize >= 15) {
+      // Large batch scenario - use extended timeout to collect even more requests
+      const timeout = shouldExtendTimeout ? 400 : 300 // Extended for backend optimization
+      mediaServiceDebugLog(`[MediaService] 🚀 LARGE BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+      return timeout
+    } else if (batchSize >= 8) {
+      // Medium batch - longer timeout to encourage growth
+      const timeout = shouldExtendTimeout ? 300 : 250 // Increased significantly
+      mediaServiceDebugLog(`[MediaService] 🔄 MEDIUM BATCH: Using ${timeout}ms timeout for ${batchSize} items`)
+      return timeout
+    } else if (batchSize >= 3) {
+      // Small-medium batch - wait for more requests
+      const timeout = shouldExtendTimeout ? 250 : 200 // Increased from 150ms
+      return timeout
     } else {
-      // Small batch - quick timeout
-      return 10 // 10ms for small batches (original behavior)
+      // Very small batch - wait significantly longer to encourage batching
+      const timeout = shouldExtendTimeout ? 200 : 150 // Increased from 100ms
+      return timeout
     }
   }
   
@@ -804,10 +996,10 @@ export class MediaService {
       // Test if invoke actually works by calling a simple command
       await invoke('get_cli_args')
       
-      console.log('[MediaService] ✅ Tauri environment detected and working')
+      mediaServiceDebugLog('[MediaService] ✅ Tauri environment detected and working')
       return true
     } catch (error) {
-      console.log('[MediaService] ❌ Tauri environment not available:', (error as Error).message)
+      mediaServiceDebugLog('[MediaService] ❌ Tauri environment not available:', (error as Error).message)
       return false
     }
   }
@@ -815,53 +1007,112 @@ export class MediaService {
   private async processBatch() {
     const batchIds = Array.from(this.batchResolvers.keys())
     if (batchIds.length === 0) return
-    
-    console.log(`[MediaService] 🚀 Processing batch of ${batchIds.length} media requests:`, batchIds)
+
+    // 🚀 PHASE 5: Track batch processing time for optimization
+    this.lastBatchProcessTime = Date.now()
+
+    mediaServiceDebugLog(`[MediaService] 🚀 PHASE 5: Processing optimized batch of ${batchIds.length} media requests:`, batchIds)
     
     try {
       // 🚀 PRODUCTION FIX: Better Tauri environment detection
       const isTauriEnvironment = await this.detectTauriEnvironment()
       
       if (isTauriEnvironment) {
-        console.log(`[MediaService] ✅ Using Tauri batch operations for ${batchIds.length} items`)
+        mediaServiceDebugLog(`[MediaService] ✅ Using Tauri batch operations for ${batchIds.length} items`)
         await this.processBatchWithTauri(batchIds)
       } else {
-        console.log(`[MediaService] ⚠️ Tauri not available, falling back to individual processing for ${batchIds.length} items`)
+        mediaServiceDebugLog(`[MediaService] ⚠️ Tauri not available, falling back to individual processing for ${batchIds.length} items`)
         // Fallback to individual processing for testing/browser-only environments
         await this.processBatchFallback(batchIds)
       }
     } catch (error) {
       console.error('[MediaService] Batch processing failed:', error)
-      // Reject all pending requests
+      // Only reject pending requests, don't force-resolve them
       for (const [mediaId, { reject }] of this.batchResolvers) {
+        mediaServiceDebugLog(`[MediaService] ❌ BATCH ERROR: Rejecting ${mediaId} due to batch processing failure`)
         reject(error)
       }
-    } finally {
+      // Clear resolvers after handling the error
       this.batchResolvers.clear()
+    } finally {
+      // 🔧 ENHANCED FIX: SMART CLEANUP with RETRY for unprocessed items
+      if (this.batchResolvers.size > 0) {
+        mediaServiceDebugLog(`[MediaService] 📊 SMART CLEANUP: ${this.batchResolvers.size} items remaining after batch processing`)
+
+        // Retry unprocessed items individually instead of failing them
+        const unprocessedItems = Array.from(this.batchResolvers.entries())
+        this.batchResolvers.clear() // Clear first to avoid infinite loops
+
+        for (const [mediaId, resolver] of unprocessedItems) {
+          mediaServiceDebugLog(`[MediaService] 🔄 RETRY: Processing ${mediaId} individually after batch failure`)
+
+          // Retry individual loading for unprocessed items
+          this.retryIndividualLoad(mediaId, resolver)
+        }
+      }
+
       this.batchRequestTimer = null
     }
   }
   
   private async processBatchWithTauri(batchIds: string[]) {
     const { invoke } = await import('@tauri-apps/api/core')
-    
+
     try {
-      // Use exists check first for ultra-fast filtering
-      const existenceFlags = await invoke<boolean[]>('media_exists_batch', {
-        projectId: this.projectId,
-        mediaIds: batchIds
-      })
-      
+      // 🚀 PHASE 5: Use existence cache to reduce backend calls
+      const cachedExistenceResults = new Map<string, boolean>()
+      const uncachedIds: string[] = []
+
+      // Check cache first
+      for (const mediaId of batchIds) {
+        const cached = this.projectExistenceCache.get(mediaId)
+        if (cached !== undefined) {
+          cachedExistenceResults.set(mediaId, cached)
+        } else {
+          uncachedIds.push(mediaId)
+        }
+      }
+
+      let existenceFlags: boolean[]
+
+      if (uncachedIds.length > 0) {
+        // Only call backend for uncached items
+        mediaServiceDebugLog(`[MediaService] 🚀 PHASE 5: Cache hit for ${cachedExistenceResults.size}/${batchIds.length} items, checking ${uncachedIds.length} uncached items`)
+
+        const uncachedFlags = await invoke<boolean[]>('media_exists_batch', {
+          projectId: this.projectId,
+          mediaIds: uncachedIds
+        })
+
+        // Cache the results
+        uncachedIds.forEach((mediaId, index) => {
+          this.projectExistenceCache.set(mediaId, uncachedFlags[index])
+        })
+
+        // Reconstruct full existence array
+        existenceFlags = batchIds.map(mediaId => {
+          const cached = cachedExistenceResults.get(mediaId)
+          if (cached !== undefined) return cached
+
+          const uncachedIndex = uncachedIds.indexOf(mediaId)
+          return uncachedFlags[uncachedIndex]
+        })
+      } else {
+        // All items were cached
+        mediaServiceDebugLog(`[MediaService] 🚀 PHASE 5: 100% cache hit for existence check (${batchIds.length} items)`)
+        existenceFlags = batchIds.map(mediaId => cachedExistenceResults.get(mediaId)!)
+      }
+
       const existingIds = batchIds.filter((_, index) => existenceFlags[index])
       const missingIds = batchIds.filter((_, index) => !existenceFlags[index])
       
-      console.log(`[MediaService] ⚡ BATCH EXISTS CHECK: ${existingIds.length} exist, ${missingIds.length} missing`)
+      mediaServiceDebugLog(`[MediaService] ⚡ BATCH EXISTS CHECK: ${existingIds.length} exist, ${missingIds.length} missing`)
       
       // Resolve missing media as null immediately
       for (const missingId of missingIds) {
         const resolver = this.batchResolvers.get(missingId)
         if (resolver) {
-          console.log(`[MediaService] ❌ Media not found: ${missingId}`)
+          mediaServiceDebugLog(`[MediaService] ❌ Media not found: ${missingId}`)
           resolver.resolve(null)
           this.batchResolvers.delete(missingId)
         }
@@ -875,14 +1126,25 @@ export class MediaService {
         mediaIds: existingIds
       })
       
-      console.log(`[MediaService] 🚀 BATCH LOADED: ${mediaDataArray.length} media items successfully`)
+      mediaServiceDebugLog(`[MediaService] 🚀 BATCH LOADED: ${mediaDataArray.length} media items successfully`)
       
-      // Process and resolve each media item
+      // Process and resolve each media item with error recovery
       for (const mediaData of mediaDataArray) {
         const resolver = this.batchResolvers.get(mediaData.id)
         if (resolver) {
-          const result = await this.processBatchMediaItem(mediaData)
-          resolver.resolve(result)
+          try {
+            const result = await this.processBatchMediaItem(mediaData)
+            resolver.resolve(result)
+          } catch (error) {
+            // ERROR RECOVERY: Add to failed list and resolve as null
+            logger.warn(`[MediaService] Failed to process batch media ${mediaData.id}:`, error)
+
+            const originalName = mediaData.metadata?.original_name || 'unknown'
+            const pageId = mediaData.metadata?.page_id || 'unknown'
+
+            this.addFailedMedia(mediaData.id, originalName, pageId, this.getErrorMessage(error))
+            resolver.resolve(null)
+          }
           this.batchResolvers.delete(mediaData.id)
         }
       }
@@ -895,8 +1157,8 @@ export class MediaService {
   }
   
   private async processBatchFallback(batchIds: string[]) {
-    console.log(`[MediaService] 🔄 Falling back to individual processing for ${batchIds.length} items`)
-    
+    mediaServiceDebugLog(`[MediaService] 🔄 Falling back to individual processing for ${batchIds.length} items`)
+
     for (const mediaId of batchIds) {
       const resolver = this.batchResolvers.get(mediaId)
       if (resolver) {
@@ -904,7 +1166,18 @@ export class MediaService {
           const result = await this.getMediaInternal(mediaId)
           resolver.resolve(result)
         } catch (error) {
-          resolver.reject(error)
+          // ERROR RECOVERY: Instead of rejecting, add to failed list and resolve as null
+          logger.warn(`[MediaService] Failed to load media ${mediaId}, adding to failed list:`, error)
+
+          // Try to get media info from cache to populate failed media details
+          const cachedMedia = this.mediaCache.get(mediaId)
+          const originalName = this.getStringValue(cachedMedia?.fileName || cachedMedia?.metadata?.original_name)
+          const pageId = this.getStringValue(cachedMedia?.pageId || cachedMedia?.metadata?.page_id)
+
+          this.addFailedMedia(mediaId, originalName, pageId, this.getErrorMessage(error))
+
+          // Resolve as null instead of rejecting to prevent hanging
+          resolver.resolve(null)
         }
         this.batchResolvers.delete(mediaId)
       }
@@ -927,7 +1200,7 @@ export class MediaService {
         data: new Uint8Array(mediaData.data),
         metadata: processedMetadata
       })
-      console.log(`[MediaService] ⚡ BATCH: Cached audio data for ${mediaData.id}`)
+      mediaServiceDebugLog(`[MediaService] ⚡ BATCH: Cached audio data for ${mediaData.id}`)
     }
     
     return {
@@ -936,7 +1209,212 @@ export class MediaService {
       url: undefined // Will be created by UnifiedMediaContext
     }
   }
-  
+
+  /**
+   * Retry individual loading for items that failed in batch processing
+   */
+  private async retryIndividualLoad(mediaId: string, resolver: { resolve: (value: any) => void }): Promise<void> {
+    try {
+      mediaServiceDebugLog(`[MediaService] 🔄 INDIVIDUAL RETRY: Loading ${mediaId} individually`)
+
+      const result = await this.getMediaInternal(mediaId)
+      resolver.resolve(result)
+
+      mediaServiceDebugLog(`[MediaService] ✅ INDIVIDUAL RETRY SUCCESS: ${mediaId}`)
+    } catch (error) {
+      mediaServiceDebugLog(`[MediaService] ❌ INDIVIDUAL RETRY FAILED: ${mediaId}`, error)
+
+      // Add to failed media list and resolve as null
+      const cachedMedia = this.mediaCache.get(mediaId)
+      const originalName = this.getStringValue(cachedMedia?.fileName || cachedMedia?.metadata?.original_name) || 'unknown'
+      const pageId = this.getStringValue(cachedMedia?.pageId || cachedMedia?.metadata?.page_id) || 'unknown'
+
+      this.addFailedMedia(mediaId, originalName, pageId, this.getErrorMessage(error))
+      resolver.resolve(null)
+    }
+  }
+
+  /**
+   * 🚀 PHASE 3: Add request to priority queue with cancellation support
+   */
+  private async queueMediaRequest(
+    mediaId: string,
+    options: {
+      priority?: RequestPriority,
+      pageId?: string,
+      isVisible?: boolean,
+      isCurrent?: boolean
+    } = {}
+  ): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
+    return new Promise((resolve, reject) => {
+      // Remove any existing requests for the same media ID
+      this.requestQueue = this.requestQueue.filter(req => req.mediaId !== mediaId)
+
+      // Determine priority based on context
+      let priority = options.priority || RequestPriority.LOW
+      if (options.isCurrent) {
+        priority = RequestPriority.HIGH
+      } else if (options.isVisible) {
+        priority = RequestPriority.MEDIUM
+      }
+
+      const cancellationToken = { cancelled: false }
+      const queuedRequest: QueuedRequest = {
+        mediaId,
+        priority,
+        pageId: options.pageId,
+        isVisible: options.isVisible,
+        isCurrent: options.isCurrent,
+        timestamp: Date.now(),
+        cancellationToken,
+        resolver: { resolve, reject }
+      }
+
+      this.requestQueue.push(queuedRequest)
+
+      // Sort queue by priority (highest first), then by timestamp (oldest first)
+      this.requestQueue.sort((a, b) => {
+        if (a.priority !== b.priority) {
+          return b.priority - a.priority // Higher priority first
+        }
+        return a.timestamp - b.timestamp // Older requests first for same priority
+      })
+
+      mediaServiceDebugLog(`[MediaService] 📋 QUEUED: ${mediaId} with priority ${priority} (queue size: ${this.requestQueue.length})`)
+
+      // Start processing if not already running
+      this.processQueue()
+    })
+  }
+
+  /**
+   * 🚀 PHASE 3: Process the priority queue
+   */
+  private processQueue(): void {
+    if (this.queueProcessingTimer) {
+      return // Already processing
+    }
+
+    this.queueProcessingTimer = setTimeout(async () => {
+      while (this.requestQueue.length > 0 && this.activeRequests.size < this.maxConcurrentRequests) {
+        const request = this.requestQueue.shift()
+        if (!request) break
+
+        // Skip cancelled requests
+        if (request.cancellationToken.cancelled) {
+          mediaServiceDebugLog(`[MediaService] ⏭️ SKIPPING: ${request.mediaId} (cancelled)`)
+          continue
+        }
+
+        // Skip if already being processed
+        if (this.activeRequests.has(request.mediaId)) {
+          mediaServiceDebugLog(`[MediaService] ⏭️ SKIPPING: ${request.mediaId} (already active)`)
+          continue
+        }
+
+        this.activeRequests.add(request.mediaId)
+        mediaServiceDebugLog(`[MediaService] 🚀 PROCESSING: ${request.mediaId} (priority ${request.priority})`)
+
+        // Process the request asynchronously
+        this.processQueuedRequest(request).finally(() => {
+          this.activeRequests.delete(request.mediaId)
+          // Continue processing queue
+          this.queueProcessingTimer = null
+          this.processQueue()
+        })
+      }
+
+      if (this.requestQueue.length === 0 || this.activeRequests.size >= this.maxConcurrentRequests) {
+        this.queueProcessingTimer = null
+      }
+    }, 10) // Small delay to batch multiple queue additions
+  }
+
+  /**
+   * 🚀 PHASE 3: Process an individual queued request
+   */
+  private async processQueuedRequest(request: QueuedRequest): Promise<void> {
+    try {
+      // Check if cancelled before processing
+      if (request.cancellationToken.cancelled) {
+        mediaServiceDebugLog(`[MediaService] 🚫 CANCELLED: ${request.mediaId}`)
+        return
+      }
+
+      const result = await this.getMediaInternal(request.mediaId)
+
+      // Check if cancelled after processing
+      if (request.cancellationToken.cancelled) {
+        mediaServiceDebugLog(`[MediaService] 🚫 CANCELLED AFTER LOAD: ${request.mediaId}`)
+        return
+      }
+
+      request.resolver.resolve(result)
+      mediaServiceDebugLog(`[MediaService] ✅ QUEUE SUCCESS: ${request.mediaId}`)
+    } catch (error) {
+      if (!request.cancellationToken.cancelled) {
+        mediaServiceDebugLog(`[MediaService] ❌ QUEUE ERROR: ${request.mediaId}`, error)
+        request.resolver.reject(error)
+      }
+    }
+  }
+
+  /**
+   * 🚀 PHASE 3: Cancel all requests for a specific page
+   */
+  public cancelRequestsForPage(pageId: string): void {
+    let cancelledCount = 0
+
+    // Cancel queued requests
+    for (const request of this.requestQueue) {
+      if (request.pageId === pageId) {
+        request.cancellationToken.cancelled = true
+        cancelledCount++
+      }
+    }
+
+    // Remove cancelled requests from queue
+    this.requestQueue = this.requestQueue.filter(req => !req.cancellationToken.cancelled)
+
+    if (cancelledCount > 0) {
+      mediaServiceDebugLog(`[MediaService] 🚫 CANCELLED: ${cancelledCount} requests for page ${pageId}`)
+    }
+  }
+
+  /**
+   * 🚀 PHASE 3: Cancel all low priority requests to prioritize high/medium priority
+   */
+  public cancelLowPriorityRequests(): void {
+    let cancelledCount = 0
+
+    for (const request of this.requestQueue) {
+      if (request.priority === RequestPriority.LOW) {
+        request.cancellationToken.cancelled = true
+        cancelledCount++
+      }
+    }
+
+    // Remove cancelled requests from queue
+    this.requestQueue = this.requestQueue.filter(req => !req.cancellationToken.cancelled)
+
+    if (cancelledCount > 0) {
+      mediaServiceDebugLog(`[MediaService] 🚫 CANCELLED: ${cancelledCount} low priority requests`)
+    }
+  }
+
+  /**
+   * 🚀 PHASE 5: Clear backend optimization caches when project changes
+   */
+  public clearBackendCaches(): void {
+    const existenceCacheSize = this.projectExistenceCache.size
+    this.projectExistenceCache.clear()
+    this.lastBatchProcessTime = 0
+
+    if (existenceCacheSize > 0) {
+      mediaServiceDebugLog(`[MediaService] 🧹 PHASE 5: Cleared ${existenceCacheSize} existence cache entries for project change`)
+    }
+  }
+
   /**
    * Internal method that does the actual media loading (without deduplication)
    */
@@ -945,14 +1423,14 @@ export class MediaService {
     if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
       const cached = this.audioDataCache.get(mediaId)
       if (cached) {
-        console.log('[MediaService] Returning cached audio data for:', mediaId)
+        mediaServiceDebugLog('[MediaService] Returning cached audio data for:', mediaId)
         return { ...cached, url: this.blobUrlCache.get(mediaId) }
       }
       
       // Check if we're already loading this audio
       const loadingPromise = this.audioLoadingPromises.get(mediaId)
       if (loadingPromise) {
-        console.log('[MediaService] Waiting for existing audio load:', mediaId)
+        mediaServiceDebugLog('[MediaService] Waiting for existing audio load:', mediaId)
         return loadingPromise
       }
     }
@@ -969,7 +1447,7 @@ export class MediaService {
     }
     
     try {
-      console.log('[MediaService] Getting media from file system:', mediaId)
+      mediaServiceDebugLog('[MediaService] Getting media from file system:', mediaId)
       
       const mediaInfo = await this.fileStorage.getMedia(mediaId)
       
@@ -981,7 +1459,7 @@ export class MediaService {
         metadataKeys: mediaInfo?.metadata ? Object.keys(mediaInfo.metadata) : []
       })
       
-      console.log('[MediaService] FileStorage returned:', {
+      mediaServiceDebugLog('[MediaService] FileStorage returned:', {
         found: !!mediaInfo,
         hasData: !!(mediaInfo?.data),
         dataSize: mediaInfo?.data?.byteLength || 0,
@@ -997,7 +1475,7 @@ export class MediaService {
       
       // Get cached metadata
       const cachedItem = this.mediaCache.get(mediaId)
-      console.log('[MediaService] Cached item:', {
+      mediaServiceDebugLog('[MediaService] Cached item:', {
         found: !!cachedItem,
         id: cachedItem?.id,
         type: cachedItem?.type,
@@ -1020,14 +1498,14 @@ export class MediaService {
             ? (mediaInfo.metadata?.clipStart !== undefined ? 'camelCase' : 'snake_case')
             : 'none'
         }
-        console.log(`[MediaService] 🎬 YouTube clip timing conversion for ${mediaId}:`)
-        console.log('  Raw clip_start (snake):', debugInfo.rawClipStart)
-        console.log('  Raw clip_end (snake):', debugInfo.rawClipEnd)
-        console.log('  Raw clipStart (camel):', debugInfo.camelClipStart)
-        console.log('  Raw clipEnd (camel):', debugInfo.camelClipEnd)
-        console.log('  Processed clipStart:', debugInfo.processedClipStart)
-        console.log('  Processed clipEnd:', debugInfo.processedClipEnd)
-        console.log('  Conversion source:', debugInfo.conversionSource)
+        mediaServiceDebugLog(`[MediaService] 🎬 YouTube clip timing conversion for ${mediaId}:`)
+        mediaServiceDebugLog('  Raw clip_start (snake):', debugInfo.rawClipStart)
+        mediaServiceDebugLog('  Raw clip_end (snake):', debugInfo.rawClipEnd)
+        mediaServiceDebugLog('  Raw clipStart (camel):', debugInfo.camelClipStart)
+        mediaServiceDebugLog('  Raw clipEnd (camel):', debugInfo.camelClipEnd)
+        mediaServiceDebugLog('  Processed clipStart:', debugInfo.processedClipStart)
+        mediaServiceDebugLog('  Processed clipEnd:', debugInfo.processedClipEnd)
+        mediaServiceDebugLog('  Conversion source:', debugInfo.conversionSource)
       }
       
       // 🔧 FIX: Always apply field conversion, even for cached items to ensure clip timing is converted
@@ -1051,7 +1529,7 @@ export class MediaService {
         (processedMetadata.isYouTube && (processedMetadata.clipStart !== undefined || processedMetadata.clipEnd !== undefined))
       
       if (shouldUpdateCache) {
-        console.log(`[MediaService] 🔄 Updating cache for ${mediaId}:`, {
+        mediaServiceDebugLog(`[MediaService] 🔄 Updating cache for ${mediaId}:`, {
           wasEmpty: !cachedItem,
           isYouTube: processedMetadata.isYouTube,
           hasClipTiming: !!(processedMetadata.clipStart !== undefined || processedMetadata.clipEnd !== undefined),
@@ -1085,56 +1563,73 @@ export class MediaService {
         metadataKeys: Object.keys(metadata)
       })
       
-      // For YouTube videos, generate embed URL with clip timing if available
-      if ((metadata.source === 'youtube' || metadata.isYouTube) && metadata.embedUrl) {
-        let baseUrl = metadata.embedUrl
-        
-        // 🔧 FIX: Dynamically add clip timing parameters to YouTube embed URL
-        if (metadata.clipStart !== undefined || metadata.clipEnd !== undefined) {
-          const urlObj = new URL(baseUrl)
-          
-          // Add start parameter if clipStart exists
-          if (metadata.clipStart !== undefined && metadata.clipStart !== null) {
-            urlObj.searchParams.set('start', metadata.clipStart.toString())
+      // For YouTube videos, get URL from metadata or blob data
+      if (metadata.source === 'youtube' || metadata.isYouTube) {
+        let baseUrl = metadata.embedUrl || metadata.youtubeUrl
+
+        // 🔧 FIX: If no URL in metadata, extract from blob data (stored as text)
+        if (!baseUrl && mediaInfo.data && mediaInfo.data.byteLength > 0) {
+          try {
+            const textDecoder = new TextDecoder()
+            baseUrl = textDecoder.decode(mediaInfo.data)
+            logger.info(`[MediaService] 🔧 Extracted YouTube URL from blob data for ${mediaId}:`, baseUrl)
+          } catch (error) {
+            logger.error(`[MediaService] Failed to extract YouTube URL from blob data for ${mediaId}:`, error)
           }
-          
-          // Add end parameter if clipEnd exists  
-          if (metadata.clipEnd !== undefined && metadata.clipEnd !== null) {
-            urlObj.searchParams.set('end', metadata.clipEnd.toString())
-          }
-          
-          url = urlObj.toString()
-          debugLogger.debug('MediaService.getMedia', 'Generated YouTube embed URL with clip timing', { 
-            mediaId, 
-            baseUrl, 
-            finalUrl: url, 
-            clipStart: metadata.clipStart, 
-            clipEnd: metadata.clipEnd 
-          })
-          logger.info(`[MediaService] 🎬 Generated YouTube embed URL with clip timing for ${mediaId}:`, {
-            baseUrl,
-            finalUrl: url,
-            clipStart: metadata.clipStart,
-            clipEnd: metadata.clipEnd
-          })
-        } else {
-          url = baseUrl
-          debugLogger.debug('MediaService.getMedia', 'Using YouTube embed URL without clip timing', { mediaId, url })
-          logger.info('[MediaService] Using YouTube embed URL (no clip timing):', url)
         }
-      } else if (metadata.youtubeUrl) {
-        url = metadata.youtubeUrl
-        debugLogger.debug('MediaService.getMedia', 'Using YouTube URL', { mediaId, url })
-        logger.info('[MediaService] Using YouTube URL:', url)
-      } else if (metadata.source === 'youtube' || metadata.isYouTube || metadata.embedUrl || metadata.youtubeUrl) {
-        // YouTube video but missing URL - should not happen
-        logger.error('[MediaService] YouTube video detected but no URL available', {
-          mediaId,
-          source: metadata.source,
-          isYouTube: metadata.isYouTube,
-          hasEmbedUrl: !!metadata.embedUrl,
-          hasYoutubeUrl: !!metadata.youtubeUrl
-        })
+
+        if (baseUrl) {
+          // 🔧 FIX: Dynamically add clip timing parameters to YouTube embed URL
+          if (metadata.clipStart !== undefined || metadata.clipEnd !== undefined) {
+            try {
+              const urlObj = new URL(baseUrl)
+
+              // Add start parameter if clipStart exists
+              if (metadata.clipStart !== undefined && metadata.clipStart !== null) {
+                urlObj.searchParams.set('start', metadata.clipStart.toString())
+              }
+
+              // Add end parameter if clipEnd exists
+              if (metadata.clipEnd !== undefined && metadata.clipEnd !== null) {
+                urlObj.searchParams.set('end', metadata.clipEnd.toString())
+              }
+
+              url = urlObj.toString()
+              debugLogger.debug('MediaService.getMedia', 'Generated YouTube embed URL with clip timing', {
+                mediaId,
+                baseUrl,
+                finalUrl: url,
+                clipStart: metadata.clipStart,
+                clipEnd: metadata.clipEnd
+              })
+              logger.info(`[MediaService] 🎬 Generated YouTube embed URL with clip timing for ${mediaId}:`, {
+                baseUrl,
+                finalUrl: url,
+                clipStart: metadata.clipStart,
+                clipEnd: metadata.clipEnd
+              })
+            } catch (urlError) {
+              // If URL parsing fails, use baseUrl as-is
+              url = baseUrl
+              logger.warn(`[MediaService] Failed to parse YouTube URL for clip timing, using base URL:`, urlError)
+            }
+          } else {
+            url = baseUrl
+            debugLogger.debug('MediaService.getMedia', 'Using YouTube URL without clip timing', { mediaId, url })
+            logger.info('[MediaService] Using YouTube URL (no clip timing):', url)
+          }
+        } else {
+          // YouTube video but missing URL - provide fallback
+          logger.error('[MediaService] YouTube video detected but no URL available', {
+            mediaId,
+            source: metadata.source,
+            isYouTube: metadata.isYouTube,
+            hasEmbedUrl: !!metadata.embedUrl,
+            hasYoutubeUrl: !!metadata.youtubeUrl,
+            hasBlobData: !!(mediaInfo.data && mediaInfo.data.byteLength > 0)
+          })
+          url = 'https://www.youtube.com/watch?v=invalid' // Fallback URL to prevent errors
+        }
       } else if (mediaInfo.data && mediaInfo.data.byteLength > 0) {
         // For regular files with data, create a blob URL
         logger.info('[MediaService v3.0.0] Creating blob URL for media', { 
@@ -1201,7 +1696,7 @@ export class MediaService {
       let data: Uint8Array | undefined
       if (mediaInfo.data && !(metadata.source === 'youtube' || metadata.isYouTube)) {
         data = new Uint8Array(mediaInfo.data)
-        console.log('[MediaService] Providing binary data for SCORM packaging:', {
+        mediaServiceDebugLog('[MediaService] Providing binary data for SCORM packaging:', {
           mediaId,
           originalSize: mediaInfo.data.byteLength,
           convertedSize: data.length,
@@ -1217,7 +1712,7 @@ export class MediaService {
       })
       
       logger.info('[MediaService v2.0.6] Retrieved media from FILE SYSTEM:', mediaId, 'url:', url)
-      console.log('[MediaService v2.0.6] Final result for getMedia:', { 
+      mediaServiceDebugLog('[MediaService v2.0.6] Final result for getMedia:', { 
         mediaId, 
         url, 
         hasUrl: !!url,
@@ -1234,13 +1729,13 @@ export class MediaService {
       if (mediaId?.startsWith('audio-') || mediaId?.includes('audio')) {
         if (data && metadata) {
           this.audioDataCache.set(mediaId, { data, metadata })
-          console.log('[MediaService] Cached audio data for future use:', mediaId)
+          mediaServiceDebugLog('[MediaService] Cached audio data for future use:', mediaId)
         }
         // Clear loading promise
         this.audioLoadingPromises.delete(mediaId)
       }
       
-      console.log('[MediaService] Returning media:', {
+      mediaServiceDebugLog('[MediaService] Returning media:', {
         mediaId,
         hasData: !!result.data,
         metadataType: result.metadata.type,
@@ -1248,7 +1743,7 @@ export class MediaService {
         url: result.url
       })
       
-      console.log(`✅ [MediaService] getMedia SUCCESS for ${mediaId}:`, {
+      mediaServiceDebugLog(`✅ [MediaService] getMedia SUCCESS for ${mediaId}:`, {
         hasData: !!result.data,
         hasMetadata: !!result.metadata,
         hasUrl: !!result.url,
@@ -1263,7 +1758,16 @@ export class MediaService {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.error('[MediaService] Failed to get media from file system:', error)
       console.error(`❌ [MediaService] getMedia FAILED for ${mediaId}:`, errorMsg)
-      console.log(`🔍 [MediaService] Full error object for ${mediaId}:`, error)
+      mediaServiceDebugLog(`🔍 [MediaService] Full error object for ${mediaId}:`, error)
+
+      // ERROR RECOVERY: Add to failed media list
+      const cachedMedia = this.mediaCache.get(mediaId)
+      const originalName = this.getStringValue(cachedMedia?.fileName || cachedMedia?.metadata?.original_name)
+      const pageId = this.getStringValue(cachedMedia?.pageId || cachedMedia?.metadata?.page_id)
+
+      this.addFailedMedia(mediaId, originalName, pageId, errorMsg)
+      logger.warn(`[MediaService] Added failed media to recovery list: ${mediaId} (${originalName})`)
+
       return null
     }
   }
@@ -1273,7 +1777,7 @@ export class MediaService {
    */
   private async loadAudioWithDeduplication(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null> {
     try {
-      console.log('[MediaService] Loading audio from file system:', mediaId)
+      mediaServiceDebugLog('[MediaService] Loading audio from file system:', mediaId)
       
       const mediaInfo = await this.fileStorage.getMedia(mediaId)
       
@@ -1294,7 +1798,7 @@ export class MediaService {
         })
         url = URL.createObjectURL(blob)
         this.blobUrlCache.set(mediaId, url)
-        console.log('[MediaService] Created blob URL for audio:', mediaId)
+        mediaServiceDebugLog('[MediaService] Created blob URL for audio:', mediaId)
       }
       
       const data = mediaInfo.data ? new Uint8Array(mediaInfo.data) : undefined
@@ -1304,7 +1808,7 @@ export class MediaService {
       // Cache the audio data
       if (data && metadata) {
         this.audioDataCache.set(mediaId, { data, metadata })
-        console.log('[MediaService] Cached audio data for:', mediaId)
+        mediaServiceDebugLog('[MediaService] Cached audio data for:', mediaId)
       }
       
       // Clear loading promise
@@ -1328,9 +1832,9 @@ export class MediaService {
     try {
       // Get all media in the project
       const allMedia = await this.listAllMedia()
-      console.log(`[MediaService] 🧹 Starting aggressive cleanup scan of ${allMedia.length} media items`)
-      console.log(`[MediaService] 🔍 DEBUG: All media IDs:`, allMedia.map(m => m.id))
-      console.log(`[MediaService] 🔍 DEBUG: Sample metadata:`, allMedia.length > 0 ? allMedia[0].metadata : 'No items')
+      mediaServiceDebugLog(`[MediaService] 🧹 Starting aggressive cleanup scan of ${allMedia.length} media items`)
+      mediaServiceDebugLog(`[MediaService] 🔍 DEBUG: All media IDs:`, allMedia.map(m => m.id))
+      mediaServiceDebugLog(`[MediaService] 🔍 DEBUG: Sample metadata:`, allMedia.length > 0 ? allMedia[0].metadata : 'No items')
       
       for (const mediaItem of allMedia) {
         // AGGRESSIVE CONTAMINATION DETECTION
@@ -1342,7 +1846,7 @@ export class MediaService {
           // Get raw metadata from FileStorage to bypass MediaService processing
           const rawMediaData = await this.fileStorage.getMedia(mediaItem.id)
           if (rawMediaData) {
-            console.log(`[MediaService] 🔍 RAW METADATA from FileStorage for ${mediaItem.id}:`, {
+            mediaServiceDebugLog(`[MediaService] 🔍 RAW METADATA from FileStorage for ${mediaItem.id}:`, {
               fileStorageMetadata: rawMediaData.metadata,
               fileStorageKeys: Object.keys(rawMediaData.metadata || {}),
               processedMetadata: metadata,
@@ -1368,7 +1872,7 @@ export class MediaService {
         ]
         
         // Check each contamination field for debugging
-        console.log(`[MediaService] 🔬 Scanning contamination fields for ${mediaItem.id}:`, 
+        mediaServiceDebugLog(`[MediaService] 🔬 Scanning contamination fields for ${mediaItem.id}:`, 
           contaminationFields.filter(field => field in metadata))
         
         // 🔧 FIXED CONTAMINATION DETECTION
@@ -1391,7 +1895,7 @@ export class MediaService {
           // Special handling for source field - only 'youtube' source is contamination for source field
           if (field === 'source') {
             const isYouTubeSource = value === 'youtube'
-            if (isYouTubeSource) console.log(`[MediaService] ✅ CONTAMINATION: YouTube source field on non-video media`)
+            if (isYouTubeSource) mediaServiceDebugLog(`[MediaService] ✅ CONTAMINATION: YouTube source field on non-video media`)
             return isYouTubeSource
           }
           
@@ -1400,7 +1904,7 @@ export class MediaService {
           const youtubeSpecificFields = ['embed_url', 'youtube_url', 'embedUrl', 'youtubeUrl', 
                                          'clip_start', 'clip_end', 'clipStart', 'clipEnd']
           if (youtubeSpecificFields.includes(field)) {
-            console.log(`[MediaService] ✅ CONTAMINATION: YouTube-specific field ${field} exists on non-video media`)
+            mediaServiceDebugLog(`[MediaService] ✅ CONTAMINATION: YouTube-specific field ${field} exists on non-video media`)
             return true
           }
           
@@ -1427,7 +1931,7 @@ export class MediaService {
         // Only clean non-video/non-YouTube media that has YouTube contamination
         const shouldClean = hasYouTubeContamination && !isLegitimateYouTubeVideo
         
-        console.log(`[MediaService] 🔍 CLEANUP SCAN: ${mediaItem.id} (type: ${mediaItem.type})`, {
+        mediaServiceDebugLog(`[MediaService] 🔍 CLEANUP SCAN: ${mediaItem.id} (type: ${mediaItem.type})`, {
           hasYouTubeContamination,
           isLegitimateYouTubeVideo,
           shouldClean,
@@ -1446,8 +1950,8 @@ export class MediaService {
         })
         
         if (shouldClean) {
-          console.log(`[MediaService] 🧹 AGGRESSIVE: Cleaning contaminated ${mediaItem.type}: ${mediaItem.id}`)
-          console.log(`[MediaService] 🔍 Detected contamination fields:`, contaminationFields.filter(field => !!metadata[field]))
+          mediaServiceDebugLog(`[MediaService] 🧹 AGGRESSIVE: Cleaning contaminated ${mediaItem.type}: ${mediaItem.id}`)
+          mediaServiceDebugLog(`[MediaService] 🔍 Detected contamination fields:`, contaminationFields.filter(field => !!metadata[field]))
           
           try {
             // AGGRESSIVE CLEANUP - Remove ALL YouTube-related fields
@@ -1456,7 +1960,7 @@ export class MediaService {
             // Remove all contamination fields regardless of case/format
             contaminationFields.forEach(field => {
               if (cleanMetadata.hasOwnProperty(field)) {
-                console.log(`[MediaService] 🗑️ Removing contaminated field: ${field} = ${cleanMetadata[field]}`)
+                mediaServiceDebugLog(`[MediaService] 🗑️ Removing contaminated field: ${field} = ${cleanMetadata[field]}`)
                 delete cleanMetadata[field]
               }
             })
@@ -1466,7 +1970,7 @@ export class MediaService {
               if (key.toLowerCase().includes('youtube') || 
                   key.toLowerCase().includes('embed') ||
                   key.toLowerCase().includes('clip')) {
-                console.log(`[MediaService] 🗑️ Removing suspicious field: ${key} = ${cleanMetadata[key]}`)
+                mediaServiceDebugLog(`[MediaService] 🗑️ Removing suspicious field: ${key} = ${cleanMetadata[key]}`)
                 delete cleanMetadata[key]
               }
             })
@@ -1492,7 +1996,7 @@ export class MediaService {
               }
             })
             
-            console.log(`[MediaService] 🧽 Clean metadata keys:`, Object.keys(cleanMetadata))
+            mediaServiceDebugLog(`[MediaService] 🧽 Clean metadata keys:`, Object.keys(cleanMetadata))
             
             // 🔧 CRITICAL FIX: Preserve original media data, only update metadata
             const existingMediaInfo = await this.fileStorage.getMedia(mediaItem.id)
@@ -1501,7 +2005,7 @@ export class MediaService {
             if (existingMediaInfo?.data) {
               // Preserve original image data
               mediaBlob = new Blob([existingMediaInfo.data], { type: existingMediaInfo.mediaType || mediaItem.type })
-              console.log(`[MediaService] ✅ Preserving original media data: ${existingMediaInfo.data.byteLength} bytes`)
+              mediaServiceDebugLog(`[MediaService] ✅ Preserving original media data: ${existingMediaInfo.data.byteLength} bytes`)
             } else {
               // Fallback: get from cache or create empty blob (shouldn't happen for existing media)
               console.warn(`[MediaService] ⚠️ No existing data found for ${mediaItem.id}, using empty blob`)
@@ -1523,10 +2027,10 @@ export class MediaService {
             
             // 🔄 FORCE CACHE REFRESH: Invalidate any stale blob URLs
             blobUrlManager.revokeUrl(mediaItem.id)
-            console.log(`[MediaService] 🔄 Revoked stale blob URL for cleaned media: ${mediaItem.id}`)
+            mediaServiceDebugLog(`[MediaService] 🔄 Revoked stale blob URL for cleaned media: ${mediaItem.id}`)
             
             cleaned.push(mediaItem.id)
-            console.log(`[MediaService] ✅ AGGRESSIVELY cleaned contaminated media: ${mediaItem.id}`)
+            mediaServiceDebugLog(`[MediaService] ✅ AGGRESSIVELY cleaned contaminated media: ${mediaItem.id}`)
           } catch (error) {
             const errorMsg = `Failed to clean ${mediaItem.id}: ${error}`
             errors.push(errorMsg)
@@ -1535,21 +2039,21 @@ export class MediaService {
         }
       }
       
-      console.log(`[MediaService] 🧹 AGGRESSIVE cleanup complete: ${cleaned.length} cleaned, ${errors.length} errors`)
+      mediaServiceDebugLog(`[MediaService] 🧹 AGGRESSIVE cleanup complete: ${cleaned.length} cleaned, ${errors.length} errors`)
       if (cleaned.length > 0) {
-        console.log(`[MediaService] 🎯 Cleaned items:`, cleaned)
+        mediaServiceDebugLog(`[MediaService] 🎯 Cleaned items:`, cleaned)
       }
       if (errors.length > 0) {
-        console.log(`[MediaService] ❌ Cleanup errors:`, errors)
+        mediaServiceDebugLog(`[MediaService] ❌ Cleanup errors:`, errors)
       }
       
       // Summary of all media processed
-      console.log(`[MediaService] 📊 Cleanup summary: Processed ${allMedia.length} total media items`)
+      mediaServiceDebugLog(`[MediaService] 📊 Cleanup summary: Processed ${allMedia.length} total media items`)
       const mediaByType = allMedia.reduce((acc, item) => {
         acc[item.type] = (acc[item.type] || 0) + 1
         return acc
       }, {} as Record<string, number>)
-      console.log(`[MediaService] 📊 Media by type:`, mediaByType)
+      mediaServiceDebugLog(`[MediaService] 📊 Media by type:`, mediaByType)
       
       return { cleaned, errors }
     } catch (error) {
@@ -1606,7 +2110,7 @@ export class MediaService {
     
     // 🔍 ENHANCED LOGGING: Log all metadata processing for debugging
     if (actualMediaType === 'image' || actualMediaType === 'video') {
-      console.log(`[MediaService] 📊 Processing metadata for ${actualMediaType}:`, {
+      mediaServiceDebugLog(`[MediaService] 📊 Processing metadata for ${actualMediaType}:`, {
         mediaId: mediaInfo.id,
         type: actualMediaType,
         source: source,
@@ -1616,28 +2120,58 @@ export class MediaService {
       })
     }
     
+    // 🔧 FIX: Properly extract YouTube URL from metadata fields
+    const embedUrl = mediaInfo.metadata?.embedUrl || mediaInfo.metadata?.embed_url
+    const youtubeUrl = mediaInfo.metadata?.youtubeUrl ||
+                      (mediaInfo.metadata?.source === 'youtube' ? embedUrl : undefined)
+
     return {
       type: actualMediaType,
       pageId: (typeof pageId === 'string' ? pageId : ''),
       mimeType: mediaInfo.metadata?.mimeType || mediaInfo.metadata?.mime_type,
       mime_type: mediaInfo.metadata?.mime_type,
       source: mediaInfo.metadata?.source,
-      embedUrl: mediaInfo.metadata?.embedUrl || mediaInfo.metadata?.embed_url,
-      isYouTube: mediaInfo.metadata?.source === 'youtube',
-      youtubeUrl: mediaInfo.metadata?.youtubeUrl,
+      embedUrl: embedUrl,
+      isYouTube: mediaInfo.metadata?.source === 'youtube' || mediaInfo.metadata?.isYouTube === true,
+      youtubeUrl: youtubeUrl,
       title: mediaInfo.metadata?.title,
       uploadedAt: mediaInfo.metadata?.uploadedAt || new Date().toISOString(),
-      // 🔧 FIX: Convert snake_case clip timing fields to camelCase
-      clipStart: mediaInfo.metadata?.clipStart || mediaInfo.metadata?.clip_start,
-      clipEnd: mediaInfo.metadata?.clipEnd || mediaInfo.metadata?.clip_end
+      // 🔧 FIX: Convert snake_case clip timing fields to camelCase with proper null/string handling
+      clipStart: this.normalizeClipTiming(mediaInfo.metadata?.clipStart || mediaInfo.metadata?.clip_start),
+      clipEnd: this.normalizeClipTiming(mediaInfo.metadata?.clipEnd || mediaInfo.metadata?.clip_end)
     }
   }
   
   /**
+   * Normalize clip timing values: convert null to undefined, strings to numbers
+   * Handles the bug where clip timing shows as "null (type: object)"
+   */
+  private normalizeClipTiming(value: any): number | undefined {
+    // Handle null, undefined, empty string
+    if (value === null || value === undefined || value === '') {
+      return undefined
+    }
+
+    // Handle string numbers - convert to number
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value)
+      return isNaN(parsed) ? undefined : parsed
+    }
+
+    // Handle actual numbers
+    if (typeof value === 'number' && !isNaN(value)) {
+      return value
+    }
+
+    // Handle any other invalid values
+    return undefined
+  }
+
+  /**
    * Clear the audio cache - should be called when switching projects
    */
   clearAudioCache(): void {
-    console.log('[MediaService] Clearing audio cache, current size:', this.audioDataCache.size)
+    mediaServiceDebugLog('[MediaService] Clearing audio cache, current size:', this.audioDataCache.size)
     
     // Clear blob URLs for cached audio
     this.audioDataCache.forEach((_, mediaId) => {
@@ -1651,21 +2185,21 @@ export class MediaService {
     this.audioDataCache.clear()
     this.audioLoadingPromises.clear()
     
-    console.log('[MediaService] Audio cache cleared')
+    mediaServiceDebugLog('[MediaService] Audio cache cleared')
   }
 
   /**
    * Clear audio cache for a specific media ID - use when replacing audio
    */
   clearAudioFromCache(mediaId: string): void {
-    console.log('[MediaService] Clearing audio from cache:', mediaId)
+    mediaServiceDebugLog('[MediaService] Clearing audio from cache:', mediaId)
     
     // Clear blob URL if exists
     const url = this.blobUrlCache.get(mediaId)
     if (url && url.startsWith('blob:')) {
       try {
         URL.revokeObjectURL(url)
-        console.log('[MediaService] Revoked blob URL for:', mediaId)
+        mediaServiceDebugLog('[MediaService] Revoked blob URL for:', mediaId)
       } catch (e) {
         console.warn('[MediaService] Failed to revoke blob URL:', e)
       }
@@ -1676,7 +2210,7 @@ export class MediaService {
     this.blobUrlCache.delete(mediaId) 
     this.audioLoadingPromises.delete(mediaId)
     
-    console.log('[MediaService] Audio cleared from cache:', mediaId)
+    mediaServiceDebugLog('[MediaService] Audio cleared from cache:', mediaId)
   }
   
   /**
@@ -1698,7 +2232,7 @@ export class MediaService {
    */
   async createBlobUrl(mediaId: string): Promise<string | null> {
     debugLogger.debug('MediaService.createBlobUrl', 'Getting blob URL', { mediaId })
-    console.log('[MediaService v3.0.0] createBlobUrl called for:', mediaId)
+    mediaServiceDebugLog('[MediaService v3.0.0] createBlobUrl called for:', mediaId)
     
     try {
       // Get the media which now returns blob URLs
@@ -1777,12 +2311,12 @@ export class MediaService {
     
     // 🚀 FIX 6: SMART BACKEND CALL PREVENTION
     if (isVisualOnly) {
-      console.log('[MediaService] 🚀 FIX 6: SMART BACKEND CALL PREVENTION - Visual-only mode detected')
+      mediaServiceDebugLog('[MediaService] 🚀 FIX 6: SMART BACKEND CALL PREVENTION - Visual-only mode detected')
       
       // Check global flag first
       const globalVisualMode = (globalThis as any)._scormBuilderVisualOnlyMode
       if (globalVisualMode) {
-        console.log('[MediaService] ✅ Global visual-only flag confirmed, implementing smart filtering')
+        mediaServiceDebugLog('[MediaService] ✅ Global visual-only flag confirmed, implementing smart filtering')
       }
     }
     
@@ -1815,7 +2349,7 @@ export class MediaService {
             reason: isVisualOnly ? 'Cache empty, need initial scan' : 'Full scan requested'
           })
           
-          console.log(`[MediaService] 🔍 Calling backend getAllProjectMedia() - Visual-only: ${isVisualOnly}`)
+          mediaServiceDebugLog(`[MediaService] 🔍 Calling backend getAllProjectMedia() - Visual-only: ${isVisualOnly}`)
           const fileSystemMedia = await (this.fileStorage as any).getAllProjectMedia()
           
           if (Array.isArray(fileSystemMedia)) {
@@ -1842,7 +2376,7 @@ export class MediaService {
                 const mediaItem: MediaItem = {
                   id: fsMedia.id,
                   type: mediaType,
-                  pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || '',
+                  pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || this.derivePageIdFromMediaId(fsMedia.id),
                   fileName: fsMedia.metadata?.fileName || fsMedia.metadata?.original_name || '',
                   metadata: {
                     ...fsMedia.metadata,
@@ -1864,7 +2398,7 @@ export class MediaService {
             })
             
             if (isVisualOnly && excludedCount > 0) {
-              console.log(`[MediaService] 🚀 FIX 6: Successfully excluded ${excludedCount} audio/caption items from results`)
+              mediaServiceDebugLog(`[MediaService] 🚀 FIX 6: Successfully excluded ${excludedCount} audio/caption items from results`)
             }
           }
         } catch (error) {
@@ -1873,7 +2407,7 @@ export class MediaService {
           logger.warn('[MediaService] Failed to fetch file system media, using cache only:', error)
         }
       } else if (!shouldCallBackend) {
-        console.log('[MediaService] 🚀 FIX 6: BACKEND CALL SKIPPED - Using cached visual media only')
+        mediaServiceDebugLog('[MediaService] 🚀 FIX 6: BACKEND CALL SKIPPED - Using cached visual media only')
         debugLogger.info('MediaService.listAllMedia', 'Skipped backend call', {
           reason: 'Visual-only mode with sufficient cache',
           cachedItems: cachedItems.length
@@ -1888,7 +2422,7 @@ export class MediaService {
         visualOnlyMode: isVisualOnly
       })
       
-      console.log(`[MediaService] Listed media with filtering - Total: ${items.length}, Excluded types: [${excludeTypes.join(', ')}]`)
+      mediaServiceDebugLog(`[MediaService] Listed media with filtering - Total: ${items.length}, Excluded types: [${excludeTypes.join(', ')}]`)
       return items
     } catch (error) {
       debugLogger.error('MediaService.listAllMedia', 'Failed to list media', error)
@@ -2132,6 +2666,37 @@ export class MediaService {
   }
 
   /**
+   * Derive pageId from mediaId using reverse ID generation logic
+   * Maps index back to pageId: 0→"welcome", 1→"objectives", 2+→"topic-{n-1}"
+   */
+  private derivePageIdFromMediaId(mediaId: string): string | null {
+    try {
+      // Parse mediaId format (e.g., "image-5", "audio-2", "video-10")
+      const match = mediaId.match(/^(image|audio|video|caption)-(\d+)$/)
+      if (!match) {
+        debugLogger.warn('MediaService.derivePageIdFromMediaId', 'Invalid mediaId format', { mediaId })
+        return null
+      }
+
+      const index = parseInt(match[2])
+
+      // Map index to pageId using the same logic as idGenerator
+      if (index === 0) {
+        return 'welcome'
+      } else if (index === 1) {
+        return 'objectives'
+      } else {
+        // Topics start at index 2, map to topic-1, topic-2, etc.
+        const topicNumber = index - 1
+        return `topic-${topicNumber}`
+      }
+    } catch (error) {
+      debugLogger.error('MediaService.derivePageIdFromMediaId', 'Failed to derive pageId', { mediaId, error })
+      return null
+    }
+  }
+
+  /**
    * Bulk delete media with error handling
    */
   async bulkDeleteMedia(
@@ -2267,11 +2832,13 @@ export class MediaService {
         for (const [pageId, audioData] of Object.entries(audioNarrationData)) {
           if (audioData && typeof audioData === 'object') {
             const audioItem = audioData as any
+            // 🔧 FIX 4: MEDIA ID GENERATION - Generate ID if missing
+            const mediaId = audioItem.id || generateMediaId('audio', audioItem.pageId || pageId)
             const mediaItem: MediaItem = {
-              id: audioItem.id,
+              id: mediaId,
               type: 'audio',
               pageId: audioItem.pageId || pageId,
-              fileName: audioItem.metadata?.fileName || audioItem.metadata?.originalName || `${audioItem.id}.mp3`,
+              fileName: audioItem.metadata?.fileName || audioItem.metadata?.originalName || `${mediaId}.mp3`,
               metadata: {
                 ...audioItem.metadata,
                 type: 'audio',
@@ -2279,10 +2846,10 @@ export class MediaService {
                 uploadedAt: audioItem.metadata?.uploadedAt || new Date().toISOString()
               }
             }
-            this.mediaCache.set(audioItem.id, mediaItem)
+            this.mediaCache.set(mediaId, mediaItem)
             mediaCount++
             debugLogger.debug('MediaService.loadMediaFromProject', 'Loaded audio narration', {
-              id: audioItem.id,
+              id: mediaId,
               pageId: pageId
             })
           }
@@ -2321,11 +2888,13 @@ export class MediaService {
                   })
                 }
 
+                // 🔧 FIX 4: MEDIA ID GENERATION - Generate ID if missing
+                const mediaId = mediaData.id || generateMediaId(mediaData.type || 'image', mediaData.pageId || pageId)
                 const mediaItem: MediaItem = {
-                  id: mediaData.id,
+                  id: mediaId,
                   type: mediaData.type || 'image',
                   pageId: mediaData.pageId || pageId,
-                  fileName: mediaData.metadata?.fileName || mediaData.metadata?.originalName || `${mediaData.id}.${this.getExtension(mediaData.type || 'image')}`,
+                  fileName: mediaData.metadata?.fileName || mediaData.metadata?.originalName || `${mediaId}.${this.getExtension(mediaData.type || 'image')}`,
                   metadata: {
                     ...mediaData.metadata,
                     type: mediaData.type || 'image',
@@ -2333,10 +2902,10 @@ export class MediaService {
                     uploadedAt: mediaData.metadata?.uploadedAt || new Date().toISOString()
                   }
                 }
-                this.mediaCache.set(mediaData.id, mediaItem)
+                this.mediaCache.set(mediaId, mediaItem)
                 mediaCount++
                 debugLogger.debug('MediaService.loadMediaFromProject', 'Loaded media enhancement', {
-                  id: mediaData.id,
+                  id: mediaId,
                   type: mediaData.type,
                   pageId: pageId
                 })
@@ -2345,22 +2914,23 @@ export class MediaService {
           }
         }
       }
-      
+
       // Load media registry data if available (for backward compatibility)
       if (mediaRegistryData && typeof mediaRegistryData === 'object') {
         for (const [mediaId, registryData] of Object.entries(mediaRegistryData)) {
           // Only add if not already in cache (avoid duplicates)
           if (!this.mediaCache.has(mediaId) && registryData && typeof registryData === 'object') {
             const regData = registryData as any
+            const derivedPageId = regData.pageId || this.derivePageIdFromMediaId(mediaId)
             const mediaItem: MediaItem = {
               id: mediaId,
               type: regData.type || 'image',
-              pageId: regData.pageId || 'unknown',
+              pageId: derivedPageId || 'unknown',
               fileName: regData.fileName || regData.originalName || `${mediaId}.${this.getExtension(regData.type || 'image')}`,
               metadata: {
                 ...regData,
                 type: regData.type || 'image',
-                pageId: regData.pageId || 'unknown',
+                pageId: derivedPageId || 'unknown',
                 uploadedAt: regData.uploadedAt || new Date().toISOString()
               }
             }
@@ -2405,7 +2975,7 @@ export class MediaService {
     
     // Log the actual structure of the first page to understand what we're dealing with
     if (courseContent.welcomePage) {
-      console.log('[MediaService] Welcome page structure:', {
+      mediaServiceDebugLog('[MediaService] Welcome page structure:', {
         id: courseContent.welcomePage.id,
         hasMedia: 'media' in courseContent.welcomePage,
         hasMediaReferences: 'mediaReferences' in courseContent.welcomePage,
@@ -2422,7 +2992,7 @@ export class MediaService {
       // Process welcome page media - check both media and mediaReferences properties
       const welcomeMedia = courseContent.welcomePage?.media || courseContent.welcomePage?.mediaReferences || []
       if (welcomeMedia && Array.isArray(welcomeMedia) && welcomeMedia.length > 0) {
-        console.log(`[MediaService] Processing ${welcomeMedia.length} media items from welcome page`)
+        mediaServiceDebugLog(`[MediaService] Processing ${welcomeMedia.length} media items from welcome page`)
         for (const mediaRef of welcomeMedia) {
           if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
             // Extract the media type - could be in different places
@@ -2454,7 +3024,7 @@ export class MediaService {
             
             this.mediaCache.set(mediaRef.id, mediaItem)
             mediaCount++
-            console.log('[MediaService] Loaded welcome page media:', {
+            mediaServiceDebugLog('[MediaService] Loaded welcome page media:', {
               id: mediaRef.id,
               type: mediaType,
               pageId: pageId,
@@ -2469,7 +3039,7 @@ export class MediaService {
       // Process objectives page media - check both possible property names
       const objectivesPage = courseContent.learningObjectivesPage || courseContent.objectivesPage
       if (objectivesPage) {
-        console.log('[MediaService] Objectives page structure:', {
+        mediaServiceDebugLog('[MediaService] Objectives page structure:', {
           id: objectivesPage.id,
           hasMedia: 'media' in objectivesPage,
           mediaLength: objectivesPage.media?.length,
@@ -2479,7 +3049,7 @@ export class MediaService {
       
       const objectivesMedia = objectivesPage?.media || objectivesPage?.mediaReferences || []
       if (objectivesMedia && Array.isArray(objectivesMedia) && objectivesMedia.length > 0) {
-        console.log(`[MediaService] Processing ${objectivesMedia.length} media items from objectives page`)
+        mediaServiceDebugLog(`[MediaService] Processing ${objectivesMedia.length} media items from objectives page`)
         for (const mediaRef of objectivesMedia) {
           if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
             const mediaType = mediaRef.type || mediaRef.metadata?.type || 'image'
@@ -2508,7 +3078,7 @@ export class MediaService {
             
             this.mediaCache.set(mediaRef.id, mediaItem)
             mediaCount++
-            console.log('[MediaService] Loaded objectives page media:', {
+            mediaServiceDebugLog('[MediaService] Loaded objectives page media:', {
               id: mediaRef.id,
               type: mediaType,
               pageId: pageId,
@@ -2524,7 +3094,7 @@ export class MediaService {
       if (courseContent.topics && Array.isArray(courseContent.topics)) {
         // Log first topic structure for debugging
         if (courseContent.topics[0]) {
-          console.log('[MediaService] First topic structure:', {
+          mediaServiceDebugLog('[MediaService] First topic structure:', {
             id: courseContent.topics[0].id,
             hasMedia: 'media' in courseContent.topics[0],
             mediaLength: courseContent.topics[0].media?.length,
@@ -2535,7 +3105,7 @@ export class MediaService {
         for (const topic of courseContent.topics) {
           const topicMedia = topic?.media || topic?.mediaReferences || []
           if (topicMedia && Array.isArray(topicMedia) && topicMedia.length > 0) {
-            console.log(`[MediaService] Processing ${topicMedia.length} media items from topic ${topic.id}`)
+            mediaServiceDebugLog(`[MediaService] Processing ${topicMedia.length} media items from topic ${topic.id}`)
             for (const mediaRef of topicMedia) {
               if (mediaRef && typeof mediaRef === 'object' && mediaRef.id) {
                 const mediaType = mediaRef.type || mediaRef.metadata?.type || 'image'
@@ -2564,7 +3134,7 @@ export class MediaService {
                 
                 this.mediaCache.set(mediaRef.id, mediaItem)
                 mediaCount++
-                console.log('[MediaService] Loaded topic media:', {
+                mediaServiceDebugLog('[MediaService] Loaded topic media:', {
                   id: mediaRef.id,
                   type: mediaType,
                   pageId: pageId,
@@ -2626,10 +3196,10 @@ export class MediaService {
       }
       const ext = mimeToExt[mimeType.toLowerCase()]
       if (ext) {
-        console.log(`[MediaService] MIME type "${mimeType}" mapped to extension "${ext}"`)
+        mediaServiceDebugLog(`[MediaService] MIME type "${mimeType}" mapped to extension "${ext}"`)
         return ext
       }
-      console.log(`[MediaService] Unknown MIME type "${mimeType}", falling back to MediaType-based extension`)
+      mediaServiceDebugLog(`[MediaService] Unknown MIME type "${mimeType}", falling back to MediaType-based extension`)
     }
     
     // Fallback to type-based extension (should avoid .bin for known types)
@@ -2639,16 +3209,288 @@ export class MediaService {
       case 'audio': return 'mp3' // Default to mp3 for audio
       case 'caption': return 'vtt' // Default to vtt for captions
       case 'youtube': return 'json' // YouTube metadata stored as JSON
-      default: 
+      default:
         console.warn(`[MediaService] Unknown MediaType "${type}", defaulting to .bin extension`)
         return 'bin'
     }
   }
+
+  // Error Recovery Methods
+
+  /**
+   * Get list of media that failed to load
+   */
+  getFailedMedia(): Array<{
+    id: string
+    originalName: string
+    pageId: string
+    error: string
+    timestamp: string
+  }> {
+    return [...this.failedMediaList]
+  }
+
+  /**
+   * Clear the failed media list
+   */
+  clearFailedMedia(): void {
+    this.failedMediaList = []
+    logger.info('[MediaService] Cleared failed media list')
+  }
+
+  /**
+   * Retry loading failed media
+   */
+  async retryFailedMedia(): Promise<void> {
+    logger.info(`[MediaService] Retrying ${this.failedMediaList.length} failed media items`)
+
+    const failedToRetry = [...this.failedMediaList]
+    this.failedMediaList = [] // Clear the list
+
+    for (const failedItem of failedToRetry) {
+      try {
+        // Try to get the media again
+        const media = await this.getMedia(failedItem.id)
+        if (media) {
+          // Successfully loaded - add to cache
+          const mediaItem: MediaItem = {
+            id: failedItem.id,
+            type: media.metadata.type as MediaType,
+            pageId: failedItem.pageId,
+            fileName: failedItem.originalName,
+            metadata: media.metadata
+          }
+          this.mediaCache.set(failedItem.id, mediaItem)
+          logger.info(`[MediaService] Successfully retried loading media: ${failedItem.originalName}`)
+        }
+      } catch (error) {
+        // Still failing - add back to failed list
+        this.failedMediaList.push(failedItem)
+        logger.warn(`[MediaService] Media still failing on retry: ${failedItem.originalName}`, error)
+      }
+    }
+
+    logger.info(`[MediaService] Retry complete. ${failedToRetry.length - this.failedMediaList.length} items recovered`)
+  }
+
+  /**
+   * Add a media item to the failed list
+   */
+  private addFailedMedia(id: string, originalName: string, pageId: string, error: string): void {
+    this.failedMediaList.push({
+      id,
+      originalName,
+      pageId,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  /**
+   * Safely extract error message from unknown error type
+   */
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    if (typeof error === 'string') {
+      return error
+    }
+    if (error && typeof error === 'object' && 'message' in error) {
+      return String((error as any).message)
+    }
+    if (error && typeof error === 'object' && 'toString' in error) {
+      try {
+        return String(error)
+      } catch {
+        return 'Complex error object'
+      }
+    }
+    return 'Unknown error'
+  }
+
+  /**
+   * Safely extract string value from potentially non-string metadata property
+   */
+  private getStringValue(value: unknown, fallback: string = 'unknown'): string {
+    if (typeof value === 'string') {
+      return value || fallback
+    }
+    if (value && typeof value === 'object' && 'toString' in value) {
+      try {
+        const stringValue = String(value)
+        return stringValue || fallback
+      } catch {
+        return fallback
+      }
+    }
+    if (value !== null && value !== undefined) {
+      try {
+        return String(value) || fallback
+      } catch {
+        return fallback
+      }
+    }
+    return fallback
+  }
+
+  // Media Validation Methods
+
+  /**
+   * Validate all media to identify potential loading issues
+   */
+  async validateAllMedia(): Promise<{
+    valid: Array<{ id: string; originalName: string }>
+    warnings: Array<{ id: string; originalName: string; reason: string }>
+    risky: Array<{ id: string; originalName: string; reason: string; recommendations?: string[] }>
+  }> {
+    const allMedia = await this.listAllMedia()
+    const results = {
+      valid: [] as Array<{ id: string; originalName: string }>,
+      warnings: [] as Array<{ id: string; originalName: string; reason: string }>,
+      risky: [] as Array<{ id: string; originalName: string; reason: string; recommendations?: string[] }>
+    }
+
+    for (const media of allMedia) {
+      const validationResult = await this.validateMediaItem(media)
+
+      switch (validationResult.level) {
+        case 'valid':
+          results.valid.push({
+            id: media.id,
+            originalName: this.getStringValue(media.fileName || media.metadata.original_name)
+          })
+          break
+        case 'warning':
+          results.warnings.push({
+            id: media.id,
+            originalName: this.getStringValue(media.fileName || media.metadata.original_name),
+            reason: validationResult.reason
+          })
+          break
+        case 'risky':
+          results.risky.push({
+            id: media.id,
+            originalName: this.getStringValue(media.fileName || media.metadata.original_name),
+            reason: validationResult.reason,
+            recommendations: validationResult.recommendations
+          })
+          break
+      }
+    }
+
+    logger.info(`[MediaService] Media validation complete: ${results.valid.length} valid, ${results.warnings.length} warnings, ${results.risky.length} risky`)
+    return results
+  }
+
+  /**
+   * Validate a single media item
+   */
+  private async validateMediaItem(media: MediaItem): Promise<{
+    level: 'valid' | 'warning' | 'risky'
+    reason: string
+    recommendations?: string[]
+  }> {
+    const originalName = this.getStringValue(media.fileName || media.metadata.original_name, '')
+    const metadata = media.metadata
+
+    // Check for external file paths (high risk)
+    if (originalName.includes(':\\') || originalName.includes('/') && !originalName.startsWith('./')) {
+      return {
+        level: 'risky',
+        reason: 'External file path detected - may be inaccessible',
+        recommendations: [
+          'Copy file to project directory',
+          'Use relative paths within project',
+          'Import media using the Media Enhancement wizard'
+        ]
+      }
+    }
+
+    // Check for problematic file extensions
+    const extension = originalName.split('.').pop()?.toLowerCase() || ''
+    if (extension === 'json') {
+      return {
+        level: 'risky',
+        reason: 'JSON file detected - likely metadata, not actual media',
+        recommendations: [
+          'Check if this should be a binary media file',
+          'Remove if this is orphaned metadata',
+          'Re-import the actual media file'
+        ]
+      }
+    }
+
+    if (extension === 'bin') {
+      return {
+        level: 'risky',
+        reason: 'BIN file detected - unusual format that may cause loading issues',
+        recommendations: [
+          'Convert to standard format (PNG, JPG, MP4, etc.)',
+          'Re-import using standard media formats',
+          'Verify file integrity'
+        ]
+      }
+    }
+
+    // Check for missing size information
+    if (!metadata.size && !metadata.fileSize) {
+      return {
+        level: 'warning',
+        reason: 'Missing size information - may indicate incomplete upload'
+      }
+    }
+
+    // Check for type consistency
+    const declaredType = metadata.type || media.type
+    const mimeType = metadata.mime_type || metadata.mimeType
+    const fileExtension = extension
+
+    if (this.hasTypeInconsistency(declaredType, mimeType, fileExtension)) {
+      return {
+        level: 'warning',
+        reason: 'Media type inconsistency detected between declared type, MIME type, and file extension'
+      }
+    }
+
+    return {
+      level: 'valid',
+      reason: 'Media appears to be valid'
+    }
+  }
+
+  /**
+   * Check for inconsistencies between declared type, MIME type, and file extension
+   */
+  private hasTypeInconsistency(declaredType: string, mimeType?: string, fileExtension?: string): boolean {
+    if (!mimeType && !fileExtension) return false
+
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']
+    const videoExtensions = ['mp4', 'webm', 'ogg', 'avi', 'mov']
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'flac', 'm4a']
+
+    // Check MIME type consistency
+    if (mimeType) {
+      const mimeCategory = mimeType.split('/')[0]
+      if (declaredType === 'image' && mimeCategory !== 'image') return true
+      if (declaredType === 'video' && mimeCategory !== 'video') return true
+      if (declaredType === 'audio' && mimeCategory !== 'audio') return true
+    }
+
+    // Check file extension consistency
+    if (fileExtension) {
+      if (declaredType === 'image' && !imageExtensions.includes(fileExtension)) return true
+      if (declaredType === 'video' && !videoExtensions.includes(fileExtension)) return true
+      if (declaredType === 'audio' && !audioExtensions.includes(fileExtension)) return true
+    }
+
+    return false
+  }
 }
 
 // Export factory function for getting singleton instances
-export function createMediaService(projectId: string, fileStorage?: FileStorage): MediaService {
-  return MediaService.getInstance({ projectId, fileStorage })
+export function createMediaService(projectId: string, fileStorage?: FileStorage, generationMode?: boolean): MediaService {
+  return MediaService.getInstance({ projectId, fileStorage, generationMode })
 }
 
 // Export as default to replace the old MediaService

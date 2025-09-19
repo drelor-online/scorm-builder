@@ -10,6 +10,7 @@ import { generatePreviewHTML } from '../services/previewGenerator'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { blobUrlManager } from '../utils/blobUrlManager'
+import { safeDeepClone } from '../utils/safeClone'
 
 interface CoursePreviewAccurateProps {
   courseContent?: CourseContent | null
@@ -86,7 +87,7 @@ export const CoursePreviewAccurate: React.FC<CoursePreviewAccurateProps> = ({
 
   const processContentForPreview = async (content: EnhancedCourseContent, step: string) => {
     // Clone the content to avoid modifying original
-    const processed = JSON.parse(JSON.stringify(content))
+    const processed = safeDeepClone(content)
     
     // Based on current step, remove content that wouldn't be available yet
     switch (step) {

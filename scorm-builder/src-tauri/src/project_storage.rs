@@ -194,16 +194,32 @@ pub fn load_project_file(file_path: &Path) -> Result<ProjectFile, String> {
 pub fn list_project_files() -> Result<Vec<PathBuf>, String> {
     let projects_dir = get_projects_directory()?;
 
+    // Log to frontend so we can see it in the browser console
+    crate::commands_secure::log_to_frontend("INFO", &format!("Scanning for projects in: {}", projects_dir.display()));
+
     let mut project_files = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(&projects_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("scormproj") {
-                project_files.push(path);
+    // Properly handle errors instead of silently failing
+    match fs::read_dir(&projects_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("scormproj") {
+                    crate::commands_secure::log_to_frontend("INFO", &format!("Found project: {}", path.display()));
+                    project_files.push(path);
+                }
             }
         }
+        Err(err) => {
+            let error_msg = format!("ERROR reading directory '{}': {}", projects_dir.display(), err);
+            crate::commands_secure::log_to_frontend("ERROR", &error_msg);
+            // Don't silently fail - return the error!
+            return Err(format!("Failed to read projects directory '{}': {}",
+                              projects_dir.display(), err));
+        }
     }
+
+    crate::commands_secure::log_to_frontend("INFO", &format!("Found {} project files", project_files.len()));
 
     // Sort by modification time (newest first)
     project_files.sort_by(|a, b| {

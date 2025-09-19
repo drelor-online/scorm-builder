@@ -45,7 +45,7 @@ export default defineConfig({
     })
   ],
   build: {
-    target: 'es2018', // Modern browsers for smaller output
+    target: 'es2022', // Support for top-level await
     rollupOptions: {
       output: {
         // Ensure all assets use relative paths with consistent naming

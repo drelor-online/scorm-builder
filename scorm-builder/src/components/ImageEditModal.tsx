@@ -3,7 +3,7 @@ import { Cropper, CropperRef } from 'react-advanced-cropper'
 import 'react-advanced-cropper/dist/style.css'
 import { Modal, Button, ButtonGroup, ProgressBar } from './DesignSystem'
 import { RotateCcw, FlipHorizontal, FlipVertical, Crop as CropIcon, ZoomIn, ZoomOut } from 'lucide-react'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import { useNotifications } from '../contexts/NotificationContext'
 import styles from './ImageEditModal.module.css'
 
@@ -187,7 +187,7 @@ export const ImageEditModal: React.FC<ImageEditModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false)
   const cropperRef = useRef<CropperRef>(null)
   
-  const { updateMedia } = useUnifiedMedia()
+  const { actions } = useMedia()
   const { success: showSuccess, error: showError } = useNotifications()
 
   const onCropChange = useCallback((cropper: CropperRef) => {
@@ -312,7 +312,7 @@ export const ImageEditModal: React.FC<ImageEditModalProps> = ({
       const newTitle = `${imageTitle} - edited${editDescription}`
 
       // Update the existing image with edited content
-      const updatedImageMedia = await updateMedia(originalImageId, croppedImageBlob, { title: newTitle })
+      const updatedImageMedia = await actions.updateMedia(originalImageId, croppedImageBlob, { title: newTitle })
       
       if (updatedImageMedia) {
         onImageUpdated(updatedImageMedia.id, newTitle) // ID stays the same
@@ -327,7 +327,7 @@ export const ImageEditModal: React.FC<ImageEditModalProps> = ({
     } finally {
       setIsProcessing(false)
     }
-  }, [cropCoordinates, editState, imageUrl, imageTitle, originalImageId, updateMedia, onImageUpdated, onClose, showSuccess, showError, transformedImage])
+  }, [cropCoordinates, editState, imageUrl, imageTitle, originalImageId, actions.updateMedia, onImageUpdated, onClose, showSuccess, showError, transformedImage])
 
   const handleCancel = useCallback(() => {
     // Reset state when closing

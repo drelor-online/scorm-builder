@@ -1,5 +1,7 @@
 # SCORM Builder End-to-End Testing Guide
 
+> **Note:** The Playwright-based instructions below are archived. New automated desktop tests live under `tests/tauri` and are executed with WebdriverIO + tauri-driver (`npm run test:tauri`).
+
 This guide explains how to run the comprehensive test suite for SCORM Builder, including AI analysis capabilities.
 
 ## Quick Start

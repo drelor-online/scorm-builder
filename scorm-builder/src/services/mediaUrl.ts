@@ -176,22 +176,37 @@ export function extractYouTubeId(url: string): string | null {
  * Build YouTube embed URL with optional clip timing parameters
  */
 export function buildYouTubeEmbed(rawUrl: string, start?: number, end?: number): string {
+  // Handle null, undefined, or empty URLs
+  if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.trim() === '') {
+    console.error('[mediaUrl] buildYouTubeEmbed: Invalid URL provided:', rawUrl)
+    return 'about:blank' // Safe fallback that won't cause iframe errors
+  }
+
   const id = extractYouTubeId(rawUrl)
   if (!id) {
-    // If we can't extract ID, return the original URL
-    return rawUrl
+    // If we can't extract ID, don't return the original URL as it might not be an embed URL
+    // This prevents iframe errors like "Refused to display 'https://www.youtube.com/' in a frame"
+    console.error('[mediaUrl] buildYouTubeEmbed: Failed to extract YouTube ID from URL:', rawUrl)
+    return 'about:blank' // Safe fallback instead of potentially invalid iframe src
   }
-  
+
   const params = new URLSearchParams()
-  if (typeof start === 'number' && start >= 0) {
-    params.set('start', String(Math.max(0, Math.floor(start))))
+  if (typeof start === 'number') {
+    // Convert negative values to 0
+    const safeStart = Math.max(0, Math.floor(start))
+    if (safeStart >= 0) {
+      params.set('start', String(safeStart))
+    }
   }
   if (typeof end === 'number' && (!start || end > start)) {
     params.set('end', String(Math.floor(end)))
   }
-  
+
   const qs = params.toString() ? `?${params.toString()}` : ''
-  return `https://www.youtube.com/embed/${id}${qs}`
+  const embedUrl = `https://www.youtube.com/embed/${id}${qs}`
+
+  console.log('[mediaUrl] buildYouTubeEmbed: Generated embed URL:', { rawUrl, embedUrl, start, end })
+  return embedUrl
 }
 
 /**
@@ -199,17 +214,72 @@ export function buildYouTubeEmbed(rawUrl: string, start?: number, end?: number):
  */
 export function parseYouTubeClipTiming(embedUrl: string): { start?: number, end?: number } {
   if (!embedUrl) return {}
-  
+
   try {
     const url = new URL(embedUrl)
     const start = url.searchParams.get('start')
     const end = url.searchParams.get('end')
-    
+
     return {
       start: start ? parseInt(start, 10) : undefined,
       end: end ? parseInt(end, 10) : undefined
     }
   } catch {
     return {}
+  }
+}
+
+/**
+ * Extract clip timing from YouTube embed URL in the format expected by the MediaService
+ *
+ * This function addresses the bug where clip timing is lost after project reload
+ * because it's only preserved in the embed URL as query parameters.
+ *
+ * @param url - YouTube embed URL that may contain start/end parameters
+ * @returns Object with clipStart and clipEnd properties (matching MediaService format)
+ */
+export function extractClipTimingFromUrl(url: string): { clipStart?: number, clipEnd?: number } {
+  // Handle null, undefined, or empty URLs
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return {
+      clipStart: undefined,
+      clipEnd: undefined
+    }
+  }
+
+  try {
+    const urlObj = new URL(url)
+    const startParam = urlObj.searchParams.get('start')
+    const endParam = urlObj.searchParams.get('end')
+
+    // Parse and validate start parameter
+    let clipStart: number | undefined = undefined
+    if (startParam) {
+      const parsed = parseInt(startParam, 10)
+      if (!isNaN(parsed) && parsed >= 0) {
+        clipStart = Math.floor(parsed) // Round down decimal values
+      }
+    }
+
+    // Parse and validate end parameter
+    let clipEnd: number | undefined = undefined
+    if (endParam) {
+      const parsed = parseInt(endParam, 10)
+      if (!isNaN(parsed) && parsed >= 0) {
+        clipEnd = Math.floor(parsed) // Round down decimal values
+      }
+    }
+
+    return {
+      clipStart,
+      clipEnd
+    }
+  } catch (error) {
+    // Handle malformed URLs gracefully
+    console.warn('[mediaUrl] extractClipTimingFromUrl: Failed to parse URL:', url, error)
+    return {
+      clipStart: undefined,
+      clipEnd: undefined
+    }
   }
 }

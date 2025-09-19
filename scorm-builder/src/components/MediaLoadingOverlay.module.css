@@ -115,6 +115,36 @@
   color: var(--text-secondary);
 }
 
+.cancelButton {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-self: flex-start;
+}
+
+.cancelButton:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-default);
+  transform: translateY(-1px);
+}
+
+.cancelButton:active {
+  transform: translateY(0);
+  background: var(--bg-quaternary);
+}
+
+.cancelButton:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* Mobile responsive */
 @media (max-width: 600px) {
   .loadingCard {

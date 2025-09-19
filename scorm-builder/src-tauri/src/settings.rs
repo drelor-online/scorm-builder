@@ -68,19 +68,23 @@ pub fn get_projects_directory() -> Result<PathBuf, String> {
     let settings = load_settings()?;
 
     if let Some(custom_dir) = settings.projects_directory {
-        let path = PathBuf::from(custom_dir);
+        let path = PathBuf::from(&custom_dir);
+        crate::commands_secure::log_to_frontend("INFO", &format!("Using custom projects directory from settings: {}", path.display()));
         if path.exists() {
             return Ok(path);
         }
+        crate::commands_secure::log_to_frontend("WARN", &format!("WARNING: Custom directory '{}' doesn't exist, falling back to default", path.display()));
     }
 
     // Fall back to default
     let home_dir = dirs::home_dir().ok_or_else(|| "Unable to find home directory".to_string())?;
-
     let default_dir = home_dir.join("Documents").join("SCORM Projects");
+
+    crate::commands_secure::log_to_frontend("INFO", &format!("Using default projects directory: {}", default_dir.display()));
 
     // Create directory if it doesn't exist
     if !default_dir.exists() {
+        crate::commands_secure::log_to_frontend("INFO", &format!("Creating projects directory: {}", default_dir.display()));
         fs::create_dir_all(&default_dir)
             .map_err(|e| format!("Failed to create projects directory: {e}"))?;
     }

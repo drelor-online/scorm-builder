@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@wdio/globals/types"],
+    "allowJs": false
+  },
+  "include": ["tests/tauri/**/*.ts"]
+}

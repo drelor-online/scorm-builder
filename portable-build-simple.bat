@@ -1,137 +1,84 @@
 @echo off
 setlocal
 
-:: Check for --frontend-only flag
-set FRONTEND_ONLY=0
-if "%1"=="--frontend-only" set FRONTEND_ONLY=1
+REM Simple portable build script that leaves running Node processes alone
+set "FRONTEND_ONLY=0"
+if /I "%~1"=="--frontend-only" set "FRONTEND_ONLY=1"
 
 echo ============================================
-if %FRONTEND_ONLY%==1 (
-    echo   SCORM Builder - Frontend Build Only
+if "%FRONTEND_ONLY%"=="1" (
+  echo   SCORM Builder - Frontend Build
 ) else (
-    echo   SCORM Builder - Portable Build (Simple)
+  echo   SCORM Builder - Portable Build
 )
 echo ============================================
+
 echo.
+echo Preparing workspace...
+if not exist portable-build mkdir portable-build >nul 2>&1
+if not exist portable-build\SCORM-Builder-Portable mkdir portable-build\SCORM-Builder-Portable >nul 2>&1
 
-:: Kill any processes that might lock files
-echo Killing any blocking processes...
-powershell -Command "Get-Process node, esbuild -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
-timeout /t 2 /nobreak >nul
-
-:: Clean previous portable build (skip for frontend-only)
-if %FRONTEND_ONLY%==0 (
-    if exist portable-build rmdir /s /q portable-build
-    mkdir portable-build
-)
-
-:: Navigate to build directory
-cd scorm-builder
+pushd scorm-builder >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Failed to navigate to scorm-builder directory
-    exit /b 1
+  echo ERROR: Unable to enter scorm-builder directory
+  exit /b 1
 )
 
-:: Clean caches
-echo Clearing build caches...
-if exist node_modules\.vite rmdir /s /q node_modules\.vite
-if exist node_modules\.cache rmdir /s /q node_modules\.cache  
-if exist .vite rmdir /s /q .vite
-if exist .vite-temp rmdir /s /q .vite-temp
 if exist dist rmdir /s /q dist
-:: Only clean Tauri target for full builds
-if %FRONTEND_ONLY%==0 (
-    if exist src-tauri\target\release rmdir /s /q src-tauri\target\release
-)
+if exist src-tauri\target\release\scorm-builder.exe del /q src-tauri\target\release\scorm-builder.exe >nul 2>&1
 
-:: Install dependencies
-echo.
-echo Installing dependencies...
-call npm ci
-if errorlevel 1 (
-    echo WARNING: npm ci failed, trying npm install...
-    call npm install
-    if errorlevel 1 (
-        echo ERROR: Failed to install dependencies
-        exit /b 1
-    )
-)
-
-:: Build frontend
-echo.
-echo Building frontend...
-call npx tsc
-if errorlevel 1 (
-    echo ERROR: TypeScript compilation failed
+REM Install dependencies if needed
+if not exist node_modules (
+  echo Installing dependencies...
+  call npm install
+  if errorlevel 1 (
+    echo ERROR: npm install failed
+    popd
     exit /b 1
+  )
 )
 
-call npx vite build
+echo.
+echo Building frontend bundle...
+call npm run build
 if errorlevel 1 (
-    echo ERROR: Vite build failed
+  echo ERROR: Frontend build failed
+  popd
+  exit /b 1
+)
+
+if "%FRONTEND_ONLY%"=="0" (
+  echo.
+  echo Building Tauri shell...
+  call npx tauri build --no-bundle
+  if errorlevel 1 (
+    echo ERROR: Tauri build failed
+    popd
     exit /b 1
-)
-
-:: Build Tauri (skip if frontend-only)
-if %FRONTEND_ONLY%==0 (
-    echo.
-    echo Building Tauri application...
-    call npx tauri build --no-bundle
-    if errorlevel 1 (
-        echo ERROR: Tauri build failed
-        exit /b 1
-    )
+  )
 ) else (
-    echo.
-    echo Skipping Tauri build - frontend only mode
+  echo Skipping Tauri build (frontend only mode)
 )
 
-:: Copy to portable folder
+set "BUILT_EXE=src-tauri\target\release\scorm-builder.exe"
+popd >nul
+
 echo.
-echo Creating portable distribution...
-cd ..
-
-:: Only create folder and copy if exe exists
-if exist scorm-builder\src-tauri\target\release\scorm-builder.exe (
-    if not exist portable-build\SCORM-Builder-Portable mkdir portable-build\SCORM-Builder-Portable
-    copy scorm-builder\src-tauri\target\release\scorm-builder.exe portable-build\SCORM-Builder-Portable\SCORM-Builder.exe
-    if errorlevel 1 (
-        echo ERROR: Failed to copy executable
-        exit /b 1
-    )
+if "%FRONTEND_ONLY%"=="0" (
+  if exist "scorm-builder\%BUILT_EXE%" (
+    copy /y "scorm-builder\%BUILT_EXE%" "portable-build\SCORM-Builder-Portable\SCORM-Builder.exe" >nul
+    echo Portable executable copied to portable-build\SCORM-Builder-Portable\
+  ) else (
+    echo WARNING: No executable found at scorm-builder\%BUILT_EXE%
+  )
 ) else (
-    if %FRONTEND_ONLY%==1 (
-        echo.
-        echo WARNING: No Tauri executable found.
-        echo Run without --frontend-only flag to build the full application first.
-        echo Frontend has been rebuilt successfully.
-    ) else (
-        echo ERROR: Build output not found at scorm-builder\src-tauri\target\release\scorm-builder.exe
-        exit /b 1
-    )
-)
-
-:: Copy DLLs if they exist
-if exist scorm-builder\src-tauri\target\release\*.dll (
-    copy scorm-builder\src-tauri\target\release\*.dll portable-build\SCORM-Builder-Portable\
+  echo Frontend assets available under scorm-builder\dist\
+  if exist "scorm-builder\%BUILT_EXE%" (
+    echo Existing executable remains untouched.
+  )
 )
 
 echo.
+echo Build complete.
 echo ============================================
-if %FRONTEND_ONLY%==1 (
-    echo   Frontend Build Complete!
-    echo ============================================
-    if exist portable-build\SCORM-Builder-Portable\SCORM-Builder.exe (
-        echo Portable app: portable-build\SCORM-Builder-Portable\SCORM-Builder.exe
-        echo Run the existing executable to test frontend changes.
-    ) else (
-        echo Frontend built to: scorm-builder\dist\
-        echo Note: No portable executable found. Run without --frontend-only to create one.
-    )
-) else (
-    echo   Build Complete!
-    echo ============================================
-    echo Portable build: portable-build\SCORM-Builder-Portable\
-)
-echo.
-pause
+exit /b 0

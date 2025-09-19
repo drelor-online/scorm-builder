@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 
-export type DirtySection = 'courseSeed' | 'courseContent' | 'media' | 'activities'
+export type DirtySection = 'courseSeed' | 'courseContent' | 'media' | 'activities' | 'courseSettings' | 'promptTuning'
 
 interface DirtySections {
   courseSeed: boolean
   courseContent: boolean
   media: boolean
   activities: boolean
+  courseSettings: boolean
+  promptTuning: boolean
 }
 
 interface UnsavedChangesState {
@@ -38,7 +40,9 @@ export const UnsavedChangesProvider: React.FC<UnsavedChangesProviderProps> = ({
     courseSeed: false,
     courseContent: false,
     media: false,
-    activities: false
+    activities: false,
+    courseSettings: false,
+    promptTuning: false
   })
 
   // Computed value for overall unsaved changes
@@ -56,7 +60,7 @@ export const UnsavedChangesProvider: React.FC<UnsavedChangesProviderProps> = ({
       if (prevSections[section] === true) {
         return prevSections // Return the same object reference to prevent re-render
       }
-      
+
       return {
         ...prevSections,
         [section]: true
@@ -85,7 +89,9 @@ export const UnsavedChangesProvider: React.FC<UnsavedChangesProviderProps> = ({
       courseSeed: false,
       courseContent: false,
       media: false,
-      activities: false
+      activities: false,
+      courseSettings: false,
+      promptTuning: false
     })
   }, [])
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import { LoadingSpinner } from './DesignSystem'
 
 interface MediaDisplayProps {
@@ -11,7 +11,7 @@ interface MediaDisplayProps {
 }
 
 export function MediaDisplay({ mediaId, alt, className, style, fallback }: MediaDisplayProps) {
-  const { createBlobUrl } = useUnifiedMedia()
+  const { createBlobUrl } = useMedia()
   const [mediaUrl, setMediaUrl] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
   const [mediaType, setMediaType] = React.useState<string | null>(null)

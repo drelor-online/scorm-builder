@@ -7,12 +7,22 @@ use crate::project_storage::{
 };
 use crate::scorm::{manifest, package};
 use chrono::Local;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::net::IpAddr;
 use std::path::PathBuf;
+use tauri::Emitter;
 use url::Url;
+
+// Global AppHandle for logging to frontend
+static APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
+
+// Initialize the global app handle for logging
+pub fn init_frontend_logger(app: tauri::AppHandle) {
+    APP_HANDLE.set(app).ok();
+}
 
 // Simple file logger for debugging
 pub fn log_debug(message: &str) {
@@ -31,6 +41,21 @@ pub fn log_debug(message: &str) {
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_file) {
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
         let _ = writeln!(file, "[{timestamp}] {message}");
+    }
+}
+
+// Log to both file and frontend
+pub fn log_to_frontend(level: &str, message: &str) {
+    // Always log to file as fallback
+    log_debug(message);
+
+    // Emit to frontend if app handle is available
+    if let Some(app) = APP_HANDLE.get() {
+        let _ = app.emit("rust-log", serde_json::json!({
+            "level": level,
+            "message": message,
+            "timestamp": Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string()
+        }));
     }
 }
 
@@ -283,8 +308,10 @@ pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
 #[tauri::command]
 pub async fn list_projects() -> Result<Vec<ProjectMetadata>, String> {
     log_debug("list_projects called");
+    eprintln!("[RUST] 🔍 list_projects command invoked");
 
     let files = list_project_files()?;
+    eprintln!("[RUST] 📁 Found {} project files to process", files.len());
     let mut projects = Vec::new();
 
     for path in files {
@@ -317,6 +344,14 @@ pub async fn list_projects() -> Result<Vec<ProjectMetadata>, String> {
     }
 
     log_debug(&format!("Returning {} projects", projects.len()));
+    eprintln!("[RUST] ✅ Returning {} projects to frontend", projects.len());
+
+    // Log first project as sample if any exist
+    if !projects.is_empty() {
+        eprintln!("[RUST] 📋 Sample project: id={}, name='{}'",
+                 projects[0].id, projects[0].name);
+    }
+
     Ok(projects)
 }
 
@@ -675,6 +710,111 @@ pub async fn unsafe_download_image(url: String) -> Result<DownloadImageResponse,
     Ok(DownloadImageResponse {
         base64_data,
         content_type: final_content_type,
+    })
+}
+
+// Diagnostic command for debugging project directory issues
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectDirectoryDiagnostics {
+    pub projects_directory: String,
+    pub directory_exists: bool,
+    pub directory_readable: bool,
+    pub file_count: Option<usize>,
+    pub scormproj_count: Option<usize>,
+    pub first_few_files: Vec<String>,
+    pub error_details: Option<String>,
+}
+
+#[tauri::command]
+pub async fn diagnose_projects_directory() -> Result<ProjectDirectoryDiagnostics, String> {
+    log_to_frontend("INFO", "Starting project directory diagnostics");
+
+    let projects_dir = match get_projects_directory() {
+        Ok(dir) => dir,
+        Err(e) => {
+            let error_msg = format!("Failed to get projects directory: {}", e);
+            log_to_frontend("ERROR", &error_msg);
+            return Ok(ProjectDirectoryDiagnostics {
+                projects_directory: "UNKNOWN".to_string(),
+                directory_exists: false,
+                directory_readable: false,
+                file_count: None,
+                scormproj_count: None,
+                first_few_files: vec![],
+                error_details: Some(error_msg),
+            });
+        }
+    };
+
+    let projects_dir_str = projects_dir.display().to_string();
+    log_to_frontend("INFO", &format!("Checking directory: {}", projects_dir_str));
+
+    let directory_exists = projects_dir.exists();
+    log_to_frontend("INFO", &format!("Directory exists: {}", directory_exists));
+
+    if !directory_exists {
+        return Ok(ProjectDirectoryDiagnostics {
+            projects_directory: projects_dir_str,
+            directory_exists: false,
+            directory_readable: false,
+            file_count: None,
+            scormproj_count: None,
+            first_few_files: vec![],
+            error_details: Some("Projects directory does not exist".to_string()),
+        });
+    }
+
+    // Try to read the directory
+    let (directory_readable, file_count, scormproj_count, first_few_files, error_details) =
+        match std::fs::read_dir(&projects_dir) {
+            Ok(entries) => {
+                log_to_frontend("INFO", "Directory is readable, enumerating files");
+
+                let mut all_files = Vec::new();
+                let mut scormproj_files = Vec::new();
+
+                for entry in entries {
+                    match entry {
+                        Ok(entry) => {
+                            let file_name = entry.file_name().to_string_lossy().to_string();
+                            all_files.push(file_name.clone());
+
+                            if file_name.ends_with(".scormproj") {
+                                scormproj_files.push(file_name);
+                            }
+                        }
+                        Err(e) => {
+                            log_to_frontend("WARN", &format!("Error reading directory entry: {}", e));
+                        }
+                    }
+                }
+
+                let first_few = all_files.iter().take(10).cloned().collect();
+
+                log_to_frontend("INFO", &format!("Found {} total files, {} .scormproj files",
+                    all_files.len(), scormproj_files.len()));
+
+                if !scormproj_files.is_empty() {
+                    log_to_frontend("INFO", &format!("SCORM projects: {:?}", scormproj_files));
+                }
+
+                (true, Some(all_files.len()), Some(scormproj_files.len()), first_few, None)
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to read directory: {}", e);
+                log_to_frontend("ERROR", &error_msg);
+                (false, None, None, vec![], Some(error_msg))
+            }
+        };
+
+    Ok(ProjectDirectoryDiagnostics {
+        projects_directory: projects_dir_str,
+        directory_exists,
+        directory_readable,
+        file_count,
+        scormproj_count,
+        first_few_files,
+        error_details,
     })
 }
 

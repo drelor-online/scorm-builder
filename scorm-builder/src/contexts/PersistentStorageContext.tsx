@@ -45,9 +45,14 @@ interface PersistentStorageContextValue {
 
 const PersistentStorageContext = createContext<PersistentStorageContextValue | null>(null)
 
-export function PersistentStorageProvider({ children }: { children: ReactNode }) {
-  const storage = usePersistentStorage()
-  
+interface PersistentStorageProviderProps {
+  children: ReactNode
+  fileStorage?: FileStorage
+}
+
+export function PersistentStorageProvider({ children, fileStorage }: PersistentStorageProviderProps) {
+  const storage = usePersistentStorage(fileStorage)
+
   return (
     <PersistentStorageContext.Provider value={storage}>
       {children}

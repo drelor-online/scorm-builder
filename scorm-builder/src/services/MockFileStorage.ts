@@ -25,7 +25,7 @@ export class MockFileStorage {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
-    this.mockData[projectId] = { project, content: {} }
+    this.mockData[projectId] = { project, content: {}, media: {} }
     this._currentProjectId = projectId
     this._currentProjectPath = projectPath
     return project
@@ -78,12 +78,43 @@ export class MockFileStorage {
     if (!this.mockData[this.currentProjectId].media) {
       this.mockData[this.currentProjectId].media = {}
     }
-    this.mockData[this.currentProjectId].media[id] = { mediaType, metadata, size: blob.size }
+
+    let data: Uint8Array
+
+    // Convert blob to Uint8Array to simulate file storage
+    if (blob.arrayBuffer && typeof blob.arrayBuffer === 'function') {
+      // Browser environment
+      const arrayBuffer = await blob.arrayBuffer()
+      data = new Uint8Array(arrayBuffer)
+    } else if ((blob as any).buffer) {
+      // Node.js Buffer-like object
+      data = new Uint8Array((blob as any).buffer)
+    } else {
+      // Fallback: convert string to bytes
+      const text = blob.toString()
+      data = new TextEncoder().encode(text)
+    }
+
+    this.mockData[this.currentProjectId].media[id] = {
+      mediaType,
+      metadata: metadata || {},
+      size: blob.size || data.length,
+      data
+    }
   }
 
   async getMedia(id: string): Promise<any> {
     if (!this.currentProjectId) return null
-    return this.mockData[this.currentProjectId]?.media?.[id] || null
+    const media = this.mockData[this.currentProjectId]?.media?.[id]
+    if (!media) return null
+
+    return {
+      id: id,
+      mediaType: media.mediaType,
+      metadata: media.metadata,
+      size: media.size,
+      data: media.data.buffer  // Convert Uint8Array to ArrayBuffer to match MediaInfo interface
+    }
   }
   
   async getMediaForTopic(topicId: string): Promise<any[]> {
@@ -165,8 +196,40 @@ export class MockFileStorage {
   }
 
   async storeYouTubeVideo(id: string, youtubeUrl: string, metadata?: any): Promise<void> {
-    await this.storeMedia(id, new Blob([youtubeUrl], { type: 'text/plain' }), 'youtube', metadata)
+    // Directly store YouTube data without Blob
+    if (!this.currentProjectId) throw new Error('No project open')
+    if (!this.mockData[this.currentProjectId].media) {
+      this.mockData[this.currentProjectId].media = {}
+    }
+
+    const data = new TextEncoder().encode(youtubeUrl)
+
+    this.mockData[this.currentProjectId].media[id] = {
+      mediaType: 'youtube',
+      metadata: metadata || {},
+      size: data.length,
+      data
+    }
   }
+
+  async deleteMedia(id: string): Promise<boolean> {
+    if (!this.currentProjectId) return false
+    const media = this.mockData[this.currentProjectId]?.media
+    if (media && media[id]) {
+      delete media[id]
+      return true
+    }
+    return false
+  }
+
+  async updateYouTubeMetadata(id: string, updates: any): Promise<void> {
+    if (!this.currentProjectId) throw new Error('No project open')
+    const media = this.mockData[this.currentProjectId]?.media?.[id]
+    if (media) {
+      media.metadata = { ...media.metadata, ...updates }
+    }
+  }
+
 
   async exportProject(): Promise<Blob> {
     const data = JSON.stringify(this.mockData[this._currentProjectId || ''])

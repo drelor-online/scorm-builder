@@ -553,3 +553,18 @@
     padding: var(--space-md);
   }
 }
+
+/* Loading Spinner for Lazy Loading */
+.loadingSpinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-default);
+  border-top: 2px solid var(--color-primary-500);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

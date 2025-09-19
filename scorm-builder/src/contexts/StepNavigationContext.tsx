@@ -35,15 +35,86 @@ export function StepNavigationProvider({ children, initialStep = 0 }: StepNaviga
   const stepChangeHandlersRef = useRef<Set<StepChangeHandler>>(new Set())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
-  // Load visited steps from storage when the context mounts
+  // Load visited steps from storage when the context mounts or project changes
+  useEffect(() => {
+    // CRITICAL FIX: Reset isLoaded when project changes to ensure loading happens
+    if (storage.isInitialized && storage.currentProjectId) {
+      if (isLoaded) {
+        // Project changed, reset and reload
+        setIsLoaded(false)
+        console.log('[StepNavigationContext] Project changed, resetting loaded state for reload')
+      }
+    }
+  }, [storage.currentProjectId])
+
+  // Load visited steps from storage
   useEffect(() => {
     if (storage.isInitialized && storage.currentProjectId && !isLoaded) {
+      console.log('[StepNavigationContext] Loading visitedSteps for project:', storage.currentProjectId)
+
       storage.getContent('visitedSteps').then((data) => {
         if (data && Array.isArray(data.steps)) {
+          console.log('[StepNavigationContext] Loaded visitedSteps:', data.steps)
           setVisitedSteps(data.steps)
+
+          // CRITICAL FIX: Also check currentStep and ensure synchronization
+          storage.getContent('currentStep').then((stepData) => {
+            if (stepData && stepData.step) {
+              // Map step names to step numbers for synchronization
+              const stepMapping = {
+                'seed': 0,
+                'prompt': 1,
+                'json': 2,
+                'media': 3,
+                'audio': 4,
+                'activities': 5,
+                'settings': 6,
+                'scorm': 7
+              }
+
+              const currentStepNumber = stepMapping[stepData.step as keyof typeof stepMapping] || 0
+              console.log('[StepNavigationContext] Current step from App:', stepData.step, 'mapped to:', currentStepNumber)
+
+              // CRITICAL FIX: If currentStep is ahead of visitedSteps, backfill steps
+              if (currentStepNumber > Math.max(...data.steps)) {
+                const backfilledSteps = Array.from({ length: currentStepNumber + 1 }, (_, i) => i)
+                console.log('[StepNavigationContext] Backfilling steps up to current:', backfilledSteps)
+                setVisitedSteps(backfilledSteps)
+              }
+            }
+          }).catch(() => {
+            console.log('[StepNavigationContext] No currentStep found, using loaded visitedSteps as-is')
+          })
+        } else {
+          console.log('[StepNavigationContext] No visitedSteps found, using initial step')
+          // CRITICAL FIX: Still check currentStep even if no visitedSteps
+          storage.getContent('currentStep').then((stepData) => {
+            if (stepData && stepData.step) {
+              const stepMapping = {
+                'seed': 0,
+                'prompt': 1,
+                'json': 2,
+                'media': 3,
+                'audio': 4,
+                'activities': 5,
+                'settings': 6,
+                'scorm': 7
+              }
+
+              const currentStepNumber = stepMapping[stepData.step as keyof typeof stepMapping] || 0
+              if (currentStepNumber > 0) {
+                const initialSteps = Array.from({ length: currentStepNumber + 1 }, (_, i) => i)
+                console.log('[StepNavigationContext] No visitedSteps but currentStep exists, creating initial steps:', initialSteps)
+                setVisitedSteps(initialSteps)
+              }
+            }
+          }).catch(() => {
+            console.log('[StepNavigationContext] No currentStep or visitedSteps, using default')
+          })
         }
         setIsLoaded(true)
       }).catch(() => {
+        console.log('[StepNavigationContext] Failed to load visitedSteps, using default')
         // If no saved visited steps, that's fine
         setIsLoaded(true)
       })

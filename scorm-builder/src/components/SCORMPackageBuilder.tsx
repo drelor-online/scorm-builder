@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, memo } from 'react'
 import { CourseContent, Media, Topic } from '../types/aiPrompt'
 import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
@@ -8,11 +8,13 @@ import { invoke } from '@tauri-apps/api/core'
 import { convertToEnhancedCourseContent } from '../services/courseContentConverter'
 import { generateRustSCORM } from '../services/rustScormGenerator'
 import { useStorage } from '../contexts/PersistentStorageContext'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { DEFAULT_COURSE_SETTINGS, type CourseSettings } from './CourseSettingsWizard'
+import { useMedia } from '../hooks/useMedia'
 import { useNotifications } from '../contexts/NotificationContext'
 import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { sanitizeScormFileName } from '../utils/fileSanitizer'
 import { debugLogger } from '../utils/ultraSimpleLogger'
+import { safeDeepClone } from '../utils/safeClone'
 
 import { PageLayout } from './PageLayout'
 import { 
@@ -52,7 +54,7 @@ function injectMissingTopicMedia(courseContent: CourseContent, storageMedia: any
   })
   
   // Create a deep copy of course content to avoid mutating the original
-  const injectedContent = JSON.parse(JSON.stringify(courseContent))
+  const injectedContent = safeDeepClone(courseContent)
   
   // Track injections for logging
   const injectionLog: { topicId: string; injectedMediaIds: string[] }[] = []
@@ -254,13 +256,19 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const [isGenerationCancelled, setIsGenerationCancelled] = useState(false)
   const generationAbortController = useRef<AbortController | null>(null)
   const storage = useStorage()
-  const { 
-    getMedia,
-    getAllMedia,
-    getMediaForPage,
+  const media = useMedia()
+  
+  // Extract commonly used methods
+  const {
     createBlobUrl,
     storeMedia
-  } = useUnifiedMedia()
+  } = media.actions
+  
+  const {
+    getMedia,
+    getAllMedia,
+    getMediaForPage
+  } = media.selectors
   const { success, error: notifyError, info, progress, warning } = useNotifications()
   const { measureAsync } = usePerformanceMonitor({
     componentName: 'SCORMPackageBuilder',
@@ -572,6 +580,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(welcomeCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading welcome caption (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeCaptionId}`)
+
+        // Update loading message to indicate caption processing
+        setLoadingMessage(`Loading media files... (processing caption files: ${loadedCount + 1}/${totalMediaToLoad})`)
+        await new Promise<void>(resolve => setTimeout(resolve, 50))
+
         const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId, signal)
         if (captionBlob) {
           mediaFilesRef.current.set(`${welcomeCaptionId}.vtt`, captionBlob)
@@ -581,6 +594,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           failedMedia.push(`welcome caption: ${welcomeCaptionId}`)
           console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome caption: ${welcomeCaptionId}`)
         }
+
+        // Reset loading message
+        setLoadingMessage('Loading media files...')
+        await new Promise<void>(resolve => setTimeout(resolve, 50))
       }
       
       for (const mediaItem of welcomeMedia) {
@@ -646,6 +663,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         loadedMediaIds.add(objectivesCaptionId)
         totalMediaToLoad++
         console.log(`[SCORMPackageBuilder] Loading objectives caption (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesCaptionId}`)
+
+        // Update loading message to indicate caption processing
+        setLoadingMessage(`Loading media files... (processing caption files: ${loadedCount + 1}/${totalMediaToLoad})`)
+        await new Promise<void>(resolve => setTimeout(resolve, 50))
+
         const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId, signal)
         if (captionBlob) {
           mediaFilesRef.current.set(`${objectivesCaptionId}.vtt`, captionBlob)
@@ -655,6 +677,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           failedMedia.push(`objectives caption: ${objectivesCaptionId}`)
           console.warn(`[SCORMPackageBuilder] ✗ Failed to load objectives caption: ${objectivesCaptionId}`)
         }
+
+        // Reset loading message
+        setLoadingMessage('Loading media files...')
+        await new Promise<void>(resolve => setTimeout(resolve, 50))
       }
       
       for (const mediaItem of objectivesMedia) {
@@ -729,6 +755,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           loadedMediaIds.add(topicCaptionId)
           totalMediaToLoad++
           console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} caption (${loadedCount + 1}/${totalMediaToLoad}): ${topicCaptionId}`)
+
+          // Update loading message to indicate caption processing for specific topic
+          setLoadingMessage(`Loading media files... (processing topic ${topicIndex} captions: ${loadedCount + 1}/${totalMediaToLoad})`)
+          await new Promise<void>(resolve => setTimeout(resolve, 50))
+
           const captionBlob = await getMediaBlobFromRegistry(topicCaptionId, signal)
           if (captionBlob) {
             mediaFilesRef.current.set(`${topicCaptionId}.vtt`, captionBlob)
@@ -738,6 +769,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             failedMedia.push(`topic ${topicIndex} caption: ${topicCaptionId}`)
             console.warn(`[SCORMPackageBuilder] ✗ Failed to load topic ${topicIndex} caption: ${topicCaptionId}`)
           }
+
+          // Reset loading message
+          setLoadingMessage('Loading media files...')
+          await new Promise<void>(resolve => setTimeout(resolve, 50))
         }
         
         // DEBUG: Log topic media processing details
@@ -973,7 +1008,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.log('[SCORMPackageBuilder] Media files ready for packaging:', mediaFilesRef.current.size)
         
         setGenerationProgress(40)
-        await yieldToUI()
+        await new Promise<void>(resolve => setTimeout(resolve, 50))
         
         // Add blob references to enhanced content for Rust generator
         // The Rust generator needs these blobs to include media in the package
@@ -1149,13 +1184,18 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       })
       
       // Retrieve course settings from storage
-      let courseSettings = null
+      let courseSettings: CourseSettings | null = null
       try {
-        courseSettings = await storage.getContent('courseSettings')
+        courseSettings = await storage.getContent('courseSettings') as CourseSettings
         console.log('[SCORMPackageBuilder] Loaded course settings:', courseSettings)
       } catch (error) {
         console.log('[SCORMPackageBuilder] No course settings found, using defaults')
       }
+
+      // CRITICAL FIX: Apply defaults when settings loading fails
+      // This prevents the missing sidebar issue when courseSettings is null
+      const finalCourseSettings: CourseSettings = courseSettings || DEFAULT_COURSE_SETTINGS
+      console.log('[SCORMPackageBuilder] Final course settings applied:', finalCourseSettings)
 
       const result = await measureAsync(
         'scorm-generation',
@@ -1174,7 +1214,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                   console.log('[SCORMPackageBuilder] Progress:', progress, message)
                 },
                 mediaFilesRef.current, // Pass the pre-loaded media files
-                courseSettings // Pass course settings for audio completion requirements
+                finalCourseSettings // Pass course settings with defaults applied
               ),
               timeoutPromise
             ])
@@ -1386,7 +1426,23 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         type: typeof error,
         constructor: error && typeof error === 'object' && 'constructor' in error ? (error.constructor as any)?.name : undefined
       })
-      const errorMsg = `Error saving SCORM package: ${error instanceof Error ? error.message : 'Unknown error'}`
+
+      // Provide more specific error messages for common failure scenarios
+      let errorMsg = 'Error saving SCORM package: Unknown error'
+      if (error instanceof Error) {
+        if (error.message.includes('Permission denied') || error.message.includes('EACCES') || error.name === 'PermissionError') {
+          errorMsg = 'Permission denied: Cannot write to the selected location. Please choose a different folder or run as administrator.'
+        } else if (error.message.includes('ENOSPC') || error.message.includes('No space left')) {
+          errorMsg = 'Insufficient disk space: Please free up space on your disk and try again.'
+        } else if (error.message.includes('ENOENT') || error.message.includes('no such file or directory')) {
+          errorMsg = 'Invalid path: The selected folder does not exist. Please choose a valid location.'
+        } else if (error.message.includes('EROFS') || error.message.includes('read-only')) {
+          errorMsg = 'Cannot write to read-only location: Please choose a writable folder.'
+        } else {
+          errorMsg = `Error saving SCORM package: ${error.message}`
+        }
+      }
+
       setMessages(prev => [...prev, {
         id: `download-error-${Date.now()}`,
         type: 'error',

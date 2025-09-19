@@ -1,5 +1,15 @@
 /* MediaEnhancementWizard Component Styles */
 
+/* CSP-compliant visibility utilities */
+.hidden {
+  display: none !important;
+}
+
+.retryButton {
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
 /* Contamination Cleanup Styles */
 .contaminationWarning {
   margin-bottom: var(--space-md);
@@ -1341,6 +1351,18 @@
   display: flex;
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
+}
+
+/* CSP-safe styles to replace inline styles */
+.addMediaText {
+  margin-top: 1rem;
+  font-size: 1.2rem;
+}
+
+.forceDownloadInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .flex1 {

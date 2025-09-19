@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { CourseContentUnion, CourseContent, Media, Page, Topic } from '../types/aiPrompt'
 import type { MediaItem } from '../services/MediaService'
 import { CourseSeedData } from '../types/course'
@@ -7,7 +7,7 @@ import { isKnownCorsRestrictedDomain, downloadExternalImage, forceDownloadExtern
 import { PageLayout } from './PageLayout'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AutoSaveBadge } from './AutoSaveBadge'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { 
   Button, 
@@ -34,7 +34,7 @@ import { useStorage } from '../contexts/PersistentStorageContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import DOMPurify from 'dompurify'
 import { logger } from '../utils/logger'
-import { buildYouTubeEmbed, parseYouTubeClipTiming } from '../services/mediaUrl'
+import { buildYouTubeEmbed, parseYouTubeClipTiming, extractClipTimingFromUrl } from '../services/mediaUrl'
 import styles from './MediaEnhancementWizard.module.css'
 
 interface SearchResult {
@@ -208,7 +208,7 @@ const EnhancedClipTimingDisplay: React.FC<EnhancedClipTimingDisplayProps> = ({
   console.log('✅ [EnhancedClipTimingDisplay] RENDERING clip timing display')
   
   return (
-    <div className={styles.clipTimingDisplay}>
+    <div className={styles.clipTimingDisplay} data-testid="clip-timing-display">
       <div className={styles.clipTimingTitle}>
         <Icon icon={Scissors} size="sm" />
         <span>Video Clip Timing</span>
@@ -261,6 +261,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   // Cache for enriched YouTube metadata to prevent excessive getMedia() calls
   const enrichedMetadataCacheRef = useRef<Map<string, any>>(new Map())
   
+  // State for enriched metadata (used for YouTube URL enrichment)
+  const [enrichedMetadata, setEnrichedMetadata] = useState<Map<string, any>>(new Map())
+  
   // State for contamination cleanup
   const [isCleaningContamination, setIsCleaningContamination] = useState(false)
   const [contaminationDetected, setContaminationDetected] = useState(false)
@@ -269,6 +272,9 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const [contentHistory, setContentHistory] = useState<{ [key: string]: Page | Topic }>({})
   const [hasSearched, setHasSearched] = useState(false)
   const [existingMediaIdMap, setExistingMediaIdMap] = useState<Map<string, string>>(new Map())
+
+  // State for image loading timeout mechanism
+  const [loadingTimeouts, setLoadingTimeouts] = useState<Set<string>>(new Set())
   const currentlyLoadingRef = useRef<Set<string>>(new Set())
   const [youtubeMessage, setYoutubeMessage] = useState<string | null>(null)
   const [stickyReminders, setStickyReminders] = useState<Set<string>>(new Set())
@@ -331,6 +337,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     courseContentRef.current = courseContent
   }, [courseContent])
 
+
   // Load force download mode preference from localStorage
   useEffect(() => {
     const savedForceDownload = localStorage.getItem('scorm_builder_force_download_mode')
@@ -343,21 +350,78 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     }
   }, [])
   
-  const { 
-    storeMedia, 
+  const media = useMedia()
+  
+  // Extract commonly used methods for cleaner code
+  const {
+    storeMedia,
     storeYouTubeVideo,
-    updateYouTubeVideoMetadata, 
-    getMedia, 
+    updateYouTubeVideoMetadata,
     deleteMedia,
-    getValidMediaForPage,
     populateFromCourseContent,
     createBlobUrl,
-    cleanContaminatedMedia,
-    setLoadingProfile,
+    cleanupContaminatedMedia,
+    setLoadingProfile
+  } = media.actions
+  
+  const {
+    getMedia,
+    getValidMediaForPage,
     loadingProfile
-  } = useUnifiedMedia()
+  } = media.selectors
   
   const storage = useStorage()
+
+  // YouTube URL enrichment effect - fetch enriched metadata for YouTube videos that need it
+  useEffect(() => {
+    const enrichYouTubeMetadata = async () => {
+      if (!existingPageMedia || existingPageMedia.length === 0) return
+      
+      const youtubeVideosNeedingEnrichment = existingPageMedia.filter(media => {
+        // Only process YouTube videos
+        if (!((media.type === 'video' || media.type === 'youtube') && media.isYouTube)) return false
+        
+        // Check if basic metadata has YouTube URLs
+        const hasBasicUrl = !!((media as any).youtubeUrl || media.embedUrl || media.url ||
+                              (media as any).metadata?.youtubeUrl ||
+                              (media as any).metadata?.embedUrl ||
+                              (media as any).metadata?.url)
+        
+        // Only enrich if no basic URL and not already cached
+        return !hasBasicUrl && !enrichedMetadata.get(media.id)
+      })
+      
+      if (youtubeVideosNeedingEnrichment.length === 0) return
+      
+      console.log('[MediaEnhancement] 🔄 Fetching enriched metadata for YouTube videos:', 
+        youtubeVideosNeedingEnrichment.map(m => m.id))
+      
+      // Process each video that needs enrichment
+      for (const media of youtubeVideosNeedingEnrichment) {
+        try {
+          console.log('[MediaEnhancement] 📡 Calling getMedia() for enrichment:', media.id)
+          const enrichedData = await getMedia(media.id)
+          
+          if (enrichedData?.metadata) {
+            // Cache the enriched metadata
+            setEnrichedMetadata(prev => new Map(prev.set(media.id, enrichedData)))
+            
+            console.log('[MediaEnhancement] ✅ Cached enriched metadata for:', media.id, {
+              enrichedYoutubeUrl: enrichedData.metadata.youtubeUrl,
+              enrichedEmbedUrl: enrichedData.metadata.embedUrl,
+              enrichedDirectUrl: enrichedData.url
+            })
+          } else {
+            console.warn('[MediaEnhancement] ⚠️ No enriched metadata available for:', media.id)
+          }
+        } catch (error) {
+          console.error('[MediaEnhancement] ❌ Failed to fetch enriched metadata for:', media.id, error)
+        }
+      }
+    }
+    
+    enrichYouTubeMetadata()
+  }, [existingPageMedia])
   
   // console.log('[MediaEnhancement] Component render - UnifiedMedia ready')
   
@@ -429,20 +493,20 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         }
         
         console.log('[MediaEnhancement] 🧹 Running contamination cleanup on startup...')
-        const result = await cleanContaminatedMedia()
+        const result = await cleanupContaminatedMedia(null)
         
-        if (result.cleaned.length > 0) {
-          console.log('[MediaEnhancement] ✅ Cleaned contaminated media:', result.cleaned)
+        if (result.removedMediaIds.length > 0) {
+          console.log('[MediaEnhancement] ✅ Cleaned contaminated media:', result.removedMediaIds)
           // Show success notification to user
-          success(`Cleaned ${result.cleaned.length} contaminated media items`)
+          success(`Cleaned ${result.removedMediaIds.length} contaminated media items`)
         }
         
         if (result.errors.length > 0) {
           console.error('[MediaEnhancement] ❌ Cleanup errors:', result.errors)
-          result.errors.forEach(error => console.error(`Cleanup error: ${error}`))
+          result.errors.forEach((error: string) => console.error(`Cleanup error: ${error}`))
         }
         
-        if (result.cleaned.length === 0 && result.errors.length === 0) {
+        if (result.removedMediaIds.length === 0 && result.errors.length === 0) {
           console.log('[MediaEnhancement] ✅ No contaminated media found - all clean!')
         }
       } catch (error) {
@@ -453,7 +517,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     // Run cleanup after a short delay to allow media context to initialize
     const cleanupTimer = setTimeout(runContaminationCleanup, 1000)
     return () => clearTimeout(cleanupTimer)
-  }, [cleanContaminatedMedia, success, loadingProfile])
+  }, [cleanupContaminatedMedia, success, loadingProfile])
   
   // 🚨 CONTAMINATION DETECTION: Check for contamination in loaded media
   useEffect(() => {
@@ -461,16 +525,17 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       const hasContamination = existingPageMedia.some(media => {
         const metadata = (media as any).metadata || {}
         
-        // Check if image/audio has YouTube-specific fields
-        if (media.type !== 'video') {
+        // Only flag NON-VIDEO media that has YouTube properties (true contamination)
+        // Videos and YouTube types are ALLOWED to have YouTube properties
+        if (media.type !== 'video' && media.type !== 'youtube') {
           const mediaAny = media as any
-          const isContaminated = metadata.source === 'youtube' || 
-                                 metadata.embed_url || 
-                                 metadata.clip_start !== undefined || 
+          const isContaminated = metadata.source === 'youtube' ||
+                                 metadata.embed_url ||
+                                 metadata.clip_start !== undefined ||
                                  metadata.clip_end !== undefined ||
                                  mediaAny.embedUrl ||
-                                 mediaAny.clipStart !== undefined ||
-                                 mediaAny.clipEnd !== undefined ||
+                                 (mediaAny.clipStart !== undefined && mediaAny.clipStart !== null) ||
+                                 (mediaAny.clipEnd !== undefined && mediaAny.clipEnd !== null) ||
                                  mediaAny.isYouTube === true
           return isContaminated
         }
@@ -480,6 +545,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
       if (hasContamination) {
         console.log('[MediaEnhancement] 🚨 CONTAMINATION DETECTED in current page media')
+      } else {
+        console.log('[MediaEnhancement] ✅ No contamination detected - all media types are valid')
       }
     }
     
@@ -761,13 +828,32 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     if (!lightboxMedia?.isYouTube) {
       return lightboxMedia?.embedUrl || lightboxMedia?.url || ''
     }
-    
+
     // Use direct clipStart/clipEnd state for immediate preview updates
-    return buildYouTubeEmbed(
+    const url = buildYouTubeEmbed(
       lightboxMedia.url || lightboxMedia.embedUrl || '',
       clipStart,
       clipEnd
     )
+
+    // Validate the URL is a proper embed URL or safe fallback
+    if (!url || url === 'about:blank') {
+      console.error('[MediaEnhancement] Invalid YouTube embed URL generated:', {
+        originalUrl: lightboxMedia.url || lightboxMedia.embedUrl,
+        generatedUrl: url,
+        clipStart,
+        clipEnd
+      })
+      return 'about:blank' // Safe fallback that won't cause iframe errors
+    }
+
+    // Ensure it's a proper YouTube embed URL
+    if (!url.includes('/embed/') && !url.startsWith('about:')) {
+      console.error('[MediaEnhancement] Generated URL is not a proper embed URL:', url)
+      return 'about:blank' // Safe fallback instead of potentially problematic URL
+    }
+
+    return url
   }, [lightboxMedia?.url, lightboxMedia?.embedUrl, lightboxMedia?.isYouTube, clipStart, clipEnd])
   
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
@@ -820,9 +906,29 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
 
     const s = startText ? parseTimeToSeconds(startText) : lightboxMedia.clipStart
     const e = endText ? parseTimeToSeconds(endText) : lightboxMedia.clipEnd
-    const embed = lightboxMedia.isYouTube 
-      ? buildYouTubeEmbed(lightboxMedia.url || lightboxMedia.embedUrl || '', s, e)
-      : lightboxMedia.embedUrl
+
+    // 🔧 FIX: Use enriched metadata as fallback for YouTube URL
+    let embedUrl = lightboxMedia.embedUrl
+    if (lightboxMedia.isYouTube) {
+      // Try to get URL from lightboxMedia first, then fall back to enriched metadata
+      const primaryUrl = lightboxMedia.url || lightboxMedia.embedUrl
+      const enriched = enrichedMetadata.get(lightboxMedia.id)
+      const fallbackUrl = enriched?.metadata?.youtubeUrl || enriched?.metadata?.embedUrl || ''
+
+      const youtubeUrl = primaryUrl || fallbackUrl
+      embedUrl = buildYouTubeEmbed(youtubeUrl, s, e)
+
+      console.log('🔍 [CLIP DEBUG] commitClipTiming URL resolution:', {
+        mediaId: lightboxMedia.id,
+        primaryUrl,
+        fallbackUrl,
+        finalYoutubeUrl: youtubeUrl,
+        finalEmbedUrl: embedUrl,
+        hasEnrichedMetadata: !!enriched
+      })
+    }
+
+    const embed = embedUrl
 
     debugLogger.info('YOUTUBE_CLIP', 'Committing YouTube clip timing changes', {
       mediaId: lightboxMedia.id,
@@ -1714,15 +1820,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
       // Mark media section as dirty after successful media addition
       markDirty('media')
-      
-        // CRITICAL FIX: Reload media from MediaService to ensure fresh blob URLs
-        // This ensures the component shows the latest data with proper blob URLs
-        // MEDIA CLEARING FIX: Skip reload during clip timing updates
-        if (!isUpdatingClipTimingRef.current) {
-          await loadExistingMedia()
-        } else {
-          console.log('[MediaEnhancement] Skipping loadExistingMedia after media addition - clip timing update in progress')
-        }
+
+      // RACE CONDITION FIX: Do NOT reload media from cache after adding
+      // The local state has already been updated with the correct item (line 1804)
+      // Calling loadExistingMedia() can cause a race condition where the cache
+      // hasn't been updated yet, causing the newly added video to disappear
+      console.log('[MediaEnhancement] Media added successfully - using direct state update instead of cache reload')
       }
       
       // Race the media addition against timeout
@@ -1900,6 +2003,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       item.type === 'image' || item.type === 'video' || item.type === 'youtube'
     )
     
+    console.log('[MediaEnhancement] 📋 MEDIA LOADING VERIFICATION DEBUG:', {
+      pageId,
+      rawMediaCount: pageMediaItems.length,
+      visualMediaItems: imageAndVideoItems.map(item => ({
+        id: item.id,
+        type: item.type,
+        hasMetadata: !!(item as any).metadata,
+        metadataKeys: (item as any).metadata ? Object.keys((item as any).metadata) : [],
+        isYouTube: (item as any).metadata?.isYouTube || item.type === 'youtube',
+        metadataStructure: (item as any).metadata
+      }))
+    })
     console.log('[MediaEnhancement] Found media items:', imageAndVideoItems.length)
     
     if (imageAndVideoItems.length > 0) {
@@ -1970,7 +2085,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           // 🔧 FALLBACK FIX: Ensure YouTube videos always have a valid URL, never media-error://
           if (!url && isYouTubeVideo) {
-            url = metadata.youtubeUrl || itemAny.url || metadata.embedUrl || itemAny.embedUrl
+            // Try multiple sources for YouTube URL in order of preference
+            url = enrichedMetadata.youtubeUrl ||
+                  enrichedMetadata.embedUrl ||
+                  metadata.youtubeUrl ||
+                  metadata.embedUrl ||
+                  itemAny.url ||
+                  itemAny.embedUrl
             console.log(`[MediaEnhancement] Using fallback YouTube URL for ${item.id}:`, url)
           }
         } else {
@@ -2112,19 +2233,46 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         console.log(`[MediaEnhancement] Loading ${visualItems.length} visual items for page: ${pageId} (filtered from ${items.length} total)`)
         setLoadingProgress({ current: 0, total: visualItems.length })
 
-        // Convert to display format  
-        const mediaItems: Media[] = visualItems.map((item, index) => ({
-          id: item.id,
-          type: item.type as 'image' | 'video',
-          title: (item.metadata?.title || item.metadata?.original_name || `Media ${index + 1}`) as string,
-          url: '', // Will be populated by createBlobUrl
-          storageId: item.id,
-          // CRITICAL FIX: Ensure YouTube videos get isYouTube flag set correctly
-          isYouTube: item.metadata?.isYouTube || item.type === 'youtube' || false,
-          embedUrl: item.metadata?.embedUrl,
-          clipStart: (item.metadata?.clipStart || item.metadata?.clip_start) as number | undefined,
-          clipEnd: (item.metadata?.clipEnd || item.metadata?.clip_end) as number | undefined
-        }))
+        // Convert to display format
+        const mediaItems: Media[] = visualItems.map((item, index) => {
+          const isYouTube = item.metadata?.isYouTube || item.type === 'youtube' || false
+          const embedUrl = item.metadata?.embedUrl
+          let clipStart = (item.metadata?.clipStart || item.metadata?.clip_start) as number | undefined
+          let clipEnd = (item.metadata?.clipEnd || item.metadata?.clip_end) as number | undefined
+
+          // 🔧 FIX: Extract clip timing from embedUrl if not available as metadata
+          // This ensures clip timing appears on first topic visit, not just after navigation
+          if (isYouTube && (!clipStart || !clipEnd) && embedUrl) {
+            const extracted = extractClipTimingFromUrl(embedUrl)
+
+            // Use extracted values only if the metadata properties were undefined
+            if (clipStart === undefined) clipStart = extracted.clipStart
+            if (clipEnd === undefined) clipEnd = extracted.clipEnd
+
+            console.log(`[MediaEnhancement] 🎬 Extracted clip timing for ${item.id}:`, {
+              embedUrl,
+              originalClipStart: item.metadata?.clipStart,
+              originalClipEnd: item.metadata?.clipEnd,
+              extractedClipStart: extracted.clipStart,
+              extractedClipEnd: extracted.clipEnd,
+              finalClipStart: clipStart,
+              finalClipEnd: clipEnd
+            })
+          }
+
+          return {
+            id: item.id,
+            type: item.type as 'image' | 'video',
+            title: (item.metadata?.title || item.metadata?.original_name || `Media ${index + 1}`) as string,
+            url: '', // Will be populated by createBlobUrl
+            storageId: item.id,
+            // CRITICAL FIX: Ensure YouTube videos get isYouTube flag set correctly
+            isYouTube,
+            embedUrl,
+            clipStart,
+            clipEnd
+          }
+        })
 
         // Set the media items first
         if (seq === loadSeqRef.current) {
@@ -2207,15 +2355,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   
   // 🔧 FIX: Auto-select media with clip timing for persistent current media preview
   useEffect(() => {
+    // Check if page just changed to avoid false deletion detection
+    const pageJustChanged = currentPageIndexRef.current !== currentPageIndex
+
     // If no media is currently selected for preview
     if (!previewMediaId && existingPageMedia.length > 0) {
       // Find the first media item with clip timing (YouTube videos with start/end times)
-      const mediaWithClipTiming = existingPageMedia.find(media => 
-        media.type === 'video' && 
+      const mediaWithClipTiming = existingPageMedia.find(media =>
+        media.type === 'video' &&
         media.embedUrl &&
-        (media.clipStart !== undefined || media.clipEnd !== undefined)
+        ((media.clipStart !== undefined && media.clipStart !== null) ||
+         (media.clipEnd !== undefined && media.clipEnd !== null))
       )
-      
+
       if (mediaWithClipTiming) {
         console.log('[MediaEnhancement] 🎬 Auto-selecting media with clip timing for persistent preview:', {
           mediaId: mediaWithClipTiming.id,
@@ -2230,13 +2382,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         setPreviewMediaId(existingPageMedia[0].id)
       }
     }
-    
-    // Clear preview if the selected media no longer exists
-    if (previewMediaId && !existingPageMedia.find(m => m.id === previewMediaId)) {
+
+    // Clear preview only if media is deleted on same page, not when switching pages
+    if (previewMediaId && !existingPageMedia.find(m => m.id === previewMediaId) && !pageJustChanged) {
       console.log('[MediaEnhancement] 🧹 Clearing preview for deleted media:', previewMediaId)
       setPreviewMediaId(null)
     }
-  }, [existingPageMedia, previewMediaId])
+  }, [existingPageMedia, previewMediaId, currentPageIndex])
   
   // Load prompt suggestions separated by type
   useEffect(() => {
@@ -2928,9 +3080,16 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       fullMedia: media
     })
     
-    if (media.type === 'video') {
-      // Check if it's a YouTube video
-      if (media.embedUrl || (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be')))) {
+    if (media.type === 'video' || media.type === 'youtube') {
+      // Check if it's a YouTube video, including enriched metadata
+      const hasYouTubeUrl = media.embedUrl || 
+                           (media.url && (media.url.includes('youtube.com') || media.url.includes('youtu.be'))) ||
+                           (media as any).metadata?.youtubeUrl ||
+                           (media as any).metadata?.embedUrl ||
+                           enrichedMetadata.get(media.id)?.metadata?.youtubeUrl ||
+                           enrichedMetadata.get(media.id)?.metadata?.embedUrl
+      
+      if (hasYouTubeUrl) {
         // DEBUG: Log the clip timing data flow
         console.log('[YouTube Clip Display] 🎬 Rendering YouTube video with timing data:', {
           mediaId: media.id,
@@ -2942,11 +3101,26 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           hasClipTiming: (media.clipStart !== undefined || media.clipEnd !== undefined)
         })
         
-        // Generate embed URL with clip timing if available
-        const embedUrl = (media.clipStart !== undefined || media.clipEnd !== undefined)
-          ? buildYouTubeEmbed(media.url || media.embedUrl || '', media.clipStart, media.clipEnd)
-          : media.embedUrl || media.url
-          
+        // Generate embed URL with clip timing if available - use enriched metadata fallback
+        const youtubeUrl = media.url || media.embedUrl || 
+                          (media as any).metadata?.youtubeUrl ||
+                          (media as any).metadata?.embedUrl ||
+                          enrichedMetadata.get(media.id)?.metadata?.youtubeUrl ||
+                          enrichedMetadata.get(media.id)?.metadata?.embedUrl || ''
+                          
+        // ALWAYS use buildYouTubeEmbed for URL validation and safety
+        const embedUrl = buildYouTubeEmbed(youtubeUrl, media.clipStart, media.clipEnd)
+
+        // Additional safety check - never allow problematic URLs
+        if (!embedUrl || embedUrl === 'about:blank' || embedUrl === 'https://www.youtube.com/') {
+          console.error('[YouTube Clip Display] Invalid embed URL, skipping video display:', {
+            mediaId: media.id,
+            originalUrl: youtubeUrl,
+            finalEmbedUrl: embedUrl
+          })
+          return <div className={styles.noPreview}>Invalid YouTube URL</div>
+        }
+
         console.log('[YouTube Clip Display] 📺 Final iframe src URL:', {
           mediaId: media.id,
           finalEmbedUrl: embedUrl,
@@ -2978,20 +3152,24 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           </div>
         )
       }
-      // Regular video
+      // Regular video - use blob URL if available
+      const videoId = media.storageId || media.id
+      const videoUrl = blobUrls.get(videoId) || media.url
       return (
         <video
-          src={media.url}
+          src={videoUrl}
           controls
           className={styles.mediaVideo}
           title={media.title}
         />
       )
     } else {
-      // Image
+      // Image - use blob URL if available 
+      const imageId = media.storageId || media.id
+      const imageUrl = blobUrls.get(imageId) || media.url
       return (
         <img
-          src={media.url}
+          src={imageUrl}
           alt={media.title}
           className={styles.mediaImage}
         />
@@ -3199,10 +3377,41 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   }, [onNext, resetDirty, getCurrentPage, existingPageMedia])
 
   // RENDER FIX: Filter to visual media only to prevent empty src warnings for audio/caption
-  const visualMedia = useMemo(
-    () => (existingPageMedia || []).filter(m => m.type === 'image' || m.type === 'video' || m.type === 'youtube'),
-    [existingPageMedia]
-  )
+  const visualMedia = useMemo(() => {
+    console.log('[MediaEnhancement] 🔍 VISUAL MEDIA FILTERING DEBUG - Raw input media:', existingPageMedia?.map(m => ({
+      id: m.id,
+      type: m.type,
+      isYouTube: m.isYouTube,
+      hasUrl: !!m.url,
+      hasMetadata: !!(m as any).metadata,
+      metadataKeys: (m as any).metadata ? Object.keys((m as any).metadata) : [],
+      fullMedia: m
+    })))
+    
+    const filtered = (existingPageMedia || []).filter(m => {
+      const isVisual = m.type === 'image' || m.type === 'video' || m.type === 'youtube'
+      console.log(`[MediaEnhancement] 🔍 Media filtering for ${m.id}:`, {
+        id: m.id,
+        type: m.type,
+        isYouTube: m.isYouTube,
+        isVisual,
+        hasUrl: !!m.url,
+        hasMetadata: !!(m as any).metadata,
+        metadataKeys: (m as any).metadata ? Object.keys((m as any).metadata) : [],
+        reason: isVisual ? 'INCLUDED' : 'EXCLUDED'
+      })
+      return isVisual
+    })
+    
+    console.log(`[MediaEnhancement] 📊 Visual media filtering summary:`, {
+      totalMediaCount: existingPageMedia?.length || 0,
+      visualMediaCount: filtered.length,
+      willShowGrid: filtered.length > 0,
+      willShowNoMediaMessage: filtered.length === 0
+    })
+    
+    return filtered
+  }, [existingPageMedia])
 
   // PERFORMANCE: Memoize existing media items to prevent expensive re-rendering
   const renderedExistingMedia = useMemo(() => {
@@ -3231,27 +3440,83 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
         onClick={() => handleMediaClick(media.id)}
       >
         <div className={styles.mediaThumbnailContainer}>
-          {media.type === 'video' && media.isYouTube ? (
+          {(media.type === 'video' || media.type === 'youtube') && media.isYouTube ? (
             // YouTube video thumbnail - enhanced with URL fallback logic
             (() => {
               // Try multiple URL locations for YouTube URL (same logic as PageThumbnailGrid)
-              // Media interface has direct properties, not nested metadata
-              const youtubeUrl = (media as any).youtubeUrl || 
-                                media.embedUrl ||
-                                media.url
+              // FIXED: Also check nested metadata like PageThumbnailGrid does
+              let youtubeUrl = (media as any).youtubeUrl || 
+                               media.embedUrl ||
+                               media.url ||
+                               (media as any).metadata?.youtubeUrl ||
+                               (media as any).metadata?.embedUrl ||
+                               (media as any).metadata?.url
+              
+              // If no YouTube URL found in basic metadata, try enriched metadata (same as PageThumbnailGrid)
+              if (!youtubeUrl) {
+                console.log('[MediaEnhancement] 🔄 No YouTube URL in basic metadata, checking enriched cache for:', media.id)
+                
+                // Check if we already have enriched metadata cached
+                const cachedMetadata = enrichedMetadata.get(media.id)
+                if (cachedMetadata?.metadata) {
+                  // Extract YouTube URL from cached enriched metadata
+                  youtubeUrl = cachedMetadata.metadata.youtubeUrl || 
+                              cachedMetadata.metadata.embedUrl ||
+                              cachedMetadata.url
+                  
+                  console.log('[MediaEnhancement] 📦 Using cached enriched metadata for:', media.id, {
+                    enrichedYoutubeUrl: cachedMetadata.metadata.youtubeUrl,
+                    enrichedEmbedUrl: cachedMetadata.metadata.embedUrl,
+                    enrichedDirectUrl: cachedMetadata.url,
+                    finalUrl: youtubeUrl
+                  })
+                }
+                
+                // If still no URL and not cached, we'll need async enrichment
+                // This will be handled by a React effect since we can't do async in render
+                if (!youtubeUrl && !cachedMetadata) {
+                  console.log('[MediaEnhancement] ⏳ YouTube URL requires async enrichment for:', media.id)
+                }
+              }
               
               const videoIdMatch = youtubeUrl?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/)
               const videoId = videoIdMatch ? videoIdMatch[1] : null
               const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null
               
-              console.log('[MediaEnhancement] YouTube thumbnail extraction:', {
+              console.log('[MediaEnhancement] 🔎 DEEP YouTube URL extraction debug:', {
                 mediaId: media.id,
-                youtubeUrl: (media as any).youtubeUrl,
-                embedUrl: media.embedUrl,
+                mediaType: media.type,
+                isYouTube: media.isYouTube,
+                // Direct properties
+                directYoutubeUrl: (media as any).youtubeUrl,
+                directEmbedUrl: media.embedUrl,
                 directUrl: media.url,
-                selectedUrl: youtubeUrl,
+                // Metadata exploration
+                hasMetadata: !!(media as any).metadata,
+                metadataKeys: (media as any).metadata ? Object.keys((media as any).metadata) : [],
+                metadataYoutubeUrl: (media as any).metadata?.youtubeUrl,
+                metadataEmbedUrl: (media as any).metadata?.embedUrl,
+                metadataUrl: (media as any).metadata?.url,
+                // Complete metadata dump for analysis
+                fullMetadata: (media as any).metadata,
+                // Extraction logic results
+                urlExtractionResults: {
+                  step1_directYoutubeUrl: (media as any).youtubeUrl || null,
+                  step2_directEmbedUrl: media.embedUrl || null,
+                  step3_directUrl: media.url || null,
+                  step4_metadataYoutubeUrl: (media as any).metadata?.youtubeUrl || null,
+                  step5_metadataEmbedUrl: (media as any).metadata?.embedUrl || null,
+                  step6_metadataUrl: (media as any).metadata?.url || null,
+                  finalSelectedUrl: youtubeUrl
+                },
+                // Video ID extraction
+                videoIdMatch: youtubeUrl?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\n?#]+)/),
                 videoId,
-                thumbnailUrl
+                // Final thumbnail URL
+                finalThumbnailUrl: thumbnailUrl,
+                // Decision outcome
+                willShowThumbnail: !!thumbnailUrl,
+                willShowPlaceholder: !thumbnailUrl
               })
               
               return thumbnailUrl ? (
@@ -3260,10 +3525,19 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     src={thumbnailUrl}
                     alt={media.title || 'Video thumbnail'}
                     className={styles.mediaThumbnail}
+                    onLoad={() => {
+                      console.log('[MediaEnhancement] ✅ YouTube thumbnail loaded successfully:', thumbnailUrl)
+                    }}
                     onError={(e) => {
-                      console.log('[MediaEnhancement] YouTube thumbnail failed to load:', thumbnailUrl)
+                      console.error('[MediaEnhancement] ❌ YouTube thumbnail failed to load:', {
+                        thumbnailUrl,
+                        error: e,
+                        mediaId: media.id,
+                        videoId,
+                        originalYoutubeUrl: youtubeUrl
+                      })
                       const target = e.target as HTMLImageElement
-                      target.style.display = 'none'
+                      target.classList.add(styles.hidden)
                       const parent = target.parentElement
                       if (parent) {
                         const fallbackDiv = document.createElement('div')
@@ -3286,6 +3560,28 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
               {(() => {
                 const id = media.storageId || media.id
                 const url = id ? blobUrls.get(id) : undefined
+                const hasTimedOut = loadingTimeouts.has(id)
+
+                // Debug logging for image loading issues
+                if (id && !url && !hasTimedOut) {
+                  console.log(`[MediaEnhancement] Loading state for ${id}:`, {
+                    id,
+                    hasUrl: !!url,
+                    hasTimedOut,
+                    blobUrlsSize: blobUrls.size,
+                    isCurrentlyLoading: currentlyLoadingRef.current.has(id)
+                  })
+                }
+
+                // Set timeout for loading if not already set and no URL yet
+                if (!url && id && !hasTimedOut && !currentlyLoadingRef.current.has(id)) {
+                  currentlyLoadingRef.current.add(id)
+                  setTimeout(() => {
+                    setLoadingTimeouts(prev => new Set([...prev, id]))
+                    currentlyLoadingRef.current.delete(id)
+                  }, 5000) // 5 second timeout
+                }
+
                 return url ? (
                   <img
                     src={url}                // <-- guaranteed non-empty here
@@ -3294,9 +3590,26 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                     onError={(e) => {
                       console.log('[MediaEnhancement] Media thumbnail failed to load:', url)
                       const target = e.target as HTMLImageElement
-                      target.style.display = 'none'
+                      target.classList.add(styles.hidden)
                     }}
                   />
+                ) : hasTimedOut ? (
+                  <div className={styles.mediaPlaceholder}>
+                    <span>⚠️ Failed to load</span>
+                    <button
+                      onClick={() => {
+                        setLoadingTimeouts(prev => {
+                          const next = new Set(prev)
+                          next.delete(id)
+                          return next
+                        })
+                        currentlyLoadingRef.current.delete(id)
+                      }}
+                      className={styles.retryButton}
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : (
                   <div className={styles.mediaPlaceholder}>
                     <span>Loading...</span>
@@ -3388,15 +3701,18 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
           
           {/* Enhanced Clip Timing Display for Current Media */}
           {(() => {
-            const shouldShow = media.isYouTube && (media.clipStart !== undefined || media.clipEnd !== undefined);
+            const shouldShow = media.isYouTube && (
+              (typeof media.clipStart === 'number' && !isNaN(media.clipStart)) ||
+              (typeof media.clipEnd === 'number' && !isNaN(media.clipEnd))
+            );
             console.log('🎯 [Current Media Section] Checking Enhanced Clip Timing Display - DETAILED:');
             console.log('  📍 Media ID:', media.id);
             console.log('  📍 Media Type:', media.type);
             console.log('  📍 Is YouTube:', media.isYouTube);
             console.log('  📍 Clip Start:', media.clipStart, '(type:', typeof media.clipStart, ')');
             console.log('  📍 Clip End:', media.clipEnd, '(type:', typeof media.clipEnd, ')');
-            console.log('  📍 Has Clip Start:', media.clipStart !== undefined);
-            console.log('  📍 Has Clip End:', media.clipEnd !== undefined);
+            console.log('  📍 Has Clip Start:', media.clipStart !== undefined && media.clipStart !== null);
+            console.log('  📍 Has Clip End:', media.clipEnd !== undefined && media.clipEnd !== null);
             console.log('  📍 Should Show:', shouldShow);
             console.log('  📍 All Media Keys:', Object.keys(media));
             console.log('  📍 Media Keys Available:', Object.keys(media).join(', '));
@@ -3525,14 +3841,22 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
             )}
             
             {/* Existing Visual Media */}
-            {!isLoadingMedia && visualMedia.length > 0 && (
-            <Card className={styles.mediaCard}>
-              <h3 className={styles.mediaTitle}>Current Media</h3>
-              <div className={styles.mediaGrid}>
-                {renderedExistingMedia}
-              </div>
-            </Card>
-          )}
+            {!isLoadingMedia && visualMedia.length > 0 && (() => {
+              console.log('[MediaEnhancement] 🎯 RENDERING CURRENT MEDIA GRID:', {
+                isLoadingMedia,
+                visualMediaLength: visualMedia.length,
+                renderedExistingMediaCount: renderedExistingMedia.length,
+                willRenderGrid: !isLoadingMedia && visualMedia.length > 0
+              })
+              return (
+                <Card className={styles.mediaCard}>
+                  <h3 className={styles.mediaTitle}>Current Media</h3>
+                  <div className={styles.mediaGrid}>
+                    {renderedExistingMedia}
+                  </div>
+                </Card>
+              )
+            })()}
           
           {/* Show "No media" message when page has no visual media */}
           {visualMedia.length === 0 && (
@@ -3543,7 +3867,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                 <p className={styles.noMediaHint}>
                   Use the options below to add images or videos to this page
                 </p>
-                <p style={{ marginTop: '1rem', fontSize: '1.2rem' }}>
+                <p className={styles.addMediaText}>
                   ↓ Add Media Below ↓
                 </p>
               </div>
@@ -3617,7 +3941,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
                   {/* Force Download Mode Indicator */}
                   {forceDownloadMode && (
                     <Alert variant="info">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className={styles.forceDownloadInfo}>
                         <Icon icon={Shield} size="sm" />
                         <span>
                           <strong>Force Download Mode Active</strong> - Using aggressive download methods for VPN/corporate networks
@@ -4275,5 +4599,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   )
 }
 
-export { MediaEnhancementWizard }
-export default MediaEnhancementWizard
+// Memoize the component to prevent unnecessary re-renders
+const MemoizedMediaEnhancementWizard = memo(MediaEnhancementWizard)
+
+export { MemoizedMediaEnhancementWizard as MediaEnhancementWizard }
+export default MemoizedMediaEnhancementWizard

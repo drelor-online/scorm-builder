@@ -31,9 +31,9 @@ class BlobUrlManager {
   private lockedUrls = new Set<string>() // URLs locked from cleanup
 
   constructor() {
-    // Setup automatic cleanup
-    this.startCleanupTimer()
-    
+    // Don't start cleanup timer until URLs are created
+    // Timer will be started automatically when first URL is created
+
     // Cleanup on page unload
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', this.cleanup)
@@ -85,9 +85,14 @@ class BlobUrlManager {
       metadata
     })
     this.keyToUrl.set(key, url)
-    
+
+    // Start cleanup timer if this is the first URL
+    if (this.registry.size === 1) {
+      this.startCleanupTimer()
+    }
+
     logger.debug('[BlobURLManager] Created blob URL:', { key, url, size: blob.size })
-    
+
     return url
   }
 
@@ -115,6 +120,11 @@ class BlobUrlManager {
         this.urls.delete(key)
         this.refCounts.delete(key)
         this.keyToUrl.delete(key)
+
+        // Stop cleanup timer if no URLs remain
+        if (this.registry.size === 0) {
+          this.stopCleanupTimer()
+        }
       }
     } else {
       // Decrement reference count

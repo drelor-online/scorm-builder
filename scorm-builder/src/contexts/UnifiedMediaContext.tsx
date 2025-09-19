@@ -7,6 +7,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { MediaService, createMediaService, type MediaItem, type MediaMetadata, type ProgressCallback } from '../services/MediaService'
+import { extractClipTimingFromUrl } from '../services/mediaUrl'
 import { logger } from '../utils/logger'
 import { BlobURLCache } from '../services/BlobURLCache'
 import type { MediaType } from '../utils/idGenerator'
@@ -15,6 +16,18 @@ import { useStorage } from './PersistentStorageContext'
 // RENDER LOOP FIX: One-shot contamination warning cache to prevent spam
 // Track media IDs that have already been cleaned to prevent duplicate warnings
 const cleanedOnce = new Set<string>()
+
+const shouldLogMediaDebug = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true';
+const mediaDebugLog = (...args: unknown[]) => {
+  if (shouldLogMediaDebug) {
+    console.log(...args);
+  }
+};
+const mediaDebugWarn = (...args: unknown[]) => {
+  if (shouldLogMediaDebug) {
+    console.warn(...args);
+  }
+};
 
 // PERFORMANCE OPTIMIZATION: Loading profiles for step-specific optimization
 type LoadingProfile = 'visual-only' | 'all'
@@ -58,13 +71,19 @@ export interface UnifiedMediaContextType {
   // Utility
   isLoading: boolean
   error: Error | null
+  partialLoadingWarning: { message: string; loadedCount: number } | null
   clearError: () => void
+  clearPartialLoadingWarning: () => void
   refreshMedia: () => Promise<void>
   
   // Performance optimization
   loadingProfile: LoadingProfile
   setLoadingProfile: (profile: LoadingProfile) => void
-  
+
+  // Bulk operation management
+  isBulkOperation: boolean
+  setBulkOperation: (isBulk: boolean) => void
+
   // Cache management
   resetMediaCache: () => void
   populateFromCourseContent: (mediaItems: any[], pageId: string) => Promise<void>
@@ -82,6 +101,8 @@ const UnifiedMediaContext = createContext<UnifiedMediaContextType | null>(null)
 interface UnifiedMediaProviderProps {
   children: React.ReactNode
   projectId: string
+  loadingTimeout?: number // Timeout in milliseconds (default: 30000)
+  bulkOperationTimeout?: number // Timeout for bulk operations (default: 120000 - 2 minutes)
 }
 
 // Global reference for TauriAudioPlayer
@@ -97,94 +118,136 @@ async function progressivelyLoadRemainingMedia(
   criticalMediaIds: string[],
   mediaService: MediaService,
   blobCache: BlobURLCache,
-  profile: LoadingProfile = 'all'
+  profile: LoadingProfile = 'all',
+  // 🔧 FIX 1: Add instance management parameters
+  progressiveLoaderRunningRef: React.MutableRefObject<boolean>,
+  progressiveLoaderAbortControllerRef: React.MutableRefObject<AbortController | null>
 ) {
-  console.log('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
-  console.log(`[ProgressiveLoader] 🔍 PROFILE DEBUG: Received profile="${profile}"`)
+  // 🔧 FIX 1: DUPLICATE LOADER PREVENTION
+  if (progressiveLoaderRunningRef.current) {
+    mediaDebugLog('[ProgressiveLoader] 🚫 DUPLICATE PREVENTION: Another Progressive Loader is already running, aborting this instance')
+    return
+  }
+
+  // 🔧 FIX 5: AUDIONNARRATIONWIZARD CAPTION PRIORITY
+  // Check if we're in an AudioNarrationWizard context that needs caption loading
+  const hasAudioNarrationPriority = globalThis.location?.hash?.includes('audio') ||
+                                    globalThis.location?.pathname?.includes('audio')
+
+  if (hasAudioNarrationPriority) {
+    // In AudioNarrationWizard, prioritize caption loading and don't skip them
+    mediaDebugLog('[ProgressiveLoader] 🔧 FIX 5: AudioNarrationWizard context detected - ensuring caption priority')
+  }
+
+  // Mark this instance as running and create abort controller
+  progressiveLoaderRunningRef.current = true
+  const abortController = new AbortController()
+  progressiveLoaderAbortControllerRef.current = abortController
+
+  mediaDebugLog('[ProgressiveLoader] 🚀 Starting intelligent progressive media loading...')
+  mediaDebugLog(`[ProgressiveLoader] 🔍 PROFILE DEBUG: Received profile="${profile}"`)
+
+  try {
   
   // Filter out already loaded critical media
   const baseRemainingMedia = allMedia.filter(item => !criticalMediaIds.includes(item.id))
   
   // EMERGENCY DEBUG: Log all items before filtering
-  console.log(`[ProgressiveLoader] 📊 BEFORE FILTERING: ${baseRemainingMedia.length} items:`)
+  mediaDebugLog(`[ProgressiveLoader] 📊 BEFORE FILTERING: ${baseRemainingMedia.length} items:`)
   baseRemainingMedia.forEach((item, i) => {
     if (i < 10) { // Limit logging to first 10 items
-      console.log(`  - ${item.id} (${item.type})`)
+      mediaDebugLog(`  - ${item.id} (${item.type})`)
     }
   })
   if (baseRemainingMedia.length > 10) {
-    console.log(`  ... and ${baseRemainingMedia.length - 10} more items`)
+    mediaDebugLog(`  ... and ${baseRemainingMedia.length - 10} more items`)
   }
   
   // 🔧 FIX 4: FORCE PROGRESSIVE LOADER TO RESPECT VISUAL-ONLY PROFILE
-  // Enhanced filtering with emergency circuit breaker
+  // Enhanced filtering with emergency circuit breaker and AudioNarrationWizard exception
   const remainingMedia = profile === 'visual-only'
     ? baseRemainingMedia.filter(item => {
         const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
-        
-        // EMERGENCY CIRCUIT BREAKER: Block ALL audio/caption items
+
+        // 🔧 FIX 5: EXCEPTION FOR AUDIONNARRATIONWIZARD CAPTIONS
+        const isCaptionWithPriority = item.type === 'caption' && hasAudioNarrationPriority
+        if (isCaptionWithPriority) {
+          mediaDebugLog(`[ProgressiveLoader] 🔧 FIX 5: Allowing caption ${item.id} in visual-only mode due to AudioNarrationWizard priority`)
+          return true
+        }
+
+        // EMERGENCY CIRCUIT BREAKER: Block ALL audio/caption items (except prioritized captions)
         const isBlockedType = item.type === 'audio' || item.type === 'caption'
         if (isBlockedType) {
-          console.log(`[ProgressiveLoader] 🚫 FIX 4: EMERGENCY BLOCK - ${item.id} (${item.type}) blocked in visual-only mode`)
+          mediaDebugLog(`[ProgressiveLoader] 🚫 FIX 4: EMERGENCY BLOCK - ${item.id} (${item.type}) blocked in visual-only mode`)
           return false
         }
-        
+
         if (!isVisual) {
-          console.log(`[ProgressiveLoader] 🚫 VISUAL-ONLY: Excluding ${item.id} (${item.type})`)
+          mediaDebugLog(`[ProgressiveLoader] 🚫 VISUAL-ONLY: Excluding ${item.id} (${item.type})`)
         }
         return isVisual
       })
     : baseRemainingMedia
     
-  console.log(`[ProgressiveLoader] Profile: ${profile}, Filtering ${baseRemainingMedia.length} → ${remainingMedia.length} items`)
+  mediaDebugLog(`[ProgressiveLoader] Profile: ${profile}, Filtering ${baseRemainingMedia.length} → ${remainingMedia.length} items`)
   
   // EMERGENCY DEBUG: Log what's still in the list after filtering
-  console.log(`[ProgressiveLoader] 📊 AFTER FILTERING: ${remainingMedia.length} items to load:`)
+  mediaDebugLog(`[ProgressiveLoader] 📊 AFTER FILTERING: ${remainingMedia.length} items to load:`)
   remainingMedia.forEach(item => {
-    console.log(`  ✅ ${item.id} (${item.type})`)
+    mediaDebugLog(`  ✅ ${item.id} (${item.type})`)
   })
   
   if (remainingMedia.length === 0) {
-    console.log('[ProgressiveLoader] ✅ No remaining media to load after profile filtering')
+    mediaDebugLog('[ProgressiveLoader] ✅ No remaining media to load after profile filtering')
     return
   }
   
-  console.log(`[ProgressiveLoader] 📋 ${remainingMedia.length} media items to progressively load`)
+  mediaDebugLog(`[ProgressiveLoader] 📋 ${remainingMedia.length} media items to progressively load`)
   
   // 🎯 INTELLIGENT PRIORITIZATION ALGORITHM
-  const prioritizedBatches = prioritizeMediaForLoading(remainingMedia, profile)
+  const prioritizedBatches = prioritizeMediaForLoading(remainingMedia, profile, hasAudioNarrationPriority)
   
-  // Load each batch with delays between them
+  // Load each batch sequentially with pipeline stage awareness
   for (let i = 0; i < prioritizedBatches.length; i++) {
     const batch = prioritizedBatches[i]
     const batchName = getBatchName(i)
-    
-    console.log(`[ProgressiveLoader] 🔄 Loading ${batchName} (${batch.length} items)...`)
+
+    // Determine pipeline stage for better progress reporting
+    const pipelineStage = getPipelineStage(batch, i)
+
+    mediaDebugLog(`[ProgressiveLoader] 🔄 Loading ${batchName} ${pipelineStage} (${batch.length} items)...`)
     
     // 🔧 FIX 4: PROGRESSIVE LOADER TIMING FIX
     // Validate profile before each batch to prevent race conditions
-    console.log(`[ProgressiveLoader] 🔧 FIX 4: Pre-batch profile validation - current: "${profile}"`)
+    mediaDebugLog(`[ProgressiveLoader] 🔧 FIX 4: Pre-batch profile validation - current: "${profile}"`)
     
     if (profile === 'visual-only') {
       // Double-check that this batch contains only visual items
       const nonVisualItems = batch.filter(item => !(item.type === 'image' || item.type === 'video' || item.type === 'youtube'))
       if (nonVisualItems.length > 0) {
-        console.log(`[ProgressiveLoader] 🚨 FIX 4: ABORT - Found ${nonVisualItems.length} non-visual items in visual-only batch:`)
-        nonVisualItems.forEach(item => console.log(`  - ${item.id} (${item.type})`))
-        console.log('[ProgressiveLoader] 🚨 FIX 4: Skipping contaminated batch to prevent audio/caption loading')
+        mediaDebugLog(`[ProgressiveLoader] 🚨 FIX 4: ABORT - Found ${nonVisualItems.length} non-visual items in visual-only batch:`)
+        nonVisualItems.forEach(item => mediaDebugLog(`  - ${item.id} (${item.type})`))
+        mediaDebugLog('[ProgressiveLoader] 🚨 FIX 4: Skipping contaminated batch to prevent audio/caption loading')
         continue
       }
     }
     
     try {
+      // 🔧 FIX 1: Check for abort signal before each batch
+      if (abortController.signal.aborted) {
+        mediaDebugLog(`[ProgressiveLoader] 🚫 FIX 1: Batch ${i + 1} aborted by signal`)
+        throw new Error('AbortError')
+      }
+
       // Load batch in parallel
       const batchIds = batch.map(item => item.id)
-      console.log(`[ProgressiveLoader] 🔧 FIX 4: Processing batch with items: ${batchIds.join(', ')}`)
-      
+      mediaDebugLog(`[ProgressiveLoader] 🔧 FIX 4: Processing batch with items: ${batchIds.join(', ')}`)
+
       const preloadedUrls = await blobCache.preloadMedia(batchIds, async (id) => {
         // 🔧 FIX 4: Final safety check before individual item loading
         if (profile === 'visual-only' && (id.startsWith('audio-') || id.startsWith('caption-'))) {
-          console.log(`[ProgressiveLoader] 🚫 FIX 4: Emergency block - refusing to load ${id} in visual-only mode`)
+          mediaDebugLog(`[ProgressiveLoader] 🚫 FIX 4: Emergency block - refusing to load ${id} in visual-only mode`)
           return null
         }
         
@@ -209,28 +272,45 @@ async function progressivelyLoadRemainingMedia(
       })
       
       const successCount = preloadedUrls.filter(url => url !== null).length
-      console.log(`[ProgressiveLoader] ✅ ${batchName} loaded: ${successCount}/${batch.length} items`)
+      mediaDebugLog(`[ProgressiveLoader] ✅ ${batchName} loaded: ${successCount}/${batch.length} items`)
       
     } catch (error) {
-      console.warn(`[ProgressiveLoader] ⚠️ ${batchName} failed:`, error)
+      mediaDebugWarn(`[ProgressiveLoader] ⚠️ ${batchName} failed:`, error)
     }
     
     // Add delay between batches to not overwhelm the system
+    // Longer delay for larger projects with many batches
     if (i < prioritizedBatches.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000)) // 1s between batches
+      const delayMs = prioritizedBatches.length > 5 ? 1500 : 1000 // 1.5s for large projects, 1s for small
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+      mediaDebugLog(`[ProgressiveLoader] 💤 Waiting ${delayMs}ms between batches (${i + 1}/${prioritizedBatches.length})`)
     }
   }
   
-  console.log('[ProgressiveLoader] 🎉 Progressive loading completed!')
+  mediaDebugLog('[ProgressiveLoader] 🎉 Progressive loading completed!')
+
+  } catch (error) {
+    // 🔧 FIX 1: Handle aborts gracefully
+    if (error instanceof Error && error.name === 'AbortError') {
+      mediaDebugLog('[ProgressiveLoader] 🚫 Progressive loading aborted by duplicate prevention')
+    } else {
+      mediaDebugWarn('[ProgressiveLoader] ⚠️ Progressive loading failed:', error)
+    }
+  } finally {
+    // 🔧 FIX 1: CLEANUP - Always reset the running flag
+    progressiveLoaderRunningRef.current = false
+    progressiveLoaderAbortControllerRef.current = null
+    mediaDebugLog('[ProgressiveLoader] 🧹 Progressive Loader instance cleaned up')
+  }
 }
 
-// 🎯 PRIORITIZATION ALGORITHM: Sort media by importance for user experience  
-function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: LoadingProfile = 'all'): MediaItem[][] {
+// 🎯 PRIORITIZATION ALGORITHM: Sort media by importance for user experience
+function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: LoadingProfile = 'all', hasAudioNarrationPriority = false): MediaItem[][] {
   const batches: MediaItem[][] = []
   
   // 🔧 FIX 4: Skip audio/caption batching in visual-only mode
   if (profile === 'visual-only') {
-    console.log(`[ProgressiveLoader] 🔧 FIX 4: Visual-only mode - creating single batch of ${remainingMedia.length} visual items`)
+    mediaDebugLog(`[ProgressiveLoader] 🔧 FIX 4: Visual-only mode - creating single batch of ${remainingMedia.length} visual items`)
     
     // In visual-only mode, just group all visual media into priority batches
     const visualMedia = remainingMedia.filter(item => 
@@ -276,13 +356,84 @@ function prioritizeMediaForLoading(remainingMedia: MediaItem[], profile: Loading
   )
   if (audioPriority.length > 0) batches.push(audioPriority)
   
-  // LOW PRIORITY BATCH: Everything else (later topics, captions, etc.)
-  const lowPriority = remainingMedia.filter(item => 
+  // SEQUENTIAL LOADING PIPELINE: Split remaining media into ordered stages
+  const lowPriorityRemaining = remainingMedia.filter(item =>
     !highPriority.includes(item) &&
     !mediumPriority.includes(item) &&
     !audioPriority.includes(item)
   )
-  if (lowPriority.length > 0) batches.push(lowPriority)
+
+  if (lowPriorityRemaining.length > 0) {
+    mediaDebugLog(`[ProgressiveLoader] 🚀 SEQUENTIAL PIPELINE: Processing ${lowPriorityRemaining.length} remaining items`)
+
+    // STAGE 1: Audio files (highest CPU impact, load first while resources available)
+    const pipelineAudio = lowPriorityRemaining.filter(item => item.type === 'audio')
+
+    // STAGE 2: Visual media (images, videos - moderate impact, user-visible)
+    const pipelineVisual = lowPriorityRemaining.filter(item =>
+      item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+    )
+
+    // 🔧 ENHANCED FIX: IMPROVED CAPTION PRIORITY HANDLING
+    let pipelineCaptions = lowPriorityRemaining.filter(item => item.type === 'caption')
+
+    // Enhanced caption priority logic with better batching
+    if (hasAudioNarrationPriority && pipelineCaptions.length > 0) {
+      mediaDebugLog(`[ProgressiveLoader] 🔧 ENHANCED: Promoting ${pipelineCaptions.length} captions to dedicated high-priority batches`)
+
+      // Create dedicated caption batches (smaller for better reliability)
+      const CAPTION_BATCH_SIZE = 5 // Smaller batches for captions to reduce timeout risk
+
+      // Split captions into small dedicated batches
+      const captionBatches: MediaItem[][] = []
+      for (let i = 0; i < pipelineCaptions.length; i += CAPTION_BATCH_SIZE) {
+        const captionBatch = pipelineCaptions.slice(i, i + CAPTION_BATCH_SIZE)
+        captionBatches.push(captionBatch)
+      }
+
+      // Insert all caption batches right after high priority (position 1)
+      if (batches.length > 0) {
+        batches.splice(1, 0, ...captionBatches)
+      } else {
+        batches.push(...captionBatches)
+      }
+
+      pipelineCaptions = [] // Clear since we've already added them to batches
+      mediaDebugLog(`[ProgressiveLoader] 🔧 ENHANCED: Created ${captionBatches.length} dedicated caption batches of max ${CAPTION_BATCH_SIZE} items each`)
+    }
+
+    // Split each pipeline stage into small batches (max 10 items each)
+    const MAX_BATCH_SIZE = 10
+
+    // PIPELINE STAGE 1: Audio loading
+    if (pipelineAudio.length > 0) {
+      mediaDebugLog(`[ProgressiveLoader] 🎵 PIPELINE STAGE 1: ${pipelineAudio.length} audio files`)
+      for (let i = 0; i < pipelineAudio.length; i += MAX_BATCH_SIZE) {
+        const batch = pipelineAudio.slice(i, i + MAX_BATCH_SIZE)
+        batches.push(batch)
+      }
+    }
+
+    // PIPELINE STAGE 2: Visual media loading
+    if (pipelineVisual.length > 0) {
+      mediaDebugLog(`[ProgressiveLoader] 🖼️ PIPELINE STAGE 2: ${pipelineVisual.length} visual files`)
+      for (let i = 0; i < pipelineVisual.length; i += MAX_BATCH_SIZE) {
+        const batch = pipelineVisual.slice(i, i + MAX_BATCH_SIZE)
+        batches.push(batch)
+      }
+    }
+
+    // PIPELINE STAGE 3: Caption loading (most vulnerable to deadlocks)
+    if (pipelineCaptions.length > 0) {
+      mediaDebugLog(`[ProgressiveLoader] 📝 PIPELINE STAGE 3: ${pipelineCaptions.length} caption files`)
+      for (let i = 0; i < pipelineCaptions.length; i += MAX_BATCH_SIZE) {
+        const batch = pipelineCaptions.slice(i, i + MAX_BATCH_SIZE)
+        batches.push(batch)
+      }
+    }
+
+    mediaDebugLog(`[ProgressiveLoader] 📋 SEQUENTIAL PIPELINE: Created ${batches.length - 3} batches across ${[pipelineAudio.length > 0 ? 1 : 0, pipelineVisual.length > 0 ? 1 : 0, pipelineCaptions.length > 0 ? 1 : 0].reduce((a, b) => a + b, 0)} stages`)
+  }
   
   return batches
 }
@@ -293,12 +444,33 @@ function getBatchName(batchIndex: number): string {
   return names[batchIndex] || `Batch ${batchIndex + 1}`
 }
 
+function getPipelineStage(batch: MediaItem[], batchIndex: number): string {
+  if (batchIndex < 3) {
+    return '' // Priority batches don't need stage info
+  }
+
+  // Analyze batch content to determine pipeline stage
+  const audioCount = batch.filter(item => item.type === 'audio').length
+  const visualCount = batch.filter(item => item.type === 'image' || item.type === 'video' || item.type === 'youtube').length
+  const captionCount = batch.filter(item => item.type === 'caption').length
+
+  if (audioCount > 0 && visualCount === 0 && captionCount === 0) {
+    return '[🎵 Audio Pipeline]'
+  } else if (visualCount > 0 && audioCount === 0 && captionCount === 0) {
+    return '[🖼️ Visual Pipeline]'
+  } else if (captionCount > 0 && audioCount === 0 && visualCount === 0) {
+    return '[📝 Caption Pipeline]'
+  } else {
+    return '[🔀 Mixed Pipeline]'
+  }
+}
+
 function getTopicNumber(pageId: string): number {
   const match = pageId.match(/topic-(\d+)/)
   return match ? parseInt(match[1], 10) : 999
 }
 
-export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProviderProps) {
+export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 30000, bulkOperationTimeout = 120000 }: UnifiedMediaProviderProps) {
   // Get the shared FileStorage instance from PersistentStorageContext
   const storage = useStorage()
   
@@ -340,19 +512,76 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const mediaServiceRef = React.useRef<MediaService | null>(null)
   const lastLoadedProjectIdRef = React.useRef<string | null>(null)
   const isLoadingRef = React.useRef<boolean>(false)
+
+  // 🔧 FIX 1: PROGRESSIVE LOADER INSTANCE MANAGEMENT
+  // Track if a Progressive Loader is currently running to prevent duplicates
+  const progressiveLoaderRunningRef = React.useRef<boolean>(false)
+  const progressiveLoaderAbortControllerRef = React.useRef<AbortController | null>(null)
+
+  // 🔧 FIX 2: REFRESH DEBOUNCING
+  // Debounce rapid refreshMedia calls to prevent duplicate loading
+  const refreshTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
   
   const [mediaCache, setMediaCache] = useState<Map<string, MediaItem>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [loadingProfile, setLoadingProfile] = useState<LoadingProfile>('all')
+  const [isBulkOperation, setIsBulkOperation] = useState(false)
+  const [partialLoadingWarning, setPartialLoadingWarning] = useState<{ message: string; loadedCount: number } | null>(null)
   
   // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Set global flag for MediaService blocking
   useEffect(() => {
     const isVisualOnly = loadingProfile === 'visual-only'
     globalThis._scormBuilderVisualOnlyMode = isVisualOnly
-    console.log(`[UnifiedMediaContext] 🔧 FIX 5: Setting global visual-only flag: ${isVisualOnly}`)
+    mediaDebugLog(`[UnifiedMediaContext] 🔧 FIX 5: Setting global visual-only flag: ${isVisualOnly}`)
   }, [loadingProfile])
-  
+
+  // CRITICAL FIX: Timeout reset mechanism for bulk operations
+  const activeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    // If there's an active loading operation and bulk operation flag changes,
+    // reset the timeout with the correct duration
+    if (isLoadingRef.current && activeTimeoutRef.current) {
+      console.log('[UnifiedMediaContext] 🚀 TIMEOUT FIX: Bulk operation flag changed, resetting timeout', {
+        isBulkOperation,
+        wasTimeout: !!activeTimeoutRef.current,
+        newTimeout: isBulkOperation ? bulkOperationTimeout : loadingTimeout
+      })
+
+      // Clear the existing timeout
+      clearTimeout(activeTimeoutRef.current)
+
+      // Set new timeout with correct duration and partial loading fallback
+      const effectiveTimeout = isBulkOperation ? bulkOperationTimeout : loadingTimeout
+      activeTimeoutRef.current = setTimeout(() => {
+        console.warn(`[UnifiedMediaContext] Loading timeout after ${effectiveTimeout}ms (bulk: ${isBulkOperation}), implementing partial loading fallback`)
+
+        // PARTIAL LOADING FALLBACK: Complete with what we have instead of failing
+        const loadedMediaCount = mediaCache.size
+        const hasSignificantProgress = loadedMediaCount > 0
+
+        setIsLoading(false)
+        isLoadingRef.current = false
+
+        if (hasSignificantProgress) {
+          // Success with partial data - set warning instead of error
+          console.warn(`[UnifiedMediaContext] 📊 PARTIAL LOADING: Completed with ${loadedMediaCount} media items loaded`)
+          setError(null) // Clear any previous errors
+          setPartialLoadingWarning({
+            message: `Loading completed with ${loadedMediaCount} media items. Some media may not be available.`,
+            loadedCount: loadedMediaCount
+          })
+        } else {
+          // No progress made - set error as before
+          setError(new Error(`Loading timed out after ${effectiveTimeout / 1000} seconds with no media loaded. This may be due to corrupted media files or network issues.`))
+        }
+
+        activeTimeoutRef.current = null
+      }, effectiveTimeout)
+    }
+  }, [isBulkOperation, bulkOperationTimeout, loadingTimeout])
+
   // Track media loads to prevent infinite reloading
   const hasLoadedRef = useRef<Set<string>>(new Set())
   
@@ -362,11 +591,11 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   // Load initial media list when projectId changes
   useEffect(() => {
     // EMERGENCY DEBUG: Track media context loads
-    console.log('[DEBUG] UnifiedMediaContext useEffect triggered for project:', actualProjectId)
+    mediaDebugLog('[DEBUG] UnifiedMediaContext useEffect triggered for project:', actualProjectId)
     
     // Stronger guard against reloads
     if (hasLoadedRef.current.has(actualProjectId)) {
-      console.log('[UnifiedMediaContext] Already loaded this project, SKIPPING:', actualProjectId)
+      mediaDebugLog('[UnifiedMediaContext] Already loaded this project, SKIPPING:', actualProjectId)
       return
     }
     
@@ -374,6 +603,11 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     if (lastLoadedProjectIdRef.current === actualProjectId) {
       logger.info('[UnifiedMediaContext] Project ID unchanged, skipping media reload:', actualProjectId)
       return
+    }
+    
+    if (lastLoadedProjectIdRef.current && lastLoadedProjectIdRef.current !== actualProjectId) {
+      cleanedOnce.clear()
+      mediaDebugLog('[UnifiedMediaContext] Reset contamination warning cache for new project')
     }
     
     // Prevent concurrent loads
@@ -394,12 +628,12 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     // 🔧 FIX 3: PREVENT MULTIPLE MEDIASERVICE INITIALIZATIONS
     // Only create a new MediaService if we don't have one or the project ID changed
     if (!mediaServiceRef.current || lastLoadedProjectIdRef.current !== actualProjectId) {
-      console.log(`🔧 [UnifiedMediaContext] FIX 3: Creating MediaService for project ${actualProjectId} (previous: ${lastLoadedProjectIdRef.current})`)
+      mediaDebugLog(`🔧 [UnifiedMediaContext] FIX 3: Creating MediaService for project ${actualProjectId} (previous: ${lastLoadedProjectIdRef.current})`)
       const newService = createMediaService(actualProjectId, storage.fileStorage)
       mediaServiceRef.current = newService
-      console.log(`✅ [UnifiedMediaContext] FIX 3: MediaService created/reused for project ${actualProjectId}`)
+      mediaDebugLog(`✅ [UnifiedMediaContext] FIX 3: MediaService created/reused for project ${actualProjectId}`)
     } else {
-      console.log(`♻️  [UnifiedMediaContext] FIX 3: Reusing existing MediaService for project ${actualProjectId}`)
+      mediaDebugLog(`♻️  [UnifiedMediaContext] FIX 3: Reusing existing MediaService for project ${actualProjectId}`)
     }
     
     // Update the last loaded project ID
@@ -411,12 +645,26 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     
     // Cleanup project-specific blob URLs on unmount
     return () => {
+      // 🔧 FIX 1: CLEANUP PROGRESSIVE LOADER ON UNMOUNT
+      if (progressiveLoaderRunningRef.current && progressiveLoaderAbortControllerRef.current) {
+        logger.info('[UnifiedMediaContext] Aborting Progressive Loader on unmount')
+        progressiveLoaderAbortControllerRef.current.abort()
+        progressiveLoaderRunningRef.current = false
+        progressiveLoaderAbortControllerRef.current = null
+      }
+
+      // 🔧 FIX 2: CLEANUP REFRESH TIMEOUT ON UNMOUNT
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current)
+        refreshTimeoutRef.current = null
+      }
+
       // Clear audio cache when unmounting
       if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
         logger.info('[UnifiedMediaContext] Clearing audio cache on unmount')
         ;(mediaServiceRef.current as any).clearAudioCache()
       }
-      
+
       // Clean up ALL blob URLs when switching projects to prevent stale references
       logger.info('[UnifiedMediaContext] Clearing ALL blob URLs to prevent stale references')
       blobCache.clearAll()
@@ -424,15 +672,76 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   }, [actualProjectId, storage.fileStorage, blobCache])
   
   const refreshMedia = useCallback(async () => {
-    // Prevent concurrent loads
-    if (isLoadingRef.current) {
-      logger.info('[UnifiedMediaContext] Already loading, skipping refresh')
-      return
+    // 🔧 ENHANCED FIX: PROPER MUTEX WITH REQUEST QUEUE
+    // Create a unique request ID to track this specific refresh call
+    const requestId = `refresh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Starting refresh request ${requestId}`)
+
+    // 🔧 FIX 2: REFRESH DEBOUNCING - Cancel any pending debounced calls
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current)
+      refreshTimeoutRef.current = null
+      mediaDebugLog(`[UnifiedMediaContext] 🔧 FIX 2: Cancelled pending debounced call for ${requestId}`)
     }
-    
+
+    // 🔧 ENHANCED FIX: STRICT CONCURRENCY CONTROL
+    // If already loading, wait for completion instead of skipping
+    if (isLoadingRef.current) {
+      logger.info(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} waiting for active loading to complete`)
+
+      // Wait for the current loading to complete
+      let waitCount = 0
+      while (isLoadingRef.current && waitCount < 100) { // Max 10 second wait
+        await new Promise(resolve => setTimeout(resolve, 100))
+        waitCount++
+      }
+
+      if (isLoadingRef.current) {
+        logger.warn(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} timed out waiting for active loading`)
+        return
+      }
+
+      logger.info(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} proceeding after wait (${waitCount * 100}ms)`)
+    }
+
+    // 🔧 ENHANCED FIX: ABORT ANY RUNNING PROGRESSIVE LOADER WITH REQUEST ID TRACKING
+    if (progressiveLoaderRunningRef.current && progressiveLoaderAbortControllerRef.current) {
+      mediaDebugLog(`[UnifiedMediaContext] 🔧 FIX 1: Request ${requestId} aborting previous Progressive Loader`)
+      progressiveLoaderAbortControllerRef.current.abort()
+      progressiveLoaderRunningRef.current = false
+      progressiveLoaderAbortControllerRef.current = null
+    }
+
     isLoadingRef.current = true
     setIsLoading(true)
     setError(null)
+
+    // Set up timeout to prevent infinite loading with partial loading fallback
+    const effectiveTimeout = isBulkOperation ? bulkOperationTimeout : loadingTimeout
+    activeTimeoutRef.current = setTimeout(() => {
+      logger.warn(`[UnifiedMediaContext] Refresh timeout after ${effectiveTimeout}ms, implementing partial loading fallback`)
+
+      // PARTIAL LOADING FALLBACK: Complete with what we have instead of failing
+      const loadedMediaCount = mediaCache.size
+      const hasSignificantProgress = loadedMediaCount > 0
+
+      setIsLoading(false)
+      isLoadingRef.current = false
+
+      if (hasSignificantProgress) {
+        // Success with partial data - continue without error
+        logger.warn(`[UnifiedMediaContext] 📊 PARTIAL REFRESH: Completed with ${loadedMediaCount} media items loaded`)
+        setError(null) // Clear any previous errors
+        setPartialLoadingWarning({
+          message: `Refresh completed with ${loadedMediaCount} media items. Some media may not be available.`,
+          loadedCount: loadedMediaCount
+        })
+      } else {
+        // No progress made - set error as before
+        setError(new Error(`Loading timed out after ${effectiveTimeout / 1000} seconds with no media loaded. This may be due to corrupted media files or network issues.`))
+      }
+      activeTimeoutRef.current = null
+    }, effectiveTimeout)
     
     try {
       // Get the current media service from ref
@@ -487,7 +796,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       const isVisualOnly = loadingProfile === 'visual-only'
       const excludeTypes = isVisualOnly ? ['audio', 'caption'] : []
       
-      console.log(`[UnifiedMediaContext] 🚀 FIX 6: Calling MediaService.listAllMedia() with smart filtering:`, {
+      mediaDebugLog(`[UnifiedMediaContext] 🚀 FIX 6: Calling MediaService.listAllMedia() with smart filtering:`, {
         loadingProfile,
         isVisualOnly,
         excludeTypes
@@ -496,7 +805,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       // Now get media with smart backend filtering - this prevents unwanted backend scanning
       const allMedia = await mediaService.listAllMedia({ excludeTypes })
       
-      console.log(`[UnifiedMediaContext] 🚀 FIX 6: MediaService returned ${allMedia.length} items after smart backend filtering`)
+      mediaDebugLog(`[UnifiedMediaContext] 🚀 FIX 6: MediaService returned ${allMedia.length} items after smart backend filtering`)
       
       // Legacy filtering logic (now redundant but kept for safety)
       // The filtering should already be done by MediaService, but double-check
@@ -504,30 +813,40 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         ? allMedia.filter(item => {
             const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
             if (!isVisual) {
-              console.log(`[UnifiedMediaContext] 🚨 UNEXPECTED: Found non-visual item after MediaService filtering: ${item.id} (${item.type})`)
+              mediaDebugLog(`[UnifiedMediaContext] 🚨 UNEXPECTED: Found non-visual item after MediaService filtering: ${item.id} (${item.type})`)
             }
             return isVisual
           })
         : allMedia
         
       if (isVisualOnly && finalMedia.length !== allMedia.length) {
-        console.log(`[UnifiedMediaContext] 🚨 MediaService filtering may not be working - had to filter ${allMedia.length - finalMedia.length} additional items`)
+        mediaDebugLog(`[UnifiedMediaContext] 🚨 MediaService filtering may not be working - had to filter ${allMedia.length - finalMedia.length} additional items`)
       } else if (isVisualOnly) {
-        console.log(`[UnifiedMediaContext] ✅ FIX 6: Perfect filtering - all ${allMedia.length} items were visual media`)
+        mediaDebugLog(`[UnifiedMediaContext] ✅ FIX 6: Perfect filtering - all ${allMedia.length} items were visual media`)
       }
       
-      console.log(`🔍 [DEBUG] MediaService.listAllMedia() returned ${allMedia.length} items after backend filtering, final count: ${finalMedia.length}:`)
+      mediaDebugLog(`🔍 [DEBUG] MediaService.listAllMedia() returned ${allMedia.length} items after backend filtering, final count: ${finalMedia.length}:`)
       finalMedia.forEach(item => {
-        console.log(`🔍 [DEBUG] MediaService item: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
+        mediaDebugLog(`🔍 [DEBUG] MediaService item: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
       })
       
       const newCache = new Map<string, MediaItem>()
       finalMedia.forEach(item => {
+        // 🔧 FIX 3: MEDIA ID VALIDATION - Prevent undefined/null IDs
+        if (!item.id || item.id === 'undefined' || item.id === 'null') {
+          mediaDebugWarn(`[UnifiedMediaContext] 🚨 FIX 3: Skipping media item with invalid ID:`, {
+            id: item.id,
+            type: item.type,
+            pageId: item.pageId,
+            fileName: item.fileName
+          })
+          return // Skip this item
+        }
         newCache.set(item.id, item)
       })
       setMediaCache(newCache)
-      console.log(`🔍 [DEBUG] Updated cache with ${finalMedia.length} items from MediaService`)
-      logger.info('[UnifiedMediaContext] Loaded', finalMedia.length, 'media items')
+      mediaDebugLog(`🔍 [DEBUG] Updated cache with ${newCache.size} valid items from MediaService (filtered from ${finalMedia.length})`)
+      logger.info('[UnifiedMediaContext] Loaded', newCache.size, 'valid media items')
       
       // 🚀 STARTUP PERFORMANCE FIX: Replace aggressive preloading with lazy loading
       if (finalMedia.length > 0) {
@@ -542,7 +861,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
                               item.id && item.id !== ''
             
             if (isCritical) {
-              console.log(`[UnifiedMediaContext] 🎯 Marking as critical for preload: ${item.id} (${item.type})`)
+              mediaDebugLog(`[UnifiedMediaContext] 🎯 Marking as critical for preload: ${item.id} (${item.type})`)
             }
             
             return isCritical
@@ -608,43 +927,49 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           }
         }
         
-        // 🔧 FIX 2: ENHANCED REFRESHMEDIA CIRCUIT BREAKER
-        // Check loading profile before starting progressive loading
-        setTimeout(async () => {
-          try {
-            console.log(`[UnifiedMediaContext] 🔧 FIX 2: RefreshMedia circuit breaker - current profile: "${loadingProfile}"`)
-            
-            if (loadingProfile === 'visual-only') {
-              console.log('[UnifiedMediaContext] 🚫 FIX 2: Visual-only mode detected - filtering media before progressive loading')
-              
-              // Filter out audio/caption items before progressive loading
-              const visualOnlyMedia = allMedia.filter(item => {
-                const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
-                if (!isVisual) {
-                  console.log(`[UnifiedMediaContext] 🚫 FIX 2: Circuit breaker excluding ${item.id} (${item.type}) from progressive loading`)
-                }
-                return isVisual
-              })
-              
-              console.log(`[UnifiedMediaContext] 🔧 FIX 2: Circuit breaker filtered ${allMedia.length} → ${visualOnlyMedia.length} items`)
-              await progressivelyLoadRemainingMedia(visualOnlyMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
-            } else {
-              console.log('[UnifiedMediaContext] 🔧 FIX 2: Full loading mode - proceeding with all media types')
-              await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache, loadingProfile)
-            }
-          } catch (error) {
-            logger.warn('[UnifiedMediaContext] Progressive loading failed:', error)
+        // 🔧 ENHANCED FIX: IMMEDIATE PROGRESSIVE LOADING (RACE CONDITION PREVENTION)
+        // REMOVED DANGEROUS 2-SECOND DELAY - This was causing concurrent Progressive Loaders
+        // Progressive loading now starts immediately under mutex protection
+        try {
+          mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} starting immediate progressive loading (profile: "${loadingProfile}")`)
+
+          if (loadingProfile === 'visual-only') {
+            mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} filtering for visual-only mode`)
+
+            // Filter out audio/caption items before progressive loading
+            const visualOnlyMedia = allMedia.filter(item => {
+              const isVisual = item.type === 'image' || item.type === 'video' || item.type === 'youtube'
+              if (!isVisual) {
+                mediaDebugLog(`[UnifiedMediaContext] 🚫 MUTEX: Request ${requestId} excluding ${item.id} (${item.type}) from progressive loading`)
+              }
+              return isVisual
+            })
+
+            mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} filtered ${allMedia.length} → ${visualOnlyMedia.length} items`)
+            await progressivelyLoadRemainingMedia(visualOnlyMedia, criticalMediaIds, mediaService, blobCache, loadingProfile, progressiveLoaderRunningRef, progressiveLoaderAbortControllerRef)
+          } else {
+            mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} starting full loading mode`)
+            await progressivelyLoadRemainingMedia(allMedia, criticalMediaIds, mediaService, blobCache, loadingProfile, progressiveLoaderRunningRef, progressiveLoaderAbortControllerRef)
           }
-        }, 2000) // 2 second delay to ensure UI is interactive
+
+          mediaDebugLog(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} progressive loading completed successfully`)
+        } catch (error) {
+          logger.warn(`[UnifiedMediaContext] 🔧 MUTEX: Request ${requestId} progressive loading failed:`, error)
+        }
       }
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to load media:', err)
       setError(err as Error)
     } finally {
+      // Always clear the timeout when loading completes (success or failure)
+      if (activeTimeoutRef.current) {
+        clearTimeout(activeTimeoutRef.current)
+        activeTimeoutRef.current = null
+      }
       setIsLoading(false)
       isLoadingRef.current = false
     }
-  }, [storage, blobCache])
+  }, [storage, blobCache, loadingTimeout])
   
   const storeMedia = useCallback(async (
     file: File | Blob,
@@ -662,7 +987,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       
       // Clear any existing blob URL for this media ID to force regeneration
       blobCache.revoke(item.id)
-      console.log('[UnifiedMediaContext] Cleared blob URL cache for replaced media:', item.id)
+      mediaDebugLog('[UnifiedMediaContext] Cleared blob URL cache for replaced media:', item.id)
       
       // Update cache
       setMediaCache(prev => {
@@ -686,7 +1011,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         // Check if this is an audio or caption ID by pattern
         const isAudioOrCaption = mediaId.startsWith('audio-') || mediaId.startsWith('caption-')
         if (isAudioOrCaption) {
-          console.log(`🚫 [UnifiedMediaContext] FIX 5: EMERGENCY CIRCUIT BREAKER - Blocking getMedia(${mediaId}) in visual-only mode`)
+          mediaDebugLog(`🚫 [UnifiedMediaContext] FIX 5: EMERGENCY CIRCUIT BREAKER - Blocking getMedia(${mediaId}) in visual-only mode`)
           return null
         }
       }
@@ -721,7 +1046,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         
         // Clear blob URL cache for this media
         blobCache.revoke(mediaId)
-        console.log('[UnifiedMediaContext] Cleared blob URL cache for deleted media:', mediaId)
+        mediaDebugLog('[UnifiedMediaContext] Cleared blob URL cache for deleted media:', mediaId)
       }
       
       return success
@@ -829,16 +1154,44 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           }
           
           // YouTube-specific metadata (only for actual YouTube videos)
-          // 🔧 CRITICAL FIX: Don't extract clip timing from course content - it doesn't exist there
-          // Clip timing data is stored separately in FileStorage and loaded by MediaService
-          const youtubeMetadata = isActualYouTubeVideo ? {
-            source: 'youtube',
-            isYouTube: true,
-            youtubeUrl: metadata.youtubeUrl || itemAny.youtubeUrl || itemAny.url,
-            embedUrl: metadata.embedUrl || itemAny.embedUrl,
-            thumbnail: metadata.thumbnail || itemAny.thumbnail,
-            // clipStart/clipEnd intentionally omitted - will be loaded by MediaService from FileStorage
-          } : {}
+          // 🔧 CLIP TIMING FIX: Extract clip timing from course content when available
+          // Course content IS the authoritative source for clip timing after project save/reload
+          const youtubeMetadata = isActualYouTubeVideo ? (() => {
+            const embedUrl = metadata.embedUrl || itemAny.embedUrl
+
+            // First, try to get clip timing from direct properties
+            let clipStart = itemAny.clipStart
+            let clipEnd = itemAny.clipEnd
+
+            // If clip timing is not available as properties, extract from embedUrl
+            if ((clipStart === undefined || clipEnd === undefined) && embedUrl) {
+              const extracted = extractClipTimingFromUrl(embedUrl)
+
+              // Use extracted values only if the properties were undefined
+              if (clipStart === undefined) clipStart = extracted.clipStart
+              if (clipEnd === undefined) clipEnd = extracted.clipEnd
+
+              logger.debug(`[UnifiedMediaContext] Extracted clip timing from embedUrl: ${embedUrl}`, {
+                originalClipStart: itemAny.clipStart,
+                originalClipEnd: itemAny.clipEnd,
+                extractedClipStart: extracted.clipStart,
+                extractedClipEnd: extracted.clipEnd,
+                finalClipStart: clipStart,
+                finalClipEnd: clipEnd
+              })
+            }
+
+            return {
+              source: 'youtube',
+              isYouTube: true,
+              youtubeUrl: metadata.youtubeUrl || itemAny.youtubeUrl || itemAny.url,
+              embedUrl: embedUrl,
+              thumbnail: metadata.thumbnail || itemAny.thumbnail,
+              // 🎬 PRESERVE CLIP TIMING: Extract from course content OR embedUrl
+              clipStart,
+              clipEnd
+            }
+          })() : {}
           
           // Non-YouTube metadata (for images and regular videos)
           const regularMetadata = !isActualYouTubeVideo ? {
@@ -866,7 +1219,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         convertedItems.forEach(item => {
           updated.set(item.id, item)
           logger.debug(`[UnifiedMediaContext] Added to cache from course content: ${item.id} (${item.type}) - clip timing will be loaded by MediaService`)
-          console.log(`🔍 [DEBUG] Cache ADD: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
+          mediaDebugLog(`🔍 [DEBUG] Cache ADD: ${item.id} → pageId: '${item.pageId}', type: '${item.type}'`)
         })
         return updated
       })
@@ -994,21 +1347,21 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
       filteredMediaForPage = allMediaForPage.filter(item => 
         opts.types!.includes(item.type as 'image' | 'video' | 'youtube')
       )
-      console.log(`🔧 [UnifiedMediaContext] Visual-only filtering: ${allMediaForPage.length} → ${filteredMediaForPage.length} items (types: ${opts.types.join(', ')}) for page ${pageId}`)
+      mediaDebugLog(`🔧 [UnifiedMediaContext] Visual-only filtering: ${allMediaForPage.length} → ${filteredMediaForPage.length} items (types: ${opts.types.join(', ')}) for page ${pageId}`)
     }
     
     // LIGHTWEIGHT MODE: Early return if no existence verification needed
     // This prevents expensive getMedia() calls for audio/caption files during Media step
     if (opts?.verifyExistence === false) {
-      console.log(`🚀 [UnifiedMediaContext] Lightweight mode: Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
+      mediaDebugLog(`🚀 [UnifiedMediaContext] Lightweight mode: Returning ${filteredMediaForPage.length} cached media items for page ${pageId}`)
       return filteredMediaForPage
     }
     
     // DEBUG logging (only when not in lightweight mode to reduce noise)
-    console.log(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - Full verification mode:`)
-    console.log(`   Items matching pageId '${pageId}': ${allMediaForPage.length}`)
+    mediaDebugLog(`🔍 [UnifiedMediaContext] getValidMediaForPage('${pageId}') - Full verification mode:`)
+    mediaDebugLog(`   Items matching pageId '${pageId}': ${allMediaForPage.length}`)
     if (filteredMediaForPage.length > 0) {
-      console.log(`   Filtered items:`, filteredMediaForPage.map(item => ({
+      mediaDebugLog(`   Filtered items:`, filteredMediaForPage.map(item => ({
         id: item.id,
         type: item.type,
         pageId: item.pageId
@@ -1045,33 +1398,33 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
           
           // PERFORMANCE OPTIMIZATION: Schedule cleanup during idle time to avoid blocking UI
           scheduleIdleCleanup(item.id, async () => {
-            console.warn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE! (Deferred)`)
-            console.warn(`   Media ID: ${item.id}`)
-            console.warn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
-            console.warn(`   Page: ${pageId}`)
-            console.warn(`   Contaminated fields:`, {
+            mediaDebugWarn(`🚨 [UnifiedMediaContext] CONTAMINATED MEDIA IN CACHE! (Deferred)`)
+            mediaDebugWarn(`   Media ID: ${item.id}`)
+            mediaDebugWarn(`   Type: ${item.type} (should NOT have YouTube metadata)`)
+            mediaDebugWarn(`   Page: ${pageId}`)
+            mediaDebugWarn(`   Contaminated fields:`, {
               source: item.metadata?.source,
               isYouTube: item.metadata?.isYouTube,
               hasYouTubeUrl: !!item.metadata?.youtubeUrl,
               hasEmbedUrl: !!item.metadata?.embedUrl,
               hasClipTiming: !!(item.metadata?.clipStart || item.metadata?.clipEnd)
             })
-            console.warn('   🔧 This contaminated data will cause UI issues!')
+            mediaDebugWarn('   🔧 This contaminated data will cause UI issues!')
           })
         }
       }
       
       if (contaminatedCount > 0) {
-        console.warn(`🚨 [UnifiedMediaContext] Found ${contaminatedCount} contaminated items for page ${pageId}`)
-        console.warn('   📊 Page media summary:')
+        mediaDebugWarn(`🚨 [UnifiedMediaContext] Found ${contaminatedCount} contaminated items for page ${pageId}`)
+        mediaDebugWarn('   📊 Page media summary:')
         const typeCounts: Record<string, number> = {}
         allMediaForPage.forEach(item => {
           typeCounts[item.type] = (typeCounts[item.type] || 0) + 1
         })
-        console.warn(`   Types: ${JSON.stringify(typeCounts)}`)
+        mediaDebugWarn(`   Types: ${JSON.stringify(typeCounts)}`)
       }
     } else {
-      console.log(`🔕 [UnifiedMediaContext] FIX 2: Skipping contamination detection - visual-only mode detected for page ${pageId}`)
+      mediaDebugLog(`🔕 [UnifiedMediaContext] FIX 2: Skipping contamination detection - visual-only mode detected for page ${pageId}`)
     }
     
     // 🔧 FIX INFINITE LOOP: Return all cached media without async existence checks
@@ -1096,7 +1449,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
       // Reduced logging to prevent console lock-up
-      // console.log('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
+      // mediaDebugLog('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
       
       // Use BlobURLCache for efficient caching
       return await blobCache.getOrCreate(mediaId, async () => {
@@ -1110,7 +1463,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         const media = await mediaService.getMedia(mediaId)
         // Simplified logging to prevent console lock-up
         if (media) {
-          console.log('[UnifiedMediaContext v3.0.0] Media found, size:', media?.data?.length || 0)
+          mediaDebugLog('[UnifiedMediaContext v3.0.0] Media found, size:', media?.data?.length || 0)
         }
         
         if (!media) {
@@ -1120,14 +1473,14 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
         
         // Check if it's a YouTube or external URL - don't cache these
         if (media.url && (media.url.startsWith('http') || media.url.startsWith('data:'))) {
-          console.log('[UnifiedMediaContext v3.0.0] External/data URL, returning directly:', media.url)
+          mediaDebugLog('[UnifiedMediaContext v3.0.0] External/data URL, returning directly:', media.url)
           // Don't cache external URLs in BlobURLCache
           throw new Error('External URL - skip caching')
         }
         
         // Return data for BlobURLCache to create blob URL
         if (media.data && media.data.length > 0) {
-          console.log('[UnifiedMediaContext v3.0.0] Returning data for BlobURLCache:', {
+          mediaDebugLog('[UnifiedMediaContext v3.0.0] Returning data for BlobURLCache:', {
             mediaId,
             dataSize: media.data.length,
             mimeType: media.metadata?.mimeType || media.metadata?.mime_type
@@ -1142,7 +1495,7 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
             const text = new TextDecoder('utf-8', { fatal: false }).decode(firstBytes)
             if (text.includes('<svg') || text.includes('<?xml')) {
               mimeType = 'image/svg+xml'
-              console.log('[UnifiedMediaContext] Detected SVG content for:', mediaId)
+              mediaDebugLog('[UnifiedMediaContext] Detected SVG content for:', mediaId)
             }
           }
           
@@ -1195,11 +1548,15 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
   const revokeBlobUrl = useCallback((url: string) => {
     // BlobURLCache handles revocation - this is now a no-op
     // Kept for backward compatibility
-    console.log('[UnifiedMediaContext] revokeBlobUrl called (handled by BlobURLCache):', url)
+    mediaDebugLog('[UnifiedMediaContext] revokeBlobUrl called (handled by BlobURLCache):', url)
   }, [])
   
   const clearError = useCallback(() => {
     setError(null)
+  }, [])
+
+  const clearPartialLoadingWarning = useCallback(() => {
+    setPartialLoadingWarning(null)
   }, [])
   
   const hasAudioCached = useCallback((mediaId: string): boolean => {
@@ -1285,14 +1642,18 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     clearAudioFromCache,
     isLoading,
     error,
+    partialLoadingWarning,
     clearError,
+    clearPartialLoadingWarning,
     refreshMedia,
     resetMediaCache,
     populateFromCourseContent,
     cleanContaminatedMedia,
     setCriticalMediaLoadingCallback: setCriticalMediaLoadingCallback,
     loadingProfile,
-    setLoadingProfile
+    setLoadingProfile,
+    isBulkOperation,
+    setBulkOperation: setIsBulkOperation
   }), [
     storeMedia,
     updateMedia,
@@ -1312,13 +1673,17 @@ export function UnifiedMediaProvider({ children, projectId }: UnifiedMediaProvid
     clearAudioFromCache,
     isLoading,
     error,
+    partialLoadingWarning,
     clearError,
+    clearPartialLoadingWarning,
     refreshMedia,
     resetMediaCache,
     populateFromCourseContent,
     cleanContaminatedMedia,
     setCriticalMediaLoadingCallback,
-    setLoadingProfile
+    setLoadingProfile,
+    isBulkOperation,
+    setIsBulkOperation
   ])
   
   // Set global context for TauriAudioPlayer

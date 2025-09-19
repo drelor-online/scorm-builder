@@ -23,6 +23,7 @@ import './DesignSystem/designSystem.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { generateActivityId } from '../utils/idGenerator'
+import { logger } from '../utils/logger'
 import DOMPurify from 'dompurify'
 import styles from './ActivitiesEditor.module.css'
 
@@ -121,7 +122,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
     storage = useStorage()
   } catch (error) {
     // Storage provider not available, component will work without persistence
-    console.warn('PersistentStorage not available, activities will not be persisted:', error)
+    logger.warn('ActivitiesEditor.storage', 'PersistentStorage not available, activities will not be persisted', { error })
   }
   
   // REMOVED: Loading from storage on mount to prevent circular updates
@@ -153,7 +154,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
           onSave(content, true) // Pass content and silent=true for auto-save
         }
       } catch (error) {
-        console.error('Error saving activities data:', error)
+        logger.error('ActivitiesEditor.save', 'Error saving activities data', { error })
       }
     }
     
@@ -297,7 +298,7 @@ export const ActivitiesEditor: React.FC<ActivitiesEditorProps> = ({
           resetDirty('activities')
         } catch (error) {
           // If onNext fails, don't reset dirty flag
-          console.error('Failed to proceed to next step:', error)
+          logger.error('ActivitiesEditor.next', 'Failed to proceed to next step', { error })
           throw error // Re-throw to maintain error handling
         }
       }}

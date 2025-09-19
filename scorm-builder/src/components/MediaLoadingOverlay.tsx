@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import styles from './MediaLoadingOverlay.module.css'
 
 // Funny loading messages that rotate randomly
@@ -28,13 +28,17 @@ const getRandomMessage = () => {
 interface MediaLoadingOverlayProps {
   message?: string
   showProgress?: boolean
+  onCancel?: () => void
+  showCancel?: boolean
 }
 
-export const MediaLoadingOverlay: React.FC<MediaLoadingOverlayProps> = ({ 
-  message = 'Loading media...', 
-  showProgress = true 
+export const MediaLoadingOverlay: React.FC<MediaLoadingOverlayProps> = ({
+  message = 'Loading media...',
+  showProgress = true,
+  onCancel,
+  showCancel = false
 }) => {
-  const { isLoading } = useUnifiedMedia()
+  const { isLoading } = useMedia()
   const [funnyMessage, setFunnyMessage] = useState(getRandomMessage())
   
   // Change the funny message every 3 seconds while loading
@@ -63,7 +67,7 @@ export const MediaLoadingOverlay: React.FC<MediaLoadingOverlayProps> = ({
               <div className={styles.progressBar}>
                 <div className={styles.progressFill} />
               </div>
-              <p 
+              <p
                 className={styles.progressText}
                 role="status"
                 aria-live="polite"
@@ -71,6 +75,16 @@ export const MediaLoadingOverlay: React.FC<MediaLoadingOverlayProps> = ({
                 {funnyMessage}
               </p>
             </div>
+          )}
+          {showCancel && onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className={styles.cancelButton}
+              aria-label="Cancel loading"
+            >
+              Cancel
+            </button>
           )}
         </div>
       </div>

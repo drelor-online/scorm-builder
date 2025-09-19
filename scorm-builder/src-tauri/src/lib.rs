@@ -19,6 +19,7 @@ use commands::{
 use commands_secure::{
     append_to_log, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
     load_api_keys, load_project, rename_project, save_api_keys, save_project, unsafe_download_image,
+    diagnose_projects_directory,
 };
 use backup_recovery::{
     check_recovery, cleanup_old_backups, create_backup, recover_from_backup,
@@ -48,6 +49,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
+        .setup(|app| {
+            // Initialize the frontend logger with the app handle
+            commands_secure::init_frontend_logger(app.handle().clone());
+
+            // Test that logging is working
+            commands_secure::log_to_frontend("INFO", "SCORM Builder starting up - Rust logger initialized");
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             create_project,
@@ -93,7 +103,8 @@ pub fn run() {
             clean_workflow_files,
             export_workflow_zip,
             save_workflow_json,
-            unsafe_download_image
+            unsafe_download_image,
+            diagnose_projects_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

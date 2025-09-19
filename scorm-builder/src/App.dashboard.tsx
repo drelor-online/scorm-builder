@@ -15,6 +15,9 @@ import { NotificationToStatusBridge } from './components/NotificationToStatusBri
 import { WorkflowRecorder } from './components/WorkflowRecorder'
 import App from './App'
 import { openProjectWithCoordination } from './utils/coordinatedProjectLoading'
+import { startRustLogListener } from './services/rustLogListener'
+import { isTauriEnvironment } from './config/environment'
+import { safeLog } from './utils/productionLogger'
 
 interface DashboardContentProps {
   onSecretClick?: () => void
@@ -106,13 +109,32 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
       }
     })
   }, [])
-  
+
+  useEffect(() => {
+    // Start listening to Rust logs
+    if (isTauriEnvironment()) {
+      startRustLogListener()
+      safeLog('App.dashboard', 'Started Rust log listener')
+
+      // Test Rust logging by calling diagnostic command
+      setTimeout(async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          const diagnostics = await invoke('diagnose_projects_directory')
+          safeLog('App.dashboard', 'Project directory diagnostics', diagnostics)
+        } catch (error) {
+          console.error('[App.dashboard] Failed to call diagnostics:', error)
+        }
+      }, 1000) // Delay to ensure logger is initialized
+    }
+  }, [])
+
   const handleProjectSelected = async (projectId: string) => {
-    console.log('[App.dashboard] handleProjectSelected called with:', projectId)
+    safeLog('App.dashboard', 'handleProjectSelected called with', { projectId })
     
     // StrictMode protection: Ignore duplicate calls during loading
     if (isLoadingRef.current) {
-      console.log('[App.dashboard] ⚠️ Ignoring duplicate project loading call (StrictMode protection)')
+      safeLog('App.dashboard', '⚠️ Ignoring duplicate project loading call (StrictMode protection)')
       return
     }
     
@@ -121,7 +143,7 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
       setIsLoadingProject(true)
       setLoadingProgress({ phase: 'loading', percent: 0, message: 'Initializing...' })
       
-      console.log('[App.dashboard] Opening project with coordination:', projectId)
+      safeLog('App.dashboard', 'Opening project with coordination', { projectId })
       
       // LOADING COORDINATION FIX: Use coordinated loading instead of direct storage call
       // Note: Media context is null during dashboard phase - coordination will handle this gracefully
@@ -134,14 +156,14 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
         }
       })
       
-      console.log('[App.dashboard] Coordinated project loading completed, currentProjectId:', storage.currentProjectId)
+      safeLog('App.dashboard', 'Coordinated project loading completed', { currentProjectId: storage.currentProjectId })
       
       // Verify that currentProjectId is set after coordination
       if (!storage.currentProjectId) {
         console.error('[App.dashboard] ⚠️ WARNING: currentProjectId is null after coordinated loading!')
         console.error('[App.dashboard] This may indicate a coordination issue - the project may not have opened properly')
       } else {
-        console.log('[App.dashboard] ✅ Project ID verified after coordination:', storage.currentProjectId)
+        safeLog('App.dashboard', '✅ Project ID verified after coordination', { currentProjectId: storage.currentProjectId })
       }
       
       // Don't close the dialog yet - wait for media to load
@@ -183,7 +205,7 @@ function DashboardContent({ onSecretClick }: DashboardContentProps) {
     // Close overlay as soon as we have clear evidence the project is ready
     // This prevents getting stranded on React state update timing issues
     if (storage.currentProjectId) {
-      console.log('[Dashboard] 🔐 Safety trigger: Project data detected, closing overlay', {
+      safeLog('Dashboard', '🔐 Safety trigger: Project data detected, closing overlay', {
         hasCurrentProjectId: !!storage.currentProjectId,
         loadingProgress: loadingProgress.percent
       })
@@ -515,7 +537,7 @@ function DashboardWithStatusPanel() {
         setShowWorkflowRecorder(prev => {
           const newState = !prev
           localStorage.setItem('workflow_recorder_enabled', String(newState))
-          console.log(`[Beta] Workflow Recorder ${newState ? 'enabled' : 'disabled'} via keyboard shortcut`)
+          safeLog('Beta', `Workflow Recorder ${newState ? 'enabled' : 'disabled'} via keyboard shortcut`)
           return newState
         })
       }
@@ -540,7 +562,7 @@ function DashboardWithStatusPanel() {
   const handleSecretClick = useCallback(() => {
     setShowWorkflowRecorder(true)
     localStorage.setItem('workflow_recorder_enabled', 'true')
-    console.log('[Beta] Workflow Recorder enabled via secret click (5 clicks on title)')
+    safeLog('Beta', 'Workflow Recorder enabled via secret click (5 clicks on title)')
   }, [])
 
   return (
@@ -563,7 +585,7 @@ function DashboardWithStatusPanel() {
           onClose={() => {
             setShowWorkflowRecorder(false)
             localStorage.setItem('workflow_recorder_enabled', 'false')
-            console.log('[Beta] Workflow Recorder disabled via close button')
+            safeLog('Beta', 'Workflow Recorder disabled via close button')
           }}
         />
       )}

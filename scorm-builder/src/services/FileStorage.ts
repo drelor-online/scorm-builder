@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { debugLogger } from '@/utils/ultraSimpleLogger';
+import { extractProjectId } from '@/utils/projectIdExtraction';
 import type { ProjectData, MediaFile, SaveResult, LoadResult, DeleteResult } from '@/types/project';
 import type { MediaReference } from '@/types/projectStructure';
 
@@ -92,10 +93,12 @@ interface SaveQueueEntry {
 }
 
 export class FileStorage {
+  private static instance: FileStorage | null = null;
+
   private _currentProjectId: string | null = null;
   private _currentProjectPath: string | null = null;
   public isInitialized = false;
-  
+
   // Debouncing for save operations
   private saveTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private saveQueue: Map<string, SaveQueueEntry> = new Map();
@@ -105,6 +108,17 @@ export class FileStorage {
   private SAVE_RATE_LIMIT_MS = 1000; // Minimum 1 second between saves for same content
   private MAX_RETRY_COUNT = 3;
   private retryCount: Map<string, number> = new Map();
+
+  // Singleton pattern to ensure only one FileStorage instance exists
+  public static getInstance(): FileStorage {
+    if (!FileStorage.instance) {
+      FileStorage.instance = new FileStorage();
+    }
+    return FileStorage.instance;
+  }
+
+  // Make constructor private to prevent direct instantiation
+  private constructor() {}
   
   get currentProjectId(): string | null {
     return this._currentProjectId;
@@ -187,30 +201,22 @@ export class FileStorage {
         hasSeedData: !!projectFile.course_seed_data
       });
       
-      // Ensure we have a consistent numeric project ID
-      let numericProjectId = projectFile.project.id;
-      
-      // If the project.id contains a path, extract just the numeric ID
-      if (numericProjectId && (numericProjectId.includes('\\') || numericProjectId.includes('/'))) {
-        // It's a path like "C:\...\1754508638860" - extract the last part
-        const parts = numericProjectId.split(/[\\/]/);
-        numericProjectId = parts[parts.length - 1];
+      // CONSISTENCY FIX: Use the same extraction logic as coordinatedProjectLoading
+      const extractedProjectId = extractProjectId(projectId);
+
+      // If we couldn't extract from the projectId path, try from the backend data
+      let finalProjectId = extractedProjectId;
+      if (!finalProjectId || finalProjectId === projectId) {
+        // Fallback to backend project ID if path extraction failed
+        finalProjectId = extractProjectId(projectFile.project.id) || projectFile.project.id;
       }
-      
-      // If it's still not a numeric ID, try to extract from the file path
-      if (numericProjectId && !/^\d+$/.test(numericProjectId)) {
-        const match = projectId.match(/_(\d+)\.scormproj$/);
-        if (match) {
-          numericProjectId = match[1];
-        }
-      }
-      
-      this._currentProjectId = numericProjectId;
+
+      this._currentProjectId = finalProjectId;
       this._currentProjectPath = projectId;
       
       debugLogger.info('FileStorage.openProject', `Project opened successfully: ${projectFile.project.name}`, {
         originalId: projectFile.project.id,
-        extractedId: numericProjectId,
+        extractedId: finalProjectId,
         projectPath: projectId
       });
       
@@ -573,9 +579,18 @@ export class FileStorage {
   async listProjects(): Promise<Project[]> {
     try {
       debugLogger.info('FileStorage.listProjects', 'Fetching project list');
-      
+      console.log('[FileStorage] 📡 Calling backend list_projects command...');
+
       const projects = await invoke<any[]>('list_projects');
-      
+
+      console.log('[FileStorage] 📊 Backend response:', {
+        responseType: typeof projects,
+        isArray: Array.isArray(projects),
+        length: projects ? projects.length : 'null/undefined',
+        firstProject: projects && projects.length > 0 ? projects[0] : 'no projects',
+        rawData: projects
+      });
+
       debugLogger.debug('FileStorage.listProjects', `Found ${projects.length} projects`);
       const mappedProjects = projects.map(p => ({
         id: p.id,
@@ -591,10 +606,17 @@ export class FileStorage {
       debugLogger.info('FileStorage.listProjects', `Returning ${mappedProjects.length} projects`, {
         projectNames: mappedProjects.map(p => p.name)
       });
-      
+
+      console.log('[FileStorage] ✅ Processed projects:', {
+        count: mappedProjects.length,
+        projectNames: mappedProjects.map(p => p.name),
+        sampleProject: mappedProjects.length > 0 ? mappedProjects[0] : 'none'
+      });
+
       return mappedProjects;
     } catch (error) {
       debugLogger.error('FileStorage.listProjects', 'Failed to list projects', error);
+      console.error('[FileStorage] ❌ Error in listProjects:', error);
       return [];
     }
   }
@@ -1926,4 +1948,4 @@ export class FileStorage {
 }
 
 // Export a singleton instance
-export const fileStorage = new FileStorage();
+export const fileStorage = FileStorage.getInstance();

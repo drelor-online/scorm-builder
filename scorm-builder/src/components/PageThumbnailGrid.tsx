@@ -1,10 +1,10 @@
-import React, { useEffect, useState, memo, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, memo, useCallback, useMemo, useRef } from 'react'
 import { CourseContent, Page, Topic } from '../types/aiPrompt'
 import { Card } from './DesignSystem'
 import { tokens } from './DesignSystem/designTokens'
 import { Home, Target, Image as ImageIcon, Video } from 'lucide-react'
 import DOMPurify from 'dompurify'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 import styles from './PageThumbnailGrid.module.css'
 // Removed blobUrlManager - now using asset URLs
@@ -17,7 +17,9 @@ interface PageThumbnailGridProps {
 
 // Media Preview Component - Enhanced with YouTube metadata fetching
 const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo(({ page, mediaItems }) => {
-  const { createBlobUrl, getMedia } = useUnifiedMedia()
+  const { actions, selectors } = useMedia()
+  const { createBlobUrl } = actions
+  const { getMedia } = selectors
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [enrichedMetadata, setEnrichedMetadata] = useState<Map<string, any>>(new Map())
   
@@ -190,6 +192,234 @@ const MediaPreview: React.FC<{ page: Page | Topic; mediaItems: any[] }> = memo((
 // Add display name for debugging
 MediaPreview.displayName = 'MediaPreview'
 
+// Lazy Media Preview Component with Intersection Observer
+const LazyMediaPreview: React.FC<{ page: Page | Topic; pageId: string }> = memo(({ page, pageId }) => {
+  const { actions, selectors } = useMedia()
+  const { getValidMediaForPage } = selectors
+  const [isVisible, setIsVisible] = useState(false)
+  const [mediaItems, setMediaItems] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const elementRef = useRef<HTMLDivElement>(null)
+
+  // Intersection Observer to detect when thumbnail comes into view
+  useEffect(() => {
+    const element = elementRef.current
+    if (!element) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isVisible) {
+          console.log(`[LazyMediaPreview] ${pageId} entered viewport, starting load`)
+          setIsVisible(true)
+        }
+      },
+      {
+        rootMargin: '50px', // Start loading 50px before entering viewport
+        threshold: 0.1 // Trigger when 10% visible
+      }
+    )
+
+    observer.observe(element)
+
+    return () => {
+      observer.unobserve(element)
+    }
+  }, [pageId, isVisible])
+
+  // Load media only when visible
+  useEffect(() => {
+    if (!isVisible || !getValidMediaForPage) return
+
+    const loadMedia = async () => {
+      setIsLoading(true)
+      try {
+        console.log(`[LazyMediaPreview] Loading media for page ${pageId}`)
+        const items = await getValidMediaForPage(pageId, {
+          types: ['image', 'video', 'youtube'],
+          verifyExistence: false
+        }) || []
+
+        setMediaItems(items)
+        console.log(`[LazyMediaPreview] Loaded ${items.length} media items for page ${pageId}`)
+      } catch (error) {
+        console.warn(`[LazyMediaPreview] Failed to load media for page ${pageId}:`, error)
+        setMediaItems([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadMedia()
+  }, [isVisible, pageId, getValidMediaForPage])
+
+  // Check for video in media items
+  const hasVideo = mediaItems.some(m => m.type === 'video' || m.type === 'youtube')
+
+  return (
+    <div ref={elementRef} className={styles.thumbnailContent}>
+      {isLoading ? (
+        // Loading placeholder
+        <div className={styles.thumbnailPlaceholder}>
+          <div className={styles.loadingSpinner} />
+        </div>
+      ) : isVisible && mediaItems.length > 0 ? (
+        // Render actual MediaPreview when loaded
+        <MediaPreview page={page} mediaItems={mediaItems} />
+      ) : isVisible ? (
+        // No media placeholder when loaded but empty
+        <div className={styles.thumbnailPlaceholder}>
+          <ImageIcon size={24} />
+        </div>
+      ) : (
+        // Initial placeholder before loading
+        <div className={styles.thumbnailPlaceholder}>
+          {hasVideo ? <Video size={24} /> : <ImageIcon size={24} />}
+        </div>
+      )}
+    </div>
+  )
+})
+
+LazyMediaPreview.displayName = 'LazyMediaPreview'
+
+// 🚀 PHASE 4: Cache-Aware Media Preview Component
+const CachedMediaPreview: React.FC<{
+  page: Page | Topic;
+  pageId: string;
+  getCachedThumbnail: (pageId: string) => any;
+  setCachedThumbnail: (pageId: string, data: any) => void;
+}> = memo(({ page, pageId, getCachedThumbnail, setCachedThumbnail }) => {
+  const { actions, selectors } = useMedia()
+  const { getValidMediaForPage } = selectors
+  const [isVisible, setIsVisible] = useState(false)
+  const [mediaItems, setMediaItems] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const elementRef = useRef<HTMLDivElement>(null)
+
+  // Check cache first
+  useEffect(() => {
+    const cached = getCachedThumbnail(pageId)
+    if (cached && !cached.isLoading) {
+      console.log(`[CachedMediaPreview] 📦 CACHE HIT: Using cached thumbnail for ${pageId}`)
+      setMediaItems(cached.mediaItems)
+      setIsLoading(false)
+      return
+    }
+  }, [pageId, getCachedThumbnail])
+
+  // Intersection Observer to detect when thumbnail comes into view
+  useEffect(() => {
+    const element = elementRef.current
+    if (!element) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isVisible) {
+          console.log(`[CachedMediaPreview] ${pageId} entered viewport, checking cache then loading`)
+          setIsVisible(true)
+        }
+      },
+      {
+        rootMargin: '50px', // Start loading 50px before entering viewport
+        threshold: 0.1 // Trigger when 10% visible
+      }
+    )
+
+    observer.observe(element)
+
+    return () => {
+      observer.unobserve(element)
+    }
+  }, [pageId, isVisible])
+
+  // Load media only when visible and not cached
+  useEffect(() => {
+    if (!isVisible || !getValidMediaForPage) return
+
+    // Check cache again when visibility changes
+    const cached = getCachedThumbnail(pageId)
+    if (cached && !cached.isLoading) {
+      console.log(`[CachedMediaPreview] 📦 CACHE HIT on visibility: Using cached data for ${pageId}`)
+      setMediaItems(cached.mediaItems)
+      setIsLoading(false)
+      return
+    }
+
+    const loadMedia = async () => {
+      setIsLoading(true)
+
+      // Store loading state in cache to prevent duplicate requests
+      setCachedThumbnail(pageId, {
+        mediaItems: [],
+        mediaUrl: null,
+        isLoading: true
+      })
+
+      try {
+        console.log(`[CachedMediaPreview] 📡 CACHE MISS: Loading media for page ${pageId}`)
+        const items = await getValidMediaForPage(pageId, {
+          types: ['image', 'video', 'youtube'],
+          verifyExistence: false
+        }) || []
+
+        setMediaItems(items)
+
+        // Cache the loaded media items
+        setCachedThumbnail(pageId, {
+          mediaItems: items,
+          mediaUrl: null, // Will be set by MediaPreview
+          isLoading: false
+        })
+
+        console.log(`[CachedMediaPreview] ✅ CACHED: ${items.length} media items for page ${pageId}`)
+      } catch (error) {
+        console.warn(`[CachedMediaPreview] ❌ LOAD FAILED for page ${pageId}:`, error)
+        setMediaItems([])
+
+        // Cache the failure to avoid repeated attempts
+        setCachedThumbnail(pageId, {
+          mediaItems: [],
+          mediaUrl: null,
+          isLoading: false
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadMedia()
+  }, [isVisible, pageId, getValidMediaForPage, getCachedThumbnail, setCachedThumbnail])
+
+  // Check for video in media items
+  const hasVideo = mediaItems.some(m => m.type === 'video' || m.type === 'youtube')
+
+  return (
+    <div ref={elementRef} className={styles.thumbnailContent}>
+      {isLoading ? (
+        // Loading placeholder
+        <div className={styles.thumbnailPlaceholder}>
+          <div className={styles.loadingSpinner} />
+        </div>
+      ) : isVisible && mediaItems.length > 0 ? (
+        // Render actual MediaPreview when loaded
+        <MediaPreview page={page} mediaItems={mediaItems} />
+      ) : isVisible ? (
+        // No media placeholder when loaded but empty
+        <div className={styles.thumbnailPlaceholder}>
+          <ImageIcon size={24} />
+        </div>
+      ) : (
+        // Initial placeholder before loading
+        <div className={styles.thumbnailPlaceholder}>
+          {hasVideo ? <Video size={24} /> : <ImageIcon size={24} />}
+        </div>
+      )}
+    </div>
+  )
+})
+
+CachedMediaPreview.displayName = 'CachedMediaPreview'
+
 export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
   courseContent,
   currentPageId,
@@ -209,6 +439,64 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     )
   }
 
+  // 🚀 PHASE 4: Dedicated Thumbnail Cache for PageThumbnailGrid
+  const thumbnailCache = useRef<Map<string, {
+    mediaItems: any[]
+    mediaUrl: string | null
+    timestamp: number
+    isLoading: boolean
+  }>>(new Map())
+
+  const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+  const MAX_CACHE_SIZE = 50 // Maximum number of cached thumbnails
+
+  // Cache management functions
+  const getCachedThumbnail = useCallback((pageId: string) => {
+    const cached = thumbnailCache.current.get(pageId)
+    if (!cached) return null
+
+    // Check if cache is expired
+    if (Date.now() - cached.timestamp > CACHE_TTL) {
+      thumbnailCache.current.delete(pageId)
+      return null
+    }
+
+    return cached
+  }, [])
+
+  const setCachedThumbnail = useCallback((pageId: string, data: {
+    mediaItems: any[]
+    mediaUrl: string | null
+    isLoading: boolean
+  }) => {
+    // Implement LRU cache by removing oldest entries when at capacity
+    if (thumbnailCache.current.size >= MAX_CACHE_SIZE) {
+      const oldestKey = thumbnailCache.current.keys().next().value
+      if (oldestKey) {
+        thumbnailCache.current.delete(oldestKey)
+        console.log(`[PageThumbnailGrid] 🗑️ CACHE: Evicted oldest entry ${oldestKey}`)
+      }
+    }
+
+    thumbnailCache.current.set(pageId, {
+      ...data,
+      timestamp: Date.now()
+    })
+
+    console.log(`[PageThumbnailGrid] 💾 CACHE: Stored thumbnail for ${pageId} (cache size: ${thumbnailCache.current.size})`)
+  }, [])
+
+  const clearThumbnailCache = useCallback(() => {
+    const cacheSize = thumbnailCache.current.size
+    thumbnailCache.current.clear()
+    console.log(`[PageThumbnailGrid] 🧹 CACHE: Cleared ${cacheSize} cached thumbnails`)
+  }, [])
+
+  // Clear cache when course content changes (new project loaded)
+  useEffect(() => {
+    clearThumbnailCache()
+  }, [courseContent?.topics?.length, courseContent?.welcomePage?.id, clearThumbnailCache])
+
   // Helper to extract text content and truncate - memoized
   const getContentPreview = useCallback((html: string, maxLength: number = 100): string => {
     const temp = document.createElement('div')
@@ -219,8 +507,9 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     return text.substring(0, maxLength) + '...'
   }, [])
 
-  // Get context to access media
-  const { getValidMediaForPage } = useUnifiedMedia()
+  // Get media context
+  const media = useMedia()
+  const { getValidMediaForPage } = media.selectors
   
   // Create array of all pages first - memoized to prevent recreation
   const allPages: Array<Page | Topic> = useMemo(() => [
@@ -229,73 +518,15 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     ...(Array.isArray(courseContent.topics) ? courseContent.topics : [])
   ].filter(Boolean), [courseContent]) // Remove any undefined entries
   
-  // State to track media data for all pages (async loading)
-  const [pageMediaMap, setPageMediaMap] = useState<Map<string, any[]>>(new Map())
+  // Remove bulk loading - now using lazy loading per thumbnail
   
-  // PERFORMANCE OPTIMIZATION: Batch load media with reduced priority  
-  useEffect(() => {
-    const loadMediaForAllPages = async () => {
-      // Add safety check for getValidMediaForPage
-      if (!getValidMediaForPage) {
-        console.warn('[PageThumbnailGrid] getValidMediaForPage not available yet')
-        return
-      }
-      
-      console.log(`[PageThumbnailGrid] Loading media for ${allPages.length} pages with lightweight fetching`)
-      
-      const newMap = new Map<string, any[]>()
-      
-      // PERFORMANCE OPTIMIZATION: Process pages in smaller batches to avoid blocking UI
-      const batchSize = 5
-      for (let i = 0; i < allPages.length; i += batchSize) {
-        const batch = allPages.slice(i, i + batchSize)
-        
-        const batchPromises = batch.map(async (page) => {
-          try {
-            const mediaItems = await getValidMediaForPage(page.id, {
-              types: ['image', 'video', 'youtube'],
-              verifyExistence: false
-            }) || []
-            return { pageId: page.id, mediaItems }
-          } catch (error) {
-            console.warn(`[PageThumbnailGrid] Failed to load media for page ${page.id}:`, error)
-            return { pageId: page.id, mediaItems: [] }
-          }
-        })
-        
-        const batchResults = await Promise.all(batchPromises)
-        batchResults.forEach(({ pageId, mediaItems }) => {
-          newMap.set(pageId, mediaItems)
-        })
-        
-        // Small delay between batches to keep UI responsive
-        if (i + batchSize < allPages.length) {
-          await new Promise(resolve => setTimeout(resolve, 10))
-        }
-      }
-      
-      setPageMediaMap(newMap)
-      console.log(`[PageThumbnailGrid] Completed loading media for ${allPages.length} pages`)
-    }
-    
-    if (allPages.length > 0) {
-      // Add slight delay to let other critical operations complete first
-      setTimeout(() => loadMediaForAllPages(), 100)
-    }
-  }, [allPages]) // FIXED: Removed getValidMediaForPage to prevent infinite loop
-  
-  // Helper to get media count (only image/video/youtube, not audio/captions) - memoized
-  const getMediaCount = useCallback((page: Page | Topic): number => {
-    // Get media from memoized map instead of calling getMediaForPage repeatedly
-    const mediaItems = pageMediaMap.get(page.id) || []
-    // Only count image, video, and YouTube media types for enhancement purposes
-    return mediaItems.filter(m => m.type === 'image' || m.type === 'video' || m.type === 'youtube').length
-  }, [pageMediaMap])
-
-  // Helper to check if page has media - memoized
+  // For lazy loading, we'll determine media presence optimistically
+  // The LazyMediaPreview will handle the actual media loading
   const hasMedia = useCallback((page: Page | Topic): boolean => {
-    return getMediaCount(page) > 0
-  }, [getMediaCount])
+    // For now, assume pages have media - LazyMediaPreview will show appropriate placeholder
+    // This prevents layout shift and provides better UX
+    return true
+  }, [])
 
   return (
     <div 
@@ -306,7 +537,6 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
         const isWelcome = page.id === 'welcome' || page.id === 'content-0'
         const isObjectives = page.id === 'objectives' || page.id === 'learning-objectives' || page.id === 'content-1'
         const isCurrent = page.id === currentPageId
-        const mediaCount = getMediaCount(page)
         
         return (
           <Card
@@ -349,39 +579,14 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
               </h4>
             </div>
 
-            {/* Media Preview */}
-            {hasMedia(page) && (
-              <MediaPreview page={page} mediaItems={pageMediaMap.get(page.id) || []} />
-            )}
+            {/* Cached Media Preview */}
+            <CachedMediaPreview
+              page={page}
+              pageId={page.id}
+              getCachedThumbnail={getCachedThumbnail}
+              setCachedThumbnail={setCachedThumbnail}
+            />
 
-            {/* Content Preview - Only show if no media */}
-            {!hasMedia(page) && (
-              <div 
-                data-testid={`content-preview-${page.id}`}
-                className={styles.contentPreview}
-              >
-                {getContentPreview(page.content)}
-              </div>
-            )}
-
-            {/* Media Indicator */}
-            {hasMedia(page) && (
-              <div 
-                data-testid="media-indicator"
-                className={styles.mediaIndicator}
-                title="Has media"
-              >
-                <span className={styles.srOnly}>✓ Has media</span>
-                ✓
-              </div>
-            )}
-
-            {/* Media Count Badge */}
-            {mediaCount > 1 && (
-              <div className={styles.mediaCount}>
-                {mediaCount} media items
-              </div>
-            )}
           </Card>
         )
       })}

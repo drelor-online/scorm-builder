@@ -14,6 +14,9 @@ import { initializeLoggerConfig } from '@/config/loggerConfig'
 import { createMutationSafeContent, validateImmutableUpdate } from '@/utils/mutationSafety'
 import { cleanupOrphanedMediaReferences } from '@/utils/orphanedMediaCleaner'
 import { cleanMediaReferencesFromCourseContent, countMediaReferences } from '@/utils/courseContentMediaCleaner'
+import { safeDeepClone } from '@/utils/safeClone'
+// AUDIT FIX: Schema normalization for media items
+import { normalizeMediaItem, normalizeCourseContent } from '@/types/schema'
 
 // Initialize logger configuration to reduce console noise
 initializeLoggerConfig()
@@ -52,6 +55,7 @@ const CourseSettingsWizard = lazy(() =>
 import type { CourseSeedData } from '@/types/course'
 import type { CourseContent, CourseContentUnion, Topic } from '@/types/aiPrompt'
 import type { ProjectData } from '@/types/project'
+import type { CourseSettings } from './components/CourseSettingsWizard'
 
 // Type guards
 function isNewFormat(content: CourseContentUnion): content is CourseContent {
@@ -73,6 +77,28 @@ import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog'
 import { NetworkStatusIndicator } from '@/components/DesignSystem'
 // LoadingComponent removed - using inline loading
 const LoadingComponent = () => <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
+
+// Media Loading Overlay with Cancel functionality
+const MediaLoadingOverlayWithCancel: React.FC = () => {
+  const mediaContext = useUnifiedMedia()
+
+  const handleCancel = () => {
+    console.log('[App] User requested to cancel media loading')
+    if (mediaContext) {
+      // Reset the media cache to stop loading
+      mediaContext.resetMediaCache()
+    }
+  }
+
+  return (
+    <MediaLoadingOverlay
+      message="Optimizing your media for instant access..."
+      showProgress={true}
+      showCancel={true}
+      onCancel={handleCancel}
+    />
+  )
+}
 
 // Lazy load export/import services
 // const loadExportImport = () => import('@/services/ProjectExportImport')
@@ -111,8 +137,6 @@ const EMPTY_MEDIA_FILES = {}
 const EMPTY_AUDIO_FILES = {}
 const EMPTY_CUSTOM_TOPICS: string[] = []
 
-// DEBUG: Track loadProject calls to identify infinite loops
-let loadProjectCallCount = 0
 
 // Inner component that uses StepNavigationContext
 function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandled, skipInitialLoad }: AppProps) {
@@ -135,6 +159,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   const [currentStep, setCurrentStep] = useState('seed')
   const [courseSeedData, setCourseSeedData] = useState<CourseSeedData | null>(null)
   const [courseContent, setCourseContent] = useState<CourseContent | null>(null)
+  const [courseSettings, setCourseSettings] = useState<CourseSettings | null>(null)
   const [isStatusPanelDocked, setIsStatusPanelDocked] = useState(true)
 
   // Set up debug log export on window close
@@ -316,7 +341,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       currentStep: currentStep,
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
-      audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
+      audioFiles: EMPTY_AUDIO_FILES,   // Use stable reference
+      promptTuningSettings: undefined, // To be loaded separately
+      courseSettings: courseSettings || undefined
     } : {
       courseTitle: '',
       courseSeedData: {
@@ -329,9 +356,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       currentStep: 'seed',
       lastModified: lastSavedTimeRef.current, // Include in data but not dependencies
       mediaFiles: EMPTY_MEDIA_FILES, // Use stable reference
-      audioFiles: EMPTY_AUDIO_FILES   // Use stable reference
+      audioFiles: EMPTY_AUDIO_FILES,   // Use stable reference
+      promptTuningSettings: undefined, // To be loaded separately
+      courseSettings: courseSettings || undefined
     }
-  }, [courseSeedData, courseContent, currentStep]) // lastSavedTime removed from deps
+  }, [courseSeedData, courseContent, courseSettings, currentStep]) // lastSavedTime removed from deps
   
   // Load API keys on first load
   useEffect(() => {
@@ -366,20 +395,11 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   // Load project data from PersistentStorage on mount
   useEffect(() => {
-    // Reset counters when project ID changes
+    // Reset tracker when project ID changes
     if (hasLoadedProjectRef.current !== storage.currentProjectId) {
-      loadProjectCallCount = 0
       hasLoadedProjectRef.current = null
     }
     
-    // DEBUG: Track how many times this effect runs
-    loadProjectCallCount++
-    console.log(`[DEBUG] loadProject useEffect called ${loadProjectCallCount} times for project:`, storage.currentProjectId)
-    if (loadProjectCallCount > 3) {
-      console.error('[ERROR] loadProject called too many times! This indicates an infinite loop.')
-      console.trace('Stack trace for excessive loadProject calls')
-      return
-    }
     
     // COORDINATION FIX: Skip initial loading if Dashboard has already handled the coordination
     if (skipInitialLoad && storage.currentProjectId) {
@@ -437,7 +457,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       // If no project ID, reset the tracking refs to allow loading next project
       if (!storage.currentProjectId) {
         hasLoadedProjectRef.current = null
-        loadProjectCallCount = 0
       }
       return
     }
@@ -496,6 +515,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           const directCourseContent = await storage.getCourseContent()
           if (directCourseContent) {
             debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
+            // AUDIT FIX: Use original content structure, normalization applied at media item level
             loadedCourseContent = directCourseContent as CourseContent
             
             // Also load audioNarration and media-enhancements to populate media arrays
@@ -530,15 +550,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     // CRITICAL FIX: Validate media exists before adding reference
                     const mediaExists = await getMedia(audioId)
                     if (mediaExists) {
-                      const audioItem = { 
+                      // AUDIT FIX: Use schema normalization for media items
+                      const audioItem = normalizeMediaItem({ 
                         id: audioId,
                         type: 'audio' as const,
                         url: '',
                         title: 'Audio Narration',
                         pageId: 'welcome'
-                      }
+                      })
                       if (!loadedCourseContent.welcomePage.media.some(m => m.id === audioItem.id)) {
-                        loadedCourseContent.welcomePage.media.push(audioItem)
+                        loadedCourseContent.welcomePage.media = [...loadedCourseContent.welcomePage.media, audioItem]
                         debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to welcome page`)
                       }
                     } else {
@@ -556,7 +577,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     const mediaExists = await getMedia(item.id)
                     if (mediaExists) {
                       if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
-                        loadedCourseContent.welcomePage!.media!.push(item)
+                        // AUDIT FIX: Use schema normalization for media items
+                        const normalizedItem = normalizeMediaItem(item)
+                        loadedCourseContent.welcomePage!.media = [...loadedCourseContent.welcomePage!.media!, normalizedItem]
                         debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to welcome page`)
                       }
                     } else {
@@ -586,15 +609,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     // CRITICAL FIX: Validate media exists before adding reference
                     const mediaExists = await getMedia(audioId)
                     if (mediaExists) {
-                      const audioItem = {
+                      // AUDIT FIX: Use schema normalization for media items
+                      const audioItem = normalizeMediaItem({
                         id: audioId,
                         type: 'audio' as const,
                         url: '',
                         title: 'Audio Narration',
                         pageId: 'objectives'
-                      }
+                      })
                       if (!loadedCourseContent.learningObjectivesPage.media.some(m => m.id === audioItem.id)) {
-                        loadedCourseContent.learningObjectivesPage.media.push(audioItem)
+                        loadedCourseContent.learningObjectivesPage.media = [...loadedCourseContent.learningObjectivesPage.media, audioItem]
                         debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to objectives page`)
                       }
                     } else {
@@ -612,7 +636,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     const mediaExists = await getMedia(item.id)
                     if (mediaExists) {
                       if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
-                        loadedCourseContent.learningObjectivesPage!.media!.push(item)
+                        // AUDIT FIX: Use schema normalization for media items
+                        const normalizedItem = normalizeMediaItem(item)
+                        loadedCourseContent.learningObjectivesPage!.media = [...loadedCourseContent.learningObjectivesPage!.media!, normalizedItem]
                         debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to objectives page`)
                       }
                     } else {
@@ -646,15 +672,16 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       // CRITICAL FIX: Validate media exists before adding reference
                       const mediaExists = await getMedia(audioId)
                       if (mediaExists) {
-                        const audioItem = {
+                        // AUDIT FIX: Use schema normalization for media items
+                        const audioItem = normalizeMediaItem({
                           id: audioId,
                           type: 'audio' as const,
                           url: '',
                           title: 'Audio Narration',
                           pageId: topicKey
-                        }
+                        })
                         if (!topic.media.some(m => m.id === audioItem.id)) {
-                          topic.media.push(audioItem)
+                          topic.media = [...topic.media, audioItem]
                           debugLogger.debug('App.loadProject', `Added valid audio reference: ${audioId} to ${topicKey}`)
                         }
                       } else {
@@ -673,7 +700,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       const mediaExists = await getMedia(item.id)
                       if (mediaExists) {
                         if (!topic.media!.some(m => m.id === item.id)) {
-                          topic.media!.push(item)
+                          // AUDIT FIX: Use schema normalization for media items
+                          const normalizedItem = normalizeMediaItem(item)
+                          topic.media = [...topic.media!, normalizedItem]
                           debugLogger.debug('App.loadProject', `Added valid media reference: ${item.id} to ${topicKey}`)
                         }
                       } else {
@@ -688,7 +717,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             }
             
             // Validate and fix fill-in-the-blank questions
-            if (loadedCourseContent.topics) {
+            if (loadedCourseContent && loadedCourseContent.topics) {
               loadedCourseContent.topics.forEach(topic => {
                 if (topic.knowledgeCheck?.questions) {
                   topic.knowledgeCheck.questions.forEach(question => {
@@ -890,10 +919,24 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         })
         setCourseContent(finalCourseContent)
         setCourseSeedData(loadedCourseSeedData)
-        
-        // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only if loading directly into media step
+
+        // Load course settings
+        try {
+          const savedCourseSettings = await storage.getContent('courseSettings')
+          if (savedCourseSettings) {
+            debugLogger.info('App.loadProject', 'Loaded saved course settings', savedCourseSettings)
+            setCourseSettings(savedCourseSettings as CourseSettings)
+          } else {
+            debugLogger.info('App.loadProject', 'No saved course settings found, using defaults')
+            setCourseSettings(null)
+          }
+        } catch (error) {
+          debugLogger.error('App.loadProject', 'Failed to load course settings', error)
+          setCourseSettings(null)
+        }
+
+        // Set visual-only loading profile if loading directly into media step
         if (loadedStep === 'media') {
-          console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile for loaded media step')
           setLoadingProfile('visual-only')
         }
         
@@ -923,11 +966,17 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // This ensures that when loading a project at step N, all steps 0 through N are accessible
         if (loadedStep !== 'seed') {
           const targetStep = stepNumbers[loadedStep as keyof typeof stepNumbers]
-          // Mark all steps from 0 to targetStep as visited
-          for (let i = 0; i <= targetStep; i++) {
-            navigation.navigateToStep(i)
-          }
-          // End at the target step
+          // CRITICAL FIX: Unlock all steps from 0 to targetStep using unlockSteps API
+          // This properly synchronizes visitedSteps without the race condition of multiple navigateToStep calls
+          const stepsToUnlock = Array.from({ length: targetStep + 1 }, (_, i) => i)
+          debugLogger.info('App.loadProject', 'Unlocking all steps up to target', {
+            targetStep,
+            stepsToUnlock,
+            loadedStep
+          })
+          navigation.unlockSteps(stepsToUnlock)
+
+          // Then navigate to the target step once
           navigation.navigateToStep(targetStep)
         } else {
           navigation.navigateToStep(0)
@@ -1044,27 +1093,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         })
         await storage.saveCourseContent(dataToSave.courseContent)
       }
-      
+      if (dataToSave.courseSettings) {
+        debugLogger.info('App.handleSave', 'Saving course settings', dataToSave.courseSettings)
+        await storage.saveContent('courseSettings', dataToSave.courseSettings)
+      }
+
       // Save current step
       await storage.saveContent('currentStep', { step: dataToSave.currentStep })
       
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
       
-      // Clean contaminated media before final project save
-      try {
-        debugLogger.info('App.handleSave', 'Running contamination cleanup before save...')
-        const cleanupResult = await cleanContaminatedMedia()
-        if (cleanupResult.cleaned.length > 0) {
-          debugLogger.info('App.handleSave', 'Cleaned contaminated media', cleanupResult.cleaned)
-        }
-        if (cleanupResult.errors.length > 0) {
-          debugLogger.warn('App.handleSave', 'Cleanup errors', cleanupResult.errors)
-        }
-      } catch (cleanupError) {
-        debugLogger.error('App.handleSave', 'Contamination cleanup failed', cleanupError)
-        // Continue with save even if cleanup fails
-      }
+      // Skip contamination cleanup on save for performance - the fixed contamination detection 
+      // in MediaEnhancementWizard prevents false positives, so cleanup is only needed when 
+      // manually triggered by the user via "Fix Media Issues" button
+      debugLogger.info('App.handleSave', 'Skipping contamination cleanup for performance - no longer needed after contamination detection fix')
       
       await storage.saveProject()
       debugLogger.info('App.handleSave', 'Manual save completed successfully', {
@@ -1113,23 +1156,21 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         })
         await storage.saveCourseContent(dataToSave.courseContent)
       }
-      
+      if (dataToSave.courseSettings) {
+        debugLogger.info('App.handleAutosave', 'Auto-saving course settings', dataToSave.courseSettings)
+        await storage.saveContent('courseSettings', dataToSave.courseSettings)
+      }
+
       // Save current step
       await storage.saveContent('currentStep', { step: dataToSave.currentStep })
       
       // AI prompt, audio settings, and SCORM config are now saved directly through storage
       // No need to check localStorage anymore
       
-      // Clean contaminated media before final project save (silent for autosave)
-      try {
-        const cleanupResult = await cleanContaminatedMedia()
-        if (cleanupResult.cleaned.length > 0) {
-          debugLogger.info('App.handleAutosave', 'Auto-cleaned contaminated media', cleanupResult.cleaned)
-        }
-      } catch (cleanupError) {
-        debugLogger.error('App.handleAutosave', 'Auto-cleanup failed', cleanupError)
-        // Continue with save even if cleanup fails
-      }
+      // Skip contamination cleanup on autosave for performance - the fixed contamination detection 
+      // in MediaEnhancementWizard prevents false positives, so cleanup is only needed when 
+      // manually triggered by the user via "Fix Media Issues" button
+      debugLogger.info('App.handleAutosave', 'Skipping contamination cleanup for performance - no longer needed after contamination detection fix')
       
       await storage.saveProject()
       debugLogger.info('App.handleAutosave', 'Auto-save completed successfully', {
@@ -1287,7 +1328,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           // Create a safe copy first to avoid mutation issues
           let courseContentForCleaning: any
           try {
-            courseContentForCleaning = JSON.parse(JSON.stringify(courseContent))
+            courseContentForCleaning = safeDeepClone(courseContent)
             debugLogger.debug('App', 'Successfully created safe copy of course content for cleaning')
           } catch (copyError) {
             debugLogger.error('App', 'Failed to create safe copy of course content', {
@@ -1383,8 +1424,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     // Note: JSONImportValidator component handles marking 'courseContent' section dirty automatically
     setCourseContent(data)
     
-    // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only BEFORE media step renders
-    console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile before media step')
+    // Set visual-only loading profile before media step renders
     setLoadingProfile('visual-only')
     
     setCurrentStep('media')
@@ -1524,7 +1564,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
 
   const handleAudioBack = useCallback(async () => {
     // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only BEFORE media step renders
-    console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile before media step (back from audio)')
     setLoadingProfile('visual-only')
     
     setCurrentStep('media')
@@ -1578,16 +1617,19 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     }
   }
 
-  const handleSettingsNext = async (settings: any) => {
+  const handleSettingsNext = async (settings: CourseSettings) => {
+    // Update state with course settings
+    setCourseSettings(settings)
+
     // Save course settings and proceed to SCORM generation
     setCurrentStep('scorm')
     navigation.navigateToStep(stepNumbers.scorm)
-    
+
     // Save to PersistentStorage
     if (storage.currentProjectId) {
       try {
         await storage.saveContent('currentStep', { step: 'scorm' })
-        // Save the course settings  
+        // Save the course settings
         await storage.saveContent('courseSettings', settings)
       } catch (error) {
         console.error('Failed to save course settings:', error)
@@ -1719,24 +1761,32 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   
   // Unsaved changes handling
   const handleSaveAndContinue = async () => {
-    const result = await handleSave(projectData)
-    if (result.success) {
-      hideDialog();
-      // Note: handleSave already resets all dirty flags
-      
-      // Execute pending navigation action if exists (e.g., Exit to Dashboard)
-      if (pendingNavigationAction) {
-        pendingNavigationAction();
-        setPendingNavigationAction(null);
-      } else if (pendingProjectId) {
-        // Handle pending project after save
-        onPendingProjectHandled?.()
-        // Only navigate back to dashboard if we're switching projects
-        if (onBackToDashboard) {
-          onBackToDashboard()
+    setIsSaving(true)
+    try {
+      const result = await handleSave(projectData)
+      if (result.success) {
+        hideDialog();
+        // Note: handleSave already resets all dirty flags
+        
+        // Execute pending navigation action if exists (e.g., Exit to Dashboard)
+        if (pendingNavigationAction) {
+          pendingNavigationAction();
+          setPendingNavigationAction(null);
+        } else if (pendingProjectId) {
+          // Handle pending project after save
+          onPendingProjectHandled?.()
+          // Only navigate back to dashboard if we're switching projects
+          if (onBackToDashboard) {
+            onBackToDashboard()
+          }
         }
       }
       // If no pendingProjectId or navigation action, just continue with current workflow
+    } catch (error) {
+      console.error('Save failed:', error)
+      showError('Failed to save project. Please try again.')
+    } finally {
+      setIsSaving(false)
     }
   }
   
@@ -1852,7 +1902,6 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     if (stepMapping) {
       // 🚀 FIX 1: PRE-EMPTIVE LOADING PROFILE - Set visual-only if navigating to media step via breadcrumb
       if (stepMapping[0] === 'media') {
-        console.log('[App] 🚀 FIX 1: Pre-emptively setting visual-only profile for breadcrumb navigation to media step')
         setLoadingProfile('visual-only')
       }
       
@@ -1970,12 +2019,9 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
   return (
     <ErrorBoundary>
         <UnifiedMediaProvider projectId={storage.currentProjectId || ''}>
-          <div style={{ backgroundColor: COLORS.background, color: COLORS.textMuted, minHeight: '100vh' }}>
-        {/* Media loading overlay */}
-        <MediaLoadingOverlay 
-          message="Optimizing your media for instant access..." 
-          showProgress={true} 
-        />
+          <div data-testid="app-container" style={{ backgroundColor: COLORS.background, color: COLORS.textMuted, minHeight: '100vh' }}>
+        {/* Media loading overlay with cancel functionality */}
+        <MediaLoadingOverlayWithCancel />
         
         {/* Project loading overlay */}
         <ProjectLoadingOverlay 
@@ -2003,7 +2049,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         Skip to main content
       </a>
       
-      <main id="main-content">
+      <main id="main-content" data-testid="app-main">
         {activeDialog === 'settings' && (
           <div 
             style={{
@@ -2069,8 +2115,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           </Suspense>
         )}
         
-        <div style={{ display: activeDialog ? 'none' : 'block' }}>
-          <AutoSaveProvider 
+        <div data-testid="wizard-container" style={{ display: activeDialog ? 'none' : 'block' }}>
+          <AutoSaveProvider
             isSaving={autoSaveState.isSaving || isSaving}
             lastSaved={autoSaveState.lastSaved}
             hasUnsavedChanges={hasUnsavedChanges}
@@ -2428,6 +2474,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
       <UnsavedChangesDialog
         isOpen={activeDialog === 'unsaved'}
         currentProjectName={courseSeedData?.courseTitle || 'Current Project'}
+        isSaving={isSaving}
         onSave={handleSaveAndContinue}
         onDiscard={handleDiscardChanges}
         onCancel={() => {

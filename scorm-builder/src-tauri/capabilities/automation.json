@@ -1,0 +1,34 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "automation",
+  "description": "Capability for automation and WebDriver testing",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-webview-position",
+    "core:webview:allow-webview-size",
+    "core:webview:allow-print",
+    "opener:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPDATA/scorm-builder" },
+        { "path": "$APPDATA/scorm-builder/**" },
+        { "path": "$DOCUMENT/SCORM Projects" },
+        { "path": "$DOCUMENT/SCORM Projects/**" }
+      ]
+    }
+  ]
+}

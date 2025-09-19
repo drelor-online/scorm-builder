@@ -42,14 +42,14 @@ export const HelpPage: React.FC<HelpPageProps> = ({
 }) => {
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<'all' | HelpTopic['category']>('all')
   const [filteredTopics, setFilteredTopics] = useState<HelpTopic[]>(helpTopics)
   const [scrollToTopicId, setScrollToTopicId] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const topicRefs = useRef<Record<string, HTMLElement | null>>({})
 
   // Categories for filtering
-  const categories = [
+  const categories: Array<{ id: 'all' | HelpTopic['category']; label: string; icon: typeof Book }> = [
     { id: 'all', label: 'All Topics', icon: Book },
     { id: 'workflow', label: 'Workflow Steps', icon: ChevronRight },
     { id: 'troubleshooting', label: 'Troubleshooting', icon: AlertCircle },
@@ -121,44 +121,15 @@ export const HelpPage: React.FC<HelpPageProps> = ({
   // Filter topics based on search and category
   useEffect(() => {
     let topics = helpTopics
-    
-    // Filter by category
-    if (selectedCategory !== 'all') {
-      topics = topics.filter(topic => {
-        switch (selectedCategory) {
-          case 'workflow':
-            return topic.id.includes('config') || 
-                   topic.id.includes('generator') || 
-                   topic.id.includes('import') ||
-                   topic.id.includes('enhancement') ||
-                   topic.id.includes('narration') ||
-                   topic.id.includes('editor') ||
-                   topic.id.includes('package')
-          case 'troubleshooting':
-            return topic.id.includes('error') || 
-                   topic.id.includes('issue') ||
-                   topic.id.includes('troubleshooting')
-          case 'features':
-            return topic.id.includes('keyboard') || 
-                   topic.id.includes('performance') ||
-                   topic.id.includes('template') ||
-                   topic.id.includes('murf') ||
-                   topic.id.includes('project')
-          case 'faq':
-            return topic.id.includes('faq') || 
-                   topic.id.includes('best-practice') ||
-                   topic.id.includes('lms')
-          default:
-            return true
-        }
-      })
-    }
-    
-    // Filter by search query
+
     if (searchQuery.trim()) {
       topics = searchTopics(searchQuery)
     }
-    
+
+    if (selectedCategory !== 'all') {
+      topics = topics.filter(topic => topic.category === selectedCategory)
+    }
+
     setFilteredTopics(topics)
   }, [searchQuery, selectedCategory])
 

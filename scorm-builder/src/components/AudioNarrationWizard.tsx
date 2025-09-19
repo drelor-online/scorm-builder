@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { CourseContentUnion, Media, Topic } from '../types/aiPrompt'
+import { safeMediaFilter, ensureArray } from '../utils/safeMediaFilter'
 
 // Extended Media type to include caption type and MediaItem properties used in this component
 type ExtendedMedia = Media & { 
@@ -28,7 +29,7 @@ import { TauriAudioPlayer } from './TauriAudioPlayer'
 import './DesignSystem/designSystem.css'
 import styles from './AudioNarrationWizard.module.css'
 import { useStorage } from '../contexts/PersistentStorageContext'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useStepData } from '../hooks/useStepData'
@@ -36,6 +37,7 @@ import { useStepData } from '../hooks/useStepData'
 import { generateAudioRecordingId } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
 import { debugLogger } from '../utils/ultraSimpleLogger'
+import { safeDeepClone } from '../utils/safeClone'
 
 // Debounce helper
 function debounce<T extends (...args: unknown[]) => unknown>(func: T, wait: number): T {
@@ -116,11 +118,11 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
     if ('welcomePage' in content) {
       blocks.push({
         id: `welcome-narration`,
-        text: content.welcomePage?.narration || '',
+        text: (content as any).welcomePage?.narration || '',
         blockNumber: '0001',
         // Always use 'welcome' for consistency with media ID generation
         pageId: 'welcome',
-        pageTitle: content.welcomePage?.title || 'Welcome'
+        pageTitle: (content as any).welcomePage?.title || 'Welcome'
       })
     }
 
@@ -169,18 +171,25 @@ export function AudioNarrationWizard({
   onStepClick
 }: AudioNarrationWizardProps) {
   const storage = useStorage()
-  const { 
+  const media = useMedia()
+  const {
     storeMedia,
-    getMedia,
-    getMediaForPage: _getMediaForPage,
     createBlobUrl,
-    revokeBlobUrl,
+    setBulkOperation
+  } = media.actions
+  const {
+    getMedia,
+    getMediaById,
+    getMediaForPage: _getMediaForPage,
     getAllMedia,
-    deleteMedia,
     hasAudioCached,
-    getCachedAudio,
+    getCachedAudio
+  } = media.selectors
+  const {
+    revokeBlobUrl,
+    deleteMedia,
     clearAudioFromCache
-  } = useUnifiedMedia()
+  } = media.actions
   const { success, error: _notifyError, info } = useNotifications()
   const { markDirty, resetDirty } = useUnsavedChanges()
   
@@ -225,6 +234,10 @@ export function AudioNarrationWizard({
   const [audioVersionMap, setAudioVersionMap] = useState<Map<string, number>>(new Map())
   const [audioUploaded, setAudioUploaded] = useState(false)
   const [captionsUploaded, setCaptionsUploaded] = useState(false)
+  // 🚀 LAZY LOADING: Track which audio files are currently loading blob URLs
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
+  // 🚀 LAZY LOADING: Track currently loaded blob URLs for cleanup
+  const [currentlyLoadedBlobs, setCurrentlyLoadedBlobs] = useState<Map<string, string>>(new Map())
   const [uploadProgress, setUploadProgress] = useState<{
     fileName: string
     percent: number
@@ -254,7 +267,11 @@ export function AudioNarrationWizard({
     file?: File;
   }
   const mediaCache = useRef<Map<string, CachedMediaData | string | CaptionFile>>(new Map())
-  
+
+  // Cache for getAllMedia result to prevent redundant backend calls
+  const getAllMediaCache = useRef<{ data: ExtendedMedia[] | null, timestamp: number }>({ data: null, timestamp: 0 })
+  const GET_ALL_MEDIA_CACHE_TTL = 5000 // 5 seconds
+
   // Track when we last loaded data to prevent excessive reloads
   const lastLoadTime = useRef<number>(0)
   const MIN_RELOAD_INTERVAL = 2000 // 2 seconds minimum between reloads
@@ -262,6 +279,46 @@ export function AudioNarrationWizard({
   // Loading state for persisted data
   const [isLoadingPersistedData, setIsLoadingPersistedData] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
+
+  // Helper function to get cached getAllMedia result
+  const getCachedAllMedia = useCallback((): ExtendedMedia[] => {
+    const now = Date.now()
+
+    // Check if cache is still valid
+    if (getAllMediaCache.current.data &&
+        (now - getAllMediaCache.current.timestamp) < GET_ALL_MEDIA_CACHE_TTL) {
+      logger.log('[AudioNarrationWizard] 📋 Using cached getAllMedia result')
+      return getAllMediaCache.current.data
+    }
+
+    // Cache is stale or empty, fetch fresh data
+    try {
+      logger.log('[AudioNarrationWizard] 📋 Fetching fresh getAllMedia result')
+      const mediaResult = getAllMedia ? getAllMedia() : []
+
+      if (Array.isArray(mediaResult)) {
+        getAllMediaCache.current = {
+          data: mediaResult as ExtendedMedia[],
+          timestamp: now
+        }
+        logger.log(`[AudioNarrationWizard] 📋 Cached ${mediaResult.length} media items`)
+        return mediaResult as ExtendedMedia[]
+      } else {
+        logger.warn('[AudioNarrationWizard] getAllMedia did not return an array:', mediaResult)
+        return []
+      }
+    } catch (err) {
+      logger.error('[AudioNarrationWizard] Error calling getAllMedia:', err)
+      return []
+    }
+  }, [getAllMedia])
+
+  // Helper function to invalidate getAllMedia cache when media is modified
+  const invalidateAllMediaCache = useCallback(() => {
+    logger.log('[AudioNarrationWizard] 📋 Invalidating getAllMedia cache')
+    getAllMediaCache.current = { data: null, timestamp: 0 }
+  }, [])
+
   const [error, setError] = useState<string | null>(null)
   
   // Upload summaries for bulk operations
@@ -380,7 +437,8 @@ export function AudioNarrationWizard({
     onRemoveCaption,
     isRecording,
     recordingId,
-    isPlaying
+    isPlaying,
+    isLoadingAudio
   }: {
     block: UnifiedNarrationBlock,
     hasAudio: boolean,
@@ -398,7 +456,8 @@ export function AudioNarrationWizard({
     onRemoveCaption: () => void,
     isRecording: boolean,
     recordingId: string | null,
-    isPlaying: boolean
+    isPlaying: boolean,
+    isLoadingAudio: boolean
   }) => {
     // FIX: Use a proper React ref for each textarea instead of querySelector
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -463,6 +522,7 @@ export function AudioNarrationWizard({
                 <Button
                   size="small"
                   variant={isPlaying ? "primary" : "secondary"}
+                  disabled={isLoadingAudio}
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -470,8 +530,15 @@ export function AudioNarrationWizard({
                   }}
                   aria-label={`${isPlaying ? 'Stop' : 'Play'} audio for block ${block.blockNumber}`}
                   title={`${isPlaying ? 'Stop' : 'Play'} audio for block ${block.blockNumber}`}
+                  data-testid={isLoadingAudio ? `audio-loading-${block.id || `audio-${block.blockNumber}`}` : undefined}
                 >
-                  {isPlaying ? (<><Square size={16} /> Stop</>) : (<><Play size={16} /> Play</>)}
+                  {isLoadingAudio ? (
+                    <>🔄 Loading...</>
+                  ) : isPlaying ? (
+                    <><Square size={16} /> Stop</>
+                  ) : (
+                    <><Play size={16} /> Play</>
+                  )}
                 </Button>
                 <Button
                   size="small"
@@ -681,6 +748,16 @@ export function AudioNarrationWizard({
   // Cleanup on unmount - asset URLs don't need cleanup
   useEffect(() => {
     return () => {
+      // Clean up recording timer if active
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+        recordingTimerRef.current = null
+      }
+      // Clean up save timer if active
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
       // Clean up recording preview URL if exists (this is still a blob URL)
       if (recordingPreviewUrl) {
         URL.revokeObjectURL(recordingPreviewUrl)
@@ -737,6 +814,13 @@ export function AudioNarrationWizard({
     setIsLoadingPersistedData(true)
     lastLoadTime.current = now
 
+    // 🚀 TIMEOUT PROTECTION: Extended timeout for large projects with many audio files
+    const loadingTimeout = setTimeout(() => {
+      logger.error('[AudioNarrationWizard] Loading timeout - forcing completion after 120 seconds')
+      setIsLoadingPersistedData(false)
+      setError('Loading took too long and was cancelled. Some media files may not be available.')
+    }, 120000) // 120 second timeout for large projects with many files
+
     try {
       logger.log('[AudioNarrationWizard] Loading persisted data...')
       
@@ -746,19 +830,19 @@ export function AudioNarrationWizard({
       
       // Check welcome page - push null if no media to maintain index alignment
       if ('welcomePage' in courseContent) {
-        const welcomeAudio = courseContent.welcomePage.media?.find(m => m.type === 'audio')
+        const welcomeAudio = (courseContent as any).welcomePage.media?.find((m: any) => m.type === 'audio')
         audioIdsInContent.push(welcomeAudio?.id || null)
         // Look for captions in media array too
-        const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => (m as any).type === 'caption')
+        const welcomeCaption = (courseContent as any).welcomePage.media?.find((m: Media) => (m as any).type === 'caption')
         captionIdsInContent.push(welcomeCaption?.id || null)
       }
       
       // Check objectives page - push null if no media to maintain index alignment
       if ('learningObjectivesPage' in courseContent) {
-        const objAudio = courseContent.learningObjectivesPage.media?.find(m => m.type === 'audio')
+        const objAudio = (courseContent as any).learningObjectivesPage.media?.find((m: any) => m.type === 'audio')
         audioIdsInContent.push(objAudio?.id || null)
         // Look for captions in media array too
-        const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => (m as any).type === 'caption')
+        const objCaption = (courseContent as any).learningObjectivesPage.media?.find((m: Media) => (m as any).type === 'caption')
         captionIdsInContent.push(objCaption?.id || null)
       }
       
@@ -781,178 +865,184 @@ export function AudioNarrationWizard({
       const totalToLoad = audioIdsInContent.filter(id => id !== null).length + 
                           captionIdsInContent.filter(id => id !== null).length
       
-      // Set loading progress
-      setLoadingProgress({ current: 0, total: totalToLoad })
+      // Set loading progress with separate tracking
+      setLoadingProgress({
+        current: 0,
+        total: totalToLoad,
+        audioTotal: audioIdsInContent.filter(id => id !== null).length,
+        captionTotal: captionIdsInContent.filter(id => id !== null).length,
+        audioLoaded: 0,
+        captionLoaded: 0
+      } as any)
       
       // If we have audio IDs in content, try to load from MediaRegistry
       if (hasValidAudioIds) {
         logger.log('[AudioNarrationWizard] Starting to load audio from course content...')
         const audioLoadStart = Date.now()
         
-        // Use Promise.all with map to avoid race conditions
-        const audioLoadPromises = audioIdsInContent.map(async (audioId, index) => {
+        // 🚀 LAZY LOADING PERFORMANCE FIX: Only load metadata, skip blob URL creation
+        // This prevents loading 22+ audio files from hanging the UI
+        const audioMetadataPromises = audioIdsInContent.map(async (audioId, index) => {
           const block = narrationBlocks[index]
-          
+
           if (!block || !audioId) {
             if (block && !audioId) {
               logger.log(`[AudioNarrationWizard] No audio ID for block ${block.blockNumber} (${block.pageTitle})`)
             }
             return null
           }
-          
+
           const cacheKey = `audio_${audioId}`
-          
-          // Check cache first - use asset URLs directly
+
+          // Check cache first - use metadata only
           if (mediaCache.current.has(cacheKey)) {
-            logger.log(`[AudioNarrationWizard] Using cached audio for ${audioId}`)
+            logger.log(`[AudioNarrationWizard] Using cached audio metadata for ${audioId}`)
             const cachedData = mediaCache.current.get(cacheKey)
-            
-            // If we have cached media data, use it
-            if (typeof cachedData === 'object' && cachedData && 'mediaData' in cachedData && (cachedData.mediaData || cachedData.url)) {
-              const playableUrl = cachedData.url
-              
-              logger.log(`[AudioNarrationWizard] Cached URL for ${audioId}:`, playableUrl)
-              
-              // Track blob URLs for cleanup (including those from MediaService)
-              if (playableUrl && playableUrl.startsWith('blob:')) {
-                blobUrlsRef.current.push(playableUrl)
-                logger.log(`[AudioNarrationWizard] Tracking blob URL for cleanup: ${playableUrl}`)
-              }
-              
+
+            // If we have cached media data, create placeholder without URL
+            if (typeof cachedData === 'object' && cachedData && 'mediaData' in cachedData) {
               const audioFile: AudioFile = {
                 blockNumber: block.blockNumber,
                 file: (cachedData as any).file || new File([], (cachedData as any).fileName || `${block.blockNumber}-Block.mp3`),
-                url: playableUrl || undefined,
+                url: undefined, // ⚡ No URL - will be created on-demand
                 mediaId: audioId
               }
-              
-              // Update progress
-              setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
-              
+
+              // Update progress (tracking audio separately)
+              setLoadingProgress(prev => ({
+                ...prev,
+                current: prev.current + 1,
+                audioLoaded: (prev as any).audioLoaded + 1
+              } as any))
+
               return audioFile
             }
           }
-          
+
           try {
-            // PERFORMANCE: Check if audio is already cached in MediaService first
+            // ⚡ PERFORMANCE: Only load metadata, not blob URLs
             if (hasAudioCached && hasAudioCached(audioId)) {
-              logger.log(`[AudioNarrationWizard] Audio already cached in MediaService for ${audioId}`)
+              logger.log(`[AudioNarrationWizard] Audio metadata available in MediaService for ${audioId}`)
               const cachedAudio = getCachedAudio ? getCachedAudio(audioId) : null
-              
+
               if (cachedAudio) {
-                const fileName = (typeof cachedAudio.metadata?.original_name === 'string' ? cachedAudio.metadata.original_name : 
-                                 typeof cachedAudio.metadata?.originalName === 'string' ? cachedAudio.metadata.originalName : 
+                const fileName = (typeof cachedAudio.metadata?.original_name === 'string' ? cachedAudio.metadata.original_name :
+                                 typeof cachedAudio.metadata?.originalName === 'string' ? cachedAudio.metadata.originalName :
                                  `${block.blockNumber}-Block.mp3`)
-                
-                // Create blob URL from cached data
-                let playableUrl: string | undefined
-                try {
-                  // Create a new Uint8Array with a proper ArrayBuffer to ensure Blob compatibility
-                  // This avoids TypeScript's SharedArrayBuffer vs ArrayBuffer type issues
-                  const uint8Array = new Uint8Array(cachedAudio.data.length)
-                  uint8Array.set(cachedAudio.data)
-                  
-                  const blob = new Blob([uint8Array], { 
-                    type: cachedAudio.metadata?.mimeType || cachedAudio.metadata?.mime_type || 'audio/mpeg' 
-                  })
-                  playableUrl = URL.createObjectURL(blob)
-                  
-                  // Track blob URL for cleanup
-                  if (playableUrl) {
-                    blobUrlsRef.current.push(playableUrl)
-                    logger.log(`[AudioNarrationWizard] Created blob URL from cached audio: ${playableUrl}`)
-                  }
-                } catch (e) {
-                  logger.error(`[AudioNarrationWizard] Failed to create blob URL from cached audio:`, e)
-                }
-                
+
                 const mimeType = typeof cachedAudio.metadata?.mimeType === 'string' ? cachedAudio.metadata.mimeType : 'audio/mpeg'
                 const file = new File([], fileName, { type: mimeType })
-                
+
                 const audioFile: AudioFile = {
                   blockNumber: block.blockNumber,
                   file: file,
-                  url: playableUrl,
+                  url: undefined, // ⚡ No URL - will be created when user plays audio
                   mediaId: audioId
                 }
-                
-                // Cache locally for component use
+
+                // Cache metadata only (no blob URL)
                 mediaCache.current.set(cacheKey, {
                   mediaData: cachedAudio,
                   fileName: fileName,
                   file: file,
-                  url: playableUrl
+                  url: undefined // ⚡ Lazy loading: no URL until needed
                 })
-                
-                logger.log(`[AudioNarrationWizard] Used cached audio from MediaService: ${audioId} for block ${block.blockNumber}`)
-                
-                // Update progress
-                setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
-                
+
+                logger.log(`[AudioNarrationWizard] 🚀 LAZY: Loaded metadata only for ${audioId} for block ${block.blockNumber}`)
+
+                // Update progress (tracking audio separately)
+                setLoadingProgress(prev => ({
+                  ...prev,
+                  current: prev.current + 1,
+                  audioLoaded: (prev as any).audioLoaded + 1
+                } as any))
+
                 return audioFile
               }
             }
-            
-            // Not cached - load from disk (will be cached by MediaService)
-            logger.log(`[AudioNarrationWizard] Audio not cached, loading from disk: ${audioId}`)
-            
-            // Get media from UnifiedMedia - use asset URL directly
-            const mediaData = await getMedia(audioId)
-            
-            if (mediaData) {
-              const fileName = (typeof mediaData.metadata?.original_name === 'string' ? mediaData.metadata.original_name : 
-                               typeof mediaData.metadata?.originalName === 'string' ? mediaData.metadata.originalName : 
-                               `${block.blockNumber}-Block.mp3`)
-              
-              // Normalize the URL to fix double-encoding issues
-              const playableUrl = mediaData.url
-              
-              logger.log(`[AudioNarrationWizard] Got media URL for ${audioId}:`, playableUrl)
-              
-              // Track blob URLs for cleanup (including those from MediaService)
-              if (playableUrl && playableUrl.startsWith('blob:')) {
-                // Track existing blob URLs for cleanup
-                blobUrlsRef.current.push(playableUrl)
-                logger.log(`[AudioNarrationWizard] Tracking blob URL for cleanup: ${playableUrl}`)
-              }
-              
-              // Create a placeholder file for UI consistency (no actual data needed)
-              const mimeType = typeof mediaData.metadata?.mimeType === 'string' ? mediaData.metadata.mimeType : 'audio/mpeg'
-              const file = new File([], fileName, { type: mimeType })
-              
-              const audioFile: AudioFile = {
-                blockNumber: block.blockNumber,
-                file: file,
-                url: playableUrl || undefined,
-                mediaId: audioId
-              }
-              
-              // Cache the media data with playable URL
-              mediaCache.current.set(cacheKey, {
-                mediaData: mediaData,
-                fileName: fileName,
-                file: file,
-                url: playableUrl || undefined
-              })
-              
-              logger.log(`[AudioNarrationWizard] Loaded audio from MediaRegistry: ${audioId} for block ${block.blockNumber}`)
-              
-              // Update progress after successful load
-              setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
-              
-              return audioFile
+
+            // ⚡ For uncached audio, just create placeholder with metadata
+            logger.log(`[AudioNarrationWizard] 🚀 LAZY: Creating placeholder for uncached audio: ${audioId}`)
+
+            const fileName = `${block.blockNumber}-Block.mp3`
+            const file = new File([], fileName, { type: 'audio/mpeg' })
+
+            const audioFile: AudioFile = {
+              blockNumber: block.blockNumber,
+              file: file,
+              url: undefined, // ⚡ No URL - will be loaded on-demand
+              mediaId: audioId
             }
+
+            // Cache placeholder (will be updated when actually loaded)
+            mediaCache.current.set(cacheKey, {
+              mediaData: null, // ⚡ Placeholder: will be loaded when needed
+              fileName: fileName,
+              file: file,
+              url: undefined
+            })
+
+            logger.log(`[AudioNarrationWizard] 🚀 LAZY: Created placeholder for ${audioId} for block ${block.blockNumber}`)
+
+            // Update progress after creating placeholder (tracking audio separately)
+            setLoadingProgress(prev => ({
+              ...prev,
+              current: prev.current + 1,
+              audioLoaded: (prev as any).audioLoaded + 1
+            } as any))
+
+            return audioFile
           } catch (error) {
-            logger.error(`[AudioNarrationWizard] Failed to load audio ${audioId}:`, error)
+            logger.error(`[AudioNarrationWizard] Failed to load audio metadata ${audioId}:`, error)
             // Clear cache on error
             mediaCache.current.delete(cacheKey)
           }
-          
+
           return null
         })
-        
-        // Wait for all audio to load in parallel and filter out nulls
-        const audioResults = await Promise.all(audioLoadPromises)
+
+        // 🚀 BATCH LOADING: Process audio files in batches to prevent overwhelming backend
+        const BATCH_SIZE = 5
+        const BATCH_DELAY = 150 // ms between batches
+
+        logger.log(`[AudioNarrationWizard] 🚀 BATCH: Processing ${audioMetadataPromises.length} audio files in batches of ${BATCH_SIZE}`)
+
+        const audioResults: (AudioFile | null)[] = []
+        const totalBatches = Math.ceil(audioMetadataPromises.length / BATCH_SIZE)
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+          const startIndex = batchIndex * BATCH_SIZE
+          const endIndex = Math.min(startIndex + BATCH_SIZE, audioMetadataPromises.length)
+          const batchPromises = audioMetadataPromises.slice(startIndex, endIndex)
+
+          logger.log(`[AudioNarrationWizard] 🚀 BATCH: Loading batch ${batchIndex + 1}/${totalBatches} (files ${startIndex + 1}-${endIndex})`)
+
+          // Update loading progress to show batch info (preserving original total)
+          setLoadingProgress(prev => ({
+            ...prev,
+            // Don't overwrite current here - let individual items increment it
+            audioLoaded: startIndex, // Track audio progress separately
+            batch: batchIndex + 1,
+            totalBatches: totalBatches
+          } as any))
+
+          try {
+            const batchResults = await Promise.all(batchPromises)
+            audioResults.push(...batchResults)
+
+            logger.log(`[AudioNarrationWizard] 🚀 BATCH: Batch ${batchIndex + 1} completed`)
+
+            // Add delay between batches to prevent overwhelming the backend
+            if (batchIndex < totalBatches - 1) {
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY))
+            }
+          } catch (error) {
+            logger.error(`[AudioNarrationWizard] 🚀 BATCH: Batch ${batchIndex + 1} failed:`, error)
+            // Add nulls for failed batch to maintain array length
+            audioResults.push(...new Array(batchPromises.length).fill(null))
+          }
+        }
+
         const newAudioFiles = audioResults.filter((file): file is AudioFile => file !== null && file !== undefined)
         
         logger.log('[AudioNarrationWizard] Audio loading completed:', {
@@ -962,101 +1052,187 @@ export function AudioNarrationWizard({
           failed: audioIdsInContent.filter(id => id !== null).length - newAudioFiles.length
         })
         
-        // Use Promise.all with map for captions too
-        const captionLoadPromises = captionIdsInContent.map(async (captionId, index) => {
-          const block = narrationBlocks[index]
-          
-          if (!block || !captionId) {
-            if (block && !captionId) {
-              logger.log(`[AudioNarrationWizard] No caption ID for block ${block.blockNumber} (${block.pageTitle})`)
-            }
-            return null
-          }
-          
-          const cacheKey = `caption_${captionId}`
-          
-          // Check cache first
-          if (mediaCache.current.has(cacheKey)) {
-            logger.log(`[AudioNarrationWizard] Using cached caption for ${captionId}`)
-            // Update progress for cached caption
-            setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
-            return mediaCache.current.get(cacheKey)
-          }
-          
+        // 🚀 BATCH LOADING: Load all captions efficiently instead of individual getMedia calls
+        let newCaptionFiles: CaptionFile[] = []
+        if (hasValidCaptionIds) {
+          logger.log('[AudioNarrationWizard] 🚀 BATCH: Loading captions efficiently...')
+
           try {
-            // Get caption content from MediaService
-            const mediaData = await getMedia(captionId)
-            
-            if (mediaData) {
-              // Track blob URLs for cleanup (captions might also use blob URLs)
-              if (mediaData.url && mediaData.url.startsWith('blob:')) {
-                blobUrlsRef.current.push(mediaData.url)
-                logger.debug('[AudioNarrationWizard] Tracking caption blob URL for cleanup:', mediaData.url)
+            // Use getCachedAllMedia to get all captions in one batch (with caching)
+            const allMedia = getCachedAllMedia()
+            const captionMediaItems = Array.isArray(allMedia) ?
+              allMedia.filter((item: any) => item.type === 'caption' && captionIdsInContent.includes(item.id)) : []
+
+            logger.log(`[AudioNarrationWizard] 🚀 BATCH: Found ${captionMediaItems.length} caption items`)
+
+            // Process each caption from the batch (async)
+            const captionLoadPromises = captionIdsInContent.map(async (captionId, index) => {
+              const block = narrationBlocks[index]
+
+              if (!block || !captionId) {
+                if (block && !captionId) {
+                  logger.log(`[AudioNarrationWizard] No caption ID for block ${block.blockNumber} (${block.pageTitle})`)
+                }
+                return null
               }
-              
-              // Handle case where data might be undefined or content might be in metadata
-              let content = ''
-              if (mediaData.data) {
-                content = new TextDecoder().decode(mediaData.data)
-              } else if (mediaData.metadata?.content) {
-                // Caption content might be stored in metadata
-                content = typeof mediaData.metadata.content === 'string' ? mediaData.metadata.content : ''
+
+              const cacheKey = `caption_${captionId}`
+
+              // Check cache first
+              if (mediaCache.current.has(cacheKey)) {
+                logger.log(`[AudioNarrationWizard] Using cached caption for ${captionId}`)
+                // Update progress for cached caption (tracking captions separately)
+                setLoadingProgress(prev => ({
+                  ...prev,
+                  current: prev.current + 1,
+                  captionLoaded: (prev as any).captionLoaded + 1
+                } as any))
+                return mediaCache.current.get(cacheKey)
               }
-              
-              // Also check if content is directly in the media array in course content
-              if (!content) {
-                // Check the corresponding page in courseContent for embedded caption content
-                if (index === 0 && 'welcomePage' in courseContent) {
-                  const welcomeCaption = courseContent.welcomePage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
-                  if ((welcomeCaption as any)?.content) {
-                    content = (welcomeCaption as any).content
+
+              // Find this caption in the batch result
+              const mediaItem = captionMediaItems.find((item: any) => item.id === captionId)
+
+              if (mediaItem) {
+                // Extract caption content from various possible locations
+                let content = ''
+
+                // Load the actual media data from storage
+                try {
+                  const mediaData = await getMedia(captionId)
+                  if (mediaData?.data) {
+                    try {
+                      content = new TextDecoder().decode(mediaData.data)
+                    } catch (e) {
+                      logger.warn(`[AudioNarrationWizard] Failed to decode caption data for ${captionId}:`, e)
+                    }
                   }
-                } else if (index === 1 && 'learningObjectivesPage' in courseContent) {
-                  const objCaption = courseContent.learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
-                  if ((objCaption as any)?.content) {
-                    content = (objCaption as any).content
-                  }
-                } else if ('topics' in courseContent && courseContent.topics[index - 2]) {
-                  const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
-                  if ((topicCaption as any)?.content) {
-                    content = (topicCaption as any).content
+                } catch (error) {
+                  logger.warn(`[AudioNarrationWizard] Failed to load caption ${captionId}:`, error)
+                }
+
+                // Try metadata content field
+                if (!content && mediaItem.metadata?.content) {
+                  content = typeof mediaItem.metadata.content === 'string' ? mediaItem.metadata.content : ''
+                }
+
+                // Try direct content field
+                if (!content && (mediaItem as any).content) {
+                  content = typeof (mediaItem as any).content === 'string' ? (mediaItem as any).content : ''
+                }
+
+                // Fallback: check course content media array
+                if (!content) {
+                  if (index === 0 && 'welcomePage' in courseContent) {
+                    const welcomeCaption = (courseContent as any).welcomePage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                    if ((welcomeCaption as any)?.content) {
+                      content = (welcomeCaption as any).content
+                    }
+                  } else if (index === 1 && 'learningObjectivesPage' in courseContent) {
+                    const objCaption = (courseContent as any).learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                    if ((objCaption as any)?.content) {
+                      content = (objCaption as any).content
+                    }
+                  } else if ('topics' in courseContent && courseContent.topics[index - 2]) {
+                    const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                    if ((topicCaption as any)?.content) {
+                      content = (topicCaption as any).content
+                    }
                   }
                 }
-              }
-              
-              if (content) {
-                const captionFile = {
-                  blockNumber: block.blockNumber,
-                  content: content,
-                  mediaId: captionId
+
+                if (content) {
+                  const captionFile = {
+                    blockNumber: block.blockNumber,
+                    content: content,
+                    mediaId: captionId
+                  }
+
+                  // Cache the data
+                  mediaCache.current.set(cacheKey, captionFile)
+                  logger.log(`[AudioNarrationWizard] 🚀 BATCH: Loaded caption ${captionId} for block ${block.blockNumber}`)
+
+                  // Update progress after successful caption load (tracking captions separately)
+                  setLoadingProgress(prev => ({
+                    ...prev,
+                    current: prev.current + 1,
+                    captionLoaded: (prev as any).captionLoaded + 1
+                  } as any))
+
+                  return captionFile
+                } else {
+                  logger.warn(`[AudioNarrationWizard] 🚀 BATCH: No caption content found for ${captionId}`)
                 }
-                
-                // Cache the data
-                mediaCache.current.set(cacheKey, captionFile)
-                logger.log(`[AudioNarrationWizard] Loaded caption from MediaRegistry: ${captionId} for block ${block.blockNumber}`)
-                
-                // Update progress after successful caption load
-                setLoadingProgress(prev => ({ ...prev, current: prev.current + 1 }))
-                
-                return captionFile
               } else {
-                logger.warn(`[AudioNarrationWizard] No caption content found for ${captionId}`)
+                logger.warn(`[AudioNarrationWizard] 🚀 BATCH: Caption ${captionId} not found in batch result`)
               }
-            }
+
+              // Update progress even for failed captions to keep UI moving
+              setLoadingProgress(prev => ({
+                ...prev,
+                current: prev.current + 1,
+                captionLoaded: (prev as any).captionLoaded + 1
+              } as any))
+              return null
+            })
+
+            const captionResults = await Promise.all(captionLoadPromises)
+            newCaptionFiles = captionResults.filter((file: any): file is CaptionFile => file !== null && typeof file === 'object' && 'blockNumber' in file) as CaptionFile[]
+
+            logger.log(`[AudioNarrationWizard] 🚀 BATCH: Caption loading completed - ${newCaptionFiles.length} loaded`)
+
           } catch (error) {
-            logger.error(`[AudioNarrationWizard] Failed to load caption ${captionId}:`, error)
-            // Clear cache on error
-            mediaCache.current.delete(cacheKey)
+            logger.error('[AudioNarrationWizard] 🚀 BATCH: Failed to load captions in batch:', error)
+
+            // Fallback: try individual loading if batch fails
+            logger.log('[AudioNarrationWizard] Falling back to individual caption loading...')
+
+            const captionLoadPromises = captionIdsInContent.map(async (captionId, index) => {
+              const block = narrationBlocks[index]
+
+              if (!block || !captionId) return null
+
+              try {
+                const mediaData = await getMedia(captionId)
+                if (mediaData) {
+                  let content = ''
+                  if (mediaData.data) {
+                    content = new TextDecoder().decode(mediaData.data)
+                  } else if (mediaData.metadata?.content) {
+                    content = typeof mediaData.metadata.content === 'string' ? mediaData.metadata.content : ''
+                  }
+
+                  if (content) {
+                    // Update progress (tracking captions separately)
+                    setLoadingProgress(prev => ({
+                      ...prev,
+                      current: prev.current + 1,
+                      captionLoaded: (prev as any).captionLoaded + 1
+                    } as any))
+                    return {
+                      blockNumber: block.blockNumber,
+                      content: content,
+                      mediaId: captionId
+                    }
+                  }
+                }
+              } catch (err) {
+                logger.error(`[AudioNarrationWizard] Failed to load caption ${captionId}:`, err)
+              }
+
+              // Update progress even for failed captions (tracking captions separately)
+              setLoadingProgress(prev => ({
+                ...prev,
+                current: prev.current + 1,
+                captionLoaded: (prev as any).captionLoaded + 1
+              } as any))
+              return null
+            })
+
+            const captionResults = await Promise.all(captionLoadPromises)
+            newCaptionFiles = captionResults.filter((file: any): file is CaptionFile => file !== null && typeof file === 'object' && 'blockNumber' in file) as CaptionFile[]
           }
-          
-          return null
-        })
-        
-        // Wait for all captions to load in parallel and filter out nulls
-        const captionResults = await Promise.all(captionLoadPromises)
-        const newCaptionFiles = captionResults.filter((file): file is CaptionFile => 
-          file !== null && typeof file === 'object' && 'blockNumber' in file && 'content' in file
-        )
+        }
         
         // Only update if we successfully loaded some data
         // Don't replace existing files with incomplete data during save cycles
@@ -1122,27 +1298,14 @@ export function AudioNarrationWizard({
         logger.log('[AudioNarrationWizard] No valid audio IDs in course content, will check getAllMedia')
       }
       
-      // Always check getAllMedia as a fallback to catch media not in course content  
-      let allMediaItems: ExtendedMedia[] = []
-      
-      try {
-        const mediaResult = getAllMedia ? getAllMedia() : []
-        
-        // Ensure allMediaItems is an array
-        if (Array.isArray(mediaResult)) {
-          allMediaItems = mediaResult as ExtendedMedia[]
-          logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
-          allMediaItems.forEach(item => {
-            logger.log('[AudioNarrationWizard] Media item:', item.id, item.type, item.pageId)
-          })
-        } else {
-          logger.warn('[AudioNarrationWizard] getAllMedia did not return an array:', mediaResult)
-          logger.log('[AudioNarrationWizard] Using empty array for media items')
-        }
-      } catch (err) {
-        logger.error('[AudioNarrationWizard] Error calling getAllMedia:', err)
-        logger.log('[AudioNarrationWizard] Using empty array for media items')
-      }
+      // Always check getAllMedia as a fallback to catch media not in course content
+      logger.log('[AudioNarrationWizard] 📋 Using cached getAllMedia for fallback loading...')
+      const allMediaItems = getCachedAllMedia()
+
+      logger.log('[AudioNarrationWizard] Total media items:', allMediaItems.length)
+      allMediaItems.forEach(item => {
+        logger.log('[AudioNarrationWizard] Media item:', item.id, item.type, item.pageId)
+      })
       
       let allAudioItems = allMediaItems.filter(item => item && item.type === 'audio')
       let allCaptionItems = allMediaItems.filter(item => item && (item as any).type === 'caption')
@@ -1266,6 +1429,8 @@ export function AudioNarrationWizard({
       // Reset last load time on error to allow retry
       lastLoadTime.current = 0
     } finally {
+      // 🚀 Clear timeout protection
+      clearTimeout(loadingTimeout)
       setIsLoadingPersistedData(false)
     }
   }, [getMedia, getAllMedia, narrationBlocks, courseContent, isSaving])
@@ -1293,13 +1458,13 @@ export function AudioNarrationWizard({
       
       if ('welcomePage' in courseContent) {
         hasAudioInContent = 
-          courseContent.welcomePage?.media?.some((m: Media) => m.type === 'audio') ||
-          courseContent.learningObjectivesPage?.media?.some((m: Media) => m.type === 'audio') ||
+          (courseContent as any).welcomePage?.media?.some((m: Media) => m.type === 'audio') ||
+          (courseContent as any).learningObjectivesPage?.media?.some((m: Media) => m.type === 'audio') ||
           courseContent.topics?.some(t => t.media?.some((m: Media) => m.type === 'audio')) || false
         
         hasCaptionInContent =
-          courseContent.welcomePage?.media?.some((m: Media) => (m as any).type === 'caption') ||
-          courseContent.learningObjectivesPage?.media?.some((m: Media) => (m as any).type === 'caption') ||
+          (courseContent as any).welcomePage?.media?.some((m: Media) => (m as any).type === 'caption') ||
+          (courseContent as any).learningObjectivesPage?.media?.some((m: Media) => (m as any).type === 'caption') ||
           courseContent.topics?.some(t => t.media?.some((m: Media) => (m as any).type === 'caption')) || false
       }
       
@@ -1408,7 +1573,7 @@ export function AudioNarrationWizard({
     setIsSaving(true)
     lastSaveTime.current = now
     
-    const contentWithAudio = JSON.parse(JSON.stringify(courseContent))
+    const contentWithAudio = safeDeepClone(courseContent)
     
     // Sync edited narration text back to course content during autosave
     // Process welcome page
@@ -1416,49 +1581,47 @@ export function AudioNarrationWizard({
       const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome')
       if (welcomeBlock) {
         // Update narration text
-        contentWithAudio.welcomePage.narration = welcomeBlock.text
+        (contentWithAudio as any).welcomePage.narration = welcomeBlock.text
         
         const audioFile = audioFiles.find(f => f.blockNumber === welcomeBlock.blockNumber)
         const captionFile = captionFiles.find(f => f.blockNumber === welcomeBlock.blockNumber)
         
         // CRITICAL FIX: Sync caption text to course content during autosave
         if (captionFile) {
-          contentWithAudio.welcomePage.caption = captionFile.content
+          (contentWithAudio as any).welcomePage.captionId = captionFile.mediaId
         }
         
         if (audioFile?.mediaId) {
           // ONLY add to media array for persistence (no audioId field)
-          if (!contentWithAudio.welcomePage.media) {
-            contentWithAudio.welcomePage.media = []
+          if (!(contentWithAudio as any).welcomePage.media) {
+            (contentWithAudio as any).welcomePage.media = []
           }
-          // Remove any existing audio from media array
-          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: Media) => m.type !== 'audio')
-          // Add the new audio (without URL to prevent invalid blob URLs)
-          contentWithAudio.welcomePage.media.push({
+          // Remove any existing audio from media array and add new audio
+          const filteredMedia = safeMediaFilter((contentWithAudio as any).welcomePage.media, (m: Media) => m.type !== 'audio')
+          ;(contentWithAudio as any).welcomePage.media = [...filteredMedia, {
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
             title: '', // Required by Rust SCORM generator
             url: '' // Required by Media interface
-          } as unknown as ExtendedMedia)
+          } as unknown as ExtendedMedia]
           logger.log('[AudioNarrationWizard] Added welcome audio to media array:', audioFile.mediaId)
         }
         if (captionFile?.mediaId) {
           // ONLY add captions to media array (no captionId field)
-          if (!contentWithAudio.welcomePage.media) {
-            contentWithAudio.welcomePage.media = []
+          if (!(contentWithAudio as any).welcomePage.media) {
+            (contentWithAudio as any).welcomePage.media = []
           }
-          // Remove any existing caption from media array
-          contentWithAudio.welcomePage.media = contentWithAudio.welcomePage.media.filter((m: any) => m.type !== 'caption')
-          // Add the new caption
-          contentWithAudio.welcomePage.media.push({
+          // Remove any existing caption from media array and add new caption
+          const filteredCaptionMedia = safeMediaFilter((contentWithAudio as any).welcomePage.media, (m: any) => m.type !== 'caption')
+          ;(contentWithAudio as any).welcomePage.media = [...filteredCaptionMedia, {
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
             title: '', // Required by Rust SCORM generator
             url: '' // Required by Media interface
-          } as unknown as ExtendedMedia)
+          } as unknown as ExtendedMedia]
         }
       }
     }
@@ -1474,55 +1637,53 @@ export function AudioNarrationWizard({
       
       if (objectivesBlock) {
         // Update narration text
-        contentWithAudio.learningObjectivesPage.narration = objectivesBlock.text
+        (contentWithAudio as any).learningObjectivesPage.narration = objectivesBlock.text
         
         const audioFile = audioFiles.find(f => f.blockNumber === objectivesBlock.blockNumber)
         const captionFile = captionFiles.find(f => f.blockNumber === objectivesBlock.blockNumber)
         
         // CRITICAL FIX: Sync caption text to course content during autosave
         if (captionFile) {
-          contentWithAudio.learningObjectivesPage.caption = captionFile.content
+          (contentWithAudio as any).learningObjectivesPage.captionId = captionFile.mediaId
         }
         
         if (audioFile?.mediaId) {
           logger.log('[AudioNarrationWizard] Adding objectives audio to media array:', audioFile.mediaId)
           // ONLY add to media array for persistence (no audioId field)
-          if (!contentWithAudio.learningObjectivesPage.media) {
-            contentWithAudio.learningObjectivesPage.media = []
+          if (!(contentWithAudio as any).learningObjectivesPage.media) {
+            (contentWithAudio as any).learningObjectivesPage.media = []
           }
-          // Remove any existing audio from media array
-          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: Media) => m.type !== 'audio')
-          // Add the new audio (without URL to prevent invalid blob URLs)
-          contentWithAudio.learningObjectivesPage.media.push({
+          // Remove any existing audio from media array and add new audio
+          const filteredObjectivesMedia = safeMediaFilter((contentWithAudio as any).learningObjectivesPage.media, (m: Media) => m.type !== 'audio')
+          ;(contentWithAudio as any).learningObjectivesPage.media = [...filteredObjectivesMedia, {
             id: audioFile.mediaId,
             type: 'audio',
             storageId: audioFile.mediaId,
             title: '', // Required by Rust SCORM generator
             url: '' // Required by Media interface
-          } as unknown as ExtendedMedia)
+          } as unknown as ExtendedMedia]
         }
         if (captionFile?.mediaId) {
           // ONLY add captions to media array (no captionId field)
-          if (!contentWithAudio.learningObjectivesPage.media) {
-            contentWithAudio.learningObjectivesPage.media = []
+          if (!(contentWithAudio as any).learningObjectivesPage.media) {
+            (contentWithAudio as any).learningObjectivesPage.media = []
           }
-          // Remove any existing caption from media array
-          contentWithAudio.learningObjectivesPage.media = contentWithAudio.learningObjectivesPage.media.filter((m: any) => m.type !== 'caption')
-          // Add the new caption
-          contentWithAudio.learningObjectivesPage.media.push({
+          // Remove any existing caption from media array and add new caption
+          const filteredObjectivesCaptionMedia = safeMediaFilter((contentWithAudio as any).learningObjectivesPage.media, (m: any) => m.type !== 'caption')
+          ;(contentWithAudio as any).learningObjectivesPage.media = [...filteredObjectivesCaptionMedia, {
             id: captionFile.mediaId,
             type: 'caption',
             content: captionFile.content,
             storageId: captionFile.mediaId,
             title: '', // Required by Rust SCORM generator
             url: '' // Required by Media interface
-          } as unknown as ExtendedMedia)
+          } as unknown as ExtendedMedia]
         }
       }
     }
     
     // Process topics
-    contentWithAudio.topics.forEach((topic: Topic) => {
+    contentWithAudio.topics.forEach((topic: any) => {
       const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
       if (topicBlock) {
         // Update narration text
@@ -1542,7 +1703,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing audio from media array
-          topic.media = topic.media.filter((m: Media) => m.type !== 'audio')
+          topic.media = safeMediaFilter(topic.media, (m: Media) => m.type !== 'audio')
           // Add the new audio
           topic.media.push({
             id: audioFile.mediaId,
@@ -1558,7 +1719,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
+          topic.media = safeMediaFilter(topic.media, (m: any) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
@@ -1573,8 +1734,8 @@ export function AudioNarrationWizard({
     })
     
     logger.log('[AudioNarrationWizard] Auto-saving to course content')
-    logger.log('[AudioNarrationWizard] Welcome media:', contentWithAudio.welcomePage?.media)
-    logger.log('[AudioNarrationWizard] Objectives media:', contentWithAudio.learningObjectivesPage?.media)
+    logger.log('[AudioNarrationWizard] Welcome media:', (contentWithAudio as any).welcomePage?.media)
+    logger.log('[AudioNarrationWizard] Objectives media:', (contentWithAudio as any).learningObjectivesPage?.media)
     // Store in context and trigger save callback
     // Wrap save operations in try-finally to ensure isSaving is reset
     try {
@@ -1651,39 +1812,39 @@ export function AudioNarrationWizard({
     autoSaveToCourseContent()
     
     // Create enhanced content for navigation (media is already in media arrays)
-    const contentWithAudio = JSON.parse(JSON.stringify(courseContent))
+    const contentWithAudio = safeDeepClone(courseContent)
     
     // Sync edited narration text back to course content
     // Update welcome page narration and caption
-    if (contentWithAudio.welcomePage) {
-      const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome' || b.pageId === contentWithAudio.welcomePage?.id)
+    if ((contentWithAudio as any).welcomePage) {
+      const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome' || b.pageId === (contentWithAudio as any).welcomePage?.id)
       if (welcomeBlock) {
-        contentWithAudio.welcomePage.narration = welcomeBlock.text
+        (contentWithAudio as any).welcomePage.narration = welcomeBlock.text
         
         // CRITICAL FIX: Sync caption text to course content
         const welcomeCaption = captionFiles.find(f => f.blockNumber === welcomeBlock.blockNumber)
         if (welcomeCaption) {
-          contentWithAudio.welcomePage.caption = welcomeCaption.content
+          (contentWithAudio as any).welcomePage.caption = welcomeCaption.content
         }
       }
     }
     
     // Update learning objectives page narration and caption
-    if (contentWithAudio.learningObjectivesPage) {
-      const objectivesBlock = narrationBlocks.find(b => b.pageId === 'objectives' || b.pageId === contentWithAudio.learningObjectivesPage?.id)
+    if ((contentWithAudio as any).learningObjectivesPage) {
+      const objectivesBlock = narrationBlocks.find(b => b.pageId === 'objectives' || b.pageId === (contentWithAudio as any).learningObjectivesPage?.id)
       if (objectivesBlock) {
-        contentWithAudio.learningObjectivesPage.narration = objectivesBlock.text
+        (contentWithAudio as any).learningObjectivesPage.narration = objectivesBlock.text
         
         // CRITICAL FIX: Sync caption text to course content
         const objectivesCaption = captionFiles.find(f => f.blockNumber === objectivesBlock.blockNumber)
         if (objectivesCaption) {
-          contentWithAudio.learningObjectivesPage.caption = objectivesCaption.content
+          (contentWithAudio as any).learningObjectivesPage.caption = objectivesCaption.content
         }
       }
     }
     
     // Process topics - update both narration and media
-    contentWithAudio.topics.forEach((topic: Topic) => {
+    contentWithAudio.topics.forEach((topic: any) => {
       const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
       if (topicBlock) {
         // Update narration text
@@ -1703,7 +1864,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing audio from media array
-          topic.media = topic.media.filter((m: Media) => m.type !== 'audio')
+          topic.media = safeMediaFilter(topic.media, (m: Media) => m.type !== 'audio')
           // Add the new audio
           topic.media.push({
             id: audioFile.mediaId,
@@ -1719,7 +1880,7 @@ export function AudioNarrationWizard({
             topic.media = []
           }
           // Remove any existing caption from media array
-          topic.media = topic.media.filter((m: any) => m.type !== 'caption')
+          topic.media = safeMediaFilter(topic.media, (m: any) => m.type !== 'caption')
           // Add the new caption
           topic.media.push({
             id: captionFile.mediaId,
@@ -1734,11 +1895,11 @@ export function AudioNarrationWizard({
     })
     
     logger.log('[AudioNarrationWizard] Final content with audio:', {
-      welcomeMedia: contentWithAudio.welcomePage?.media?.filter((m: Media) => m.type === 'audio'),
-      objectivesMedia: contentWithAudio.learningObjectivesPage?.media?.filter((m: Media) => m.type === 'audio'),
-      topicMedia: contentWithAudio.topics?.map((t: Topic) => ({ 
-        id: t.id, 
-        audioMedia: t.media?.filter((m: Media) => m.type === 'audio') 
+      welcomeMedia: (contentWithAudio as any).welcomePage?.media?.filter((m: Media) => m.type === 'audio'),
+      objectivesMedia: (contentWithAudio as any).learningObjectivesPage?.media?.filter((m: Media) => m.type === 'audio'),
+      topicMedia: contentWithAudio.topics?.map((t: any) => ({
+        id: t.id,
+        audioMedia: t.media?.filter((m: any) => m.type === 'audio')
       }))
     })
     
@@ -1779,6 +1940,8 @@ export function AudioNarrationWizard({
           // Clear from cache first to ensure fresh replacement
           clearAudioFromCache(existingAudio.mediaId)
           await deleteMedia(existingAudio.mediaId)
+          // Invalidate getAllMedia cache since media was deleted
+          invalidateAllMediaCache()
           logger.log(`[AudioNarrationWizard] Deleted old audio before replacement: ${existingAudio.mediaId}`)
         } catch (error) {
           logger.error(`[AudioNarrationWizard] Failed to delete old audio: ${existingAudio.mediaId}`, error)
@@ -1797,7 +1960,10 @@ export function AudioNarrationWizard({
         })
       })
       logger.log('[AudioNarrationWizard] Audio stored successfully:', storedItem.id)
-      
+
+      // Invalidate getAllMedia cache since new media was added
+      invalidateAllMediaCache()
+
       // Create a fresh blob URL for the uploaded audio
       let url: string | undefined
       try {
@@ -1908,7 +2074,10 @@ export function AudioNarrationWizard({
       const storedItem = await storeMedia(file, block.pageId, 'caption', {
         blockNumber: block.blockNumber
       })
-      
+
+      // Invalidate getAllMedia cache since new media was added
+      invalidateAllMediaCache()
+
       setCaptionFiles(prev => {
         // Remove any existing caption for this block
         const filtered = prev.filter(f => f.blockNumber !== block.blockNumber)
@@ -1935,20 +2104,58 @@ export function AudioNarrationWizard({
     }
   }
 
+  // 🚀 LAZY LOADING: Cleanup function for old blob URLs
+  const cleanupOldBlobUrls = useCallback((keepAudioIds: Set<string> = new Set()) => {
+    const maxCachedBlobs = 3 // Keep only last 3 played audio blob URLs
+
+    // Get sorted entries by creation order (most recent first)
+    const sortedEntries = Array.from(currentlyLoadedBlobs.entries())
+
+    if (sortedEntries.length > maxCachedBlobs) {
+      // Revoke oldest blob URLs beyond the limit
+      const toRevoke = sortedEntries.slice(maxCachedBlobs)
+
+      toRevoke.forEach(([audioId, blobUrl]) => {
+        if (!keepAudioIds.has(audioId)) {
+          logger.log('[AudioNarrationWizard] 🚀 CLEANUP: Revoking old blob URL for', audioId, blobUrl)
+          URL.revokeObjectURL(blobUrl)
+
+          // Remove from tracking
+          setCurrentlyLoadedBlobs(prev => {
+            const newMap = new Map(prev)
+            newMap.delete(audioId)
+            return newMap
+          })
+
+          // Remove from blob URLs ref
+          const index = blobUrlsRef.current.indexOf(blobUrl)
+          if (index > -1) {
+            blobUrlsRef.current.splice(index, 1)
+          }
+        }
+      })
+    }
+  }, [currentlyLoadedBlobs])
+
   // Play audio for a specific block
   // FIX: Use TauriAudioPlayer instead of new Audio() for asset:// URL compatibility
   const playAudio = async (blockNumber: string) => {
     // Save current scroll position before any state changes
     const scrollY = window.scrollY
     const scrollX = window.scrollX
-    
+
     const audioFile = audioFiles.find(f => f.blockNumber === blockNumber)
     if (!audioFile) {
       logger.warn('[AudioNarrationWizard] No audio file found for block:', blockNumber)
       return
     }
-    
+
     logger.log('[AudioNarrationWizard] playAudio called for block:', blockNumber, 'audioFile:', audioFile)
+
+    // 🚀 LAZY LOADING: Cleanup old blob URLs before loading new ones
+    if (audioFile.mediaId) {
+      cleanupOldBlobUrls(new Set([audioFile.mediaId]))
+    }
     
     // Always prefer the URL from state as it's the most up-to-date after replacement
     let url = audioFile.url || undefined
@@ -1958,22 +2165,50 @@ export function AudioNarrationWizard({
       logger.log('[AudioNarrationWizard] Using asset URL directly for playback:', url)
       // Asset URLs can be played directly by the audio element
     }
-    // If no URL, we need to get one
+    // If no URL, we need to create blob URL on-demand (LAZY LOADING)
     else if (!url && audioFile.mediaId) {
-      logger.log('[AudioNarrationWizard] No URL, getting from media service for:', audioFile.mediaId)
-      
+      logger.log('[AudioNarrationWizard] 🚀 LAZY LOADING: Creating blob URL on-demand for:', audioFile.mediaId)
+
+      // Show loading indicator for this specific audio
+      setLoadingStates(prev => ({ ...prev, [audioFile.mediaId!]: true }))
+
       try {
-        const mediaData = await getMedia(audioFile.mediaId)
-        if (mediaData?.url) {
-          url = mediaData.url
-          logger.log('[AudioNarrationWizard] Got URL from media service:', url)
+        // 🚀 LAZY LOADING: Create blob URL only when user plays audio
+        const blobUrl = await createBlobUrl(audioFile.mediaId)
+        if (blobUrl) {
+          url = blobUrl
+          logger.log('[AudioNarrationWizard] 🚀 LAZY LOADING: Created blob URL on-demand:', url)
+
           // Update the audioFile with the new URL
-          setAudioFiles(prev => prev.map(f => 
+          setAudioFiles(prev => prev.map(f =>
             f.mediaId === audioFile.mediaId ? { ...f, url } : f
           ))
+
+          // Track for cleanup
+          blobUrlsRef.current.push(blobUrl)
+
+          // 🚀 LAZY LOADING: Track this blob URL for memory management
+          setCurrentlyLoadedBlobs(prev => {
+            const newMap = new Map(prev)
+            newMap.set(audioFile.mediaId!, blobUrl)
+            return newMap
+          })
+
+          // Update cache with blob URL
+          const cacheKey = `audio_${audioFile.mediaId}`
+          if (mediaCache.current.has(cacheKey)) {
+            const cached = mediaCache.current.get(cacheKey)
+            if (cached && typeof cached === 'object') {
+              mediaCache.current.set(cacheKey, { ...cached, url: blobUrl })
+            }
+          }
         }
       } catch (e) {
-        logger.error('[AudioNarrationWizard] Failed to get media URL:', e)
+        logger.error('[AudioNarrationWizard] 🚀 LAZY LOADING: Failed to create blob URL:', e)
+        setError('Failed to load audio. Please try again.')
+      } finally {
+        // Hide loading indicator
+        setLoadingStates(prev => ({ ...prev, [audioFile.mediaId!]: false }))
       }
     }
     // If we have a blob URL (from recording), use it directly
@@ -2025,6 +2260,8 @@ export function AudioNarrationWizard({
       if (fileToRemove.mediaId && deleteMedia) {
         try {
           await deleteMedia(fileToRemove.mediaId)
+          // Invalidate getAllMedia cache since media was deleted
+          invalidateAllMediaCache()
           logger.log(`[AudioNarrationWizard] Deleted audio media: ${fileToRemove.mediaId}`)
         } catch (error) {
           logger.error(`[AudioNarrationWizard] Failed to delete audio media: ${fileToRemove.mediaId}`, error)
@@ -2088,6 +2325,8 @@ export function AudioNarrationWizard({
       if (captionToRemove.mediaId && deleteMedia) {
         try {
           await deleteMedia(captionToRemove.mediaId)
+          // Invalidate getAllMedia cache since media was deleted
+          invalidateAllMediaCache()
           logger.log(`[AudioNarrationWizard] Deleted caption media: ${captionToRemove.mediaId}`)
         } catch (error) {
           logger.error(`[AudioNarrationWizard] Failed to delete caption media: ${captionToRemove.mediaId}`, error)
@@ -2192,7 +2431,10 @@ export function AudioNarrationWizard({
             percent: progress.percent
           })
         })
-        
+
+        // Invalidate getAllMedia cache since new media was added
+        invalidateAllMediaCache()
+
         // Create a fresh blob URL for the recorded audio
         let url: string | undefined
         try {
@@ -2342,17 +2584,40 @@ export function AudioNarrationWizard({
       return
     }
     
-    // Clean up previously created blob URLs to prevent memory leaks
+    // 🚀 SELECTIVE CLEANUP: Only clean up blob URLs for audio files (not captions or other media)
     if (blobUrlsRef.current && blobUrlsRef.current.length > 0) {
-      logger.log('[AudioNarrationWizard] Cleaning up previous blob URLs before bulk upload')
-      blobUrlsRef.current.forEach(url => {
+      logger.log('[AudioNarrationWizard] 🔧 SELECTIVE CLEANUP: Cleaning up audio blob URLs before bulk upload')
+
+      // Get current audio file URLs that need to be cleaned up
+      const audioUrlsToCleanup = audioFiles
+        .filter(audioFile => audioFile.url && audioFile.url.startsWith('blob:'))
+        .map(audioFile => audioFile.url!)
+
+      // Only revoke URLs that belong to existing audio files
+      audioUrlsToCleanup.forEach(url => {
         try {
           URL.revokeObjectURL(url)
+          logger.log(`[AudioNarrationWizard] 🔧 Revoked audio blob URL: ${url}`)
         } catch (e) {
-          logger.warn('[AudioNarrationWizard] Error revoking blob URL:', e)
+          logger.warn('[AudioNarrationWizard] Error revoking audio blob URL:', e)
         }
       })
-      blobUrlsRef.current = []
+
+      // Remove only the cleaned up URLs from tracking
+      blobUrlsRef.current = blobUrlsRef.current.filter(url => !audioUrlsToCleanup.includes(url))
+
+      // Also clean up the lazy loading blob URL tracking
+      setCurrentlyLoadedBlobs(prev => {
+        const newMap = new Map(prev)
+        audioFiles.forEach(audioFile => {
+          if (audioFile.mediaId && audioFile.url && audioUrlsToCleanup.includes(audioFile.url)) {
+            newMap.delete(audioFile.mediaId)
+          }
+        })
+        return newMap
+      })
+
+      logger.log(`[AudioNarrationWizard] 🔧 SELECTIVE CLEANUP: Cleaned up ${audioUrlsToCleanup.length} audio URLs, ${blobUrlsRef.current.length} other URLs preserved`)
     }
     
     // Declare variables outside try block so they're accessible in finally
@@ -2394,13 +2659,16 @@ export function AudioNarrationWizard({
     // Clear previous upload summary
     setAudioUploadSummary(null)
     
-    // Start operation tracking
-    const operationId = `bulk-audio-upload-${Date.now()}`
-    startOperation(operationId)
+    // CRITICAL FIX: Set bulk operation flag BEFORE starting operation to ensure correct timeout
+    setBulkOperation(true)
+    setIsBulkOperationActive(true) // Track bulk operation
     setIsUploading(true)
     setIsBulkAudioUploading(true) // Track audio upload specifically
-    setIsBulkOperationActive(true) // Track bulk operation
     setError(null)
+
+    // Start operation tracking AFTER bulk flags are set
+    const operationId = `bulk-audio-upload-${Date.now()}`
+    startOperation(operationId)
     
     try {
       debugLogger.debug('AudioNarrationWizard.handleAudioZipUpload', 'Creating JSZip instance')
@@ -2523,49 +2791,20 @@ export function AudioNarrationWizard({
             filename
           })
           logger.log(`[AudioNarrationWizard] Successfully stored audio ${storedItem.id} for block ${blockNumber}`)
-          
-          // Always ensure we get a valid URL for playback
-          let url: string | undefined
-          
-          // Use createBlobUrl - this is the canonical way to get blob URLs
-          try {
-            const blobUrl = await createBlobUrl(storedItem.id)
-            if (blobUrl) {
-              url = blobUrl
-              logger.log(`[AudioNarrationWizard] Got blob URL for audio ${storedItem.id}:`, url)
-              // Track blob URL for cleanup
-              if (!blobUrlsRef.current) {
-                blobUrlsRef.current = []
-              }
-              blobUrlsRef.current.push(url)
-            } else {
-              logger.error(`[AudioNarrationWizard] No blob URL returned for ${storedItem.id}`)
-            }
-          } catch (e) {
-            logger.error('[AudioNarrationWizard] Failed to create blob URL:', e)
-          }
-          
-          // Don't use fallbacks - if createBlobUrl fails, there's a real issue
-          // The mediaUrlService fallback doesn't work anyway (asset:// protocol not registered)
-          if (!url && storage?.currentProjectId) {
-            try {
-              const { mediaUrlService } = await import('../services/mediaUrl')
-              const assetUrl = await mediaUrlService.getMediaUrl(storage.currentProjectId, storedItem.id)
-              if (assetUrl) {
-                url = assetUrl
-                logger.log(`[AudioNarrationWizard] Got asset URL via mediaUrlService for ${storedItem.id}:`, assetUrl)
-              }
-            } catch (e) {
-              logger.error('[AudioNarrationWizard] Failed to generate URL using mediaUrlService:', e)
-            }
-          }
-          
-          // If still no URL, create an asset URL as placeholder that will be converted on playback
-          if (!url) {
-            // Create a fallback asset URL that TauriAudioPlayer can handle
-            url = `asset://localhost/${storage?.currentProjectId || 'project'}/media/${storedItem.id}.bin`
-            logger.warn(`[AudioNarrationWizard] Using fallback asset URL for ${storedItem.id}: ${url}`)
-          }
+
+          // Invalidate getAllMedia cache since new media was added
+          invalidateAllMediaCache()
+
+          // 🚀 LAZY LOADING CONSISTENCY FIX: Don't create blob URLs during bulk upload
+          // This ensures consistency with the lazy loading approach where URLs are created on-demand
+          let url: string | undefined = undefined // ⚡ No URL during bulk upload - will be created when user plays audio
+
+          logger.log(`[AudioNarrationWizard] 🚀 BULK UPLOAD: Stored audio ${storedItem.id} without blob URL (lazy loading)`)
+
+          // Note: Blob URLs will be created on-demand when user clicks play, ensuring:
+          // 1. Consistent behavior with non-bulk uploaded audio
+          // 2. Better memory management
+          // 3. Faster bulk upload process
           
           newAudioFiles.push({
             blockNumber,
@@ -2682,6 +2921,9 @@ export function AudioNarrationWizard({
       setIsBulkAudioUploading(false) // Clear the audio upload flag
       setIsBulkOperationActive(false) // Clear bulk operation flag
       setUploadProgress(null)
+
+      // Clear bulk operation flag for timeout management
+      setBulkOperation(false)
       
       // Clear bulk progress after a delay to show completion
       setTimeout(() => {
@@ -2752,12 +2994,15 @@ export function AudioNarrationWizard({
     // Clear previous upload summary
     setCaptionUploadSummary(null)
     
-    // Start operation tracking
+    // CRITICAL FIX: Set bulk operation flag BEFORE starting operation to ensure correct timeout
+    setBulkOperation(true)
+    setIsBulkOperationActive(true) // Track bulk operation
+    setIsUploading(true)
+    setError(null)
+
+    // Start operation tracking AFTER bulk flags are set
     const operationId = `bulk-caption-upload-${Date.now()}`
     startOperation(operationId)
-    setIsUploading(true)
-    setIsBulkOperationActive(true) // Track bulk operation
-    setError(null)
     
     try {
       debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Loading ZIP file')
@@ -2826,7 +3071,10 @@ export function AudioNarrationWizard({
                 const storedItem = await storeMedia(captionFile, block.pageId, 'caption', {
                   originalName: filename
                 })
-                
+
+                // Invalidate getAllMedia cache since new media was added
+                invalidateAllMediaCache()
+
                 // Retrieve the stored caption to ensure we have the content
                 let captionContent = content
                 try {
@@ -2940,6 +3188,9 @@ export function AudioNarrationWizard({
       setIsBulkOperationActive(false) // Clear bulk operation flag
       setCurrentProcessingFile(null) // Clear current processing file
       setCaptionProgress(null) // Clear caption progress
+
+      // Clear bulk operation flag for timeout management
+      setBulkOperation(false)
       debugLogger.debug('AudioNarrationWizard.handleCaptionZipUpload', 'Caption upload operation finished')
       
       // End the operation which will trigger save if no other operations are active
@@ -2981,10 +3232,16 @@ export function AudioNarrationWizard({
             <div className={styles.loadingContent}>
               <div className={styles.spinner} data-testid="loading-spinner" />
               <div className={styles.loadingText}>
-                <h3>Loading audio files...</h3>
-                {loadingProgress.total > 0 && (
+                <h3>Loading audio and caption files...</h3>
+                {loadingProgress.total > 0 && (loadingProgress as any).batch && (
                   <p className={styles.loadingSubtext}>
-                    Loading {loadingProgress.current} of {loadingProgress.total} files...
+                    Loading batch {(loadingProgress as any).batch} of {(loadingProgress as any).totalBatches}<br />
+                    ({loadingProgress.current} of {loadingProgress.total} files - {(loadingProgress as any).audioLoaded || 0}/{(loadingProgress as any).audioTotal || 0} audio, {(loadingProgress as any).captionLoaded || 0}/{(loadingProgress as any).captionTotal || 0} captions)
+                  </p>
+                )}
+                {loadingProgress.total > 0 && !(loadingProgress as any).batch && (
+                  <p className={styles.loadingSubtext}>
+                    Loading {loadingProgress.current} of {loadingProgress.total} files ({(loadingProgress as any).audioLoaded || 0}/{(loadingProgress as any).audioTotal || 0} audio, {(loadingProgress as any).captionLoaded || 0}/{(loadingProgress as any).captionTotal || 0} captions)...
                   </p>
                 )}
                 {loadingProgress.total === 0 && (
@@ -3138,6 +3395,8 @@ export function AudioNarrationWizard({
                     
                     const audioFile = audioFiles.find(f => f.blockNumber === block.blockNumber)
                     const isCurrentlyPlaying = playingBlockNumber === block.blockNumber
+                    // 🚀 LAZY LOADING: Check if this audio is currently loading
+                    const isLoadingThisAudio = audioFile?.mediaId ? loadingStates[audioFile.mediaId] || false : false
                     
                     return (
                       <div key={block.id} id={`block-${block.blockNumber}`}>
@@ -3170,6 +3429,7 @@ export function AudioNarrationWizard({
                           isRecording={recordingBlockId === block.id}
                           recordingId={recordingBlockId}
                           isPlaying={isCurrentlyPlaying}
+                          isLoadingAudio={isLoadingThisAudio}
                         />
                       </div>
                     )
@@ -3731,7 +3991,10 @@ export function AudioNarrationWizard({
                 }
               }
             }
-            
+
+            // Invalidate getAllMedia cache since all media was deleted
+            invalidateAllMediaCache()
+
             // Clear state FIRST
             setAudioFiles([])
             setCaptionFiles([])
@@ -3740,7 +4003,7 @@ export function AudioNarrationWizard({
             markDirty('media')
             
             // Now explicitly clear media arrays from course content
-            const clearedContent = JSON.parse(JSON.stringify(courseContent))
+            const clearedContent = safeDeepClone(courseContent)
             
             // Clear welcome page media
             if ('welcomePage' in clearedContent && clearedContent.welcomePage) {
@@ -3760,7 +4023,7 @@ export function AudioNarrationWizard({
             
             // Clear all topic media
             if (clearedContent.topics && Array.isArray(clearedContent.topics)) {
-              clearedContent.topics.forEach((topic: Topic) => {
+              clearedContent.topics.forEach((topic: any) => {
                 topic.media = []
                 // Also clear the deprecated audioId and captionId fields
                 delete (topic as any).audioId

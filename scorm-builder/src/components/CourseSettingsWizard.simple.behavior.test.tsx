@@ -2,7 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { CourseSettingsWizard, type CourseSettings } from './CourseSettingsWizard'
-import { TestProviders } from '../test/TestProviders'
+import { AllTheProviders } from '../test/TestProviders'
 
 describe('CourseSettingsWizard - Simple Import Test', () => {
   const mockCourseContent = {
@@ -17,14 +17,14 @@ describe('CourseSettingsWizard - Simple Import Test', () => {
 
   it('should render CourseSettingsWizard without crashing', () => {
     render(
-      <TestProviders>
+      <AllTheProviders>
         <CourseSettingsWizard
           courseContent={mockCourseContent}
           courseSeedData={mockCourseSeedData}
           onNext={() => {}}
           onBack={() => {}}
         />
-      </TestProviders>
+      </AllTheProviders>
     )
 
     expect(screen.getByText('Course Settings')).toBeInTheDocument()
@@ -33,18 +33,18 @@ describe('CourseSettingsWizard - Simple Import Test', () => {
 
   it('should show the audio completion checkbox', () => {
     render(
-      <TestProviders>
+      <AllTheProviders>
         <CourseSettingsWizard
           courseContent={mockCourseContent}
           courseSeedData={mockCourseSeedData}
           onNext={() => {}}
           onBack={() => {}}
         />
-      </TestProviders>
+      </AllTheProviders>
     )
 
     const checkbox = screen.getByRole('checkbox', {
-      name: /require audio completion before page navigation/i
+      name: /require audio completion/i
     })
     expect(checkbox).toBeInTheDocument()
     expect(checkbox).not.toBeChecked()

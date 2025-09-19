@@ -251,23 +251,5 @@ export function validateMediaPageAssociation(item: MediaItem, pageId: string): b
 }
 
 // ============================================================================
-// EXPORT ALL UTILITIES
+// EXPORT NOTE: All utilities are exported inline as named exports above
 // ============================================================================
-
-export {
-  // Schemas
-  MediaItemSchema,
-  CourseContentSchema,
-  
-  // Normalization functions
-  normalizeMediaItem,
-  normalizeCourseContent,
-  mediaItemToBackend,
-  
-  // YouTube utilities
-  extractYouTubeUrl,
-  
-  // Validation
-  validateYouTubeMedia,
-  validateMediaPageAssociation,
-};

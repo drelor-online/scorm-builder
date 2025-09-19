@@ -76,6 +76,8 @@ impl<'a> HtmlGenerator<'a> {
             "course_title": request.course_title,
             "has_objectives": request.learning_objectives_page.is_some(),
             "enable_csp": request.enable_csp.unwrap_or(false), // Default to false for LMS compatibility
+            "show_progress": request.show_progress.unwrap_or(true),  // Add show_progress setting
+            "show_outline": request.show_outline.unwrap_or(true),    // Add show_outline setting
             "topics": request.topics.iter().map(|t| json!({
                 "id": t.id,
                 "title": t.title

@@ -3,10 +3,16 @@ import { CourseSeedData } from '../types/course'
 import { PageLayout } from './PageLayout'
 import { useFormChanges } from '../hooks/useFormChanges'
 import { AutoSaveBadge } from './AutoSaveBadge'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Settings } from 'lucide-react'
 import { Card, Button } from './DesignSystem'
 import './DesignSystem/designSystem.css'
 import { useNotifications } from '../contexts/NotificationContext'
+import { usePromptTuning } from '../hooks/usePromptTuning'
+import { buildAIPrompt, getSettingsChangeSummary } from '../utils/promptBuilder'
+import { PromptTuningModal } from './PromptTuningModal'
+import { PromptTuningSettings, DEFAULT_PROMPT_TUNING_SETTINGS } from '../types/promptTuning'
+import { usePersistentStorage } from '../hooks/usePersistentStorage'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 import styles from './AIPromptGenerator.module.css'
 
 interface AIPromptGeneratorProps {
@@ -35,23 +41,59 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   const { success, error: notifyError } = useNotifications()
   const [customPrompt, setCustomPrompt] = useState('')
   const [mounted, setMounted] = useState(false)
+  const [isPromptTuningModalOpen, setIsPromptTuningModalOpen] = useState(false)
+  const [promptTuningSettings, setPromptTuningSettings] = useState<PromptTuningSettings>(DEFAULT_PROMPT_TUNING_SETTINGS)
+
+  // Storage integration
+  const storage = usePersistentStorage()
+
+  // Unsaved changes integration
+  const { markDirty, resetDirty } = useUnsavedChanges()
+
+  // Check if settings are default
+  const isDefault = JSON.stringify(promptTuningSettings) === JSON.stringify(DEFAULT_PROMPT_TUNING_SETTINGS)
+
   // Removed history functionality per UX requirements
   
   // Navigation guard hook - we treat "has copied prompt" as a form change
   const {
     attemptNavigation,
-    checkForChanges
+    checkForChanges,
+    showNavigationWarning,
+    confirmNavigation,
+    cancelNavigation
   } = useFormChanges({
     initialValues: { hasCopied: false }
   })
   
   // Custom prompt state is tracked but not auto-saved to localStorage anymore
   
-  // Set mounted flag
+  // Set mounted flag and load prompt tuning settings
   useEffect(() => {
     setMounted(true)
-    return () => setMounted(false)
-  }, [])
+
+    // Load prompt tuning settings from project storage
+    const loadPromptTuningSettings = async () => {
+      try {
+        const savedSettings = await storage.getContent('promptTuningSettings')
+        if (savedSettings) {
+          setPromptTuningSettings(savedSettings)
+        }
+      } catch (error) {
+        console.warn('[AIPromptGenerator] Failed to load prompt tuning settings:', error)
+        // Continue with default settings
+      }
+    }
+
+    if (storage.currentProjectId) {
+      loadPromptTuningSettings()
+    }
+
+    return () => {
+      setMounted(false)
+      resetDirty('promptTuning')
+    }
+  }, [storage])
   
   // Track when user copies the prompt
   useEffect(() => {
@@ -63,170 +105,8 @@ export const AIPromptGenerator: React.FC<AIPromptGeneratorProps> = ({
   }, [mounted, copied, hasCopiedPrompt, checkForChanges])
 
   const generatePrompt = React.useCallback((): string => {
-    if (customPrompt) return customPrompt
-    // Only use topics from the textarea (customTopics)
-    const topicsText = courseSeedData?.customTopics?.length > 0 
-      ? courseSeedData.customTopics.map(topic => `- ${topic}`).join('\n')
-      : '- Introduction\n- Main Content\n- Summary'
-
-    return `Please create a comprehensive SCORM course JSON structure for the following course:
-
-Title: ${courseSeedData?.courseTitle || 'Untitled Course'}
-Difficulty Level: ${getDifficultyLabel(courseSeedData?.difficulty || 3)} (${courseSeedData?.difficulty || 3}/5)
-Template: ${courseSeedData?.template || 'standard'}
-
-Topics to cover:
-${topicsText}
-
-Generate a JSON response with the following structure:
-{
-  "welcomePage": {
-    "id": "welcome",
-    "title": "Welcome to [Course Title]",
-    "content": "HTML fragment for welcome content",
-    "narration": "Narration text for welcome page (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
-    "imageKeywords": ["welcome", "introduction"],
-    "imagePrompts": ["AI image generation prompt for welcome"],
-    "videoSearchTerms": ["course introduction", "overview"],
-    "duration": 2
-    // NO knowledge check for Welcome page
-  },
-  "learningObjectivesPage": {
-    "id": "learning-objectives",
-    "title": "Learning Objectives",
-    "content": "HTML fragment listing learning objectives",
-    "narration": "Narration text for learning objectives (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
-    "imageKeywords": ["objectives", "goals"],
-    "imagePrompts": ["AI image generation prompt for objectives"],
-    "videoSearchTerms": ["learning goals", "course objectives"],
-    "duration": 3
-    // NO knowledge check for Learning Objectives page
-  },
-  "topics": [
-    {
-      "id": "topic-0", // Use numeric IDs: topic-0, topic-1, topic-2, etc.
-      "title": "Descriptive title derived from the topic (not a direct copy)",
-      "content": "HTML fragment with headings, paragraphs, lists, tables, etc. Example: <h2>Introduction</h2><p>Content here...</p><ul><li>Item 1</li></ul>",
-      "narration": "Narration text for this page (1-2 minutes, approximately 150-300 words, maximum 1000 characters)",
-      "imageKeywords": ["keyword1", "keyword2"],
-      "imagePrompts": ["AI image generation prompt"],
-      "videoSearchTerms": ["search term 1", "search term 2"], // YouTube search terms for finding relevant tutorial videos
-      "duration": 5,
-      "knowledgeCheck": {
-        "questions": [
-          {
-            "id": "kc-question-id",
-            "type": "multiple-choice|true-false|fill-in-the-blank",
-            "question": "Question text",
-            "options": ["Option A", "Option B", "Option C", "Option D"], // for multiple choice
-            "correctAnswer": "Option A", // or true/false, or "answer text" for fill-in-blank
-            "blank": "The _____ is important for safety", // for fill-in-the-blank only
-            "feedback": {
-              "correct": "Great job! You got it right.",
-              "incorrect": "Not quite. Review the material and try again."
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "assessment": {
-    "questions": [
-      {
-        "id": "assessment-question-id",
-        "type": "multiple-choice|true-false", // NO fill-in-the-blank for assessment
-        "question": "Question text",
-        "options": ["Option A", "Option B", "Option C", "Option D"], // for multiple choice
-        "correctAnswer": "Option A", // or true/false
-        "feedback": {
-          "correct": "Correct feedback",
-          "incorrect": "Incorrect feedback"
-        }
-      }
-    ],
-    "passMark": 80,
-    "narration": null // No narration for the assessment page
-  }
-}
-
-Please ensure:
-1. Always include Welcome and Learning Objectives pages (these are automatically added to every course)
-   - Welcome page ID must be "welcome" (as shown in the JSON structure above)
-   - Learning Objectives page ID must be "learning-objectives" (as shown in the JSON structure above)
-   - Topic IDs must be "topic-0", "topic-1", "topic-2", etc. (numeric sequence)
-2. Welcome page should introduce the course with engaging welcome content
-3. Learning Objectives page should list clear learning objectives for the course
-4. NO knowledge check for Welcome page or Learning Objectives page
-5. Content must be provided as an HTML fragment with proper semantic markup (headings, paragraphs, lists, tables, etc.)
-6. Do NOT include bulletPoints - all content should be in the HTML fragment
-7. Each page should have exactly ONE narration (single narration per page, 1-2 minutes long, approximately 150-300 words, maximum 1000 characters)
-8. Titles should be descriptive and derived from the topic, not a direct copy of the topic name
-9. Knowledge checks can include multiple choice, true/false, or fill-in-the-blank questions with feedback for correct and incorrect answers
-10. Final assessment should ONLY contain multiple choice or true/false questions (NO fill-in-the-blank)
-11. Assessment page should have NO narration (narration: null)
-12. Include at least 10 questions in the final assessment
-13. Image keywords and video search terms should be specific and relevant
-14. Total course duration should be appropriate for the content
-
-Important Notes:
-- Welcome & Learning Objectives: These pages are automatically added to every course - always include them
-- HTML Content: Write all content as HTML fragments including <h2>, <h3>, <p>, <ul>, <ol>, <table>, etc.
-- Single Narration: Each topic page gets exactly one narration text (150-300 words for 1-2 minutes of speech, maximum 1000 characters), not multiple narrations
-- Derived Titles: If topic is "Safety procedures in the workplace", title could be "Workplace Safety Fundamentals"
-- Knowledge Checks: Mix question types - multiple choice, true/false, and fill-in-the-blank. Include encouraging feedback for correct answers and instructive feedback for incorrect answers
-- Assessment Only: The final assessment should only use multiple choice or true/false questions
-- No Assessment Narration: The assessment page should not include any narration
-- No knowledge check for Welcome page
-- No knowledge check for Learning Objectives page
-- videoSearchTerms: Concise terms for YouTube searches (e.g., "workplace safety training", "hazard identification")
-- All media selections should be relevant and enhance the learning experience
-
-MATHEMATICAL EXPRESSIONS - DO NOT USE LATEX:
-- NEVER use LaTeX syntax ($ symbols with backslashes like $\\Omega$)
-- For Greek letters: Use HTML entities (&Omega;, &alpha;, &pi;) or Unicode (Ω, α, π)
-- For math operators: Use HTML entities (&times;, &divide;, &plusmn;) or Unicode (×, ÷, ±)
-- For superscripts: Use <sup>2</sup> not ^2
-- For subscripts: Use <sub>2</sub> not _2
-- For fractions: Use "1/2" or "½" (Unicode)
-- Example: "Resistance (Ω)" NOT "Resistance ($\\Omega$)"
-- Example: "E = mc<sup>2</sup>" NOT "E = mc^2"
-- Example: "V = I × R" NOT "$ V = I \\times R $"
-
-CRITICAL JSON FORMATTING RULES - MUST FOLLOW EXACTLY:
-1. Use ONLY straight quotes (ASCII 34), NEVER smart/curly quotes:
-   - CORRECT: "text"
-   - WRONG: "text" or "text" (these are curly quotes - DO NOT USE)
-   
-2. Use ONLY straight apostrophes (ASCII 39) in contractions:
-   - CORRECT: don't, it's, you're, we're
-   - WRONG: don't, it's, you're, we're (these have curly apostrophes - DO NOT USE)
-   
-3. ESCAPE all quotes inside string values:
-   - CORRECT: "He said \\"Hello\\" to me"
-   - WRONG: "He said "Hello" to me"
-   
-4. For HTML content inside JSON strings, ensure proper escaping:
-   - CORRECT: "<p class=\\"highlight\\">Text</p>"
-   - WRONG: "<p class="highlight">Text</p>"
-   
-5. AVOID LaTeX expressions ($ symbols with backslashes). Instead use:
-   - HTML entities: &Omega; &times; &pi; &alpha; &le; &ge;
-   - Unicode: Ω × π α ≤ ≥
-   - HTML tags: <sup>2</sup> for superscript, <sub>2</sub> for subscript
-   - Example: "V = I × R" or "V = I &times; R" (NOT "$ V = I \\times R $")
-   
-6. NEVER include comments in the JSON (no // or /* */ allowed)
-
-7. Ensure proper comma placement - no trailing commas
-
-8. Replace these characters if you're tempted to use them:
-   - Replace — (em dash) with --
-   - Replace – (en dash) with -
-   - Replace … (ellipsis) with ...
-   - Replace any other non-ASCII characters with ASCII equivalents
-
-REMEMBER: The JSON must parse without any errors. Test mentally that all quotes are balanced and properly escaped.`
-  }, [customPrompt, courseSeedData])
+    return buildAIPrompt(courseSeedData, promptTuningSettings, customPrompt)
+  }, [customPrompt, courseSeedData, promptTuningSettings])
 
   const handleCopy = async () => {
     const prompt = generatePrompt()
@@ -263,6 +143,38 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
   const getDifficultyLabel = (level: number): string => {
     const labels = ['Basic', 'Easy', 'Medium', 'Hard', 'Expert']
     return labels[level - 1] || 'Medium'
+  }
+
+  // Prompt tuning modal handlers
+  const handleOpenPromptTuning = () => {
+    setIsPromptTuningModalOpen(true)
+  }
+
+  const handleClosePromptTuning = () => {
+    setIsPromptTuningModalOpen(false)
+  }
+
+  const handleApplyPromptTuning = async (newSettings: PromptTuningSettings) => {
+    try {
+      // Save settings to project storage
+      await storage.saveContent('promptTuningSettings', newSettings)
+
+      // Update local state
+      setPromptTuningSettings(newSettings)
+
+      // Mark as dirty for unsaved changes tracking
+      markDirty('promptTuning')
+
+      const changes = getSettingsChangeSummary(newSettings)
+      if (changes.length > 0) {
+        success(`Prompt settings updated: ${changes.join(', ')}`)
+      } else {
+        success('Prompt settings reset to defaults')
+      }
+    } catch (error) {
+      console.error('[AIPromptGenerator] Failed to save prompt tuning settings:', error)
+      notifyError('Failed to save prompt tuning settings. Please try again.')
+    }
   }
 
   const prompt = generatePrompt()
@@ -302,6 +214,7 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         <Card>
           <ol className={styles.instructionsList}>
             <li>Copy the prompt to your clipboard</li>
+            <li>Review your Prompt Tuning presets so the AI response matches the narration, media, and assessment style you expect</li>
             <li>Paste it into your preferred AI chatbot (ChatGPT, Claude, etc.)</li>
             <li>Copy the JSON response from the AI</li>
             <li>Click Next to proceed to the JSON import step</li>
@@ -323,6 +236,11 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
             <p className={styles.courseInfoItem}>
               <strong className={styles.courseInfoLabel}>Template:</strong> {courseSeedData.template}
             </p>
+            {!isDefault && (
+              <p className={styles.courseInfoItem}>
+                <strong className={styles.courseInfoLabel}>Prompt Settings:</strong> Custom ({getSettingsChangeSummary(promptTuningSettings).length} changes)
+              </p>
+            )}
           </div>
         </Card>
       </div>
@@ -335,24 +253,38 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
         <Card>
           {/* Copy button above textarea for better accessibility */}
           <div className={styles.topButtonContainer}>
-            <Button
-              onClick={handleCopy}
-              aria-label="Copy prompt to clipboard"
-              data-testid="copy-prompt-button-top"
-              variant={copied ? 'success' : 'secondary'}
-              size="medium"
-              className={styles.copyButton}
-            >
-              {copied ? (
-                <>
-                  <Check size={16} className={styles.copyButtonIcon} /> Copied!
-                </>
-              ) : (
-                <>
-                  <Copy size={16} className={styles.copyButtonIcon} /> Copy Prompt
-                </>
-              )}
-            </Button>
+            <div className={styles.buttonGroup}>
+              <Button
+                onClick={handleCopy}
+                aria-label="Copy prompt to clipboard"
+                data-testid="copy-prompt-button-top"
+                variant={copied ? 'success' : 'secondary'}
+                size="medium"
+                className={styles.copyButton}
+              >
+                {copied ? (
+                  <>
+                    <Check size={16} className={styles.copyButtonIcon} /> Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} className={styles.copyButtonIcon} /> Copy Prompt
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleOpenPromptTuning}
+                aria-label="Customize prompt generation settings"
+                data-testid="prompt-tuning-button"
+                variant={!isDefault ? 'primary' : 'secondary'}
+                size="medium"
+                className={styles.tuningButton}
+                title="Customize how AI prompts are generated"
+              >
+                <Settings size={16} className={styles.tuningButtonIcon} />
+                {!isDefault ? 'Custom Settings' : 'Prompt Tuning'}
+              </Button>
+            </div>
           </div>
           
           <textarea
@@ -369,6 +301,41 @@ REMEMBER: The JSON must parse without any errors. Test mentally that all quotes 
 
 
     </PageLayout>
+
+      {/* Navigation Warning Dialog */}
+      {showNavigationWarning && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="navigation-warning-title">
+          <div className={styles.modalContent}>
+            <h2 id="navigation-warning-title">Unsaved Changes</h2>
+            <p>You have copied the prompt. Are you sure you want to leave without continuing to the next step?</p>
+            <div className={styles.modalActions}>
+              <Button
+                onClick={confirmNavigation}
+                variant="primary"
+                size="medium"
+                data-testid="confirm-navigation"
+              >
+                Yes, Leave
+              </Button>
+              <Button
+                onClick={cancelNavigation}
+                variant="secondary"
+                size="medium"
+                data-testid="cancel-navigation"
+              >
+                Stay on Page
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PromptTuningModal
+        isOpen={isPromptTuningModalOpen}
+        onClose={handleClosePromptTuning}
+        onApply={handleApplyPromptTuning}
+        initialSettings={promptTuningSettings}
+      />
   </>
   )
 }

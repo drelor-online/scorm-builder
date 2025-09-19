@@ -2,12 +2,16 @@ import { useEffect, useCallback, useState } from 'react';
 import { MockFileStorage } from '../services/MockFileStorage';
 import { FileStorage } from '../services/FileStorage';
 import { isTauriEnvironment } from '../config/environment';
+import { extractProjectId } from '../utils/projectIdExtraction';
 
-export function usePersistentStorage() {
-  // Use lazy initialization inside the hook to avoid circular dependency issues
+export function usePersistentStorage(providedFileStorage?: FileStorage) {
+  // Use provided FileStorage instance (for testing) or create singleton instance
   const [fileStorage] = useState<FileStorage>(() => {
-    return isTauriEnvironment() 
-      ? new FileStorage() 
+    if (providedFileStorage) {
+      return providedFileStorage;
+    }
+    return isTauriEnvironment()
+      ? FileStorage.getInstance()
       : new MockFileStorage() as any as FileStorage;
   });
   
@@ -19,6 +23,8 @@ export function usePersistentStorage() {
     async function initialize() {
       try {
         await fileStorage.initialize();
+        // Sync initial state with FileStorage
+        setCurrentProjectId(fileStorage.currentProjectId);
         setIsInitialized(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize storage');
@@ -27,9 +33,28 @@ export function usePersistentStorage() {
     initialize();
   }, []);
 
+  // Polling mechanism to keep React state synchronized with FileStorage
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const syncInterval = setInterval(() => {
+      const actualProjectId = fileStorage.currentProjectId;
+      if (actualProjectId !== currentProjectId) {
+        console.log('[usePersistentStorage] Syncing React state with FileStorage:', {
+          reactState: currentProjectId,
+          fileStorageState: actualProjectId
+        });
+        setCurrentProjectId(actualProjectId);
+      }
+    }, 100); // Check every 100ms for sync
+
+    return () => clearInterval(syncInterval);
+  }, [isInitialized, currentProjectId, fileStorage]);
+
   const createProject = useCallback(async (name: string) => {
     const project = await fileStorage.createProject(name);
-    setCurrentProjectId(project.id);
+    // Use fileStorage.currentProjectId to ensure consistency
+    setCurrentProjectId(fileStorage.currentProjectId);
     return project;
   }, []);
 
@@ -80,16 +105,38 @@ export function usePersistentStorage() {
       
       // Report finalizing phase
       onProgress?.({ phase: 'finalizing', percent: 95, message: 'Finalizing workspace setup...' });
-      
-      setCurrentProjectId(projectId);
-      
-      // RACE CONDITION FIX: Ensure React state update flushes before completion signal
-      // This prevents coordination wrapper from declaring success before currentProjectId is set
-      await Promise.resolve(); // Flush microtask queue to ensure state update propagates
-      
-      // Small delay to ensure smooth transition (skip in tests)
-      if (!import.meta.env.VITEST) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+
+      // FIXED STATE SYNCHRONIZATION: Set React state and verify FileStorage consistency
+      const actualProjectId = fileStorage.currentProjectId;
+      setCurrentProjectId(actualProjectId);
+
+      // Wait for FileStorage to be in a consistent state (no closure issues)
+      // CONSISTENCY FIX: Use extractProjectId for comparison to match coordinatedProjectLoading
+      const expectedProjectId = extractProjectId(projectId);
+      const maxAttempts = 10; // 1 second max wait
+      let attempts = 0;
+      while (attempts < maxAttempts) {
+        // Check FileStorage directly (not closure variables)
+        const freshProjectId = fileStorage.currentProjectId;
+        if (freshProjectId === expectedProjectId && freshProjectId !== null) {
+          console.log('[usePersistentStorage] FileStorage state verified after', attempts * 100, 'ms', {
+            originalProjectId: projectId,
+            expectedProjectId,
+            freshProjectId
+          });
+          // Force final React state update with the verified value
+          setCurrentProjectId(freshProjectId);
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+
+      if (attempts >= maxAttempts) {
+        console.warn('[usePersistentStorage] State synchronization timeout - proceeding anyway');
+        // Force final update even if timeout
+        setCurrentProjectId(fileStorage.currentProjectId);
       }
       
       // Complete
@@ -103,7 +150,8 @@ export function usePersistentStorage() {
   const openProjectFromFile = useCallback(async () => {
     const project = await fileStorage.loadProjectFromFile();
     if (project) {
-      setCurrentProjectId(project.id);
+      // Use fileStorage.currentProjectId to ensure consistency
+      setCurrentProjectId(fileStorage.currentProjectId);
     }
   }, []);
 

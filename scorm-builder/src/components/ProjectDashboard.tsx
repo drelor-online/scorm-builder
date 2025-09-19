@@ -215,17 +215,29 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
   async function loadProjects() {
     if (!storage.isInitialized) {
       debugLogger.warn('ProjectDashboard.loadProjects', 'Storage not initialized, skipping load')
+      console.warn('[ProjectDashboard] ⚠️ Storage not initialized, cannot load projects')
       return
     }
-    
+
     try {
       setLoading(true)
       debugLogger.info('ProjectDashboard.loadProjects', 'Starting to load projects')
-      
+      console.log('[ProjectDashboard] 🔍 Starting to load projects...')
+
       await measureAsync('loadProjects', async () => {
+        console.log('[ProjectDashboard] 📡 Calling storage.listProjects()...')
         const projectList = await storage.listProjects()
+        console.log('[ProjectDashboard] 📡 Calling storage.getRecentProjects()...')
         const recentList = await storage.getRecentProjects()
-        
+
+        console.log('[ProjectDashboard] 📊 Raw backend response:', {
+          projectListType: typeof projectList,
+          projectListLength: Array.isArray(projectList) ? projectList.length : 'not an array',
+          projectListSample: Array.isArray(projectList) && projectList.length > 0 ? projectList[0] : null,
+          recentListType: typeof recentList,
+          recentListLength: Array.isArray(recentList) ? recentList.length : 'not an array'
+        })
+
         debugLogger.debug('ProjectDashboard.loadProjects', 'Projects retrieved', {
           totalProjects: projectList.length,
           recentProjects: recentList.length
@@ -261,17 +273,27 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           recentProjects: validRecentProjects.length,
           projectNames: validProjects.map(p => p.name)
         })
-        
+
+        console.log('[ProjectDashboard] ✅ Final project counts:', {
+          mainProjects: mainProjects.length,
+          recentProjects: validRecentProjects.length,
+          totalValidProjects: validProjects.length,
+          mainProjectNames: mainProjects.map(p => p.name),
+          recentProjectNames: validRecentProjects.map(p => p.name)
+        })
+
         setProjects(mainProjects)
         setRecentProjects(validRecentProjects)
       })
     } catch (error) {
       debugLogger.error('ProjectDashboard.loadProjects', 'Failed to load projects', error)
+      console.error('[ProjectDashboard] ❌ Error loading projects:', error)
       setProjects([]) // Set empty array on error
       setRecentProjects([])
     } finally {
       setLoading(false)
       debugLogger.debug('ProjectDashboard.loadProjects', 'Load complete')
+      console.log('[ProjectDashboard] 🏁 Load complete')
     }
   }
   

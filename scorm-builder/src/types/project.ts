@@ -1,5 +1,7 @@
 import type { CourseSeedData } from './course'
 import type { CourseContentUnion, Activity, Quiz } from './aiPrompt'
+import type { PromptTuningSettings } from './promptTuning'
+import type { CourseSettings } from '../components/CourseSettingsWizard'
 
 export interface ProjectData {
   // Core project info
@@ -24,6 +26,8 @@ export interface ProjectData {
   activities?: Activity[] // Legacy format activities
   quiz?: Quiz // Legacy format quiz
   scormSettings?: ScormSettings
+  promptTuningSettings?: PromptTuningSettings
+  courseSettings?: CourseSettings
   
   // Workflow state
   currentStep: string

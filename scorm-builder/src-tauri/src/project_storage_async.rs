@@ -204,15 +204,33 @@ fn validate_project_data(project: &ProjectFile) -> Result<(), String> {
 /// List all project files in the projects directory
 pub fn list_project_files() -> Result<Vec<PathBuf>, String> {
     let projects_dir = get_projects_directory()?;
-    
+    eprintln!("[RUST] 📂 Scanning projects directory: {}", projects_dir.display());
+
     let mut project_files = Vec::new();
-    
-    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("scormproj") {
-                project_files.push(path);
+
+    match std::fs::read_dir(&projects_dir) {
+        Ok(entries) => {
+            let mut entry_count = 0;
+            let mut scormproj_count = 0;
+
+            for entry in entries.flatten() {
+                entry_count += 1;
+                let path = entry.path();
+                eprintln!("[RUST] 📄 Found file: {}", path.display());
+
+                if path.extension().and_then(|s| s.to_str()) == Some("scormproj") {
+                    scormproj_count += 1;
+                    eprintln!("[RUST] ✅ Valid .scormproj file: {}", path.display());
+                    project_files.push(path);
+                }
             }
+
+            eprintln!("[RUST] 📊 Directory scan complete - {} total files, {} .scormproj files",
+                     entry_count, scormproj_count);
+        },
+        Err(err) => {
+            eprintln!("[RUST] ❌ Failed to read projects directory: {}", err);
+            return Err(format!("Failed to read projects directory '{}': {}", projects_dir.display(), err));
         }
     }
     

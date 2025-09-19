@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react'
 import { Button } from './DesignSystem/Button'
+import { LoadingSpinner } from './DesignSystem/LoadingSpinner'
 import styles from './UnsavedChangesDialog.module.css'
 
 interface UnsavedChangesDialogProps {
   isOpen: boolean
   currentProjectName: string
+  isSaving?: boolean
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
@@ -13,6 +15,7 @@ interface UnsavedChangesDialogProps {
 export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
   isOpen,
   currentProjectName,
+  isSaving = false,
   onSave,
   onDiscard,
   onCancel
@@ -80,20 +83,33 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
               ref={firstFocusableRef}
               onClick={onCancel}
               variant="secondary"
+              disabled={isSaving}
             >
               Cancel
             </Button>
             <Button
               onClick={onDiscard}
               variant="danger"
+              disabled={isSaving}
             >
               Discard Changes
             </Button>
             <Button
               onClick={onSave}
               variant="primary"
+              disabled={isSaving}
             >
-              Save Project
+              {isSaving ? (
+                <div 
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  data-testid="save-loading-spinner"
+                >
+                  <LoadingSpinner size="small" />
+                  Saving...
+                </div>
+              ) : (
+                'Save Project'
+              )}
             </Button>
           </div>
         </div>

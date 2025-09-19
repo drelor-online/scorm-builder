@@ -71,7 +71,9 @@ echo.
 :: Build Tauri in debug mode with console window
 echo.
 echo Building Tauri application in debug mode...
-call npx tauri build --no-bundle --debug
+set RUST_LOG=debug
+set RUST_BACKTRACE=1
+call npx tauri build --debug
 if errorlevel 1 (
     echo ERROR: Tauri debug build failed
     exit /b 1
@@ -100,27 +102,93 @@ if exist scorm-builder\src-tauri\target\debug\*.dll (
     copy scorm-builder\src-tauri\target\debug\*.dll portable-build\SCORM-Builder-Debug\
 )
 
-:: Create a launcher that shows console output
+:: Create debug readme for beta testers
+echo DEBUGGING INSTRUCTIONS FOR BETA TESTERS > portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo ========================================= >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo This is a DEBUG version of SCORM Builder for troubleshooting. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo HOW TO RUN: >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 1. Double-click launch-with-console.bat to run with debug output >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 2. OR double-click SCORM-Builder-Debug.exe to run normally >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo DEBUGGING FEATURES: >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 1. Press F12 in the app to open Developer Tools >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 2. Check the Console tab for JavaScript errors >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 3. Check the Network tab for failed resource loads >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 4. Console output is saved to debug-logs.txt >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo REPORTING ISSUES: >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 1. Run launch-with-console.bat when reproducing the issue >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 2. Include debug-logs.txt when reporting bugs >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 3. Include screenshots of any error messages >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo 4. Include F12 Developer Tools Console output if applicable >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+echo. >> portable-build\SCORM-Builder-Debug\DEBUG-README.txt
+
+:: Create a launcher that shows console output and captures logs
 echo @echo off > portable-build\SCORM-Builder-Debug\launch-with-console.bat
-echo echo Starting SCORM Builder Debug Version... >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
-echo echo Press Ctrl+C to close if application hangs >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo title SCORM Builder Debug Console >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo set RUST_LOG=debug >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo set RUST_BACKTRACE=1 >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo ===================================== >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo   SCORM Builder Debug Version >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo ===================================== >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Starting with debug logging enabled... >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Logs will be saved to debug-logs.txt >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Press Ctrl+C to force close if needed >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
 echo echo. >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
-echo SCORM-Builder-Debug.exe >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Starting at %%date%% %%time%% > debug-logs.txt >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo SCORM-Builder-Debug.exe 2^>^&1 ^| tee -a debug-logs.txt >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
 echo echo. >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
-echo echo Application closed. Press any key to exit... >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Application closed at %%date%% %%time%% >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Logs saved to debug-logs.txt >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo. >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+echo echo Press any key to exit... >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
 echo pause >> portable-build\SCORM-Builder-Debug\launch-with-console.bat
+
+:: Create WebView debug enabler registry file
+echo Creating WebView debug registry file...
+echo Windows Registry Editor Version 5.00 > portable-build\SCORM-Builder-Debug\enable-webview-debug.reg
+echo. >> portable-build\SCORM-Builder-Debug\enable-webview-debug.reg
+echo [HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\WebView2] >> portable-build\SCORM-Builder-Debug\enable-webview-debug.reg
+echo "DeveloperToolsEnabled"=dword:00000001 >> portable-build\SCORM-Builder-Debug\enable-webview-debug.reg
+echo "AdditionalBrowserArguments"="--enable-logging --v=1" >> portable-build\SCORM-Builder-Debug\enable-webview-debug.reg
+
+:: Create a simple launcher script for WebView debugging
+echo @echo off > portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo Enabling enhanced WebView debugging... >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo This will modify Windows registry to enable WebView2 developer tools. >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo. >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo Press any key to continue or Ctrl+C to cancel... >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo pause >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo regedit /s enable-webview-debug.reg >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo. >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo echo Enhanced debugging enabled! Restart the app for changes to take effect. >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
+echo pause >> portable-build\SCORM-Builder-Debug\enable-enhanced-debugging.bat
 
 echo.
 echo ============================================
 echo   Debug Build Complete!
 echo ============================================
-echo Debug executable: portable-build\SCORM-Builder-Debug\SCORM-Builder-Debug.exe
-echo Console launcher: portable-build\SCORM-Builder-Debug\launch-with-console.bat
 echo.
-echo DEBUGGING TIPS:
-echo 1. Run launch-with-console.bat to see any error messages
-echo 2. Press F12 in the app to open developer tools
-echo 3. Check the console tab for JavaScript errors
-echo 4. Check the Network tab for failed resource loads
+echo DEBUG FILES CREATED:
+echo - SCORM-Builder-Debug.exe           (Main debug executable)
+echo - launch-with-console.bat           (Run with console + log capture)
+echo - DEBUG-README.txt                  (Instructions for beta testers)
+echo - enable-enhanced-debugging.bat     (Enable WebView2 advanced debugging)
+echo - enable-webview-debug.reg          (Registry file for WebView2 debugging)
+echo.
+echo FOR BETA TESTERS:
+echo 1. Read DEBUG-README.txt for full instructions
+echo 2. Use launch-with-console.bat for best debugging
+echo 3. Logs are saved to debug-logs.txt automatically
+echo 4. Press F12 in app for JavaScript debugging
+echo 5. Run enable-enhanced-debugging.bat for advanced WebView debugging
+echo.
+echo FOR DEVELOPERS:
+echo - Debug symbols included for detailed crash reports
+echo - Source maps enabled for readable stack traces
+echo - Rust debug logging enabled (RUST_LOG=debug)
+echo - WebView2 developer tools available
 echo.
 pause

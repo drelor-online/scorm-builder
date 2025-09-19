@@ -23,6 +23,9 @@ mod settings_matrix_tests;
 mod core_settings_test;
 
 #[cfg(test)]
+mod html_template_settings;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

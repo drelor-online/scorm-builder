@@ -1,8 +1,655 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { CourseContent, EnhancedCourseContent } from '../types/scorm'
+import type { CourseSettings } from '../components/CourseSettingsWizard'
 import { downloadIfExternal, isExternalUrl } from './externalImageDownloader'
 import { debugLogger } from '../utils/ultraSimpleLogger'
+import { z } from 'zod'
+
+// ============================================================================
+// RUNTIME VALIDATION SCHEMAS WITH ZOD
+// ============================================================================
+
+/**
+ * Schema for media items with comprehensive validation
+ */
+const MediaItemSchema = z.object({
+  id: z.string().min(1, 'Media ID is required'),
+  type: z.enum(['image', 'video', 'audio', 'youtube', 'pdf', 'document', 'caption']).optional(),
+  url: z.string().optional(),
+  file: z.any().optional(), // File object validation is complex
+  filename: z.string().optional(),
+  caption: z.string().optional(),
+  altText: z.string().optional(),
+  isYouTube: z.boolean().optional(),
+  youTubeVideoId: z.string().optional(),
+  startTime: z.number().min(0).optional(),
+  endTime: z.number().min(0).optional(),
+  width: z.number().min(1).max(4096).optional(),
+  height: z.number().min(1).max(4096).optional(),
+  size: z.number().min(0).max(1024 * 1024 * 1024).optional() // Max 1GB
+}).refine(data => {
+  // More lenient YouTube validation - video ID can be extracted from URL
+  if (data.isYouTube && !data.youTubeVideoId && !data.url) {
+    return false
+  }
+  return true
+}, 'YouTube videos must have either a video ID or URL')
+
+/**
+ * Schema for knowledge check questions
+ */
+const QuestionSchema = z.object({
+  question: z.string().min(1, 'Question text is required').max(2000, 'Question too long'),
+  type: z.enum(['multiple-choice', 'true-false', 'short-answer', 'essay']).optional(),
+  options: z.array(z.string().max(500, 'Option too long')).max(20, 'Too many options').optional(),
+  correctAnswer: z.union([z.number(), z.boolean(), z.string()]).optional(),
+  feedback: z.object({
+    correct: z.string().max(1000).optional(),
+    incorrect: z.string().max(1000).optional()
+  }).optional()
+}).transform(data => {
+  // Infer question type if not provided
+  if (!data.type) {
+    if (typeof data.correctAnswer === 'boolean') {
+      data.type = 'true-false'
+    } else if (Array.isArray(data.options) && data.options.length > 0) {
+      data.type = 'multiple-choice'
+    } else {
+      data.type = 'short-answer' // Default fallback
+    }
+  }
+  return data
+}).refine(data => {
+  // Multiple choice must have options and valid correctAnswer index
+  if (data.type === 'multiple-choice') {
+    if (!data.options || data.options.length === 0) return false
+    if (typeof data.correctAnswer !== 'number') return false
+    if (data.correctAnswer < 0 || data.correctAnswer >= data.options.length) return false
+  }
+  // True/false validation is more lenient
+  if (data.type === 'true-false') {
+    // Allow various formats for correctAnswer and convert them
+    if (data.correctAnswer !== undefined) {
+      if (typeof data.correctAnswer === 'boolean') return true
+      if (data.correctAnswer === 'true' || data.correctAnswer === 1 || data.correctAnswer === '1') return true
+      if (data.correctAnswer === 'false' || data.correctAnswer === 0 || data.correctAnswer === '0') return true
+    }
+  }
+  return true
+}, 'Invalid question configuration for type')
+
+/**
+ * Schema for knowledge check
+ */
+const KnowledgeCheckSchema = z.object({
+  enabled: z.boolean().default(false),
+  questions: z.array(QuestionSchema).max(50, 'Too many questions').default([])
+}).optional()
+
+/**
+ * Schema for page content (welcome, objectives, topics)
+ */
+const PageContentSchema = z.object({
+  id: z.string().min(1, 'Page ID is required').max(100, 'Page ID too long').optional(),
+  title: z.string().min(1, 'Page title is required').max(200, 'Title too long').optional(),
+  heading: z.string().min(1, 'Page heading is required').max(200, 'Heading too long').optional(),
+  content: z.string().max(100000, 'Content too long').optional(),
+  media: z.array(MediaItemSchema).max(100, 'Too many media items').optional(),
+  audioFile: z.string().optional(),
+  captionFile: z.string().optional(),
+  knowledgeCheck: KnowledgeCheckSchema.optional()
+}).refine(data => {
+  // At least title or heading must be present
+  return data.title || data.heading
+}, 'Page must have either title or heading').optional()
+
+/**
+ * Schema for topics
+ */
+const TopicSchema = z.object({
+  id: z.string().min(1, 'Topic ID is required').max(100, 'Topic ID too long'),
+  title: z.string().min(1, 'Topic title is required').max(200, 'Title too long').optional(),
+  heading: z.string().min(1, 'Topic heading is required').max(200, 'Heading too long').optional(),
+  content: z.string().max(100000, 'Topic content too long').optional(),
+  media: z.array(MediaItemSchema).max(100, 'Too many media items').optional(),
+  audioFile: z.string().optional(),
+  captionFile: z.string().optional(),
+  knowledgeCheck: KnowledgeCheckSchema.optional()
+}).refine(data => {
+  // At least title or heading must be present
+  return data.title || data.heading
+}, 'Topic must have either title or heading')
+
+/**
+ * Schema for assessment
+ */
+const AssessmentSchema = z.object({
+  enabled: z.boolean().default(false),
+  passingScore: z.number().min(0).max(100).default(80),
+  questions: z.array(QuestionSchema).max(200, 'Too many assessment questions').default([])
+}).optional()
+
+/**
+ * Schema for course settings with security constraints
+ */
+const CourseSettingsSchema = z.object({
+  passMark: z.number().min(0).max(100).optional(),
+  timeLimit: z.number().min(0).max(86400).optional(), // Max 24 hours
+  sessionTimeout: z.number().min(5).max(7200).optional(), // 5 min to 2 hours
+  minimumTimeSpent: z.number().min(0).max(7200).optional(),
+  showProgress: z.boolean().optional(),
+  showOutline: z.boolean().optional(),
+  enableCsp: z.boolean().optional(),
+  allowSkipping: z.boolean().optional(),
+  randomizeQuestions: z.boolean().optional(),
+  maxAttempts: z.number().min(1).max(10).optional()
+}).optional()
+
+/**
+ * Schema for standard course content
+ */
+const CourseContentSchema = z.object({
+  title: z.string().min(1, 'Course title is required').max(200, 'Title too long'),
+  description: z.string().max(2000, 'Description too long').optional(),
+  welcome: PageContentSchema,
+  objectivesPage: PageContentSchema,
+  topics: z.array(TopicSchema).max(1000, 'Too many topics'),
+  assessment: AssessmentSchema
+})
+
+/**
+ * Schema for enhanced course content
+ */
+const EnhancedCourseContentSchema = z.object({
+  title: z.string().min(1, 'Course title is required').max(200, 'Title too long'),
+  description: z.string().max(2000, 'Description too long').optional(),
+  welcome: PageContentSchema,
+  objectives: z.array(z.string().max(500, 'Objective too long')).max(50, 'Too many objectives').optional(),
+  topics: z.array(TopicSchema).max(1000, 'Too many topics'),
+  assessment: AssessmentSchema
+})
+
+/**
+ * Validate course content with comprehensive Zod schemas
+ */
+function validateCourseContent(courseContent: any, projectId: string): void {
+  try {
+    // Determine if this is enhanced format
+    const isEnhanced = courseContent && typeof courseContent === 'object' &&
+                      'objectives' in courseContent && Array.isArray(courseContent.objectives)
+
+    const schema = isEnhanced ? EnhancedCourseContentSchema : CourseContentSchema
+
+    // Parse and validate
+    const validationResult = schema.safeParse(courseContent)
+
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(err =>
+        `${err.path.join('.')}: ${err.message}`
+      ).join('; ')
+
+      debugLogger.error('SCORM_VALIDATION', 'Course content validation failed', {
+        projectId,
+        errors,
+        contentType: isEnhanced ? 'enhanced' : 'standard'
+      })
+
+      throw new Error(`Course content validation failed: ${errors}`)
+    }
+
+    debugLogger.info('SCORM_VALIDATION', 'Course content validation passed', {
+      projectId,
+      contentType: isEnhanced ? 'enhanced' : 'standard',
+      topicsCount: courseContent.topics?.length || 0,
+      hasAssessment: !!courseContent.assessment?.enabled,
+      hasWelcome: !!courseContent.welcome,
+      hasObjectives: isEnhanced ? !!courseContent.objectives?.length : !!courseContent.objectivesPage
+    })
+
+  } catch (error) {
+    debugLogger.error('SCORM_VALIDATION', 'Validation error occurred', {
+      projectId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    throw error
+  }
+}
+
+/**
+ * Validate course settings with Zod schema
+ */
+function validateCourseSettings(courseSettings: any, projectId: string): void {
+  if (!courseSettings) return // Settings are optional
+
+  try {
+    const validationResult = CourseSettingsSchema.safeParse(courseSettings)
+
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(err =>
+        `${err.path.join('.')}: ${err.message}`
+      ).join('; ')
+
+      debugLogger.error('SCORM_VALIDATION', 'Course settings validation failed', {
+        projectId,
+        errors
+      })
+
+      throw new Error(`Course settings validation failed: ${errors}`)
+    }
+
+    debugLogger.debug('SCORM_VALIDATION', 'Course settings validation passed', { projectId })
+
+  } catch (error) {
+    debugLogger.error('SCORM_VALIDATION', 'Settings validation error occurred', {
+      projectId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    throw error
+  }
+}
+
+// ============================================================================
+// PROMISE REJECTION HANDLING AND SAFE ASYNC UTILITIES
+// ============================================================================
+
+/**
+ * Safely execute an async operation with error handling and logging
+ */
+async function safeAsyncOperation<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  projectId: string,
+  fallback?: T
+): Promise<T | undefined> {
+  try {
+    return await operation()
+  } catch (error) {
+    debugLogger.error('ASYNC_OPERATION', `Failed to execute ${operationName}`, {
+      projectId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+
+    if (fallback !== undefined) {
+      debugLogger.debug('ASYNC_OPERATION', `Using fallback for ${operationName}`, { projectId })
+      return fallback
+    }
+
+    return undefined
+  }
+}
+
+/**
+ * Safely execute Promise.all with individual error handling for each promise
+ */
+async function safePromiseAll<T>(
+  promises: Promise<T>[],
+  operationName: string,
+  projectId: string,
+  filterFailures: boolean = true
+): Promise<T[]> {
+  try {
+    // Execute all promises with individual error handling
+    const results = await Promise.allSettled(promises)
+
+    const successful: T[] = []
+    const failed: string[] = []
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        if (result.value !== null && result.value !== undefined) {
+          successful.push(result.value)
+        }
+      } else {
+        const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason)
+        failed.push(`Item ${index}: ${errorMsg}`)
+
+        debugLogger.warn('PROMISE_ALL', `Individual promise failed in ${operationName}`, {
+          projectId,
+          index,
+          error: errorMsg
+        })
+      }
+    })
+
+    if (failed.length > 0) {
+      debugLogger.warn('PROMISE_ALL', `${operationName} completed with ${failed.length} failures`, {
+        projectId,
+        successCount: successful.length,
+        failureCount: failed.length,
+        failures: failed
+      })
+    } else {
+      debugLogger.debug('PROMISE_ALL', `${operationName} completed successfully`, {
+        projectId,
+        successCount: successful.length
+      })
+    }
+
+    return successful
+
+  } catch (error) {
+    debugLogger.error('PROMISE_ALL', `Critical failure in ${operationName}`, {
+      projectId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+
+    // Return empty array as fallback
+    return []
+  }
+}
+
+/**
+ * Safely execute media operations with retries and fallbacks
+ */
+async function safeMediaOperation<T>(
+  operation: () => Promise<T>,
+  mediaId: string,
+  operationName: string,
+  projectId: string,
+  maxRetries: number = 2
+): Promise<T | null> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+
+      if (attempt < maxRetries) {
+        debugLogger.warn('MEDIA_OPERATION', `Retrying ${operationName} for media ${mediaId} (attempt ${attempt + 1}/${maxRetries + 1})`, {
+          projectId,
+          mediaId,
+          error: errorMsg
+        })
+
+        // Wait briefly before retry
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+      } else {
+        debugLogger.error('MEDIA_OPERATION', `Failed ${operationName} for media ${mediaId} after ${maxRetries + 1} attempts`, {
+          projectId,
+          mediaId,
+          error: errorMsg
+        })
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Safely process array of async operations with progress tracking
+ */
+async function safeAsyncArrayProcess<T, U>(
+  items: T[],
+  processor: (item: T, index: number) => Promise<U>,
+  operationName: string,
+  projectId: string,
+  batchSize: number = 10
+): Promise<U[]> {
+  const results: U[] = []
+  const total = items.length
+
+  debugLogger.info('ASYNC_ARRAY', `Starting ${operationName} for ${total} items`, { projectId })
+
+  // Process in batches to avoid overwhelming the system
+  for (let i = 0; i < total; i += batchSize) {
+    const batch = items.slice(i, Math.min(i + batchSize, total))
+    const batchPromises = batch.map((item, batchIndex) =>
+      safeAsyncOperation(
+        () => processor(item, i + batchIndex),
+        `${operationName}[${i + batchIndex}]`,
+        projectId
+      )
+    )
+
+    const batchResults = await safePromiseAll(
+      batchPromises,
+      `${operationName} batch ${Math.floor(i / batchSize) + 1}`,
+      projectId
+    )
+
+    // Filter out undefined results
+    results.push(...batchResults.filter((result): result is U => result !== undefined))
+
+    debugLogger.debug('ASYNC_ARRAY', `Completed batch ${Math.floor(i / batchSize) + 1}`, {
+      projectId,
+      processed: Math.min(i + batchSize, total),
+      total,
+      batchSuccessCount: batchResults.length
+    })
+  }
+
+  debugLogger.info('ASYNC_ARRAY', `Completed ${operationName}`, {
+    projectId,
+    totalItems: total,
+    successfulResults: results.length,
+    failureCount: total - results.length
+  })
+
+  return results
+}
+
+// ============================================================================
+// DEFENSIVE UTILITIES FOR EDGE CASE HANDLING
+// ============================================================================
+
+/**
+ * Safely access array elements with bounds checking
+ */
+function safeArrayAccess<T>(arr: T[] | undefined | null, index: number, fallback?: T): T | undefined {
+  if (!Array.isArray(arr) || index < 0 || index >= arr.length) {
+    return fallback
+  }
+  return arr[index]
+}
+
+/**
+ * Safely filter array, removing undefined/null elements
+ */
+function safeArrayFilter<T>(arr: (T | undefined | null)[] | undefined | null): T[] {
+  if (!Array.isArray(arr)) return []
+  return arr.filter((item): item is T => item != null)
+}
+
+/**
+ * Safely map over array, filtering out undefined/null elements first
+ */
+function safeArrayMap<T, U>(
+  arr: (T | undefined | null)[] | undefined | null,
+  mapFn: (item: T, index: number) => U
+): U[] {
+  const filtered = safeArrayFilter(arr)
+  return filtered.map(mapFn)
+}
+
+/**
+ * Safely get nested property with path notation
+ */
+function safeGet(obj: any, path: string, fallback: any = undefined): any {
+  if (!obj || typeof obj !== 'object') return fallback
+
+  const keys = path.split('.')
+  let result = obj
+
+  for (const key of keys) {
+    if (result == null || typeof result !== 'object' || !(key in result)) {
+      return fallback
+    }
+    result = result[key]
+  }
+
+  return result
+}
+
+/**
+ * Safely perform string operations on potentially undefined values
+ */
+function safeString(value: any, fallback: string = ''): string {
+  if (value == null) return fallback
+  return String(value)
+}
+
+/**
+ * Safely split string, handling undefined/null values
+ */
+function safeStringSplit(str: any, delimiter: string, fallback: string[] = []): string[] {
+  if (str == null) return fallback
+  const safeStr = String(str)
+  return safeStr.split(delimiter)
+}
+
+/**
+ * Safely find array element, with type checking
+ */
+function safeFindInArray<T>(
+  arr: any,
+  predicate: (item: T) => boolean,
+  fallback?: T
+): T | undefined {
+  if (!Array.isArray(arr)) return fallback
+  return arr.find(predicate) || fallback
+}
+
+/**
+ * Normalize and sanitize topic data
+ */
+function sanitizeTopic(topic: any): any {
+  if (!topic || typeof topic !== 'object') return null
+
+  return {
+    id: sanitizeFilePath(safeString(topic.id, `topic-${Date.now()}`)),
+    title: sanitizeHtml(safeString(topic.title, 'Untitled Topic')),
+    content: sanitizeHtml(safeString(topic.content, '')),
+    media: Array.isArray(topic.media) ? topic.media : [],
+    knowledgeCheck: topic.knowledgeCheck || undefined
+  }
+}
+
+/**
+ * Sanitize knowledge check questions array
+ */
+function sanitizeQuestions(questions: any): any[] {
+  if (!Array.isArray(questions)) return []
+  return safeArrayFilter(questions).map(q => {
+    if (!q || typeof q !== 'object') return null
+    return {
+      ...q,
+      question: sanitizeHtml(safeString(q.question || q.text)),
+      type: safeString(q.type || q.questionType, 'multiple-choice'),
+      options: Array.isArray(q.options) ? q.options.map((opt: any) => sanitizeHtml(safeString(opt))) : [],
+      correctAnswer: q.correctAnswer
+    }
+  }).filter(q => q != null)
+}
+
+/**
+ * Safely parse JSON with fallback
+ */
+function safeJsonParse(jsonString: string, fallback: any = {}): any {
+  try {
+    return JSON.parse(jsonString)
+  } catch (error) {
+    console.warn('[SCORM] Failed to parse JSON:', error instanceof Error ? error.message : String(error))
+    return fallback
+  }
+}
+
+/**
+ * Safely access regex match groups
+ */
+function safeRegexMatch(match: RegExpMatchArray | null, index: number, fallback: string = ''): string {
+  if (!match || index >= match.length || !match[index]) {
+    return fallback
+  }
+  return match[index]
+}
+
+/**
+ * Safely parse integer with validation
+ */
+function safeParseInt(value: any, fallback: number = 0, min?: number, max?: number): number {
+  if (value === null || value === undefined) return fallback
+  const parsed = parseInt(String(value), 10)
+  if (isNaN(parsed)) return fallback
+  if (min !== undefined && parsed < min) return fallback
+  if (max !== undefined && parsed > max) return fallback
+  return parsed
+}
+
+/**
+ * Basic HTML sanitization to prevent XSS
+ */
+function sanitizeHtml(html: string): string {
+  if (typeof html !== 'string') return ''
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '') // Remove iframe tags
+    .replace(/javascript:/gi, '') // Remove javascript: URLs
+    .replace(/on\w+\s*=/gi, '') // Remove event handlers like onclick=
+    .trim()
+}
+
+/**
+ * Sanitize file path to prevent path traversal
+ */
+function sanitizeFilePath(path: string): string {
+  if (typeof path !== 'string') return 'untitled'
+  return path
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '') // Remove invalid filename characters
+    .replace(/^\.*/, '') // Remove leading dots
+    .replace(/\.\./g, '') // Remove parent directory references
+    .substring(0, 255) // Limit length
+    .trim() || 'untitled'
+}
+
+/**
+ * Validate and constrain numeric values
+ */
+function constrainNumber(value: any, min: number, max: number, fallback: number): number {
+  const num = typeof value === 'number' ? value : parseFloat(String(value))
+  if (isNaN(num) || !isFinite(num)) return fallback
+  return Math.min(Math.max(num, min), max)
+}
+
+/**
+ * Check for maximum size limits to prevent memory issues
+ */
+function validateMaximumSizes(courseContent: any): void {
+  const MAX_TOPICS = 1000
+  const MAX_QUESTIONS_PER_TOPIC = 50
+  const MAX_OPTIONS_PER_QUESTION = 20
+  const MAX_MEDIA_ITEMS = 1000
+  const MAX_CONTENT_LENGTH = 100000 // 100KB per content field
+
+  if (Array.isArray(courseContent.topics) && courseContent.topics.length > MAX_TOPICS) {
+    throw new Error(`Too many topics: ${courseContent.topics.length}. Maximum allowed: ${MAX_TOPICS}`)
+  }
+
+  if (Array.isArray(courseContent.topics)) {
+    courseContent.topics.forEach((topic: any, topicIndex: number) => {
+      if (topic?.knowledgeCheck?.questions && Array.isArray(topic.knowledgeCheck.questions)) {
+        if (topic.knowledgeCheck.questions.length > MAX_QUESTIONS_PER_TOPIC) {
+          throw new Error(`Topic ${topicIndex} has too many questions: ${topic.knowledgeCheck.questions.length}. Maximum allowed: ${MAX_QUESTIONS_PER_TOPIC}`)
+        }
+
+        topic.knowledgeCheck.questions.forEach((q: any, qIndex: number) => {
+          if (Array.isArray(q?.options) && q.options.length > MAX_OPTIONS_PER_QUESTION) {
+            throw new Error(`Topic ${topicIndex}, question ${qIndex} has too many options: ${q.options.length}. Maximum allowed: ${MAX_OPTIONS_PER_QUESTION}`)
+          }
+        })
+      }
+
+      if (Array.isArray(topic?.media) && topic.media.length > MAX_MEDIA_ITEMS) {
+        throw new Error(`Topic ${topicIndex} has too many media items: ${topic.media.length}. Maximum allowed: ${MAX_MEDIA_ITEMS}`)
+      }
+
+      if (typeof topic?.content === 'string' && topic.content.length > MAX_CONTENT_LENGTH) {
+        console.warn(`Topic ${topicIndex} content is very long (${topic.content.length} chars). Consider splitting into smaller sections.`)
+      }
+    })
+  }
+}
 
 /**
  * Converts YouTube watch URLs to embed URLs
@@ -124,7 +771,7 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
     
     // Import FileStorage and check if project is already loaded
     const { FileStorage } = await import('./FileStorage')
-    const fileStorage = new FileStorage()
+    const fileStorage = FileStorage.getInstance()
     
     // Check if project is already loaded (compare with numeric ID only)
     const currentProjectId = (fileStorage as any)._currentProjectId
@@ -195,7 +842,7 @@ function extractObjectivesFromContent(content: string): string[] {
   
   while ((match = listItemRegex.exec(content)) !== null) {
     // Remove HTML tags and trim
-    const objective = match[1].replace(/<[^>]*>/g, '').trim()
+    const objective = safeRegexMatch(match, 1).replace(/<[^>]*>/g, '').trim()
     if (objective) {
       objectives.push(objective)
     }
@@ -372,7 +1019,7 @@ async function resolveAudioCaptionFile(
   if (fileId && fileId.match(/^(audio|caption)-(\d+)$/)) {
     const match = fileId.match(/^(audio|caption)-(\d+)$/)
     if (match) {
-      const index = parseInt(match[2])
+      const index = safeParseInt(safeRegexMatch(match, 2), 0, 0, 20)
       // If index is suspiciously high (> 20), it's likely an error
       if (index > 20) {
         console.warn(`[Rust SCORM] Skipping suspicious media ID with high index: ${fileId}`)
@@ -543,7 +1190,7 @@ async function resolveImageUrl(
       if (imageUrl.startsWith('video-') && (cached.mimeType === 'application/json' || cached.mimeType === 'text/plain')) {
         try {
           const jsonText = new TextDecoder().decode(cached.data)
-          const metadata = JSON.parse(jsonText)
+          const metadata = safeJsonParse(jsonText, {})
           if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
             console.log(`[Rust SCORM] Found YouTube URL in cached metadata:`, metadata.url)
             return metadata.url
@@ -604,7 +1251,7 @@ async function resolveImageUrl(
           try {
             // Parse the JSON to get the YouTube URL
             const jsonText = new TextDecoder().decode(fileData.data)
-            const metadata = JSON.parse(jsonText)
+            const metadata = safeJsonParse(jsonText, {})
             if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
               console.log(`[Rust SCORM] Found YouTube URL in metadata:`, metadata.url)
               return metadata.url // Return the YouTube URL directly
@@ -662,10 +1309,167 @@ async function resolveImageUrl(
 }
 
 /**
+ * 🚀 PHASE 1: Prefetch all media from MediaService in parallel
+ * This eliminates the sequential request issue and enables proper batching
+ */
+async function prefetchAllMedia(
+  mediaIdSet: Set<string>,
+  projectId: string,
+  mediaCache: Map<string, { data: Uint8Array, mimeType: string }>
+): Promise<void> {
+  const mediaIds = Array.from(mediaIdSet)
+  if (mediaIds.length === 0) return
+
+  console.log(`[SCORM Prefetch] 🚀 Starting parallel prefetch of ${mediaIds.length} media items`)
+  debugLogger.info('SCORM_PREFETCH', 'Starting media prefetch', {
+    projectId,
+    mediaCount: mediaIds.length,
+    mediaIds: mediaIds.slice(0, 5) // Log first 5 for debugging
+  })
+
+  try {
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId, undefined, true) // 🚀 Enable generation mode
+
+    // 🚀 Use Promise.all to fetch all media in parallel
+    // This will trigger proper batching in MediaService
+    const startTime = Date.now()
+    const mediaResults = await Promise.all(
+      mediaIds.map(async (mediaId) => {
+        try {
+          const fileData = await mediaService.getMedia(mediaId)
+          return { mediaId, fileData }
+        } catch (error) {
+          console.warn(`[SCORM Prefetch] Failed to fetch ${mediaId}:`, error)
+          return { mediaId, fileData: null }
+        }
+      })
+    )
+
+    const fetchTime = Date.now() - startTime
+    console.log(`[SCORM Prefetch] ✅ Completed prefetch in ${fetchTime}ms`)
+
+    // Cache the results
+    let successCount = 0
+    let failureCount = 0
+
+    for (const { mediaId, fileData } of mediaResults) {
+      if (fileData && fileData.data) {
+        const uint8Data = new Uint8Array(fileData.data)
+        const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
+        mediaCache.set(mediaId, { data: uint8Data, mimeType })
+        successCount++
+      } else {
+        failureCount++
+      }
+    }
+
+    console.log(`[SCORM Prefetch] 📊 Results: ${successCount} successful, ${failureCount} failed`)
+    debugLogger.info('SCORM_PREFETCH', 'Prefetch completed', {
+      projectId,
+      totalTime: fetchTime,
+      successCount,
+      failureCount,
+      cacheSize: mediaCache.size
+    })
+
+  } catch (error) {
+    console.error(`[SCORM Prefetch] ❌ Prefetch failed:`, error)
+    debugLogger.error('SCORM_PREFETCH', 'Prefetch failed', { projectId, error })
+  }
+}
+
+/**
+ * 🚀 PHASE 1: Extract all media IDs from course content
+ * This collects all media that will be needed during generation
+ */
+function extractAllMediaIds(courseContent: CourseContent | EnhancedCourseContent): Set<string> {
+  const mediaIds = new Set<string>()
+
+  // Helper function to add media from any object
+  const addMediaFromArray = (media: any[] | undefined) => {
+    if (!media) return
+    for (const item of media) {
+      if (item?.id && typeof item.id === 'string') {
+        mediaIds.add(item.id)
+      }
+    }
+  }
+
+  // Helper function to add audio/caption IDs
+  const addAudioCaptionIds = (audioId?: string, audioFile?: string, captionId?: string, captionFile?: string) => {
+    if (audioId) mediaIds.add(audioId)
+    if (audioFile && audioFile.match(/^(audio|caption)-[\w-]+$/)) mediaIds.add(audioFile)
+    if (captionId) mediaIds.add(captionId)
+    if (captionFile && captionFile.match(/^(audio|caption)-[\w-]+$/)) mediaIds.add(captionFile)
+  }
+
+  // Welcome page media (safe property access)
+  const welcome = (courseContent as any).welcome || (courseContent as any).welcomePage
+  if (welcome) {
+    addMediaFromArray(welcome.media)
+    addAudioCaptionIds(
+      welcome.audioId,
+      welcome.audioFile,
+      welcome.captionId,
+      welcome.captionFile
+    )
+  }
+
+  // Objectives page media (safe property access)
+  const objectivesPage = (courseContent as any).objectivesPage || (courseContent as any).learningObjectivesPage
+  if (objectivesPage) {
+    addMediaFromArray(objectivesPage.media)
+    addAudioCaptionIds(
+      objectivesPage.audioId,
+      objectivesPage.audioFile,
+      objectivesPage.captionId,
+      objectivesPage.captionFile
+    )
+  }
+
+  // Legacy learningObjectivesPage support
+  const legacyObjectives = (courseContent as any).learningObjectivesPage
+  if (legacyObjectives) {
+    addMediaFromArray(legacyObjectives.media)
+    addAudioCaptionIds(
+      legacyObjectives.audioId,
+      legacyObjectives.audioFile,
+      legacyObjectives.captionId,
+      legacyObjectives.captionFile
+    )
+  }
+
+  // Topics media (safe property access)
+  const topics = (courseContent as any).topics
+  if (topics && Array.isArray(topics)) {
+    for (const topic of topics) {
+      addMediaFromArray(topic.media)
+      addAudioCaptionIds(
+        topic.audioId,
+        topic.audioFile,
+        topic.captionId,
+        topic.captionFile
+      )
+
+      // Media from knowledge check questions
+      if (topic.knowledgeCheck?.questions) {
+        for (const question of topic.knowledgeCheck.questions) {
+          addMediaFromArray((question as any).media)
+        }
+      }
+    }
+  }
+
+  console.log(`[SCORM Extract] Found ${mediaIds.size} unique media IDs:`, Array.from(mediaIds).slice(0, 10))
+  return mediaIds
+}
+
+/**
  * Resolve media items and collect media files
  */
 async function resolveMedia(
-  mediaItems: any[] | undefined, 
+  mediaItems: any[] | undefined,
   projectId: string,
   mediaFiles: MediaFile[],
   mediaCounter: { [type: string]: number }
@@ -811,7 +1615,7 @@ async function resolveMedia(
       // Format: http://asset.localhost/...%5Cmedia%5Cvideo-0.bin
       const match = media.url.match(/media%5C([\w-]+)\.bin/)
       if (match) {
-        const mediaId = match[1]
+        const mediaId = safeRegexMatch(match, 1)
         console.log(`[Rust SCORM] Detected asset.localhost URL for media ID:`, mediaId)
         
         // Try to load and check if it's YouTube metadata
@@ -821,7 +1625,7 @@ async function resolveMedia(
           if (cached && cached.mimeType === 'application/json') {
             try {
               const jsonText = new TextDecoder().decode(cached.data)
-              const metadata = JSON.parse(jsonText)
+              const metadata = safeJsonParse(jsonText, {})
               if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
                 console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL from cache:`, metadata.url)
                 media.url = metadata.url
@@ -842,7 +1646,7 @@ async function resolveMedia(
                 mediaCache.set(mediaId, { data: uint8Data, mimeType: 'application/json' })
                 
                 const jsonText = new TextDecoder().decode(uint8Data)
-                const metadata = JSON.parse(jsonText)
+                const metadata = safeJsonParse(jsonText, {})
                 if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
                   console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL:`, metadata.url)
                   media.url = metadata.url
@@ -863,10 +1667,10 @@ async function resolveMedia(
       // Extract YouTube video ID
       if (media.url.includes('youtube.com/watch?v=')) {
         const match = media.url.match(/[?&]v=([^&]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       } else if (media.url.includes('youtu.be/')) {
         const match = media.url.match(/youtu\.be\/([^?]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       }
       
       console.log(`[SCORM DEBUG] Processing YouTube media for SCORM:`, {
@@ -931,13 +1735,13 @@ async function resolveMedia(
       let videoId = ''
       if (media.url.includes('youtube.com/watch?v=')) {
         const match = media.url.match(/[?&]v=([^&]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       } else if (media.url.includes('youtu.be/')) {
         const match = media.url.match(/youtu\.be\/([^?]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       } else if (media.url.includes('youtube.com/embed/')) {
         const match = media.url.match(/embed\/([^?]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       }
       
       if (videoId) {
@@ -1008,7 +1812,7 @@ async function resolveMedia(
         if (media.type === 'video' && cached.mimeType === 'application/json') {
           try {
             const jsonText = new TextDecoder().decode(cached.data)
-            const metadata = JSON.parse(jsonText)
+            const metadata = safeJsonParse(jsonText, {})
             if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
               console.log(`[Rust SCORM] Found YouTube URL in cached video metadata:`, metadata.url)
               resolvedUrl = metadata.url
@@ -1050,7 +1854,7 @@ async function resolveMedia(
             if (media.type === 'video' && mimeType === 'application/json') {
               try {
                 const jsonText = new TextDecoder().decode(uint8Data)
-                const metadata = JSON.parse(jsonText)
+                const metadata = safeJsonParse(jsonText, {})
                 if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
                   console.log(`[Rust SCORM] Found YouTube URL in video metadata:`, metadata.url)
                   resolvedUrl = metadata.url
@@ -1207,13 +2011,13 @@ async function resolveMedia(
       // Extract YouTube video ID
       if (media.url.includes('youtube.com/watch?v=')) {
         const match = media.url.match(/[?&]v=([^&]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       } else if (media.url.includes('youtu.be/')) {
         const match = media.url.match(/youtu\.be\/([^?]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       } else if (media.url.includes('youtube.com/embed/')) {
         const match = media.url.match(/embed\/([^?]+)/)
-        if (match) videoId = match[1]
+        if (match) videoId = safeRegexMatch(match, 1)
       }
       
       resolvedMedia.push({
@@ -1318,7 +2122,14 @@ async function resolveMedia(
 /**
  * Convert TypeScript course content to Rust-compatible format
  */
-export async function convertToRustFormat(courseContent: CourseContent | EnhancedCourseContent, projectId: string, courseSettings?: any) {
+export async function convertToRustFormat(courseContent: CourseContent | EnhancedCourseContent, projectId: string, courseSettings?: CourseSettings) {
+  // Runtime validation with Zod schemas - first line of defense
+  validateCourseContent(courseContent, projectId)
+  validateCourseSettings(courseSettings, projectId)
+
+  // Validate maximum sizes to prevent memory issues
+  validateMaximumSizes(courseContent)
+
   debugLogger.info('SCORM_CONVERSION', 'Starting course content conversion to Rust format', {
     projectId,
     hasCourseSettings: !!courseSettings,
@@ -1373,9 +2184,9 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   const mediaCounter: { [type: string]: number } = {}
   
   const result = {
-    course_title: cc.courseTitle || cc.title || cc.courseName || 'Untitled Course',
-    course_description: cc.courseDescription || cc.description,
-    pass_mark: courseSettings?.passMark || cc.passMark || 80,
+    course_title: sanitizeHtml(safeString(cc.courseTitle || cc.title || cc.courseName, 'Untitled Course')),
+    course_description: sanitizeHtml(safeString(cc.courseDescription || cc.description)),
+    pass_mark: constrainNumber(courseSettings?.passMark || cc.passMark, 0, 100, 80),
     navigation_mode: courseSettings?.navigationMode || cc.navigationMode || 'linear',
     allow_retake: courseSettings?.allowRetake ?? (cc.allowRetake !== false ? true : false),
     require_audio_completion: courseSettings?.requireAudioCompletion || false,
@@ -1388,28 +2199,33 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
     show_outline: courseSettings?.showOutline ?? true,
     confirm_exit: courseSettings?.confirmExit ?? true,
     font_size: courseSettings?.fontSize || 'medium',
-    time_limit: courseSettings?.timeLimit || 0,
-    session_timeout: courseSettings?.sessionTimeout || 30,
-    minimum_time_spent: courseSettings?.minimumTimeSpent || 0,
+    time_limit: constrainNumber(courseSettings?.timeLimit, 0, 86400, 0), // Max 24 hours
+    session_timeout: constrainNumber(courseSettings?.sessionTimeout, 5, 1440, 30), // 5 min to 24 hours
+    minimum_time_spent: constrainNumber(courseSettings?.minimumTimeSpent, 0, 7200, 0), // Max 2 hours
     keyboard_navigation: courseSettings?.keyboardNavigation ?? true,
     printable: courseSettings?.printable || false,
     
     welcome_page: cc.welcome || cc.welcomePage || cc.welcomeMedia ? {
-      title: cc.welcome?.title || cc.welcomePage?.title || 'Welcome',
-      content: cc.welcome?.content || cc.welcomePage?.content || '',
-      start_button_text: cc.welcome?.startButtonText || cc.welcomePage?.startButtonText || 'Start Course',
+      title: sanitizeHtml(safeString(cc.welcome?.title || cc.welcomePage?.title, 'Welcome')),
+      content: sanitizeHtml(safeString(cc.welcome?.content || cc.welcomePage?.content)),
+      start_button_text: sanitizeHtml(safeString(cc.welcome?.startButtonText || cc.welcomePage?.startButtonText, 'Start Course')),
       audio_file: await resolveAudioCaptionFile(cc.welcome?.audioId || cc.welcome?.audioFile || cc.welcomePage?.audioId || cc.welcomePage?.audioFile, projectId, mediaFiles),
       caption_file: await resolveAudioCaptionFile(cc.welcome?.captionId || cc.welcome?.captionFile || cc.welcomePage?.captionId || cc.welcomePage?.captionFile, projectId, mediaFiles),
       image_url: await resolveImageUrl(cc.welcome?.imageUrl || cc.welcomePage?.imageUrl, projectId, mediaFiles, mediaCounter),
       // Filter out images since they're handled by image_url
       media: await resolveMedia(
-        Array.isArray(cc.welcome?.media) ? cc.welcome.media.filter((m: any) => m.type !== 'image') :
-        Array.isArray(cc.welcomePage?.media) ? cc.welcomePage.media.filter((m: any) => m.type !== 'image') :
-        cc.welcome?.media && cc.welcome.media.type !== 'image' ? [cc.welcome.media] :
-        cc.welcomePage?.media && cc.welcomePage.media.type !== 'image' ? [cc.welcomePage.media] :
-        cc.welcomeMedia && cc.welcomeMedia.type !== 'image' ? [cc.welcomeMedia] : undefined, 
-        projectId, 
-        mediaFiles, 
+        safeArrayFilter(cc.welcome?.media || cc.welcomePage?.media || [])
+          .filter((m: any) => m?.type !== 'image')
+          .map((m: any) => ({
+            id: m.id,
+            type: m.type,
+            url: m.url || '',
+            title: m.title || '',
+            clipStart: m.clip_start || m.clipStart,
+            clipEnd: m.clip_end || m.clipEnd
+          })),
+        projectId,
+        mediaFiles,
         mediaCounter
       ),
     } : undefined,
@@ -1441,41 +2257,36 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       ),
     } : undefined,
     
-    topics: await Promise.all(cc.topics.map(async (topic: any) => {
-      // Handle both knowledgeCheck (singular) and knowledgeChecks (plural array)
-      const kcData = topic.knowledgeCheck || (topic.knowledgeChecks && topic.knowledgeChecks.length > 0 ? { questions: topic.knowledgeChecks } : null)
+    topics: await safePromiseAll(
+      safeArrayMap(cc.topics, async (topic: any) => {
+        // Sanitize topic data first
+        const sanitizedTopic = sanitizeTopic(topic)
+        if (!sanitizedTopic) return null
+
+        // Handle both knowledgeCheck (singular) and knowledgeChecks (plural array)
+        const kcData = sanitizedTopic.knowledgeCheck || (sanitizedTopic.knowledgeChecks && sanitizedTopic.knowledgeChecks.length > 0 ? { questions: sanitizedTopic.knowledgeChecks } : null)
       
       return {
-        id: topic.id,
-        title: topic.title,
-        content: topic.content || '',
+        id: sanitizedTopic.id,
+        title: sanitizedTopic.title,
+        content: sanitizedTopic.content,
         knowledge_check: kcData ? {
           enabled: kcData.enabled !== false,
-          questions: (kcData.questions || (kcData.question ? [{
+          questions: sanitizeQuestions(kcData.questions || (kcData.question ? [{
             type: kcData.type || kcData.questionType,
             question: kcData.question,
             options: kcData.options,
             correctAnswer: kcData.correctAnswer,
             feedback: kcData.feedback,
             explanation: kcData.explanation
-        }] : []))?.map((q: any) => {
-          // Validate question has required fields
-          if (!q.type && !q.questionType) {
-            console.error(`[Rust SCORM] Question missing type in topic ${topic.id}:`, q)
-            throw new Error(`Question missing type in topic ${topic.id}`)
-          }
-          if (!q.question && !q.text) {
-            console.error(`[Rust SCORM] Question missing text/question field in topic ${topic.id}:`, q)
-            throw new Error(`Question missing text field in topic ${topic.id}`)
-          }
-          if (q.correctAnswer === undefined || q.correctAnswer === null) {
-            console.error(`[Rust SCORM] Question missing correctAnswer in topic ${topic.id}:`, q)
-            throw new Error(`Question missing correctAnswer in topic ${topic.id}`)
-          }
-          
+        }] : [])).map((q: any) => {
+          // Provide defaults for missing fields
+          const questionType = q.type || q.questionType || 'multiple-choice'
+          const questionText = q.question || q.text || 'Question text missing'
+          const correctAnswer = q.correctAnswer !== undefined ? q.correctAnswer : 0
+
           // For true-false questions, ensure options array exists
-          const questionType = q.type || q.questionType
-          let options = q.options
+          let options = Array.isArray(q.options) ? q.options : []
           
           if (questionType === 'true-false' && !options) {
             options = ['True', 'False']
@@ -1485,57 +2296,60 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
             type: questionType,
             text: q.question || q.text, // Fixed: Support both 'question' and 'text' fields
             options: options,
-            correct_answer: questionType === 'true-false' ? 
-              (q.correctAnswer === 0 || q.correctAnswer === 'true' || q.correctAnswer === true ? 'true' : 'false') :
-              (typeof q.correctAnswer === 'number' && options ? options[q.correctAnswer] : String(q.correctAnswer)),
+            correct_answer: questionType === 'true-false' ?
+              (correctAnswer === 0 || correctAnswer === 'true' || correctAnswer === true ? 'true' : 'false') :
+              (typeof correctAnswer === 'number' && options ? safeArrayAccess(options, correctAnswer, String(correctAnswer)) : String(correctAnswer)),
             explanation: q.explanation || q.feedback?.incorrect || q.feedback?.correct || '',
             correct_feedback: q.feedback?.correct || 'Correct!',
             incorrect_feedback: q.feedback?.incorrect || 'Not quite. Try again!',
           }
         }) || []
       } : undefined,
-        audio_file: await resolveAudioCaptionFile((topic as any).audioFile || (topic as any).audioId, projectId, mediaFiles),
-        caption_file: await resolveAudioCaptionFile((topic as any).captionFile || (topic as any).captionId, projectId, mediaFiles),
+        audio_file: await resolveAudioCaptionFile(sanitizedTopic.audioFile || sanitizedTopic.audioId, projectId, mediaFiles),
+        caption_file: await resolveAudioCaptionFile(sanitizedTopic.captionFile || sanitizedTopic.captionId, projectId, mediaFiles),
         // Extract image from media array or use imageUrl field
         image_url: await resolveImageUrl(
-          (topic as any).imageUrl || 
-          (topic as any).media?.find((m: any) => m.type === 'image')?.url ||
-          (topic as any).media?.find((m: any) => m.type === 'image')?.id,
-          projectId, 
-          mediaFiles, 
+          sanitizedTopic.imageUrl ||
+          safeFindInArray(sanitizedTopic.media, (m: any) => m?.type === 'image')?.url ||
+          safeFindInArray(sanitizedTopic.media, (m: any) => m?.type === 'image')?.id,
+          projectId,
+          mediaFiles,
           mediaCounter
         ),
         // Filter out images since they're handled by image_url
         media: await resolveMedia(
-          Array.isArray((topic as any).media) ? (topic as any).media.filter((m: any) => m.type !== 'image').map((m: any) => ({
+          safeArrayFilter(sanitizedTopic.media).filter((m: any) => m?.type !== 'image').map((m: any) => ({
             id: m.id,
             type: m.type,
             url: m.url || '',
             title: m.title || '',
             clipStart: m.clip_start || m.clipStart,
             clipEnd: m.clip_end || m.clipEnd
-          })) : (topic as any).media && (topic as any).media.type !== 'image' ? [{
-            id: (topic as any).media.id,
-            type: (topic as any).media.type,
-            url: (topic as any).media.url || '',
-            title: (topic as any).media.title || '',
-            clipStart: (topic as any).media.clip_start || (topic as any).media.clipStart,
-            clipEnd: (topic as any).media.clip_end || (topic as any).media.clipEnd
-          }] : undefined, 
-          projectId, 
-          mediaFiles, 
+          })),
+          projectId,
+          mediaFiles,
           mediaCounter
         )
       }
-    })),
+    }),
+    'topics processing',
+    projectId
+  ),
     
     assessment: cc.assessment ? {
-      questions: cc.assessment.questions.map((q: any) => {
-        // Validate assessment question has required fields
+      questions: (cc.assessment.questions || []).map((q: any) => {
+        // Validate assessment question has required fields and infer type if missing
         const qAny = q as any
-        if (!qAny.type && !qAny.options) {
-          console.error('[Rust SCORM] Assessment question missing type:', q)
-          throw new Error('Assessment question missing type')
+
+        // Infer question type if not provided (same logic as Zod schema)
+        if (!qAny.type) {
+          if (typeof qAny.correctAnswer === 'boolean') {
+            qAny.type = 'true-false'
+          } else if (Array.isArray(qAny.options) && qAny.options.length > 0) {
+            qAny.type = 'multiple-choice'
+          } else {
+            qAny.type = 'short-answer' // Default fallback
+          }
         }
         if (!qAny.question && !qAny.text) {
           console.error('[Rust SCORM] Assessment question missing text/question field:', q)
@@ -2259,7 +3073,7 @@ async function extractCourseContentMedia(courseContent: EnhancedCourseContent, p
 /**
  * Convert enhanced format to Rust-compatible format
  */
-async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent, projectId: string, courseSettings?: any) {
+async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent, projectId: string, courseSettings?: CourseSettings) {
   console.log('[Rust SCORM] Converting enhanced format, topics:', courseContent.topics.length)
   
   // Debug: Log audio IDs being extracted
@@ -2316,9 +3130,9 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
     show_outline: courseSettings?.showOutline ?? true,
     confirm_exit: courseSettings?.confirmExit ?? true,
     font_size: courseSettings?.fontSize || 'medium',
-    time_limit: courseSettings?.timeLimit || 0,
-    session_timeout: courseSettings?.sessionTimeout || 30,
-    minimum_time_spent: courseSettings?.minimumTimeSpent || 0,
+    time_limit: constrainNumber(courseSettings?.timeLimit, 0, 86400, 0), // Max 24 hours
+    session_timeout: constrainNumber(courseSettings?.sessionTimeout, 5, 1440, 30), // 5 min to 24 hours
+    minimum_time_spent: constrainNumber(courseSettings?.minimumTimeSpent, 0, 7200, 0), // Max 2 hours
     keyboard_navigation: courseSettings?.keyboardNavigation ?? true,
     printable: courseSettings?.printable || false,
     
@@ -2327,49 +3141,49 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       content: courseContent.welcome.content || '',
       start_button_text: courseContent.welcome.startButtonText || 'Start Course',
       audio_file: await resolveAudioCaptionFile(
-        (courseContent.welcome as any).audioId || 
-        courseContent.welcome.audioFile || 
-        courseContent.welcome.media?.find((m: any) => m.type === 'audio')?.id, 
-        projectId, 
-        mediaFiles, 
-        (courseContent.welcome as any).audioBlob
+        courseContent.welcome.audioId ||
+        courseContent.welcome.audioFile ||
+        safeFindInArray(courseContent.welcome.media, (m: any) => m?.type === 'audio')?.id,
+        projectId,
+        mediaFiles,
+        courseContent.welcome.audioBlob
       ),
       caption_file: await resolveAudioCaptionFile(
-        (courseContent.welcome as any).captionId || 
-        courseContent.welcome.captionFile || 
-        courseContent.welcome.media?.find((m: any) => m.type === 'caption')?.id, 
-        projectId, 
-        mediaFiles, 
-        (courseContent.welcome as any).captionBlob
+        courseContent.welcome.captionId ||
+        courseContent.welcome.captionFile ||
+        safeFindInArray(courseContent.welcome.media, (m: any) => m?.type === 'caption')?.id,
+        projectId,
+        mediaFiles,
+        courseContent.welcome.captionBlob
       ),
       image_url: await resolveImageUrl(courseContent.welcome.imageUrl, projectId, mediaFiles, mediaCounter),
       // Filter out audio/caption from media array since they're handled separately
-      media: await resolveMedia(courseContent.welcome.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption'), projectId, mediaFiles, mediaCounter),
+      media: await resolveMedia(safeArrayFilter(courseContent.welcome.media).filter((m: any) => m?.type !== 'audio' && m?.type !== 'caption'), projectId, mediaFiles, mediaCounter),
     } : undefined,
     
     learning_objectives_page: courseContent.objectives ? {
       objectives: courseContent.objectives,
       audio_file: await resolveAudioCaptionFile(
-        (courseContent.objectivesPage as any)?.audioId || 
-        courseContent.objectivesPage?.audioFile || 
-        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id ||
+        courseContent.objectivesPage?.audioId ||
+        courseContent.objectivesPage?.audioFile ||
+        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'audio')?.id ||
         // Fallback to learningObjectivesPage for backward compatibility
         (courseContent as any).learningObjectivesPage?.audioFile ||
-        (courseContent as any).learningObjectivesPage?.media?.find((m: any) => m.type === 'audio')?.id, 
-        projectId, 
-        mediaFiles, 
-        (courseContent.objectivesPage as any)?.audioBlob || (courseContent as any).learningObjectivesPage?.audioBlob
+        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'audio')?.id,
+        projectId,
+        mediaFiles,
+        courseContent.objectivesPage?.audioBlob || (courseContent as any).learningObjectivesPage?.audioBlob
       ),
       caption_file: await resolveAudioCaptionFile(
-        (courseContent.objectivesPage as any)?.captionId || 
-        courseContent.objectivesPage?.captionFile || 
-        courseContent.objectivesPage?.media?.find((m: any) => m.type === 'caption')?.id ||
+        courseContent.objectivesPage?.captionId ||
+        courseContent.objectivesPage?.captionFile ||
+        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'caption')?.id ||
         // Fallback to learningObjectivesPage for backward compatibility
         (courseContent as any).learningObjectivesPage?.captionFile ||
-        (courseContent as any).learningObjectivesPage?.media?.find((m: any) => m.type === 'caption')?.id, 
-        projectId, 
-        mediaFiles, 
-        (courseContent.objectivesPage as any)?.captionBlob || (courseContent as any).learningObjectivesPage?.captionBlob
+        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'caption')?.id,
+        projectId,
+        mediaFiles,
+        courseContent.objectivesPage?.captionBlob || (courseContent as any).learningObjectivesPage?.captionBlob
       ),
       image_url: await resolveImageUrl(
         courseContent.objectivesPage?.imageUrl || (courseContent as any).learningObjectivesPage?.imageUrl, 
@@ -2387,7 +3201,8 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       ),
     } : undefined,
     
-    topics: await Promise.all(courseContent.topics.map(async topic => {
+    topics: await safePromiseAll(
+      safeArrayMap(courseContent.topics, async topic => {
       console.log(`[Rust SCORM] Processing topic ${topic.id}, has KC:`, !!topic.knowledgeCheck)
       
       const convertedTopic = {
@@ -2396,24 +3211,24 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         content: topic.content || '',
         knowledge_check: undefined as any,
         audio_file: await resolveAudioCaptionFile(
-          (topic as any).audioId || 
-          topic.audioFile || 
-          topic.media?.find((m: any) => m.type === 'audio')?.id, 
-          projectId, 
-          mediaFiles, 
-          (topic as any).audioBlob
+          topic.audioId ||
+          topic.audioFile ||
+          safeFindInArray(topic.media, (m: any) => m?.type === 'audio')?.id,
+          projectId,
+          mediaFiles,
+          topic.audioBlob
         ),
         caption_file: await resolveAudioCaptionFile(
-          (topic as any).captionId || 
-          topic.captionFile || 
-          topic.media?.find((m: any) => m.type === 'caption')?.id, 
-          projectId, 
-          mediaFiles, 
-          (topic as any).captionBlob
+          topic.captionId ||
+          topic.captionFile ||
+          safeFindInArray(topic.media, (m: any) => m?.type === 'caption')?.id,
+          projectId,
+          mediaFiles,
+          topic.captionBlob
         ),
         image_url: await resolveImageUrl(topic.imageUrl, projectId, mediaFiles, mediaCounter),
         // Filter out audio/caption from media array since they're handled separately
-        media: await resolveMedia(topic.media?.filter((m: any) => m.type !== 'audio' && m.type !== 'caption').map(m => ({
+        media: await resolveMedia(safeArrayFilter(topic.media).filter((m: any) => m?.type !== 'audio' && m?.type !== 'caption').map(m => ({
           id: m.id,
           type: m.type,
           url: m.url || '',
@@ -2512,7 +3327,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         console.log(`[Rust SCORM] Topic ${topic.id} has ${topic.knowledgeCheck.questions.length} KC questions`)
         convertedTopic.knowledge_check = {
           enabled: true,
-          questions: topic.knowledgeCheck.questions.map(q => {
+          questions: (topic.knowledgeCheck.questions || []).map(q => {
             // Validate question has required fields
             if (!q.type && !(q as any).questionType) {
               console.error(`[Rust SCORM] Enhanced question missing type in topic ${topic.id}:`, q)
@@ -2601,10 +3416,13 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       }
       
       return convertedTopic
-    })),
+    }),
+    'enhanced topics processing',
+    projectId
+  ),
     
     assessment: courseContent.assessment ? {
-      questions: courseContent.assessment.questions.map(q => {
+      questions: (courseContent.assessment.questions || []).map(q => {
         // Validate assessment question has required fields
         if (!q.question) {
           console.error('[Rust SCORM] Enhanced assessment question missing question field:', q)
@@ -2665,7 +3483,7 @@ export async function generateRustSCORM(
   projectId: string,
   onProgress?: (message: string, progress: number) => void,
   preloadedMedia?: Map<string, Blob>,
-  courseSettings?: any
+  courseSettings?: CourseSettings
 ): Promise<Uint8Array> {
   debugLogger.info('SCORM_GENERATION', 'Starting SCORM generation process', {
     projectId,
@@ -2698,6 +3516,21 @@ export async function generateRustSCORM(
   let mediaFiles: MediaFile[] = []
   
   try {
+    // 🚀 PHASE 1: Prefetch all media in parallel before processing
+    console.log('[Rust SCORM] 🚀 Starting media prefetch phase...')
+    if (onProgress && typeof onProgress === 'function') {
+      onProgress('Prefetching all media...', 5)
+    }
+
+    const allMediaIds = extractAllMediaIds(courseContent)
+    console.log(`[Rust SCORM] Found ${allMediaIds.size} media items to prefetch`)
+
+    // Clear existing cache to ensure fresh data
+    mediaCache.clear()
+
+    await prefetchAllMedia(allMediaIds, projectId, mediaCache)
+    console.log(`[Rust SCORM] ✅ Prefetch completed, cached ${mediaCache.size} items`)
+
     debugLogger.info('SCORM_GENERATION', 'Converting course content to Rust format', { projectId })
     console.log('[Rust SCORM] Converting course content to Rust format')
     if (onProgress && typeof onProgress === 'function') {

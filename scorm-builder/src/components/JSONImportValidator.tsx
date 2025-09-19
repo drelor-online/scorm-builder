@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { CourseContent } from '../types/aiPrompt'
 import { PageLayout } from './PageLayout'
 import { 
@@ -27,7 +27,7 @@ import { courseContentSchema } from '../schemas/courseContentSchema'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { cleanupOrphanedMediaReferences, MediaExistsChecker } from '../utils/orphanedMediaCleaner'
 import { cleanMediaReferencesFromCourseContent, hasMediaReferences } from '../utils/courseContentMediaCleaner'
-import { useUnifiedMedia } from '../contexts/UnifiedMediaContext'
+import { useMedia } from '../hooks/useMedia'
 import styles from './JSONImportValidator.module.css'
 
 interface JSONImportValidatorProps {
@@ -57,7 +57,7 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const navigation = useStepNavigation()
   const { markDirty, resetDirty } = useUnsavedChanges()
   const { success, error: notifyError, info } = useNotifications()
-  const { getMedia } = useUnifiedMedia()
+  const { selectors } = useMedia()
   
   // Logger for production-safe debugging
   const logger = debugLogger
@@ -66,14 +66,14 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   const mediaExistsChecker: MediaExistsChecker = async (mediaId: string): Promise<boolean> => {
     logger.debug('JSONImportValidator', `🔍 Checking existence of media: ${mediaId}`)
     try {
-      const result = await getMedia(mediaId)
-      const exists = result !== null
+      const result = selectors.getMediaById(mediaId)
+      const exists = result !== undefined
       
       // Enhanced debug logging
-      if (result !== null) {
-        logger.debug('JSONImportValidator', `✅ Media ${mediaId} EXISTS - result type: ${typeof result}, hasData: ${result?.data !== undefined}, hasMetadata: ${result?.metadata !== undefined}`)
+      if (result !== undefined) {
+        logger.debug('JSONImportValidator', `✅ Media ${mediaId} EXISTS - result type: ${typeof result}, hasMetadata: ${result?.metadata !== undefined}`)
       } else {
-        logger.debug('JSONImportValidator', `❌ Media ${mediaId} DOES NOT EXIST - getMedia returned null`)
+        logger.debug('JSONImportValidator', `❌ Media ${mediaId} DOES NOT EXIST - getMediaById returned undefined`)
       }
       
       return exists
@@ -2135,4 +2135,4 @@ export const JSONImportValidator: React.FC<JSONImportValidatorProps> = ({
   )
 }
 
-export default JSONImportValidator;
+export default memo(JSONImportValidator);
