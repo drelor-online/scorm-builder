@@ -733,6 +733,9 @@ interface MediaFile {
 // Media cache to prevent duplicate loads during SCORM generation
 const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
 
+// Performance monitoring (module-level for access in helper functions)
+let performanceTrace: { cacheHits: number; cacheMisses: number; batchedLoads: number; startTime: number } | null = null
+
 /**
  * Ensure the project is properly loaded in FileStorage before accessing media
  * This is critical for MediaService to work correctly
@@ -905,19 +908,19 @@ function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: 
 export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<void> {
   // Only log verbose cache operations in development
   if (import.meta.env.DEV) {
-    console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache`)
+    console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache (filename-keyed)`)
   }
-  
+
   for (const [filename, blob] of mediaMap) {
     try {
       // Extract the media ID from the filename (e.g., 'image-0.jpg' -> 'image-0')
       const mediaId = filename.replace(/\.(jpg|jpeg|png|gif|mp3|mp4|vtt|bin)$/i, '')
-      
+
       // Convert blob to Uint8Array
       const arrayBuffer = await blob.arrayBuffer()
       const data = new Uint8Array(arrayBuffer)
       const mimeType = blob.type || 'application/octet-stream'
-      
+
       // Store in cache
       mediaCache.set(mediaId, { data, mimeType })
       // Only log individual cache operations in development
@@ -928,10 +931,27 @@ export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<vo
       console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
     }
   }
-  
+
   if (import.meta.env.DEV) {
     console.log(`[Rust SCORM] Pre-loading complete. Cache size: ${mediaCache.size}`)
   }
+}
+
+/**
+ * Hydrate mediaCache with ID-keyed preloaded data (optimal format)
+ * This prevents backend calls during generation by providing direct mediaId → data mapping
+ */
+export function hydrateMediaCacheById(preloadedById: Map<string, { data: Uint8Array; mimeType: string }>): void {
+  console.log(`[SCORM Media Debug] Hydrating cache with ${preloadedById.size} preloaded items`)
+
+  for (const [mediaId, mediaData] of preloadedById) {
+    mediaCache.set(mediaId, mediaData)
+    if (import.meta.env.DEV) {
+      console.log(`[SCORM Media Debug] Cached ${mediaId} (${mediaData.mimeType}, ${mediaData.data.length} bytes)`)
+    }
+  }
+
+  console.log(`[SCORM Media Debug] Cache hydration complete - ${mediaCache.size} total items in cache`)
 }
 
 /**
@@ -1070,7 +1090,8 @@ async function resolveAudioCaptionFile(
     // Check cache first
     const cached = mediaCache.get(cleanFileId)
     if (cached) {
-      console.log(`[Rust SCORM] Using cached media:`, cleanFileId)
+      console.log(`[SCORM Media Debug] Cache HIT for ${cleanFileId}`)
+      if (performanceTrace) performanceTrace.cacheHits++
       const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(cleanFileId)
       const filename = `${cleanFileId}.${ext}`
       
@@ -1086,8 +1107,10 @@ async function resolveAudioCaptionFile(
     }
     
     try {
+      console.log(`[SCORM Media Debug] Cache MISS for ${cleanFileId}`)
+      if (performanceTrace) performanceTrace.cacheMisses++
       const { createMediaService } = await import('./MediaService')
-      const mediaService = createMediaService(projectId)
+      const mediaService = createMediaService(projectId, undefined, true)
       const fileData = await mediaService.getMedia(cleanFileId)
       
       if (fileData && fileData.data) {
@@ -1229,7 +1252,7 @@ async function resolveImageUrl(
     try {
       console.log(`[Rust SCORM] Attempting to load media from MediaService:`, imageUrl)
       const { createMediaService } = await import('./MediaService')
-      const mediaService = createMediaService(projectId)
+      const mediaService = createMediaService(projectId, undefined, true)
       const fileData = await mediaService.getMedia(imageUrl)
       
       console.log(`[Rust SCORM] MediaService returned:`, {
@@ -1526,7 +1549,7 @@ async function resolveMedia(
           // Load from MediaService
           console.log(`[SCORM Media Debug] Loading from MediaService - Project: ${projectId}, Media ID: ${media.id}`)
           const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId)
+          const mediaService = createMediaService(projectId, undefined, true)
           
           // Add debug logging for MediaService state
           console.log(`[SCORM Media Debug] MediaService created for project: ${projectId}`)
@@ -1636,7 +1659,7 @@ async function resolveMedia(
           } else {
             try {
               const { createMediaService } = await import('./MediaService')
-              const mediaService = createMediaService(projectId)
+              const mediaService = createMediaService(projectId, undefined, true)
               const fileData = await mediaService.getMedia(mediaId)
               
               if (fileData && fileData.data && fileData.metadata?.mimeType === 'application/json') {
@@ -1840,7 +1863,7 @@ async function resolveMedia(
       } else {
         try {
           const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId)
+          const mediaService = createMediaService(projectId, undefined, true)
           const fileData = await mediaService.getMedia(media.url)
           
           if (fileData && fileData.data) {
@@ -1909,7 +1932,7 @@ async function resolveMedia(
       } else {
         try {
           const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId)
+          const mediaService = createMediaService(projectId, undefined, true)
           const fileData = await mediaService.getMedia(storageId)
           
           if (fileData && fileData.data) {
@@ -1964,7 +1987,7 @@ async function resolveMedia(
         } else {
           try {
             const { createMediaService } = await import('./MediaService')
-            const mediaService = createMediaService(projectId)
+            const mediaService = createMediaService(projectId, undefined, true)
             const fileData = await mediaService.getMedia(media.id)
             
             if (fileData && fileData.data) {
@@ -2423,7 +2446,7 @@ async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: Media
     await ensureProjectLoaded(projectId)
     
     const { createMediaService } = await import('./MediaService')
-    const mediaService = createMediaService(projectId)
+    const mediaService = createMediaService(projectId, undefined, true)
     console.log(`[Rust SCORM] MediaService created successfully`)
     
     // Get all stored media items
@@ -2494,7 +2517,7 @@ async function autoPopulateYouTubeFromStorage(
     await ensureProjectLoaded(projectId)
     
     const { createMediaService } = await import('./MediaService')
-    const mediaService = createMediaService(projectId)
+    const mediaService = createMediaService(projectId, undefined, true)
     console.log(`[Rust SCORM] MediaService created successfully for YouTube recovery`)
     
     // Get all stored media items
@@ -2714,7 +2737,7 @@ async function injectOrphanedMediaIntoCourseContent(projectId: string, courseDat
     await ensureProjectLoaded(projectId)
     
     const { createMediaService } = await import('./MediaService')
-    const mediaService = createMediaService(projectId)
+    const mediaService = createMediaService(projectId, undefined, true)
     console.log(`[Rust SCORM] MediaService created successfully for media injection`)
     
     // Get all stored media items
@@ -2917,7 +2940,7 @@ async function extractCourseContentMedia(courseContent: EnhancedCourseContent, p
     console.log(`  - Objectives page: ${!!courseContent.objectivesPage}`)
     
     const { createMediaService } = await import('./MediaService')
-    const mediaService = createMediaService(projectId)
+    const mediaService = createMediaService(projectId, undefined, true)
     console.log(`[Course Media Bridge] ✅ MediaService created successfully`)
     
     let extractedCount = 0
@@ -3482,7 +3505,7 @@ export async function generateRustSCORM(
   courseContent: CourseContent | EnhancedCourseContent,
   projectId: string,
   onProgress?: (message: string, progress: number) => void,
-  preloadedMedia?: Map<string, Blob>,
+  preloadedMedia?: Map<string, Blob> | Map<string, { data: Uint8Array; mimeType: string }>,
   courseSettings?: CourseSettings
 ): Promise<Uint8Array> {
   debugLogger.info('SCORM_GENERATION', 'Starting SCORM generation process', {
@@ -3492,9 +3515,27 @@ export async function generateRustSCORM(
     hasCourseSettings: !!courseSettings,
     contentType: 'objectives' in courseContent ? 'enhanced' : 'standard'
   })
+
+  // Initialize performance monitoring for cache effectiveness
+  performanceTrace = {
+    cacheHits: 0,
+    cacheMisses: 0,
+    batchedLoads: 0,
+    startTime: Date.now()
+  }
   // Pre-load media cache if provided
   if (preloadedMedia && preloadedMedia.size > 0) {
-    await preloadMediaCache(preloadedMedia)
+    // Check if this is an ID-keyed map with Uint8Array data (optimal format)
+    const firstEntry = preloadedMedia.entries().next().value
+    if (firstEntry && firstEntry[1] && typeof firstEntry[1] === 'object' && 'data' in firstEntry[1] && 'mimeType' in firstEntry[1]) {
+      // ID-keyed format: Map<string, {data: Uint8Array, mimeType: string}>
+      console.log(`[SCORM Media Debug] Using ID-keyed preloaded cache for ${preloadedMedia.size} items`)
+      hydrateMediaCacheById(preloadedMedia as Map<string, { data: Uint8Array; mimeType: string }>)
+    } else {
+      // Filename-keyed format: Map<string, Blob>
+      console.log(`[SCORM Media Debug] Using filename-keyed preloaded cache for ${preloadedMedia.size} items`)
+      await preloadMediaCache(preloadedMedia as Map<string, Blob>)
+    }
   }
   
   // Lock all blob URLs during SCORM generation to prevent cleanup
@@ -3603,7 +3644,7 @@ export async function generateRustSCORM(
         // Count total media including YouTube videos by accessing MediaService
         try {
           const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId)
+          const mediaService = createMediaService(projectId, undefined, true)
           const allMedia = await mediaService.listAllMedia()
           const totalMedia = allMedia.length
           const embeddedVideos = totalMedia - mediaFiles.length
@@ -3725,19 +3766,40 @@ export async function generateRustSCORM(
     })
     
     console.log('[Rust SCORM] Generated package size:', buffer.length)
-    
+
+    // Log performance trace statistics
+    if (performanceTrace) {
+      const generationTime = Date.now() - performanceTrace.startTime
+      console.log('[SCORM Trace]', {
+        cacheHits: performanceTrace.cacheHits,
+        cacheMisses: performanceTrace.cacheMisses,
+        batchedLoads: performanceTrace.batchedLoads,
+        generationTimeMs: generationTime,
+        cacheEfficiency: performanceTrace.cacheHits + performanceTrace.cacheMisses > 0
+          ? `${Math.round(performanceTrace.cacheHits / (performanceTrace.cacheHits + performanceTrace.cacheMisses) * 100)}%`
+          : 'N/A'
+      })
+      // Reset trace for next generation
+      performanceTrace = null
+    }
+
     // Unlock blob URLs after successful generation
     blobUrlManager.unlockAll()
-    
+
     if (onProgress && typeof onProgress === 'function') {
       onProgress('SCORM package generated successfully!', 100)
     }
-    
+
     return buffer
   } catch (error) {
     // Always unlock blob URLs, even on error
     blobUrlManager.unlockAll()
-    
+
+    // Reset performance trace on error
+    if (performanceTrace) {
+      performanceTrace = null
+    }
+
     // Log critical SCORM error to ultraSimpleLogger for persistence
     debugLogger.error('SCORM_GENERATION', 'SCORM generation process failed', {
       message: error instanceof Error ? error.message : String(error),
