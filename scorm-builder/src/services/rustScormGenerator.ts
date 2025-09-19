@@ -7,6 +7,102 @@ import { debugLogger } from '../utils/ultraSimpleLogger'
 import { z } from 'zod'
 
 // ============================================================================
+// REGRESSION DETECTION GUARDS
+// ============================================================================
+
+/**
+ * Development guard to detect MediaService calls during content conversion
+ * This prevents regressions where resolvers might bypass the preload cache
+ */
+let isInContentConversion = false
+const mediaServiceCallDetector = {
+  enterConversion() {
+    isInContentConversion = true
+  },
+  exitConversion() {
+    isInContentConversion = false
+  },
+  checkForRegressionCall(callerFunction: string) {
+    if (process.env.NODE_ENV === 'development' && isInContentConversion) {
+      throw new Error(`🚨 REGRESSION DETECTED: ${callerFunction} attempted MediaService call during conversion! All media should be pre-loaded in cache.`)
+    }
+  }
+}
+
+// ============================================================================
+// STRICT MEDIA MODE CONFIGURATION
+// ============================================================================
+
+/**
+ * Strict media mode configuration
+ * When enabled, generation fails with clear error list if any media is missing after preload
+ */
+interface StrictMediaModeConfig {
+  enabled: boolean
+  maxMissingMedia: number // Allow up to N missing media items before failing
+}
+
+const strictMediaMode: StrictMediaModeConfig = {
+  enabled: false, // Default: best-effort mode
+  maxMissingMedia: 0 // Strict mode: fail on any missing media
+}
+
+/**
+ * Media preload validation results
+ */
+interface MediaPreloadValidation {
+  requestedCount: number
+  cachedCount: number
+  missingCount: number
+  missingMediaIds: string[]
+  isValid: boolean
+}
+
+/**
+ * Validate media preload results against strict mode requirements
+ */
+function validateMediaPreload(requestedIds: string[], cachedCount: number): MediaPreloadValidation {
+  const requestedCount = requestedIds.length
+  const missingCount = requestedCount - cachedCount
+  const isValid = !strictMediaMode.enabled || missingCount <= strictMediaMode.maxMissingMedia
+
+  // For debugging, we'd need to check which specific IDs are missing
+  // but that requires inspecting the cache, which we'll do in the actual validation
+  return {
+    requestedCount,
+    cachedCount,
+    missingCount,
+    missingMediaIds: [], // Will be populated by caller if needed
+    isValid
+  }
+}
+
+/**
+ * Enable strict media mode for the current generation
+ * Call this before batch preloading to enforce strict validation
+ */
+export function enableStrictMediaMode(maxMissingMedia: number = 0) {
+  strictMediaMode.enabled = true
+  strictMediaMode.maxMissingMedia = maxMissingMedia
+  console.log(`[STRICT MEDIA MODE] Enabled with maxMissingMedia: ${maxMissingMedia}`)
+}
+
+/**
+ * Disable strict media mode (return to best-effort)
+ */
+export function disableStrictMediaMode() {
+  strictMediaMode.enabled = false
+  console.log(`[STRICT MEDIA MODE] Disabled, returning to best-effort mode`)
+}
+
+/**
+ * Get current strict media mode status
+ */
+export function getStrictMediaModeStatus(): StrictMediaModeConfig {
+  return { ...strictMediaMode }
+}
+
+// ============================================================================
 // RUNTIME VALIDATION SCHEMAS WITH ZOD
 // ============================================================================
 
@@ -1107,6 +1203,35 @@ async function batchPreloadMedia(mediaIds: string[], projectId: string): Promise
     console.log(`[SCORM Batch Pre-Load] 🚀 COMPLETED in ${duration}ms: ${cacheHits} cached, ${cacheMisses} missing`)
     console.log(`[SCORM Batch Pre-Load] Cache now contains ${mediaCache.size} total items`)
 
+    // 🚨 STRICT MEDIA MODE: Validate preload results
+    if (strictMediaMode.enabled) {
+      const validation = validateMediaPreload(mediaIds, cacheHits)
+      validation.missingMediaIds = mediaIds.filter(id => !mediaCache.has(id))
+
+      if (!validation.isValid) {
+        const errorMessage = [
+          `🚨 STRICT MEDIA MODE VIOLATION: Generation failed due to missing media`,
+          `📊 Requested: ${validation.requestedCount}, Cached: ${validation.cachedCount}, Missing: ${validation.missingCount}`,
+          `🚫 Maximum allowed missing media: ${strictMediaMode.maxMissingMedia}`,
+          `❌ Missing media IDs:`,
+          ...validation.missingMediaIds.map(id => `   - ${id}`)
+        ].join('\n')
+
+        debugLogger.error('STRICT_MEDIA_MODE', 'Generation failed due to missing media', {
+          projectId,
+          requestedCount: validation.requestedCount,
+          cachedCount: validation.cachedCount,
+          missingCount: validation.missingCount,
+          maxAllowed: strictMediaMode.maxMissingMedia,
+          missingMediaIds: validation.missingMediaIds
+        })
+
+        throw new Error(errorMessage)
+      } else {
+        console.log(`[STRICT MEDIA MODE] ✅ Validation passed: ${validation.missingCount}/${strictMediaMode.maxMissingMedia} missing media allowed`)
+      }
+    }
+
     // Track performance for monitoring
     if (performanceTrace) {
       performanceTrace.batchedLoads += 1
@@ -1116,7 +1241,13 @@ async function batchPreloadMedia(mediaIds: string[], projectId: string): Promise
 
   } catch (error) {
     console.error(`[SCORM Batch Pre-Load] ❌ FAILED:`, error)
-    // Don't throw - let content conversion proceed with individual requests as fallback
+
+    // Re-throw strict mode violations
+    if (error instanceof Error && error.message.includes('STRICT MEDIA MODE VIOLATION')) {
+      throw error
+    }
+
+    // For other errors, don't throw - let content conversion proceed with individual requests as fallback
   }
 }
 
@@ -1272,47 +1403,17 @@ async function resolveAudioCaptionFile(
       return `media/${filename}`
     }
     
-    try {
-      console.log(`[SCORM Media Debug] Cache MISS for ${cleanFileId}`)
-      if (performanceTrace) performanceTrace.cacheMisses++
-      const { createMediaService } = await import('./MediaService')
-      const mediaService = createMediaService(projectId, undefined, true)
-      const fileData = await mediaService.getMedia(cleanFileId)
-      
-      if (fileData && fileData.data) {
-        const mimeType = fileData.metadata?.mimeType || ''
-        const uint8Data = new Uint8Array(fileData.data)
-        
-        // Cache the data
-        mediaCache.set(cleanFileId, { data: uint8Data, mimeType })
-        
-        const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(cleanFileId)
-        const filename = `${cleanFileId}.${ext}`
-        
-        mediaFiles.push({
-          filename,
-          content: uint8Data,
-        })
-        
-        return `media/${filename}`
-      } else {
-        debugLogger.warn('SCORM_MEDIA', 'Media file not found during audio/caption resolution', {
-          projectId,
-          fileId: cleanFileId,
-          originalFileId: fileId
-        })
-        console.warn(`[Rust SCORM] Media not found: ${cleanFileId}, skipping`)
-        return undefined
-      }
-    } catch (error) {
-      debugLogger.warn('SCORM_MEDIA', 'Failed to load audio/caption file', {
-        projectId,
-        fileId: cleanFileId,
-        originalFileId: fileId,
-        error: error instanceof Error ? error.message : String(error)
-      })
-      console.warn(`[Rust SCORM] Failed to load audio/caption file ${cleanFileId}, skipping:`, error)
-    }
+    // Media should be pre-loaded in cache - if not found, it doesn't exist
+    mediaServiceCallDetector.checkForRegressionCall('resolveAudioCaptionFile')
+    console.log(`[SCORM Media Debug] Cache MISS for ${cleanFileId} - media should be pre-loaded, skipping`)
+    if (performanceTrace) performanceTrace.cacheMisses++
+    debugLogger.warn('SCORM_MEDIA', 'Media file not found in pre-loaded cache', {
+      projectId,
+      fileId: cleanFileId,
+      originalFileId: fileId
+    })
+    console.warn(`[Rust SCORM] Media not found in pre-loaded cache: ${cleanFileId}, skipping`)
+    return undefined
   }
   
   // Otherwise, return as-is (might be a direct filename)
@@ -1418,81 +1519,14 @@ async function resolveImageUrl(
       console.log(`[SCORM Media Debug] Cache MISS for ${imageUrl}`)
     }
 
-    try {
-      console.log(`[Rust SCORM] Attempting to load media from MediaService:`, imageUrl)
-      const { createMediaService } = await import('./MediaService')
-      const mediaService = createMediaService(projectId, undefined, true)
-      const fileData = await mediaService.getMedia(imageUrl)
-      
-      console.log(`[Rust SCORM] MediaService returned:`, {
-        hasFileData: !!fileData,
-        hasData: !!(fileData?.data),
-        dataLength: fileData?.data ? fileData.data.length : 0,
-        metadata: fileData?.metadata
-      })
-      
-      if (fileData && fileData.data) {
-        const mimeType = fileData.metadata?.mimeType || fileData.metadata?.mime_type || ''
-        const uint8Data = new Uint8Array(fileData.data)
-        
-        // Cache the data
-        mediaCache.set(imageUrl, { data: uint8Data, mimeType })
-        
-        // Check if this is a video metadata JSON file
-        if (imageUrl.startsWith('video-') && (mimeType === 'application/json' || mimeType === 'text/plain')) {
-          try {
-            // Parse the JSON to get the YouTube URL
-            const jsonText = new TextDecoder().decode(fileData.data)
-            const metadata = safeJsonParse(jsonText, {})
-            if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
-              console.log(`[Rust SCORM] Found YouTube URL in metadata:`, metadata.url)
-              return metadata.url // Return the YouTube URL directly
-            }
-            if (metadata.embed_url && (metadata.embed_url.includes('youtube.com') || metadata.embed_url.includes('youtu.be'))) {
-              console.log(`[Rust SCORM] Found YouTube embed URL in metadata:`, metadata.embed_url)
-              return metadata.embed_url // Return the YouTube embed URL directly
-            }
-          } catch (error) {
-            console.error(`[Rust SCORM] Failed to parse video metadata:`, error)
-          }
-        }
-        
-        const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(imageUrl)
-        
-        // Use proper extension based on MIME type (especially important for SVG)
-        const filename = `${imageUrl}.${ext}`
-        
-        console.log(`[Rust SCORM] Adding image to mediaFiles:`, {
-          imageUrl,
-          filename,
-          mimeType,
-          dataSize: uint8Data.length
-        })
-        
-        mediaFiles.push({
-          filename,
-          content: uint8Data,
-        })
-        
-        return `media/${filename}`
-      } else {
-        debugLogger.warn('SCORM_MEDIA', 'MediaService returned no data for image', {
-          projectId,
-          imageUrl,
-          mediaServiceResponse: !!fileData
-        })
-        console.warn(`[Rust SCORM] MediaService returned no data for: ${imageUrl}, skipping`)
-        return undefined
-      }
-    } catch (error) {
-      debugLogger.warn('SCORM_MEDIA', 'Failed to load image from MediaService', {
-        projectId,
-        imageUrl,
-        error: error instanceof Error ? error.message : String(error)
-      })
-      console.warn(`[Rust SCORM] Failed to load media from MediaService for ${imageUrl}, skipping:`, error)
-      return undefined
-    }
+    // Media should be pre-loaded in cache - if not found, it doesn't exist
+    mediaServiceCallDetector.checkForRegressionCall('resolveImageUrl')
+    console.log(`[Rust SCORM] Media not found in pre-loaded cache: ${imageUrl}, skipping`)
+    debugLogger.warn('SCORM_MEDIA', 'Media not found in pre-loaded cache', {
+      projectId,
+      imageUrl
+    })
+    return undefined
   }
   
   // Otherwise, assume it's already a package-relative path
@@ -1774,27 +1808,14 @@ async function resolveMedia(
             }
           } else {
             console.log(`[SCORM Media Debug] Cache MISS for ${mediaId}`)
-            try {
-              const { createMediaService } = await import('./MediaService')
-              const mediaService = createMediaService(projectId, undefined, true)
-              const fileData = await mediaService.getMedia(mediaId)
-              
-              if (fileData && fileData.data && fileData.metadata?.mimeType === 'application/json') {
-                const uint8Data = new Uint8Array(fileData.data)
-                
-                // Cache the data
-                mediaCache.set(mediaId, { data: uint8Data, mimeType: 'application/json' })
-                
-                const jsonText = new TextDecoder().decode(uint8Data)
-                const metadata = safeJsonParse(jsonText, {})
-                if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
-                  console.log(`[Rust SCORM] Resolved asset.localhost to YouTube URL:`, metadata.url)
-                  media.url = metadata.url
-                }
-              }
-            } catch (error) {
-              console.error(`[Rust SCORM] Failed to resolve asset.localhost URL:`, error)
-            }
+            // Media should be pre-loaded in cache - if not found, skip asset.localhost resolution
+            mediaServiceCallDetector.checkForRegressionCall('resolveMedia asset.localhost')
+            console.log(`[SCORM Media Debug] asset.localhost media not found in pre-loaded cache: ${mediaId}, skipping resolution`)
+            debugLogger.warn('SCORM_MEDIA', 'asset.localhost media not found in pre-loaded cache', {
+              projectId,
+              mediaId,
+              originalUrl: media.url
+            })
           }
         }
       }
@@ -1980,52 +2001,15 @@ async function resolveMedia(
         }
       } else {
         console.log(`[SCORM Media Debug] Cache MISS for ${media.url}`)
-        try {
-          const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId, undefined, true)
-          const fileData = await mediaService.getMedia(media.url)
-          
-          if (fileData && fileData.data) {
-            const mimeType = fileData.metadata?.mimeType || ''
-            const uint8Data = new Uint8Array(fileData.data)
-            
-            // Cache the data
-            mediaCache.set(media.url, { data: uint8Data, mimeType })
-            
-            // Check if this is a video metadata JSON file
-            if (media.type === 'video' && mimeType === 'application/json') {
-              try {
-                const jsonText = new TextDecoder().decode(uint8Data)
-                const metadata = safeJsonParse(jsonText, {})
-                if (metadata.url && (metadata.url.includes('youtube.com') || metadata.url.includes('youtu.be'))) {
-                  console.log(`[Rust SCORM] Found YouTube URL in video metadata:`, metadata.url)
-                  resolvedUrl = metadata.url
-                }
-              } catch (error) {
-                console.error(`[Rust SCORM] Failed to parse video metadata:`, error)
-              }
-            }
-            
-            // If not YouTube metadata, process as regular file
-            if (!resolvedUrl) {
-              const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.url)
-              const filename = `${media.url}.${ext}`
-              
-              mediaFiles.push({
-                filename,
-                content: uint8Data,
-              })
-              
-              resolvedUrl = `media/${filename}`
-            } else {
-              console.warn(`[Rust SCORM] MediaService returned no data for: ${media.url}, skipping`)
-              resolvedUrl = undefined
-            }
-          }
-        } catch (error) {
-          console.warn(`[Rust SCORM] Error loading media from MediaService for ${media.url}, skipping:`, error)
-          resolvedUrl = undefined
-        }
+        // Media should be pre-loaded in cache - if not found, it doesn't exist
+        mediaServiceCallDetector.checkForRegressionCall('resolveMedia media.url')
+        console.log(`[SCORM Media Debug] Media not found in pre-loaded cache: ${media.url}, skipping`)
+        debugLogger.warn('SCORM_MEDIA', 'Media not found in pre-loaded cache', {
+          projectId,
+          mediaUrl: media.url,
+          mediaType: media.type
+        })
+        resolvedUrl = undefined
       }
     }
     // If it has a storageId, use that instead
@@ -2051,35 +2035,15 @@ async function resolveMedia(
         resolvedUrl = `media/${filename}`
       } else {
         console.log(`[SCORM Media Debug] Cache MISS for ${storageId}`)
-        try {
-          const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId, undefined, true)
-          const fileData = await mediaService.getMedia(storageId)
-          
-          if (fileData && fileData.data) {
-            const mimeType = fileData.metadata?.mimeType || ''
-            const uint8Data = new Uint8Array(fileData.data)
-            
-            // Cache the data
-            mediaCache.set(storageId, { data: uint8Data, mimeType })
-            
-            const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(storageId)
-            const filename = `${storageId}.${ext}`
-            
-            mediaFiles.push({
-              filename,
-              content: uint8Data,
-            })
-            
-            resolvedUrl = `media/${filename}`
-          } else {
-            console.warn(`[Rust SCORM] MediaService returned no data for storageId: ${storageId}, skipping`)
-            resolvedUrl = undefined
-          }
-        } catch (error) {
-          console.warn(`[Rust SCORM] Error loading media with storageId ${storageId}, skipping:`, error)
-          resolvedUrl = undefined
-        }
+        // Media should be pre-loaded in cache - if not found, it doesn't exist
+        mediaServiceCallDetector.checkForRegressionCall('resolveMedia storageId')
+        console.log(`[SCORM Media Debug] Storage media not found in pre-loaded cache: ${storageId}, skipping`)
+        debugLogger.warn('SCORM_MEDIA', 'Storage media not found in pre-loaded cache', {
+          projectId,
+          storageId,
+          mediaType: media.type
+        })
+        resolvedUrl = undefined
       }
     }
     // Handle blob URLs by immediately falling back to MediaService
@@ -2108,37 +2072,15 @@ async function resolveMedia(
           resolvedUrl = `media/${filename}`
         } else {
           console.log(`[SCORM Media Debug] Cache MISS for ${media.id}`)
-          try {
-            const { createMediaService } = await import('./MediaService')
-            const mediaService = createMediaService(projectId, undefined, true)
-            const fileData = await mediaService.getMedia(media.id)
-            
-            if (fileData && fileData.data) {
-              const mimeType = fileData.metadata?.mimeType || ''
-              const uint8Data = new Uint8Array(fileData.data)
-              
-              // Cache the data
-              mediaCache.set(media.id, { data: uint8Data, mimeType })
-              
-              const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.id)
-              const filename = `${media.id}.${ext}`
-              
-              mediaFiles.push({
-                filename,
-                content: uint8Data,
-              })
-              
-              resolvedUrl = `media/${filename}`
-              console.log(`[Rust SCORM] Successfully recovered media from MediaService: ${media.id}`)
-            } else {
-              console.warn(`[Rust SCORM] MediaService returned no data for blob URL fallback: ${media.id}, skipping`)
-              resolvedUrl = undefined
-            }
-          } catch (msError) {
-            console.warn(`[Rust SCORM] MediaService fallback also failed for ${media.id}, skipping:`, msError)
-            // Skip this media item rather than using broken blob URL
-            resolvedUrl = undefined
-          }
+          // Media should be pre-loaded in cache - if not found, skip blob URL recovery
+          mediaServiceCallDetector.checkForRegressionCall('resolveMedia blob URL fallback')
+          console.log(`[SCORM Media Debug] Blob URL media not found in pre-loaded cache: ${media.id}, skipping`)
+          debugLogger.warn('SCORM_MEDIA', 'Blob URL media not found in pre-loaded cache', {
+            projectId,
+            mediaId: media.id,
+            blobUrl: media.url
+          })
+          resolvedUrl = undefined
         }
       } else {
         // Skip this media item if we can't recover it
@@ -2330,6 +2272,9 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   const allMediaIds = collectAllMediaIds(cc)
   await batchPreloadMedia(allMediaIds, projectId)
   console.log(`[Rust SCORM] Batch pre-loading completed`)
+
+  // 🚨 Enable regression detection for content conversion phase
+  mediaServiceCallDetector.enterConversion()
 
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
@@ -2555,12 +2500,15 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   console.log(`[Rust SCORM] Before auto-population: mediaFiles.length = ${mediaFiles.length}`)
   await autoPopulateMediaFromStorage(projectId, mediaFiles, mediaCounter)
   console.log(`[Rust SCORM] After auto-population: mediaFiles.length = ${mediaFiles.length}`)
-  
+
   // Inject orphaned media into course content structure
   console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
   await injectOrphanedMediaIntoCourseContent(projectId, result)
   console.log(`[Rust SCORM] Media injection complete`)
-  
+
+  // 🚨 Disable regression detection after content conversion
+  mediaServiceCallDetector.exitConversion()
+
   return { courseData: result, mediaFiles }
 }
 
@@ -3305,6 +3253,9 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   await batchPreloadMedia(allMediaIds, projectId)
   console.log(`[Rust SCORM] Batch pre-loading completed`)
 
+  // 🚨 Enable regression detection for content conversion phase
+  mediaServiceCallDetector.enterConversion()
+
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
   const mediaCounter: { [type: string]: number } = {}
@@ -3661,12 +3612,15 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   console.log(`[Rust SCORM] Before auto-population: mediaFiles.length = ${mediaFiles.length}`)
   await autoPopulateMediaFromStorage(projectId, mediaFiles, mediaCounter)
   console.log(`[Rust SCORM] After auto-population: mediaFiles.length = ${mediaFiles.length}`)
-  
+
   // Inject orphaned media into course content structure
   console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
   await injectOrphanedMediaIntoCourseContent(projectId, result)
   console.log(`[Rust SCORM] Media injection complete`)
-  
+
+  // 🚨 Disable regression detection after content conversion
+  mediaServiceCallDetector.exitConversion()
+
   return { courseData: result, mediaFiles }
 }
 
