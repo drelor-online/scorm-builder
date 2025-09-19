@@ -751,44 +751,45 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
         return
       }
       
-      // CRITICAL FIX: Load media from disk first to handle session restart
-      // This ensures blob URLs are regenerated for media stored in previous sessions
-      logger.info('[UnifiedMediaContext v2.1.1] Loading media from disk for session restart handling')
-      
-      // Check if MediaService has loadMediaFromDisk method
-      if (typeof (mediaService as any).loadMediaFromDisk === 'function') {
+      // 🚀 PERFORMANCE OPTIMIZATION: Consolidated loading approach
+      // The new MediaService with caching will handle all sources efficiently in a single call
+      logger.info('[UnifiedMediaContext] Starting optimized media loading with consolidated approach')
+
+      // Only load media from disk if the cache is completely empty
+      // This handles session restart while avoiding redundant disk scans
+      const currentCacheSize = typeof (mediaService as any).getCacheSize === 'function' ? (mediaService as any).getCacheSize() : 0
+      if (currentCacheSize === 0 && typeof (mediaService as any).loadMediaFromDisk === 'function') {
         try {
+          logger.info('[UnifiedMediaContext] Cache empty - performing one-time disk load')
           await (mediaService as any).loadMediaFromDisk()
-          logger.info('[UnifiedMediaContext v2.1.1] Successfully loaded media from disk')
         } catch (diskLoadError) {
-          logger.warn('[UnifiedMediaContext v2.1.1] Failed to load media from disk, continuing with project data:', diskLoadError)
+          logger.warn('[UnifiedMediaContext] Disk load failed, MediaService cache will handle:', diskLoadError)
         }
+      } else if (currentCacheSize > 0) {
+        logger.info(`[UnifiedMediaContext] Cache has ${currentCacheSize} items - skipping disk load`)
       }
-      
-      // Then try to load media from saved project data
-      logger.info('[UnifiedMediaContext] Attempting to load media from project data')
-      
-      // Get saved media data from storage
-      const audioNarrationData = await storage.getContent('audioNarration')
-      const mediaEnhancementsData = await storage.getContent('media-enhancements')
-      const mediaRegistryData = await storage.getContent('media')
-      const courseContent = await storage.getContent('course-content')
-      
-      logger.info('[UnifiedMediaContext] Retrieved media data from storage:', {
-        hasAudioNarration: !!audioNarrationData,
-        hasMediaEnhancements: !!mediaEnhancementsData,
-        hasMediaRegistry: !!mediaRegistryData,
-        hasCourseContent: !!courseContent
-      })
-      
-      // Load media into MediaService cache
-      if (audioNarrationData || mediaEnhancementsData || mediaRegistryData) {
-        await mediaService.loadMediaFromProject(audioNarrationData, mediaEnhancementsData, mediaRegistryData)
-      }
-      
-      // Also load media from course content (where media is stored in page arrays)
-      if (courseContent) {
-        await mediaService.loadMediaFromCourseContent(courseContent)
+
+      // Load project data into cache only if cache is still sparse
+      // This prevents redundant project data loading when cache is already populated
+      if (currentCacheSize < 5) { // Threshold for "sparse cache"
+        logger.info('[UnifiedMediaContext] Cache sparse - loading project data')
+
+        const audioNarrationData = await storage.getContent('audioNarration')
+        const mediaEnhancementsData = await storage.getContent('media-enhancements')
+        const mediaRegistryData = await storage.getContent('media')
+        const courseContent = await storage.getContent('course-content')
+
+        // Load media into MediaService cache
+        if (audioNarrationData || mediaEnhancementsData || mediaRegistryData) {
+          await mediaService.loadMediaFromProject(audioNarrationData, mediaEnhancementsData, mediaRegistryData)
+        }
+
+        // Also load media from course content (where media is stored in page arrays)
+        if (courseContent) {
+          await mediaService.loadMediaFromCourseContent(courseContent)
+        }
+      } else {
+        logger.info('[UnifiedMediaContext] Cache sufficient - skipping project data reload')
       }
       
       // 🚀 FIX 6: SMART BACKEND CALL PREVENTION (UPGRADED)

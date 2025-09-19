@@ -118,6 +118,11 @@ export class MediaService {
   private audioLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate concurrent audio loads
   private mediaLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate ALL media loads
 
+  // 📊 PERFORMANCE: Cache listAllMedia results to prevent redundant backend calls
+  private listAllMediaCache: Map<string, { result: MediaItem[]; timestamp: number }> = new Map()
+  private listAllMediaPromises: Map<string, Promise<MediaItem[]>> = new Map() // Deduplicate concurrent listAllMedia calls
+  private static readonly CACHE_TTL = 10000 // 10 seconds cache TTL
+
   // 🚀 PHASE 3: Generation mode for optimized batching (made mutable for singleton updates)
   private isGenerationMode: boolean
 
@@ -2351,34 +2356,81 @@ export class MediaService {
   async listAllMedia(options: { excludeTypes?: string[] } = {}): Promise<MediaItem[]> {
     const { excludeTypes = [] } = options
     const isVisualOnly = excludeTypes.includes('audio') && excludeTypes.includes('caption')
-    
-    debugLogger.debug('MediaService.listAllMedia', 'Listing all media', { 
+
+    // 📊 PERFORMANCE: Create cache key based on options
+    const cacheKey = JSON.stringify({ excludeTypes: excludeTypes.sort(), projectId: this.projectId })
+    const now = Date.now()
+
+    // Check cache first
+    const cached = this.listAllMediaCache.get(cacheKey)
+    if (cached && (now - cached.timestamp) < MediaService.CACHE_TTL) {
+      console.log(`[PERFORMANCE] 🚀 listAllMedia cache HIT (${now - cached.timestamp}ms old) - returning ${cached.result.length} items`)
+      return cached.result
+    }
+
+    // Check for concurrent requests
+    const existingPromise = this.listAllMediaPromises.get(cacheKey)
+    if (existingPromise) {
+      console.log(`[PERFORMANCE] 🔄 listAllMedia deduplication - reusing in-flight request`)
+      return existingPromise
+    }
+
+    debugLogger.debug('MediaService.listAllMedia', 'Listing all media', {
       excludeTypes,
-      visualOnlyMode: isVisualOnly
+      visualOnlyMode: isVisualOnly,
+      cacheKey,
+      cacheMiss: !!cached ? 'expired' : 'not found'
     })
-    
+
+    console.log(`[PERFORMANCE] ⚠️ listAllMedia cache MISS - calling backend`)
+
+    // Create new request with deduplication
+    const promise = this.listAllMediaInternal(options)
+    this.listAllMediaPromises.set(cacheKey, promise)
+
+    try {
+      const result = await promise
+
+      // Cache the result
+      this.listAllMediaCache.set(cacheKey, { result, timestamp: now })
+      console.log(`[PERFORMANCE] ✅ listAllMedia cached ${result.length} items for ${MediaService.CACHE_TTL}ms`)
+
+      return result
+    } finally {
+      // Clean up pending request
+      this.listAllMediaPromises.delete(cacheKey)
+    }
+  }
+
+  /**
+   * Internal implementation of listAllMedia without caching
+   */
+  private async listAllMediaInternal(options: { excludeTypes?: string[] } = {}): Promise<MediaItem[]> {
+    const { excludeTypes = [] } = options
+    const isVisualOnly = excludeTypes.includes('audio') && excludeTypes.includes('caption')
+
     // 🚀 FIX 6: SMART BACKEND CALL PREVENTION
     if (isVisualOnly) {
       mediaServiceDebugLog('[MediaService] 🚀 FIX 6: SMART BACKEND CALL PREVENTION - Visual-only mode detected')
-      
+
       // Check global flag first
       const globalVisualMode = (globalThis as any)._scormBuilderVisualOnlyMode
       if (globalVisualMode) {
         mediaServiceDebugLog('[MediaService] ✅ Global visual-only flag confirmed, implementing smart filtering')
       }
     }
-    
+
     try {
       // Start with cached items
       const cachedItems = Array.from(this.mediaCache.values())
       const itemsMap = new Map<string, MediaItem>()
-      
+
       // Add cached items to map (with filtering if specified)
       cachedItems.forEach(item => {
         // Apply excludeTypes filter
         if (excludeTypes.length > 0 && excludeTypes.includes(item.type)) {
-          debugLogger.debug('MediaService.listAllMedia', 'Excluding cached item', { 
-            id: item.id, 
+          debugLogger.debug('MediaService.listAllMedia', 'Excluding cached item', {
+            id: item.id,
             type: item.type,
             reason: 'Type excluded'
           })
@@ -2386,65 +2438,62 @@ export class MediaService {
         }
         itemsMap.set(item.id, item)
       })
-      
+
       // 🚀 FIX 6: SMART BACKEND CALL LOGIC
       // Only call backend if we need types that aren't excluded
       const shouldCallBackend = !isVisualOnly || cachedItems.length === 0
-      
+
       if (shouldCallBackend && this.fileStorage && typeof (this.fileStorage as any).getAllProjectMedia === 'function') {
         try {
           debugLogger.debug('MediaService.listAllMedia', 'Fetching media from file system', {
             reason: isVisualOnly ? 'Cache empty, need initial scan' : 'Full scan requested'
           })
-          
+
           mediaServiceDebugLog(`[MediaService] 🔍 Calling backend getAllProjectMedia() - Visual-only: ${isVisualOnly}`)
           const fileSystemMedia = await (this.fileStorage as any).getAllProjectMedia()
-          
+
           if (Array.isArray(fileSystemMedia)) {
             let excludedCount = 0
             let includedCount = 0
-            
+
             // Convert file system media to MediaItem format and merge (with filtering)
             fileSystemMedia.forEach((fsMedia: any) => {
               if (!itemsMap.has(fsMedia.id)) {
                 const mediaType = fsMedia.mediaType || fsMedia.metadata?.type || 'image'
-                
-                // Apply excludeTypes filter  
+
+                // Apply excludeTypes filter
                 if (excludeTypes.length > 0 && excludeTypes.includes(mediaType)) {
                   excludedCount++
-                  debugLogger.debug('MediaService.listAllMedia', 'Excluding file system item', { 
-                    id: fsMedia.id, 
+                  debugLogger.debug('MediaService.listAllMedia', 'Excluding file system item', {
+                    id: fsMedia.id,
                     type: mediaType,
                     reason: 'Type excluded'
                   })
                   return
                 }
-                
-                // Convert to MediaItem format
-                const mediaItem: MediaItem = {
+
+                const item: MediaItem = {
                   id: fsMedia.id,
                   type: mediaType,
-                  pageId: fsMedia.metadata?.pageId || fsMedia.metadata?.page_id || this.derivePageIdFromMediaId(fsMedia.id),
-                  fileName: fsMedia.metadata?.fileName || fsMedia.metadata?.original_name || '',
-                  metadata: {
-                    ...fsMedia.metadata,
-                    uploadedAt: fsMedia.metadata?.uploadedAt || new Date().toISOString()
-                  }
+                  pageId: fsMedia.metadata?.pageId || 'unknown',
+                  fileName: fsMedia.fileName || `${fsMedia.id}.${this.getExtension(mediaType as MediaType)}`,
+                  metadata: fsMedia.metadata || {}
                 }
-                itemsMap.set(fsMedia.id, mediaItem)
+                itemsMap.set(fsMedia.id, item)
+
+                // Add to cache for future use
+                this.mediaCache.set(fsMedia.id, item)
                 includedCount++
               }
             })
-            
-            debugLogger.info('MediaService.listAllMedia', 'Merged file system media with filtering', {
-              cachedCount: cachedItems.length,
-              fileSystemTotal: fileSystemMedia.length,
-              fileSystemIncluded: includedCount,
-              fileSystemExcluded: excludedCount,
-              finalCount: itemsMap.size,
-              excludeTypes
+
+            debugLogger.debug('MediaService.listAllMedia', 'File system scan complete', {
+              totalScanned: fileSystemMedia.length,
+              newItemsAdded: includedCount,
+              excludedItems: excludedCount,
+              finalCount: itemsMap.size
             })
-            
+
             if (isVisualOnly && excludedCount > 0) {
               mediaServiceDebugLog(`[MediaService] 🚀 FIX 6: Successfully excluded ${excludedCount} audio/caption items from results`)
             }
@@ -2461,15 +2510,15 @@ export class MediaService {
           cachedItems: cachedItems.length
         })
       }
-      
+
       const items = Array.from(itemsMap.values())
-      
+
       debugLogger.info('MediaService.listAllMedia', 'Media listed with filtering', {
         totalCount: items.length,
         excludeTypes,
         visualOnlyMode: isVisualOnly
       })
-      
+
       mediaServiceDebugLog(`[MediaService] Listed media with filtering - Total: ${items.length}, Excluded types: [${excludeTypes.join(', ')}]`)
       return items
     } catch (error) {
@@ -3609,6 +3658,14 @@ export class MediaService {
       }
       return result
     }
+  }
+
+  /**
+   * Get the current size of the media cache
+   * Used for optimization decisions in component loading patterns
+   */
+  getCacheSize(): number {
+    return this.mediaCache.size
   }
 }
 
