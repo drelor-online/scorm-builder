@@ -1207,6 +1207,7 @@ async function resolveImageUrl(
     // Check cache first
     const cached = mediaCache.get(imageUrl)
     if (cached) {
+      console.log(`[SCORM Media Debug] Cache HIT for ${imageUrl}`)
       console.log(`[Rust SCORM] Using cached media:`, imageUrl)
       
       // Check if this is a video metadata JSON file
@@ -1247,8 +1248,10 @@ async function resolveImageUrl(
       }
       
       return `media/${filename}`
+    } else {
+      console.log(`[SCORM Media Debug] Cache MISS for ${imageUrl}`)
     }
-    
+
     try {
       console.log(`[Rust SCORM] Attempting to load media from MediaService:`, imageUrl)
       const { createMediaService } = await import('./MediaService')
@@ -1526,6 +1529,7 @@ async function resolveMedia(
           // Check cache first
           const cached = mediaCache.get(media.id)
           if (cached) {
+            console.log(`[SCORM Media Debug] Cache HIT for ${media.id}`)
             console.log(`[Rust SCORM] Using cached media:`, media.id)
             const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.id)
             const filename = `${media.id}.${ext}`
@@ -1544,8 +1548,10 @@ async function resolveMedia(
               resolved_path: `media/${filename}`
             })
             continue
+          } else {
+            console.log(`[SCORM Media Debug] Cache MISS for ${media.id}`)
           }
-          
+
           // Load from MediaService
           console.log(`[SCORM Media Debug] Loading from MediaService - Project: ${projectId}, Media ID: ${media.id}`)
           const { createMediaService } = await import('./MediaService')
@@ -1646,6 +1652,7 @@ async function resolveMedia(
           // Check cache first
           const cached = mediaCache.get(mediaId)
           if (cached && cached.mimeType === 'application/json') {
+            console.log(`[SCORM Media Debug] Cache HIT for ${mediaId}`)
             try {
               const jsonText = new TextDecoder().decode(cached.data)
               const metadata = safeJsonParse(jsonText, {})
@@ -1657,6 +1664,7 @@ async function resolveMedia(
               console.error(`[Rust SCORM] Failed to parse cached asset.localhost metadata:`, error)
             }
           } else {
+            console.log(`[SCORM Media Debug] Cache MISS for ${mediaId}`)
             try {
               const { createMediaService } = await import('./MediaService')
               const mediaService = createMediaService(projectId, undefined, true)
@@ -1829,6 +1837,7 @@ async function resolveMedia(
       // Check cache first
       const cached = mediaCache.get(media.url)
       if (cached) {
+        console.log(`[SCORM Media Debug] Cache HIT for ${media.url}`)
         console.log(`[Rust SCORM] Using cached media in resolveMedia:`, media.url)
         
         // Check if this is a video metadata JSON file
@@ -1861,6 +1870,7 @@ async function resolveMedia(
           resolvedUrl = `media/${filename}`
         }
       } else {
+        console.log(`[SCORM Media Debug] Cache MISS for ${media.url}`)
         try {
           const { createMediaService } = await import('./MediaService')
           const mediaService = createMediaService(projectId, undefined, true)
@@ -1916,6 +1926,7 @@ async function resolveMedia(
       // Check cache first
       const cached = mediaCache.get(storageId)
       if (cached) {
+        console.log(`[SCORM Media Debug] Cache HIT for ${storageId}`)
         console.log(`[Rust SCORM] Using cached media for storageId:`, storageId)
         const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(storageId)
         const filename = `${storageId}.${ext}`
@@ -1930,6 +1941,7 @@ async function resolveMedia(
         
         resolvedUrl = `media/${filename}`
       } else {
+        console.log(`[SCORM Media Debug] Cache MISS for ${storageId}`)
         try {
           const { createMediaService } = await import('./MediaService')
           const mediaService = createMediaService(projectId, undefined, true)
@@ -1971,6 +1983,7 @@ async function resolveMedia(
         // Check cache first
         const cached = mediaCache.get(media.id)
         if (cached) {
+          console.log(`[SCORM Media Debug] Cache HIT for ${media.id}`)
           console.log(`[Rust SCORM] Using cached media for blob URL fallback:`, media.id)
           const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.id)
           const filename = `${media.id}.${ext}`
@@ -1985,6 +1998,7 @@ async function resolveMedia(
           
           resolvedUrl = `media/${filename}`
         } else {
+          console.log(`[SCORM Media Debug] Cache MISS for ${media.id}`)
           try {
             const { createMediaService } = await import('./MediaService')
             const mediaService = createMediaService(projectId, undefined, true)
@@ -2459,40 +2473,57 @@ async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: Media
     }
     console.log(`[Rust SCORM] Auto-populating media: found ${allMediaItems.length} stored media items`)
     
-    for (const mediaItem of allMediaItems) {
-      // Check if this media is already in mediaFiles
-      // Check if media file already exists in mediaFiles array
+    // 🚀 CRITICAL FIX: Replace sequential loop with parallel batch loading
+    // Filter out media items that are already processed
+    const unprocessedItems = allMediaItems.filter(mediaItem => {
       const expectedExtension = getExtensionFromMimeType(mediaItem.metadata?.mimeType || '') || getExtensionFromMediaId(mediaItem.id)
-      const existingFile = mediaFiles.find(f => 
-        f.filename.startsWith(mediaItem.id) || 
+      const existingFile = mediaFiles.find(f =>
+        f.filename.startsWith(mediaItem.id) ||
         f.filename === `${mediaItem.id}.${expectedExtension}`
       )
-      
+
       if (existingFile) {
         console.log(`[Rust SCORM] Media ${mediaItem.id} already processed, skipping`)
-        continue
+        return false
       }
-      
-      // Load the media data
-      const fileData = await mediaService.getMedia(mediaItem.id)
+      return true
+    })
+
+    console.log(`[Rust SCORM] Auto-population: Processing ${unprocessedItems.length} unprocessed items in parallel`)
+
+    // 🚀 PARALLEL BATCH PROCESSING: Load all unprocessed media in parallel
+    const mediaResults = await Promise.all(
+      unprocessedItems.map(async (mediaItem) => {
+        try {
+          const fileData = await mediaService.getMedia(mediaItem.id)
+          return { mediaItem, fileData }
+        } catch (error) {
+          console.warn(`[Rust SCORM] Failed to load ${mediaItem.id}:`, error)
+          return { mediaItem, fileData: null }
+        }
+      })
+    )
+
+    // Process the results sequentially (fast, no I/O)
+    for (const { mediaItem, fileData } of mediaResults) {
       if (fileData && fileData.data) {
         const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
         const uint8Data = new Uint8Array(fileData.data)
-        
+
         // For YouTube videos stored as JSON, skip adding to mediaFiles (they're handled as URLs)
         if (mediaItem.id.startsWith('video-') && (mimeType === 'application/json' || mimeType === 'text/plain')) {
           console.log(`[Rust SCORM] Skipping YouTube video metadata: ${mediaItem.id}`)
           continue
         }
-        
+
         const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(mediaItem.id)
         const filename = `${mediaItem.id}.${ext}`
-        
+
         mediaFiles.push({
           filename,
           content: uint8Data,
         })
-        
+
         console.log(`[Rust SCORM] Auto-populated media: ${mediaItem.id} (${mimeType}, ${uint8Data.length} bytes)`)
       }
     }
@@ -2538,10 +2569,24 @@ async function autoPopulateYouTubeFromStorage(
     
     console.log(`[Rust SCORM] YouTube auto-population: found ${videoItems.length} video items`)
     
-    for (const videoItem of videoItems) {
+    // 🚀 CRITICAL FIX: Replace sequential loop with parallel batch loading for YouTube videos
+    console.log(`[Rust SCORM] YouTube auto-population: Loading ${videoItems.length} video items in parallel`)
+
+    const videoResults = await Promise.all(
+      videoItems.map(async (videoItem) => {
+        try {
+          const fileData = await mediaService.getMedia(videoItem.id)
+          return { videoItem, fileData }
+        } catch (error) {
+          console.warn(`[Rust SCORM] Failed to load video ${videoItem.id}:`, error)
+          return { videoItem, fileData: null }
+        }
+      })
+    )
+
+    // Process results sequentially (fast, no I/O)
+    for (const { videoItem, fileData } of videoResults) {
       try {
-        // Load the video metadata
-        const fileData = await mediaService.getMedia(videoItem.id)
         if (!fileData) {
           console.warn(`[Rust SCORM] No data found for video: ${videoItem.id}`)
           continue

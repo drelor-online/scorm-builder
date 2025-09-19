@@ -118,8 +118,8 @@ export class MediaService {
   private audioLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate concurrent audio loads
   private mediaLoadingPromises: Map<string, Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>> = new Map() // Deduplicate ALL media loads
 
-  // 🚀 PHASE 3: Generation mode for optimized batching
-  private readonly isGenerationMode: boolean
+  // 🚀 PHASE 3: Generation mode for optimized batching (made mutable for singleton updates)
+  private isGenerationMode: boolean
 
   // Error recovery properties
   private failedMediaList: Array<{
@@ -148,9 +148,30 @@ export class MediaService {
       version: 'v2.0.5'
     })
     mediaServiceDebugLog('[MediaService v2.0.5] Initialized with project ID:', this.projectId)
-    
-    logger.info('[MediaService] Initialized for project:', this.projectId, 'using FILE STORAGE ONLY', 
+
+    // 🚀 CRITICAL DIAGNOSTIC: Log instance creation with generation mode
+    console.log(`[MediaService] instance`, { projectId: this.projectId, gen: this.isGenerationMode })
+
+    logger.info('[MediaService] Initialized for project:', this.projectId, 'using FILE STORAGE ONLY',
       config.fileStorage ? '(shared instance)' : '(new instance)')
+  }
+
+  /**
+   * Update generation mode on existing instance (for singleton pattern)
+   * This enables generation mode to be activated even if the instance was created without it
+   */
+  setGenerationMode(enabled: boolean): void {
+    const previousMode = this.isGenerationMode
+    this.isGenerationMode = enabled
+
+    if (previousMode !== enabled) {
+      console.log(`[MediaService] Generation mode ${enabled ? 'ENABLED' : 'DISABLED'} for project ${this.projectId}`)
+      debugLogger.info('MediaService.setGenerationMode', 'Generation mode updated', {
+        projectId: this.projectId,
+        previousMode,
+        newMode: enabled
+      })
+    }
   }
   
   // Static factory method to get singleton instance per project
@@ -160,10 +181,17 @@ export class MediaService {
     
     const existing = mediaServiceInstances.get(extractedId)
     if (existing) {
-      mediaServiceDebugLog(`♻️  [MediaService] FIX 3: Returning existing singleton instance for project ${extractedId}`)
+      // 🚀 CRITICAL FIX: Enable generation mode on existing instance if requested
+      if (config.generationMode) {
+        existing.setGenerationMode(true)
+      }
+
+      console.log(`[MediaService] Returning existing singleton instance for project ${extractedId}, generation mode: ${existing.isGenerationMode}`)
       debugLogger.debug('MediaService.getInstance', 'Returning existing instance', {
         originalProjectId: config.projectId,
-        extractedId: extractedId
+        extractedId: extractedId,
+        generationModeRequested: config.generationMode,
+        currentGenerationMode: existing.isGenerationMode
       })
       return existing
     }
@@ -1007,6 +1035,9 @@ export class MediaService {
   private async processBatch() {
     const batchIds = Array.from(this.batchResolvers.keys())
     if (batchIds.length === 0) return
+
+    // 🚀 CRITICAL DIAGNOSTIC: Log batch flush details for debugging
+    console.log(`[MediaService] batch flush`, { size: batchIds.length, gen: this.isGenerationMode })
 
     // 🚀 PHASE 5: Track batch processing time for optimization
     this.lastBatchProcessTime = Date.now()
