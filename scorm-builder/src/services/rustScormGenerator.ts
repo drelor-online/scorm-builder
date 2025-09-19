@@ -971,6 +971,156 @@ export function hydrateMediaCacheById(preloadedById: Map<string, { data: Uint8Ar
 }
 
 /**
+ * Collect all media IDs from course content for batch pre-loading
+ * This scans the entire course structure to extract every media reference
+ */
+function collectAllMediaIds(courseContent: any): string[] {
+  const mediaIds = new Set<string>()
+
+  console.log(`[SCORM Media Pre-Collection] Scanning course content for all media references`)
+
+  // Helper to safely add media ID if it exists and looks valid
+  const addMediaId = (id: string | undefined, context: string) => {
+    if (id && typeof id === 'string' && id.trim()) {
+      // Only add if it looks like a media ID (contains -, numbers, or file extension)
+      if (id.includes('-') || /\d/.test(id) || id.includes('.')) {
+        mediaIds.add(id.trim())
+        console.log(`[SCORM Media Pre-Collection] Found ${id} in ${context}`)
+      }
+    }
+  }
+
+  // Scan welcome page
+  if (courseContent.welcome || courseContent.welcomePage || courseContent.welcomeMedia) {
+    const welcome = courseContent.welcome || courseContent.welcomePage || courseContent.welcomeMedia
+    addMediaId(welcome.audioId, 'welcome.audioId')
+    addMediaId(welcome.audioFile, 'welcome.audioFile')
+    addMediaId(welcome.captionId, 'welcome.captionId')
+    addMediaId(welcome.captionFile, 'welcome.captionFile')
+    addMediaId(welcome.imageUrl, 'welcome.imageUrl')
+
+    // Scan welcome media array
+    if (Array.isArray(welcome.media)) {
+      welcome.media.forEach((m: any, i: number) => {
+        addMediaId(m?.id, `welcome.media[${i}].id`)
+        addMediaId(m?.url, `welcome.media[${i}].url`)
+      })
+    }
+  }
+
+  // Scan objectives/learning objectives page
+  const objectives = courseContent.objectivesPage || courseContent.learningObjectivesPage
+  if (objectives) {
+    addMediaId(objectives.audioId, 'objectives.audioId')
+    addMediaId(objectives.audioFile, 'objectives.audioFile')
+    addMediaId(objectives.captionId, 'objectives.captionId')
+    addMediaId(objectives.captionFile, 'objectives.captionFile')
+    addMediaId(objectives.imageUrl, 'objectives.imageUrl')
+
+    // Scan objectives media array
+    if (Array.isArray(objectives.media)) {
+      objectives.media.forEach((m: any, i: number) => {
+        addMediaId(m?.id, `objectives.media[${i}].id`)
+        addMediaId(m?.url, `objectives.media[${i}].url`)
+      })
+    }
+  }
+
+  // Scan all topics
+  const topics = courseContent.topics || []
+  topics.forEach((topic: any, topicIndex: number) => {
+    if (!topic) return
+
+    addMediaId(topic.audioId, `topic[${topicIndex}].audioId`)
+    addMediaId(topic.audioFile, `topic[${topicIndex}].audioFile`)
+    addMediaId(topic.captionId, `topic[${topicIndex}].captionId`)
+    addMediaId(topic.captionFile, `topic[${topicIndex}].captionFile`)
+    addMediaId(topic.imageUrl, `topic[${topicIndex}].imageUrl`)
+
+    // Scan topic media array
+    if (Array.isArray(topic.media)) {
+      topic.media.forEach((m: any, mediaIndex: number) => {
+        addMediaId(m?.id, `topic[${topicIndex}].media[${mediaIndex}].id`)
+        addMediaId(m?.url, `topic[${topicIndex}].media[${mediaIndex}].url`)
+      })
+    }
+
+    // Scan knowledge check media if present
+    if (topic.knowledgeCheck && Array.isArray(topic.knowledgeCheck.questions)) {
+      topic.knowledgeCheck.questions.forEach((q: any, qIndex: number) => {
+        if (Array.isArray(q.media)) {
+          q.media.forEach((m: any, mIndex: number) => {
+            addMediaId(m?.id, `topic[${topicIndex}].knowledgeCheck.questions[${qIndex}].media[${mIndex}].id`)
+            addMediaId(m?.url, `topic[${topicIndex}].knowledgeCheck.questions[${qIndex}].media[${mIndex}].url`)
+          })
+        }
+      })
+    }
+  })
+
+  const result = Array.from(mediaIds)
+  console.log(`[SCORM Media Pre-Collection] Collected ${result.length} unique media IDs:`, result)
+  return result
+}
+
+/**
+ * Batch pre-load all media IDs into cache before content conversion
+ * This eliminates individual media requests during content processing
+ */
+async function batchPreloadMedia(mediaIds: string[], projectId: string): Promise<void> {
+  if (mediaIds.length === 0) {
+    console.log(`[SCORM Batch Pre-Load] No media IDs to pre-load`)
+    return
+  }
+
+  console.log(`[SCORM Batch Pre-Load] ⚡ Pre-loading ${mediaIds.length} media items in single batch`)
+  const startTime = Date.now()
+
+  try {
+    const { createMediaService } = await import('./MediaService')
+    const mediaService = createMediaService(projectId, undefined, true) // Enable generation mode
+
+    // Use direct batch API to load all media at once
+    const batchResults = await mediaService.getMediaBatchDirect(mediaIds)
+
+    // Populate cache with results
+    let cacheHits = 0
+    let cacheMisses = 0
+
+    for (const [mediaId, mediaData] of batchResults) {
+      if (mediaData && mediaData.data) {
+        // Successfully loaded - add to cache
+        mediaCache.set(mediaId, {
+          data: mediaData.data,
+          mimeType: mediaData.metadata?.mimeType || mediaData.metadata?.mime_type || 'application/octet-stream'
+        })
+        cacheHits++
+        console.log(`[SCORM Batch Pre-Load] ✅ Cached ${mediaId} (${mediaData.data.length} bytes)`)
+      } else {
+        // Media not found - log but don't fail
+        cacheMisses++
+        console.log(`[SCORM Batch Pre-Load] ❌ Missing ${mediaId}`)
+      }
+    }
+
+    const duration = Date.now() - startTime
+    console.log(`[SCORM Batch Pre-Load] 🚀 COMPLETED in ${duration}ms: ${cacheHits} cached, ${cacheMisses} missing`)
+    console.log(`[SCORM Batch Pre-Load] Cache now contains ${mediaCache.size} total items`)
+
+    // Track performance for monitoring
+    if (performanceTrace) {
+      performanceTrace.batchedLoads += 1
+      performanceTrace.cacheHits += cacheHits
+      performanceTrace.cacheMisses += cacheMisses
+    }
+
+  } catch (error) {
+    console.error(`[SCORM Batch Pre-Load] ❌ FAILED:`, error)
+    // Don't throw - let content conversion proceed with individual requests as fallback
+  }
+}
+
+/**
  * Get file extension from MIME type
  */
 export function getExtensionFromMimeType(mimeType: string): string {
@@ -1563,68 +1713,16 @@ async function resolveMedia(
             console.log(`[SCORM Media Debug] Cache MISS for ${media.id}`)
           }
 
-          // Load from MediaService
-          console.log(`[SCORM Media Debug] Loading from MediaService - Project: ${projectId}, Media ID: ${media.id}`)
-          const { createMediaService } = await import('./MediaService')
-          const mediaService = createMediaService(projectId, undefined, true)
-          
-          // Add debug logging for MediaService state
-          console.log(`[SCORM Media Debug] MediaService created for project: ${projectId}`)
-          
-          const fileData = await mediaService.getMedia(media.id)
-          console.log(`[SCORM Media Debug] MediaService.getMedia result for ${media.id}:`, {
-            hasFileData: !!fileData,
-            hasData: !!fileData?.data,
-            dataSize: fileData?.data ? fileData.data.byteLength || fileData.data.length : 0,
-            mimeType: fileData?.metadata?.mimeType,
-            metadataKeys: fileData?.metadata ? Object.keys(fileData.metadata) : []
+          // Media should be pre-loaded in cache - if not found, it doesn't exist
+          console.log(`[SCORM Media Debug] Media not found in pre-loaded cache: ${media.id}, skipping`)
+          debugLogger.warn('SCORM_MEDIA', 'Media not found in pre-loaded cache', {
+            projectId,
+            mediaId: media.id
           })
-          
-          if (fileData && fileData.data) {
-            const uint8Data = new Uint8Array(fileData.data)
-            const mimeType = fileData.metadata?.mimeType || 'application/octet-stream'
-            
-            // Cache the data
-            mediaCache.set(media.id, { data: uint8Data, mimeType })
-            
-            const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(media.id)
-            const filename = `${media.id}.${ext}`
-            
-            mediaFiles.push({
-              filename,
-              content: uint8Data,
-            })
-            
-            resolvedMedia.push({
-              ...media,
-              url: `media/${filename}`,
-              resolved_path: `media/${filename}`
-            })
-            
-            console.log(`[SCORM Media Debug] ✅ Successfully resolved media: ${media.id} -> ${filename} (${uint8Data.length} bytes)`)
-            debugLogger.info('SCORM_MEDIA', 'Media successfully resolved and added to package', {
-              projectId,
-              mediaId: media.id,
-              filename,
-              fileSize: uint8Data.length,
-              mimeType
-            })
-            continue
-          } else {
-            const errorMsg = `Media not found: ${media.id}`
-            console.log(`[SCORM Media Debug] ❌ Media not found in MediaService: ${media.id}`)
-            debugLogger.warn('SCORM_MEDIA', 'Media not found during resolution', {
-              projectId,
-              mediaId: media.id,
-              mediaType: media.type,
-              fileDataReceived: !!fileData,
-              hasData: !!fileData?.data
-            })
-            console.warn(`[Rust SCORM] ${errorMsg}`)
-            mediaLoadingErrors.push(errorMsg)
-            // Don't add to resolvedMedia - skip this item
-            continue
-          }
+          const errorMsg = `Media not found in pre-loaded cache: ${media.id}`
+          mediaLoadingErrors.push(errorMsg)
+          // Don't add to resolvedMedia - skip this item
+          continue
         } catch (error) {
           const errorMsg = `Failed to load media ${media.id}: ${error instanceof Error ? error.message : String(error)}`
           debugLogger.error('SCORM_MEDIA', 'Media loading exception during resolution', {
@@ -2226,6 +2324,12 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   console.log(`[Rust SCORM] Starting YouTube recovery for standard format`)
   await autoPopulateYouTubeFromStorage(cc, projectId)
   console.log(`[Rust SCORM] YouTube recovery completed for standard format`)
+
+  // 🚀 CRITICAL PERFORMANCE FIX: Pre-load ALL media before content conversion
+  console.log(`[Rust SCORM] Starting batch pre-loading of all media`)
+  const allMediaIds = collectAllMediaIds(cc)
+  await batchPreloadMedia(allMediaIds, projectId)
+  console.log(`[Rust SCORM] Batch pre-loading completed`)
 
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
@@ -3194,6 +3298,12 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   console.log(`[Rust SCORM] Extracting course content media for injection system`)
   await extractCourseContentMedia(courseContent, projectId)
   console.log(`[Rust SCORM] Course content media extraction completed`)
+
+  // 🚀 CRITICAL PERFORMANCE FIX: Pre-load ALL media before content conversion
+  console.log(`[Rust SCORM] Starting batch pre-loading of all media`)
+  const allMediaIds = collectAllMediaIds(courseContent)
+  await batchPreloadMedia(allMediaIds, projectId)
+  console.log(`[Rust SCORM] Batch pre-loading completed`)
 
   // Media resolution tracking
   const mediaFiles: MediaFile[] = []
