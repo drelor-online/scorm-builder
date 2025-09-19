@@ -121,6 +121,9 @@ export class MediaService {
   // 🚀 PHASE 3: Generation mode for optimized batching (made mutable for singleton updates)
   private isGenerationMode: boolean
 
+  // 🔍 DIAGNOSTIC: Track request timing patterns
+  private lastRequestTime: number = 0
+
   // Error recovery properties
   private failedMediaList: Array<{
     id: string
@@ -952,16 +955,30 @@ export class MediaService {
   // 🚀 BATCH PROCESSING: Collect requests and process in batches
   private addToBatch(mediaId: string, resolve: (value: any) => void, reject: (reason?: any) => void) {
     this.batchResolvers.set(mediaId, { resolve, reject })
-    
+
+    // 🔍 ENHANCED DIAGNOSTIC: Track batch accumulation patterns
+    const currentTime = Date.now()
+    const timeSinceLastRequest = this.lastRequestTime ? currentTime - this.lastRequestTime : 0
+    this.lastRequestTime = currentTime
+
+    console.log(`[MediaService] REQUEST PATTERN: ${mediaId} added to batch`, {
+      currentBatchSize: this.batchResolvers.size,
+      generationMode: this.isGenerationMode,
+      timeSinceLastRequest: `${timeSinceLastRequest}ms`,
+      projectId: this.projectId
+    })
+
     // Set up batch processing timer with adaptive timeout based on batch size
     if (this.batchRequestTimer) {
       clearTimeout(this.batchRequestTimer)
+      console.log(`[MediaService] TIMER RESET: Previous timer cleared for batch size ${this.batchResolvers.size}`)
     }
-    
+
     // 🚀 STARTUP OPTIMIZATION: Use longer timeout for larger batches (startup scenario)
     const currentBatchSize = this.batchResolvers.size
     const adaptiveTimeout = this.calculateBatchTimeout(currentBatchSize)
-    
+
+    console.log(`[MediaService] TIMER SET: ${adaptiveTimeout}ms timeout for batch size ${currentBatchSize}, gen mode: ${this.isGenerationMode}`)
     mediaServiceDebugLog(`[MediaService] 📊 Batch size: ${currentBatchSize}, timeout: ${adaptiveTimeout}ms`)
     this.batchRequestTimer = setTimeout(() => this.processBatch(), adaptiveTimeout)
   }

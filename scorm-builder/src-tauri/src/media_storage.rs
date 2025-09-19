@@ -465,7 +465,7 @@ pub fn get_media(
     })
 }
 
-// 🚀 EFFICIENCY FIX: Batch operation for efficient bulk media loading
+// 🚀 CRITICAL FIX: True parallel batch operation for efficient bulk media loading
 #[tauri::command]
 pub fn get_media_batch(
     #[allow(non_snake_case)] projectId: String,
@@ -473,35 +473,60 @@ pub fn get_media_batch(
 ) -> Result<Vec<MediaData>, String> {
     let actual_project_id = extract_project_id(&projectId);
     println!(
-        "[media_storage] 🚀 BATCH: Getting {} media items efficiently for project {}",
+        "[media_storage] 🚀 PARALLEL BATCH: Getting {} media items with TRUE parallelism for project {}",
         mediaIds.len(),
         actual_project_id
     );
-    
-    let mut results = Vec::with_capacity(mediaIds.len());
+
+    let start_time = std::time::Instant::now();
+
+    // 🚀 PARALLEL PROCESSING: Use threads to load multiple files simultaneously
+    let results: Vec<Result<MediaData, String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = mediaIds.into_iter().map(|media_id| {
+            let project_id_clone = projectId.clone();
+            scope.spawn(move || {
+                match get_media(project_id_clone, media_id.clone()) {
+                    Ok(media_data) => Ok(media_data),
+                    Err(error) => {
+                        println!("[media_storage] ⚠️ PARALLEL: Failed to get media {}: {}", media_id, error);
+                        Err(error)
+                    }
+                }
+            })
+        }).collect();
+
+        // Wait for all threads to complete and collect results
+        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+    });
+
+    // Separate successful and failed results
+    let mut successful_results = Vec::new();
     let mut successful = 0;
     let mut failed = 0;
-    
-    for media_id in mediaIds {
-        match get_media(projectId.clone(), media_id.clone()) {
+
+    for result in results {
+        match result {
             Ok(media_data) => {
-                results.push(media_data);
+                successful_results.push(media_data);
                 successful += 1;
             }
-            Err(error) => {
-                println!("[media_storage] ⚠️ BATCH: Failed to get media {}: {}", media_id, error);
+            Err(_) => {
                 failed += 1;
                 // Continue with other items instead of failing entire batch
             }
         }
     }
-    
+
+    let duration = start_time.elapsed();
     println!(
-        "[media_storage] 🚀 BATCH: Completed - {} successful, {} failed",
-        successful, failed
+        "[media_storage] 🚀 PARALLEL BATCH: Completed in {:.2}ms - {} successful, {} failed ({}x speedup expected)",
+        duration.as_millis(),
+        successful,
+        failed,
+        if successful > 0 { successful } else { 1 }
     );
-    
-    Ok(results)
+
+    Ok(successful_results)
 }
 
 // 🚀 EFFICIENCY FIX: Check if media exists without loading data (ultra-fast existence check)

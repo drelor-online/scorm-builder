@@ -2492,9 +2492,13 @@ async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: Media
     console.log(`[Rust SCORM] Auto-population: Processing ${unprocessedItems.length} unprocessed items in parallel`)
 
     // 🚀 PARALLEL BATCH PROCESSING: Load all unprocessed media in parallel
+    console.log(`[SCORM PARALLEL] autoPopulateMediaFromStorage: Firing ${unprocessedItems.length} parallel requests`)
+    const startTime = Date.now()
+
     const mediaResults = await Promise.all(
-      unprocessedItems.map(async (mediaItem) => {
+      unprocessedItems.map(async (mediaItem, index) => {
         try {
+          console.log(`[SCORM PARALLEL] Request ${index + 1}/${unprocessedItems.length}: Calling getMedia for ${mediaItem.id}`)
           const fileData = await mediaService.getMedia(mediaItem.id)
           return { mediaItem, fileData }
         } catch (error) {
@@ -2503,6 +2507,9 @@ async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: Media
         }
       })
     )
+
+    const duration = Date.now() - startTime
+    console.log(`[SCORM PARALLEL] autoPopulateMediaFromStorage: Completed ${unprocessedItems.length} parallel requests in ${duration}ms`)
 
     // Process the results sequentially (fast, no I/O)
     for (const { mediaItem, fileData } of mediaResults) {
@@ -2570,11 +2577,13 @@ async function autoPopulateYouTubeFromStorage(
     console.log(`[Rust SCORM] YouTube auto-population: found ${videoItems.length} video items`)
     
     // 🚀 CRITICAL FIX: Replace sequential loop with parallel batch loading for YouTube videos
-    console.log(`[Rust SCORM] YouTube auto-population: Loading ${videoItems.length} video items in parallel`)
+    console.log(`[SCORM PARALLEL] autoPopulateYouTubeFromStorage: Firing ${videoItems.length} parallel video requests`)
+    const startTime = Date.now()
 
     const videoResults = await Promise.all(
-      videoItems.map(async (videoItem) => {
+      videoItems.map(async (videoItem, index) => {
         try {
+          console.log(`[SCORM PARALLEL] Video request ${index + 1}/${videoItems.length}: Calling getMedia for ${videoItem.id}`)
           const fileData = await mediaService.getMedia(videoItem.id)
           return { videoItem, fileData }
         } catch (error) {
@@ -2583,6 +2592,9 @@ async function autoPopulateYouTubeFromStorage(
         }
       })
     )
+
+    const duration = Date.now() - startTime
+    console.log(`[SCORM PARALLEL] autoPopulateYouTubeFromStorage: Completed ${videoItems.length} parallel video requests in ${duration}ms`)
 
     // Process results sequentially (fast, no I/O)
     for (const { videoItem, fileData } of videoResults) {
