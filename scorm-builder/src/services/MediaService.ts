@@ -3534,6 +3534,82 @@ export class MediaService {
 
     return false
   }
+
+  /**
+   * Direct batch loading API that bypasses timer coalescing
+   * Use this when you have a known set of media IDs to load efficiently
+   */
+  async getMediaBatchDirect(ids: string[]): Promise<Map<string, { data: Uint8Array; metadata: MediaMetadata } | null>> {
+    if (ids.length === 0) {
+      return new Map()
+    }
+
+    console.log(`[MediaService] DIRECT BATCH: Loading ${ids.length} media items directly`)
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+
+      // Check existence first
+      const existenceFlags = await invoke<boolean[]>('media_exists_batch', {
+        projectId: this.projectId,
+        mediaIds: ids
+      })
+
+      const existingIds = ids.filter((_, index) => existenceFlags[index])
+      const result = new Map<string, { data: Uint8Array; metadata: MediaMetadata } | null>()
+
+      if (existingIds.length === 0) {
+        // All missing - fill map with null values
+        for (const id of ids) {
+          result.set(id, null)
+        }
+        return result
+      }
+
+      console.log(`[MediaService] DIRECT BATCH: ${existingIds.length}/${ids.length} exist, loading...`)
+
+      // Load existing media
+      const mediaDataArray = await invoke<any[]>('get_media_batch', {
+        projectId: this.projectId,
+        mediaIds: existingIds
+      })
+
+      console.log(`[MediaService] DIRECT BATCH: Received ${mediaDataArray.length} media items from backend`)
+
+      // Process results
+      for (const mediaData of mediaDataArray) {
+        if (mediaData && mediaData.id) {
+          result.set(mediaData.id, {
+            data: new Uint8Array(mediaData.data),
+            metadata: this.processMetadata({
+              metadata: mediaData.metadata,
+              data: new Uint8Array(mediaData.data),
+              mediaType: mediaData.metadata.type || mediaData.metadata.media_type
+            })
+          })
+        }
+      }
+
+      // Fill missing items with null
+      for (const id of ids) {
+        if (!result.has(id)) {
+          result.set(id, null)
+        }
+      }
+
+      console.log(`[MediaService] DIRECT BATCH: Completed, returned ${result.size} items`)
+      return result
+
+    } catch (error) {
+      console.error('[MediaService] DIRECT BATCH: Failed to load media batch:', error)
+      // Return map with null values for all IDs
+      const result = new Map<string, { data: Uint8Array; metadata: MediaMetadata } | null>()
+      for (const id of ids) {
+        result.set(id, null)
+      }
+      return result
+    }
+  }
 }
 
 // Export factory function for getting singleton instances

@@ -911,26 +911,42 @@ export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<vo
     console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache (filename-keyed)`)
   }
 
-  for (const [filename, blob] of mediaMap) {
-    try {
-      // Extract the media ID from the filename (e.g., 'image-0.jpg' -> 'image-0')
-      const mediaId = filename.replace(/\.(jpg|jpeg|png|gif|mp3|mp4|vtt|bin)$/i, '')
+  // Convert to array for parallel processing
+  const entries = Array.from(mediaMap.entries())
+  const CONCURRENCY = 8 // Process 8 blobs in parallel to avoid RAM spikes
 
-      // Convert blob to Uint8Array
-      const arrayBuffer = await blob.arrayBuffer()
-      const data = new Uint8Array(arrayBuffer)
-      const mimeType = blob.type || 'application/octet-stream'
+  let currentIndex = 0
+  const processBlob = async () => {
+    while (currentIndex < entries.length) {
+      const entryIndex = currentIndex++
+      if (entryIndex >= entries.length) break
 
-      // Store in cache
-      mediaCache.set(mediaId, { data, mimeType })
-      // Only log individual cache operations in development
-      if (import.meta.env.DEV) {
-        console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
+      const [filename, blob] = entries[entryIndex]
+      try {
+        // Extract the media ID from the filename (e.g., 'image-0.jpg' -> 'image-0')
+        const mediaId = filename.replace(/\.(jpg|jpeg|png|gif|mp3|mp4|vtt|bin)$/i, '')
+
+        // Convert blob to Uint8Array
+        const arrayBuffer = await blob.arrayBuffer()
+        const data = new Uint8Array(arrayBuffer)
+        const mimeType = blob.type || 'application/octet-stream'
+
+        // Store in cache
+        mediaCache.set(mediaId, { data, mimeType })
+        // Only log individual cache operations in development
+        if (import.meta.env.DEV) {
+          console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
+        }
+      } catch (error) {
+        console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
       }
-    } catch (error) {
-      console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
     }
   }
+
+  // Process blobs in parallel with controlled concurrency
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, () => processBlob())
+  )
 
   if (import.meta.env.DEV) {
     console.log(`[Rust SCORM] Pre-loading complete. Cache size: ${mediaCache.size}`)
@@ -1357,23 +1373,18 @@ async function prefetchAllMedia(
     const { createMediaService } = await import('./MediaService')
     const mediaService = createMediaService(projectId, undefined, true) // 🚀 Enable generation mode
 
-    // 🚀 Use Promise.all to fetch all media in parallel
-    // This will trigger proper batching in MediaService
+    // 🚀 Use direct batch API for prefetch
     const startTime = Date.now()
-    const mediaResults = await Promise.all(
-      mediaIds.map(async (mediaId) => {
-        try {
-          const fileData = await mediaService.getMedia(mediaId)
-          return { mediaId, fileData }
-        } catch (error) {
-          console.warn(`[SCORM Prefetch] Failed to fetch ${mediaId}:`, error)
-          return { mediaId, fileData: null }
-        }
-      })
-    )
+    const batchResults = await mediaService.getMediaBatchDirect(mediaIds)
 
     const fetchTime = Date.now() - startTime
-    console.log(`[SCORM Prefetch] ✅ Completed prefetch in ${fetchTime}ms`)
+    console.log(`[SCORM Prefetch] ✅ Completed prefetch batch in ${fetchTime}ms`)
+
+    // Convert batch results to expected format
+    const mediaResults = mediaIds.map(mediaId => ({
+      mediaId,
+      fileData: batchResults.get(mediaId)
+    }))
 
     // Cache the results
     let successCount = 0
@@ -2491,25 +2502,22 @@ async function autoPopulateMediaFromStorage(projectId: string, mediaFiles: Media
 
     console.log(`[Rust SCORM] Auto-population: Processing ${unprocessedItems.length} unprocessed items in parallel`)
 
-    // 🚀 PARALLEL BATCH PROCESSING: Load all unprocessed media in parallel
-    console.log(`[SCORM PARALLEL] autoPopulateMediaFromStorage: Firing ${unprocessedItems.length} parallel requests`)
+    // 🚀 DIRECT BATCH LOADING: Use batch API to eliminate timer coalescing issues
+    console.log(`[SCORM BATCH] autoPopulateMediaFromStorage: Loading ${unprocessedItems.length} items in single batch`)
     const startTime = Date.now()
 
-    const mediaResults = await Promise.all(
-      unprocessedItems.map(async (mediaItem, index) => {
-        try {
-          console.log(`[SCORM PARALLEL] Request ${index + 1}/${unprocessedItems.length}: Calling getMedia for ${mediaItem.id}`)
-          const fileData = await mediaService.getMedia(mediaItem.id)
-          return { mediaItem, fileData }
-        } catch (error) {
-          console.warn(`[Rust SCORM] Failed to load ${mediaItem.id}:`, error)
-          return { mediaItem, fileData: null }
-        }
-      })
-    )
+    // Extract IDs and use direct batch loading
+    const mediaIds = unprocessedItems.map(item => item.id)
+    const batchResults = await mediaService.getMediaBatchDirect(mediaIds)
 
     const duration = Date.now() - startTime
-    console.log(`[SCORM PARALLEL] autoPopulateMediaFromStorage: Completed ${unprocessedItems.length} parallel requests in ${duration}ms`)
+    console.log(`[SCORM BATCH] autoPopulateMediaFromStorage: Completed batch load of ${unprocessedItems.length} items in ${duration}ms`)
+
+    // Convert batch results to the expected format
+    const mediaResults = unprocessedItems.map(mediaItem => ({
+      mediaItem,
+      fileData: batchResults.get(mediaItem.id)
+    }))
 
     // Process the results sequentially (fast, no I/O)
     for (const { mediaItem, fileData } of mediaResults) {
@@ -2576,25 +2584,22 @@ async function autoPopulateYouTubeFromStorage(
     
     console.log(`[Rust SCORM] YouTube auto-population: found ${videoItems.length} video items`)
     
-    // 🚀 CRITICAL FIX: Replace sequential loop with parallel batch loading for YouTube videos
-    console.log(`[SCORM PARALLEL] autoPopulateYouTubeFromStorage: Firing ${videoItems.length} parallel video requests`)
+    // 🚀 DIRECT BATCH LOADING: Use batch API for YouTube video items
+    console.log(`[SCORM BATCH] autoPopulateYouTubeFromStorage: Loading ${videoItems.length} video items in single batch`)
     const startTime = Date.now()
 
-    const videoResults = await Promise.all(
-      videoItems.map(async (videoItem, index) => {
-        try {
-          console.log(`[SCORM PARALLEL] Video request ${index + 1}/${videoItems.length}: Calling getMedia for ${videoItem.id}`)
-          const fileData = await mediaService.getMedia(videoItem.id)
-          return { videoItem, fileData }
-        } catch (error) {
-          console.warn(`[Rust SCORM] Failed to load video ${videoItem.id}:`, error)
-          return { videoItem, fileData: null }
-        }
-      })
-    )
+    // Extract IDs and use direct batch loading
+    const videoIds = videoItems.map(item => item.id)
+    const batchResults = await mediaService.getMediaBatchDirect(videoIds)
 
     const duration = Date.now() - startTime
-    console.log(`[SCORM PARALLEL] autoPopulateYouTubeFromStorage: Completed ${videoItems.length} parallel video requests in ${duration}ms`)
+    console.log(`[SCORM BATCH] autoPopulateYouTubeFromStorage: Completed batch load of ${videoItems.length} video items in ${duration}ms`)
+
+    // Convert batch results to the expected format
+    const videoResults = videoItems.map(videoItem => ({
+      videoItem,
+      fileData: batchResults.get(videoItem.id)
+    }))
 
     // Process results sequentially (fast, no I/O)
     for (const { videoItem, fileData } of videoResults) {
