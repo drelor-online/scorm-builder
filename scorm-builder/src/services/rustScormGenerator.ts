@@ -4033,7 +4033,8 @@ export async function generateRustSCORM(
   projectId: string,
   onProgress?: (message: string, progress: number) => void,
   preloadedMedia?: Map<string, Blob> | Map<string, { data: Uint8Array; mimeType: string }>,
-  courseSettings?: CourseSettings
+  courseSettings?: CourseSettings,
+  strictValidation?: boolean
 ): Promise<Uint8Array> {
   debugLogger.info('SCORM_GENERATION', 'Starting SCORM generation process', {
     projectId,
@@ -4097,11 +4098,29 @@ export async function generateRustSCORM(
     const allMediaIds = extractAllMediaIds(courseContent)
     console.log(`[Rust SCORM] Found ${allMediaIds.size} media items to prefetch`)
 
-    // Clear existing cache to ensure fresh data
-    mediaCache.clear()
-
-    await prefetchAllMedia(allMediaIds, projectId, mediaCache)
+    // Clear existing cache to ensure fresh data (only if we don't have preloaded media)
+    if (!preloadedMedia || preloadedMedia.size === 0) {
+      mediaCache.clear()
+      await prefetchAllMedia(allMediaIds, projectId, mediaCache)
+    } else {
+      console.log(`[Rust SCORM] Using preloaded media cache (${mediaCache.size} items), skipping prefetch`)
+    }
     console.log(`[Rust SCORM] ✅ Prefetch completed, cached ${mediaCache.size} items`)
+
+    // 🔍 EARLY PRE-ZIP VALIDATION: Check for missing media after prefetch but before conversion
+    if (strictValidation) {
+      const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
+      const cachedMediaIds = new Set(mediaCache.keys())
+      const missingFromCache = Array.from(referencedMediaIds).filter(id => !cachedMediaIds.has(id))
+
+      if (missingFromCache.length > 0) {
+        const message = `${missingFromCache.length} referenced media files are missing from cache: ${missingFromCache.join(', ')}`
+        console.error(`[PRE-ZIP VALIDATION] ❌ STRICT MODE - EARLY CHECK: ${message}`)
+        throw new Error(`SCORM generation failed: ${message}`)
+      }
+
+      console.log(`[PRE-ZIP VALIDATION] ✅ STRICT MODE - EARLY CHECK: All ${referencedMediaIds.size} referenced media files are available in cache`)
+    }
 
     debugLogger.info('SCORM_GENERATION', 'Converting course content to Rust format', { projectId })
     console.log('[Rust SCORM] Converting course content to Rust format')
@@ -4419,7 +4438,7 @@ export async function generateRustSCORM(
     svgFilesInPackage.forEach(f => console.log(`  - ${f.filename} (${f.content.length} bytes)`))
 
     // 🔍 PRE-ZIP VALIDATION: Compare referenced media vs files being zipped
-    console.log(`[PRE-ZIP VALIDATION] Performing final validation before ZIP creation...`)
+    console.log(`[PRE-ZIP VALIDATION] Performing ${strictValidation ? 'STRICT' : 'warning'} validation before ZIP creation...`)
     const referencedMediaIds = new Set(collectAllMediaIds(rustCourseData))
     const filesToZip = new Set(mediaFiles.map(f => f.filename.replace(/\.[^.]+$/, ''))) // Remove extensions for comparison
 
@@ -4429,8 +4448,15 @@ export async function generateRustSCORM(
     // Find missing media (referenced but not in ZIP)
     const missingFromZip = Array.from(referencedMediaIds).filter(id => !filesToZip.has(id))
     if (missingFromZip.length > 0) {
-      console.warn(`[PRE-ZIP VALIDATION] ⚠️ ${missingFromZip.length} referenced media files will be missing from SCORM package:`)
-      missingFromZip.forEach(id => console.warn(`  - ${id} (will result in 404 errors)`))
+      const message = `${missingFromZip.length} referenced media files will be missing from SCORM package: ${missingFromZip.join(', ')}`
+
+      if (strictValidation) {
+        console.error(`[PRE-ZIP VALIDATION] ❌ STRICT MODE: ${message}`)
+        throw new Error(`SCORM generation failed: ${message}`)
+      } else {
+        console.warn(`[PRE-ZIP VALIDATION] ⚠️ WARNING MODE: ${message}`)
+        missingFromZip.forEach(id => console.warn(`  - ${id} (will result in 404 errors)`))
+      }
     }
 
     // Find unreferenced files (in ZIP but not referenced)
@@ -4549,6 +4575,115 @@ export async function generateRustSCORM(
     
     // Clear media cache after generation
     clearMediaCache()
+  }
+}
+
+/**
+ * Enhanced SCORM package builder with configurable validation options
+ * This function adds strict validation capabilities based on external AI audit recommendations
+ */
+export interface ScormBuildOptions {
+  strictValidation?: boolean
+  onProgress?: (message: string, progress: number) => void
+  courseSettings?: CourseSettings
+}
+
+export async function buildScormPackageEnhanced(
+  courseContent: CourseContent | EnhancedCourseContent,
+  courseSeedData: { projectId: string; title: string },
+  mediaCache: Map<string, { data: Uint8Array; mimeType: string }>,
+  authoritativeExtensionMap: Map<string, string>,
+  options: ScormBuildOptions = {}
+): Promise<Uint8Array> {
+  const { strictValidation = false, onProgress, courseSettings } = options
+
+  debugLogger.info('SCORM_ENHANCED_BUILD', 'Starting enhanced SCORM build', {
+    projectId: courseSeedData.projectId,
+    strictValidation,
+    mediaCount: mediaCache.size,
+    extensionMapSize: authoritativeExtensionMap.size
+  })
+
+  // PRE-BUILD VALIDATION: Check extension map completeness if strict mode
+  if (strictValidation) {
+    const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
+    const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap.has(id))
+
+    if (missingExtensions.length > 0) {
+      const errorMessage = `Missing file extensions in authoritative map for ${missingExtensions.length} media files: ${missingExtensions.join(', ')}`
+      debugLogger.error('SCORM_ENHANCED_BUILD', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  // ENHANCED PRE-ZIP VALIDATION with configurable strict mode
+  const performPreZipValidation = (mediaFiles: Array<{ filename: string; content: Uint8Array }>) => {
+    console.log(`[PRE-ZIP VALIDATION] Performing ${strictValidation ? 'STRICT' : 'warning'} validation before ZIP creation...`)
+
+    const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
+    const filesToZip = new Set(mediaFiles.map(f => f.filename.replace(/\.[^.]+$/, ''))) // Remove extensions for comparison
+
+    console.log(`[PRE-ZIP VALIDATION] Referenced media IDs: ${referencedMediaIds.size}`)
+    console.log(`[PRE-ZIP VALIDATION] Files to be zipped: ${filesToZip.size}`)
+
+    // Find missing media (referenced but not in ZIP)
+    const missingFromZip = Array.from(referencedMediaIds).filter(id => !filesToZip.has(id))
+
+    if (missingFromZip.length > 0) {
+      const message = `${missingFromZip.length} referenced media files are missing from SCORM package: ${missingFromZip.join(', ')}`
+
+      if (strictValidation) {
+        console.error(`[PRE-ZIP VALIDATION] ❌ STRICT MODE: ${message}`)
+        throw new Error(`SCORM generation failed: ${message}`)
+      } else {
+        console.warn(`[PRE-ZIP VALIDATION] ⚠️ WARNING MODE: ${message}`)
+        missingFromZip.forEach(id => console.warn(`  - ${id} (will result in 404 errors)`))
+      }
+    }
+
+    // Find unreferenced files (in ZIP but not referenced) - always just log
+    const unreferencedInZip = Array.from(filesToZip).filter(filename => !referencedMediaIds.has(filename))
+    if (unreferencedInZip.length > 0) {
+      console.log(`[PRE-ZIP VALIDATION] ℹ️ ${unreferencedInZip.length} files will be included but not referenced in content:`)
+      unreferencedInZip.forEach(filename => console.log(`  - ${filename} (unused file)`))
+    }
+
+    if (missingFromZip.length === 0 && unreferencedInZip.length === 0) {
+      console.log(`[PRE-ZIP VALIDATION] ✅ Perfect match: All referenced media will be in ZIP, no unused files`)
+    } else {
+      console.log(`[PRE-ZIP VALIDATION] 📊 Summary: ${missingFromZip.length} missing, ${unreferencedInZip.length} unreferenced`)
+    }
+
+    return { missingFromZip, unreferencedInZip }
+  }
+
+  // Use the existing generateRustSCORM function but with enhanced validation
+  try {
+    // Temporarily inject our validation function into the existing flow
+    const originalFunction = generateRustSCORM
+
+    // Call the existing function with our strict validation parameter
+    const result = await generateRustSCORM(
+      courseContent,
+      courseSeedData.projectId,
+      onProgress,
+      mediaCache,
+      courseSettings,
+      strictValidation
+    )
+
+    debugLogger.info('SCORM_ENHANCED_BUILD', 'Enhanced SCORM build completed successfully', {
+      projectId: courseSeedData.projectId,
+      outputSize: result.length
+    })
+
+    return result
+  } catch (error) {
+    debugLogger.error('SCORM_ENHANCED_BUILD', 'Enhanced SCORM build failed', {
+      projectId: courseSeedData.projectId,
+      error: String(error)
+    })
+    throw error
   }
 }
 
