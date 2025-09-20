@@ -6,7 +6,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { MediaService, createMediaService, type MediaItem, type MediaMetadata, type ProgressCallback } from '../services/MediaService'
+import { MediaService, createMediaService, type MediaItem, type MediaMetadata, type ProgressCallback, type MediaServiceExtended } from '../services/MediaService'
 import { extractClipTimingFromUrl } from '../services/mediaUrl'
 import { logger } from '../utils/logger'
 import { BlobURLCache } from '../services/BlobURLCache'
@@ -620,9 +620,11 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     hasLoadedRef.current.add(actualProjectId)
     
     // Clear the audio cache from the previous project's MediaService
-    if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+    if (mediaServiceRef.current) {
       logger.info('[UnifiedMediaContext] Clearing audio cache from previous project')
-      ;(mediaServiceRef.current as any).clearAudioCache()
+      const extendedService = mediaServiceRef.current as MediaServiceExtended
+      extendedService.clearAudioCache()
+      extendedService.clearListAllMediaCaches()
     }
     
     // 🔧 FIX 3: PREVENT MULTIPLE MEDIASERVICE INITIALIZATIONS
@@ -660,9 +662,9 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
       }
 
       // Clear audio cache when unmounting
-      if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+      if (mediaServiceRef.current) {
         logger.info('[UnifiedMediaContext] Clearing audio cache on unmount')
-        ;(mediaServiceRef.current as any).clearAudioCache()
+        ;(mediaServiceRef.current as MediaServiceExtended).clearAudioCache()
       }
 
       // Clean up ALL blob URLs when switching projects to prevent stale references
@@ -757,11 +759,12 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
 
       // Only load media from disk if the cache is completely empty
       // This handles session restart while avoiding redundant disk scans
-      const currentCacheSize = typeof (mediaService as any).getCacheSize === 'function' ? (mediaService as any).getCacheSize() : 0
-      if (currentCacheSize === 0 && typeof (mediaService as any).loadMediaFromDisk === 'function') {
+      const extendedService = mediaService as MediaServiceExtended
+      const currentCacheSize = extendedService.getCacheSize()
+      if (currentCacheSize === 0) {
         try {
           logger.info('[UnifiedMediaContext] Cache empty - performing one-time disk load')
-          await (mediaService as any).loadMediaFromDisk()
+          await extendedService.loadMediaFromDisk()
         } catch (diskLoadError) {
           logger.warn('[UnifiedMediaContext] Disk load failed, MediaService cache will handle:', diskLoadError)
         }
@@ -1102,9 +1105,9 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     blobCache.clearAll()
     
     // ADDITIONAL FIX: Clear the audio cache from the MediaService if it exists
-    if (mediaServiceRef.current && typeof (mediaServiceRef.current as any).clearAudioCache === 'function') {
+    if (mediaServiceRef.current) {
       logger.info('[UnifiedMediaContext] Clearing MediaService audio cache during reset')
-      ;(mediaServiceRef.current as any).clearAudioCache()
+      ;(mediaServiceRef.current as MediaServiceExtended).clearAudioCache()
     }
     
     logger.info('[UnifiedMediaContext] Media cache and refs completely reset')

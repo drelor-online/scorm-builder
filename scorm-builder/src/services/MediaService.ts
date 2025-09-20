@@ -16,6 +16,9 @@ declare global {
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import { blobUrlManager } from '../utils/blobUrlManager'
 
+// 🎯 CONTEXT-AWARE CACHE: Operation types for intelligent TTL selection
+export type ListAllOperation = 'ui' | 'gen' | 'bg'
+
 const shouldLogMediaServiceDebug = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true';
 const mediaServiceDebugLog = (...args: unknown[]) => {
   if (shouldLogMediaServiceDebug) {
@@ -108,7 +111,24 @@ interface QueuedRequest {
   resolver: { resolve: (value: any) => void, reject: (reason?: any) => void }
 }
 
-export class MediaService {
+// 🏗️ TYPE SAFETY: Extended MediaService interface for proper typing
+export interface MediaServiceExtended {
+  // Core methods
+  getCacheSize(): number
+  loadMediaFromDisk(): Promise<void>
+  clearListAllMediaCaches(): void
+  clearAudioCache(): void
+  getCacheMetrics(): { hits: number; misses: number; evictions: number; timeouts: number; errors: number; hitRatio: number; memoryUsageMB: number }
+
+  // Standard MediaService methods
+  storeMedia(file: File | Blob, pageId: string, type: MediaType, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback): Promise<MediaItem>
+  updateMedia(existingId: string, file: File | Blob, metadata?: Partial<MediaMetadata>, progressCallback?: ProgressCallback): Promise<MediaItem>
+  deleteMedia(projectId: string, mediaId: string): Promise<boolean>
+  listAllMedia(options?: { excludeTypes?: string[]; op?: ListAllOperation }): Promise<MediaItem[]>
+  getMedia(mediaId: string): Promise<{ data?: Uint8Array; metadata: MediaMetadata; url?: string } | null>
+}
+
+export class MediaService implements MediaServiceExtended {
   public readonly projectId: string
   private fileStorage: FileStorage
   private mediaCache: Map<string, MediaItem> = new Map()
@@ -121,7 +141,27 @@ export class MediaService {
   // 📊 PERFORMANCE: Cache listAllMedia results to prevent redundant backend calls
   private listAllMediaCache: Map<string, { result: MediaItem[]; timestamp: number }> = new Map()
   private listAllMediaPromises: Map<string, Promise<MediaItem[]>> = new Map() // Deduplicate concurrent listAllMedia calls
-  private static readonly CACHE_TTL = 10000 // 10 seconds cache TTL
+
+  // 🎯 CONTEXT-AWARE CACHE TTL: Different TTL for different operation types
+  private static readonly TTL_BY_OPERATION = {
+    ui: 10000,      // UI navigation: 10 seconds
+    gen: 0,         // SCORM generation: bypass cache (always fresh)
+    bg: 30000       // Background operations: 30 seconds
+  } as const
+
+  // 🔒 MEMORY MANAGEMENT: LRU cache bounds to prevent memory leaks
+  private static readonly MAX_CACHE_ENTRIES = 16    // Max entries per project
+  private static readonly MAX_CACHE_SIZE_MB = 20    // Max ~20MB of cached metadata
+  private cacheMemoryUsage = 0  // Track approximate memory usage in bytes
+
+  // 📊 MONITORING: Cache performance metrics
+  private cacheMetrics = {
+    hits: 0,
+    misses: 0,
+    evictions: 0,
+    timeouts: 0,
+    errors: 0
+  }
 
   // 🚀 PHASE 3: Generation mode for optimized batching (made mutable for singleton updates)
   private isGenerationMode: boolean
@@ -393,7 +433,10 @@ export class MediaService {
       })
       
       logger.info('[MediaService] Stored media to FILE SYSTEM:', id, 'for page:', pageId)
-      
+
+      // ✅ CACHE INVALIDATION: Clear caches after write operation
+      this.clearListAllMediaCaches()
+
       return mediaItem
     } catch (error) {
       debugLogger.error('MediaService.storeMedia', 'Failed to store media', {
@@ -484,7 +527,10 @@ export class MediaService {
       })
       
       logger.info('[MediaService] Updated media in FILE SYSTEM:', existingId)
-      
+
+      // ✅ CACHE INVALIDATION: Clear caches after write operation
+      this.clearListAllMediaCaches()
+
       return updatedMediaItem
     } catch (error) {
       debugLogger.error('MediaService.updateMedia', 'Failed to update media', {
@@ -652,7 +698,10 @@ export class MediaService {
         }
       }
       this.mediaCache.set(id, mediaItem)
-      
+
+      // ✅ CACHE INVALIDATION: Clear caches after write operation
+      this.clearListAllMediaCaches()
+
       return mediaItem  // Return MediaItem, not just id
     } catch (error) {
       debugLogger.error('MediaService.storeYouTubeVideo', 'Failed to store YouTube video', {
@@ -2353,18 +2402,27 @@ export class MediaService {
    * @param options Options for filtering media types
    * @param options.excludeTypes Array of media types to exclude (e.g., ['audio', 'caption'])
    */
-  async listAllMedia(options: { excludeTypes?: string[] } = {}): Promise<MediaItem[]> {
-    const { excludeTypes = [] } = options
+  async listAllMedia(options: { excludeTypes?: string[]; op?: ListAllOperation } = {}): Promise<MediaItem[]> {
+    const { excludeTypes = [], op = 'ui' } = options
     const isVisualOnly = excludeTypes.includes('audio') && excludeTypes.includes('caption')
 
-    // 📊 PERFORMANCE: Create cache key based on options
-    const cacheKey = JSON.stringify({ excludeTypes: excludeTypes.sort(), projectId: this.projectId })
+    // 🎯 CONTEXT-AWARE TTL: Auto-select operation type based on generation mode
+    const operation: ListAllOperation = this.isGenerationMode ? 'gen' : op
+    const ttl = MediaService.TTL_BY_OPERATION[operation]
+
+    // 🔒 NORMALIZED CACHE KEY: Deterministic key generation to prevent edge cases
+    const normalizedExcludes = (excludeTypes || [])
+      .filter(Boolean)  // Remove null/undefined
+      .map(s => s.toLowerCase().trim())
+      .sort()
+    const cacheKey = `${this.projectId}|${normalizedExcludes.join(',')}`
     const now = Date.now()
 
-    // Check cache first
+    // Check cache first (bypass if TTL=0 for generation mode)
     const cached = this.listAllMediaCache.get(cacheKey)
-    if (cached && (now - cached.timestamp) < MediaService.CACHE_TTL) {
-      console.log(`[PERFORMANCE] 🚀 listAllMedia cache HIT (${now - cached.timestamp}ms old) - returning ${cached.result.length} items`)
+    if (cached && ttl > 0 && (now - cached.timestamp) < ttl) {
+      this.cacheMetrics.hits++
+      console.log(`[PERFORMANCE] 🚀 listAllMedia cache HIT [${operation}] (${now - cached.timestamp}ms old) - returning ${cached.result.length} items`)
       return cached.result
     }
 
@@ -2382,22 +2440,52 @@ export class MediaService {
       cacheMiss: !!cached ? 'expired' : 'not found'
     })
 
-    console.log(`[PERFORMANCE] ⚠️ listAllMedia cache MISS - calling backend`)
+    this.cacheMetrics.misses++
+    console.log(`[PERFORMANCE] ⚠️ listAllMedia cache MISS [${operation}] - calling backend`)
 
-    // Create new request with deduplication
-    const promise = this.listAllMediaInternal(options)
+    // Create new request with deduplication and timeout protection
+    const promise = Promise.race([
+      this.listAllMediaInternal(options),
+      new Promise<MediaItem[]>((_, reject) =>
+        setTimeout(() => reject(new Error('listAllMedia timeout')), 8000)
+      )
+    ])
     this.listAllMediaPromises.set(cacheKey, promise)
 
     try {
       const result = await promise
 
-      // Cache the result
-      this.listAllMediaCache.set(cacheKey, { result, timestamp: now })
-      console.log(`[PERFORMANCE] ✅ listAllMedia cached ${result.length} items for ${MediaService.CACHE_TTL}ms`)
+      // Cache the result only if TTL > 0 (not in generation mode)
+      if (ttl > 0) {
+        // 🔒 MEMORY MANAGEMENT: Enforce cache bounds before adding new entry
+        this.enforceCacheBounds()
+
+        // Estimate memory usage (rough approximation)
+        const estimatedSize = JSON.stringify(result).length * 2 // 2 bytes per char
+        this.cacheMemoryUsage += estimatedSize
+
+        this.listAllMediaCache.set(cacheKey, { result, timestamp: now })
+        console.log(`[PERFORMANCE] ✅ listAllMedia cached ${result.length} items for ${ttl}ms [${operation}]`)
+      } else {
+        console.log(`[PERFORMANCE] ⚡ listAllMedia bypass cache [${operation}] - returned ${result.length} items`)
+      }
 
       return result
+    } catch (error) {
+      // 🚨 ERROR PROPAGATION: Clean up failed promise and propagate error
+      this.listAllMediaPromises.delete(cacheKey)
+
+      // Track error metrics
+      if (error instanceof Error && error.message.includes('timeout')) {
+        this.cacheMetrics.timeouts++
+      } else {
+        this.cacheMetrics.errors++
+      }
+
+      console.error(`[PERFORMANCE] ❌ listAllMedia failed [${operation}]:`, error)
+      throw error
     } finally {
-      // Clean up pending request
+      // Clean up pending request on success
       this.listAllMediaPromises.delete(cacheKey)
     }
   }
@@ -2672,6 +2760,10 @@ export class MediaService {
         
         debugLogger.info('MediaService.deleteMedia', 'Media deleted successfully', { mediaId })
         logger.info('[MediaService] Deleted media:', mediaId)
+
+        // ✅ CACHE INVALIDATION: Clear caches after write operation
+        this.clearListAllMediaCaches()
+
         return true
       } else {
         debugLogger.warn('MediaService.deleteMedia', 'Media not found', { mediaId })
@@ -3661,11 +3753,87 @@ export class MediaService {
   }
 
   /**
+   * 🔒 MEMORY MANAGEMENT: Enforce cache bounds using LRU eviction
+   * Removes oldest entries when cache exceeds limits
+   */
+  private enforceCacheBounds(): void {
+    const maxSizeBytes = MediaService.MAX_CACHE_SIZE_MB * 1024 * 1024
+
+    // Evict by entry count
+    if (this.listAllMediaCache.size >= MediaService.MAX_CACHE_ENTRIES) {
+      const entries = Array.from(this.listAllMediaCache.entries())
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp) // Sort by timestamp (oldest first)
+
+      // Remove oldest entries
+      const toRemove = entries.slice(0, entries.length - MediaService.MAX_CACHE_ENTRIES + 1)
+      for (const [key, value] of toRemove) {
+        this.listAllMediaCache.delete(key)
+        // Update memory usage estimate
+        const estimatedSize = JSON.stringify(value.result).length * 2
+        this.cacheMemoryUsage = Math.max(0, this.cacheMemoryUsage - estimatedSize)
+      }
+      this.cacheMetrics.evictions += toRemove.length
+      console.log(`[PERFORMANCE] 🗑️ LRU evicted ${toRemove.length} cache entries by count`)
+    }
+
+    // Evict by memory usage
+    if (this.cacheMemoryUsage > maxSizeBytes) {
+      const entries = Array.from(this.listAllMediaCache.entries())
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp) // Sort by timestamp (oldest first)
+
+      // Remove entries until under memory limit
+      let memoryEvictions = 0
+      for (const [key, value] of entries) {
+        if (this.cacheMemoryUsage <= maxSizeBytes) break
+
+        this.listAllMediaCache.delete(key)
+        const estimatedSize = JSON.stringify(value.result).length * 2
+        this.cacheMemoryUsage = Math.max(0, this.cacheMemoryUsage - estimatedSize)
+        memoryEvictions++
+      }
+      this.cacheMetrics.evictions += memoryEvictions
+      console.log(`[PERFORMANCE] 🗑️ LRU evicted ${memoryEvictions} entries by memory usage (target: ${maxSizeBytes / 1024 / 1024}MB)`)
+    }
+  }
+
+  /**
+   * ✅ CACHE INVALIDATION: Clear listAllMedia caches
+   * Called on write operations and project switches
+   */
+  clearListAllMediaCaches(): void {
+    const entriesCleared = this.listAllMediaCache.size
+    const promisesCleared = this.listAllMediaPromises.size
+
+    this.listAllMediaCache.clear()
+    this.listAllMediaPromises.clear()
+    this.cacheMemoryUsage = 0
+
+    if (entriesCleared > 0 || promisesCleared > 0) {
+      console.log(`[PERFORMANCE] 🧹 Cleared listAllMedia caches: ${entriesCleared} entries, ${promisesCleared} promises`)
+    }
+  }
+
+  /**
    * Get the current size of the media cache
    * Used for optimization decisions in component loading patterns
    */
   getCacheSize(): number {
     return this.mediaCache.size
+  }
+
+  /**
+   * 📊 MONITORING: Get cache performance metrics
+   */
+  getCacheMetrics(): typeof this.cacheMetrics & { hitRatio: number; memoryUsageMB: number } {
+    const total = this.cacheMetrics.hits + this.cacheMetrics.misses
+    const hitRatio = total > 0 ? this.cacheMetrics.hits / total : 0
+    const memoryUsageMB = this.cacheMemoryUsage / (1024 * 1024)
+
+    return {
+      ...this.cacheMetrics,
+      hitRatio: Math.round(hitRatio * 100) / 100, // Round to 2 decimal places
+      memoryUsageMB: Math.round(memoryUsageMB * 100) / 100
+    }
   }
 }
 

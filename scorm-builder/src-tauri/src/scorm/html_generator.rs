@@ -1,5 +1,6 @@
 use crate::scorm::generator::CourseMetadata;
 use serde_json::Value;
+use std::path::Path;
 
 #[allow(dead_code)]
 pub fn generate_welcome_page_html(welcome: &Value) -> String {
@@ -32,15 +33,38 @@ pub fn generate_welcome_page_html(welcome: &Value) -> String {
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
 
             match media_type {
-                "image" => {
-                    let extension = if media_id.contains("image-0") {
-                        ".jpg"
+                "image" | "svg" => {
+                    // Get URL from media object, fallback to media_id with extension detection
+                    let image_url = if let Some(url) = media.get("url").and_then(|v| v.as_str()) {
+                        println!("[Rust HTML Gen] Found URL field for {}: '{}' (welcome page)", media_id, url);
+                        // If URL is provided, extract the filename with extension
+                        if url.starts_with("media/") {
+                            println!("[Rust HTML Gen] Using URL directly: {}", url);
+                            url.to_string()
+                        } else if url.starts_with("/media/") {
+                            let stripped = url.strip_prefix("/").unwrap_or(url).to_string();
+                            println!("[Rust HTML Gen] Stripped leading slash: {}", stripped);
+                            stripped
+                        } else {
+                            // External URL or relative path - use as filename
+                            let filename = format!("media/{}", Path::new(url).file_name().unwrap_or_default().to_string_lossy());
+                            println!("[Rust HTML Gen] Extracted filename from URL: {}", filename);
+                            filename
+                        }
                     } else {
-                        ".png"
+                        println!("[Rust HTML Gen] No URL field found for {}, using fallback extension detection", media_id);
+                        // Fallback: try to detect extension from media_id or use default
+                        let extension = detect_image_extension(media_id, media_type);
+                        let fallback_url = format!("media/{}{}", media_id, extension);
+                        println!("[Rust HTML Gen] Fallback URL: {}", fallback_url);
+                        fallback_url
                     };
+
+                    let img_class = if media_type == "svg" { "content-svg" } else { "content-image" };
                     html.push_str(&format!(
-                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
-"#
+                        r#"    <img src="{}" alt="{}" class="{}" />
+"#,
+                        image_url, media_title, img_class
                     ));
                 }
                 "video" => {
@@ -93,15 +117,38 @@ pub fn generate_objectives_page_html(objectives_page: &Value) -> String {
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
 
             match media_type {
-                "image" => {
-                    let extension = if media_id.contains("objectives") {
-                        ".jpg"
+                "image" | "svg" => {
+                    // Get URL from media object, fallback to media_id with extension detection
+                    let image_url = if let Some(url) = media.get("url").and_then(|v| v.as_str()) {
+                        println!("[Rust HTML Gen] Found URL field for {}: '{}' (objectives page)", media_id, url);
+                        // If URL is provided, extract the filename with extension
+                        if url.starts_with("media/") {
+                            println!("[Rust HTML Gen] Using URL directly: {}", url);
+                            url.to_string()
+                        } else if url.starts_with("/media/") {
+                            let stripped = url.strip_prefix("/").unwrap_or(url).to_string();
+                            println!("[Rust HTML Gen] Stripped leading slash: {}", stripped);
+                            stripped
+                        } else {
+                            // External URL or relative path - use as filename
+                            let filename = format!("media/{}", Path::new(url).file_name().unwrap_or_default().to_string_lossy());
+                            println!("[Rust HTML Gen] Extracted filename from URL: {}", filename);
+                            filename
+                        }
                     } else {
-                        ".png"
+                        println!("[Rust HTML Gen] No URL field found for {}, using fallback extension detection", media_id);
+                        // Fallback: try to detect extension from media_id or use default
+                        let extension = detect_image_extension(media_id, media_type);
+                        let fallback_url = format!("media/{}{}", media_id, extension);
+                        println!("[Rust HTML Gen] Fallback URL: {}", fallback_url);
+                        fallback_url
                     };
+
+                    let img_class = if media_type == "svg" { "content-svg" } else { "content-image" };
                     html.push_str(&format!(
-                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
-"#
+                        r#"    <img src="{}" alt="{}" class="{}" />
+"#,
+                        image_url, media_title, img_class
                     ));
                 }
                 "video" => {
@@ -172,17 +219,38 @@ pub fn generate_topic_page_html(topic: &Value, _index: usize) -> String {
             let media_title = media.get("title").and_then(|v| v.as_str()).unwrap_or("");
 
             match media_type {
-                "image" => {
-                    let extension = if media_id.contains("logo") {
-                        ".png"
-                    } else if media_id.contains("image-1") {
-                        ".png"
+                "image" | "svg" => {
+                    // Get URL from media object, fallback to media_id with extension detection
+                    let image_url = if let Some(url) = media.get("url").and_then(|v| v.as_str()) {
+                        println!("[Rust HTML Gen] Found URL field for {}: '{}' (topic page)", media_id, url);
+                        // If URL is provided, extract the filename with extension
+                        if url.starts_with("media/") {
+                            println!("[Rust HTML Gen] Using URL directly: {}", url);
+                            url.to_string()
+                        } else if url.starts_with("/media/") {
+                            let stripped = url.strip_prefix("/").unwrap_or(url).to_string();
+                            println!("[Rust HTML Gen] Stripped leading slash: {}", stripped);
+                            stripped
+                        } else {
+                            // External URL or relative path - use as filename
+                            let filename = format!("media/{}", Path::new(url).file_name().unwrap_or_default().to_string_lossy());
+                            println!("[Rust HTML Gen] Extracted filename from URL: {}", filename);
+                            filename
+                        }
                     } else {
-                        ".jpg"
+                        println!("[Rust HTML Gen] No URL field found for {}, using fallback extension detection", media_id);
+                        // Fallback: try to detect extension from media_id or use default
+                        let extension = detect_image_extension(media_id, media_type);
+                        let fallback_url = format!("media/{}{}", media_id, extension);
+                        println!("[Rust HTML Gen] Fallback URL: {}", fallback_url);
+                        fallback_url
                     };
+
+                    let img_class = if media_type == "svg" { "content-svg" } else { "content-image" };
                     html.push_str(&format!(
-                        r#"    <img src="media/{media_id}{extension}" alt="{media_title}" class="content-image" />
-"#
+                        r#"    <img src="{}" alt="{}" class="{}" />
+"#,
+                        image_url, media_title, img_class
                     ));
                 }
                 "video" => {
@@ -701,6 +769,42 @@ pub fn generate_complete_scorm_html(course_content: &Value, metadata: &CourseMet
 </html>"#);
 
     html
+}
+
+/// Helper function to detect image extension from media_id or type
+fn detect_image_extension(media_id: &str, media_type: &str) -> &'static str {
+    // First check if media_id already has an extension
+    if let Some(ext_start) = media_id.rfind('.') {
+        let ext = &media_id[ext_start..];
+        match ext {
+            ".jpg" => return ".jpg",
+            ".jpeg" => return ".jpeg",
+            ".png" => return ".png",
+            ".gif" => return ".gif",
+            ".webp" => return ".webp",
+            ".svg" => return ".svg",
+            _ => {}
+        }
+    }
+
+    // Check media type
+    if media_type == "svg" {
+        return ".svg";
+    }
+
+    // Analyze media_id patterns to guess extension (improved logic)
+    if media_id.contains("gif") {
+        ".gif"
+    } else if media_id.contains("webp") {
+        ".webp"
+    } else if media_id.contains("svg") {
+        ".svg"
+    } else if media_id.contains("png") || media_id.contains("logo") {
+        ".png"
+    } else {
+        // Default to jpg for regular images
+        ".jpg"
+    }
 }
 
 #[cfg(test)]
