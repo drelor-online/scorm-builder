@@ -98,7 +98,7 @@ describe('Pre-Zip Validation Hard Fail', () => {
         ['welcome-image', '.jpg'],
         ['objectives-image', '.png'],
         ['image-1', '.png'],
-        ['missing-image', '.svg']  // Extension known but file missing
+        ['missing-image', '.jpg']  // Extension known but file missing
       ])
 
       // Test should fail when missing media detected with strict validation
@@ -144,7 +144,7 @@ describe('Pre-Zip Validation Hard Fail', () => {
       ])
 
       const authoritativeExtensionMap = new Map([
-        ['missing-1', '.svg'],
+        ['missing-1', '.jpg'],
         ['missing-2', '.mp4'],
         ['present-file', '.png']
       ])
@@ -337,6 +337,198 @@ describe('Pre-Zip Validation Hard Fail', () => {
           { strictValidation: true }
         )
       ).rejects.toThrow('Missing file extensions in authoritative map')
+    })
+  })
+
+  describe('Map Hole Fail-Fast', () => {
+    it('should throw when referenced ID lacks extension in authoritative map with strict validation', async () => {
+      const courseContent = {
+        title: 'Test Course',
+        welcome: {
+          title: 'Welcome'
+        },
+        topics: [
+          {
+            id: 'topic-1',
+            title: 'Topic 1',
+            content: 'Test content',
+            media: [
+              { id: 'image-without-ext', type: 'image' }
+            ]
+          }
+        ]
+      }
+
+      const courseSeedData = {
+        projectId: 'test-project',
+        title: 'Test Course'
+      }
+
+      const mockMediaCache = new Map([
+        ['image-without-ext', { data: new Uint8Array([1]), mimeType: 'image/png' }]
+      ])
+
+      // Empty map - this simulates missing MIME detection
+      const authoritativeExtensionMap = new Map()
+
+      await expect(
+        buildScormPackageEnhanced(
+          courseContent,
+          courseSeedData,
+          mockMediaCache,
+          authoritativeExtensionMap,
+          { strictValidation: true }
+        )
+      ).rejects.toThrow('Missing file extensions in authoritative map for media IDs: image-without-ext')
+    })
+
+    it('should warn when referenced ID lacks extension in authoritative map with warning mode', async () => {
+      const originalConsoleWarn = console.warn
+      const mockWarn = vi.fn()
+      console.warn = mockWarn
+
+      const courseContent = {
+        title: 'Test Course',
+        welcome: {
+          title: 'Welcome'
+        },
+        topics: [
+          {
+            id: 'topic-1',
+            title: 'Topic 1',
+            content: 'Test content',
+            media: [
+              { id: 'image-without-ext', type: 'image' }
+            ]
+          }
+        ]
+      }
+
+      const courseSeedData = {
+        projectId: 'test-project',
+        title: 'Test Course'
+      }
+
+      const mockMediaCache = new Map([
+        ['image-without-ext', { data: new Uint8Array([1]), mimeType: 'image/png' }]
+      ])
+
+      const authoritativeExtensionMap = new Map() // Empty map
+
+      // Should not throw in warning mode, but should log warning
+      await expect(
+        buildScormPackageEnhanced(
+          courseContent,
+          courseSeedData,
+          mockMediaCache,
+          authoritativeExtensionMap,
+          { strictValidation: false }
+        )
+      ).resolves.toBeTruthy()
+
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.stringContaining('Missing file extensions in authoritative map')
+      )
+
+      console.warn = originalConsoleWarn
+    })
+  })
+
+  describe('SVG Catch-Up Path', () => {
+    it('should use fallback when SVG not in cache but in storage', async () => {
+      const courseContent = {
+        title: 'Test Course',
+        welcome: {
+          title: 'Welcome'
+        },
+        topics: [
+          {
+            id: 'topic-1',
+            title: 'Topic 1',
+            content: 'Test content',
+            media: [
+              { id: 'svg-icon-1', type: 'image' }
+            ]
+          }
+        ]
+      }
+
+      const courseSeedData = {
+        projectId: 'test-project',
+        title: 'Test Course'
+      }
+
+      // Cache is missing the SVG
+      const mockMediaCache = new Map()
+
+      const authoritativeExtensionMap = new Map([
+        ['svg-icon-1', '.svg']
+      ])
+
+      // Mock the fallback to return SVG data
+      const svgData = new Uint8Array([60, 115, 118, 103, 62]) // "<svg>"
+      mockMediaService.getMediaBatchDirect.mockResolvedValue(
+        new Map([
+          ['svg-icon-1', {
+            data: svgData,
+            metadata: { mimeType: 'image/svg+xml' }
+          }]
+        ])
+      )
+
+      const result = await buildScormPackageEnhanced(
+        courseContent,
+        courseSeedData,
+        mockMediaCache,
+        authoritativeExtensionMap,
+        { strictValidation: true }
+      )
+
+      // Should successfully complete using fallback
+      expect(result).toBeTruthy()
+      expect(mockMediaService.getMediaBatchDirect).toHaveBeenCalledWith(['svg-icon-1'])
+    })
+
+    it('should handle SVG fallback failures gracefully in strict mode', async () => {
+      const courseContent = {
+        title: 'Test Course',
+        welcome: {
+          title: 'Welcome'
+        },
+        topics: [
+          {
+            id: 'topic-1',
+            title: 'Topic 1',
+            content: 'Test content',
+            media: [
+              { id: 'missing-svg', type: 'image' }
+            ]
+          }
+        ]
+      }
+
+      const courseSeedData = {
+        projectId: 'test-project',
+        title: 'Test Course'
+      }
+
+      const mockMediaCache = new Map() // Empty cache
+      const authoritativeExtensionMap = new Map([
+        ['missing-svg', '.svg']
+      ])
+
+      // Mock fallback failure
+      mockMediaService.getMediaBatchDirect.mockRejectedValue(new Error('Storage error'))
+
+      await expect(
+        buildScormPackageEnhanced(
+          courseContent,
+          courseSeedData,
+          mockMediaCache,
+          authoritativeExtensionMap,
+          { strictValidation: true }
+        )
+      ).rejects.toThrow('SCORM generation failed: 1 referenced media files are missing')
     })
   })
 })
