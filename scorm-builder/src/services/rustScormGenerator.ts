@@ -4280,8 +4280,19 @@ export async function generateRustSCORM(
     if (mediaFiles.length > 0) {
       console.log(`  📋 Media files being included:`)
       mediaFiles.forEach((file, idx) => {
-        console.log(`    ${idx + 1}. ${file.filename} (${file.content.length} bytes)`)
+        const isSvg = file.filename.endsWith('.svg')
+        const icon = isSvg ? '🎨' : '📄'
+        console.log(`    ${idx + 1}. ${icon} ${file.filename} (${file.content.length} bytes)${isSvg ? ' [SVG]' : ''}`)
       })
+
+      // Specific SVG summary for debugging
+      const svgFiles = mediaFiles.filter(f => f.filename.endsWith('.svg'))
+      if (svgFiles.length > 0) {
+        console.log(`  🎨 SVG FILES SUMMARY: ${svgFiles.length} SVG files will be included in SCORM ZIP`)
+        svgFiles.forEach(f => console.log(`    ✅ ${f.filename}`))
+      } else {
+        console.log(`  ⚠️ SVG FILES SUMMARY: No SVG files found - all SVGs will show as 404 in SCORM package`)
+      }
     } else {
       console.log(`  ⚠️  No media files to include (empty array - this will prevent disk fallback)`)
     }
@@ -4328,6 +4339,40 @@ export async function generateRustSCORM(
 
     rewriteMediaUrls(rustCourseData)
     console.log(`[Extension Map] URL rewriting completed`)
+
+    // 🔧 SVG FORCE-INCLUSION FIX: Ensure ALL SVG files are in mediaFiles array
+    // The enhanced generator only zips what's in mediaFiles, so missing SVGs = 404s
+    console.log(`[SVG FORCE] Checking for SVG files to force-include...`)
+    const svgIds = [...authoritativeExtensionMap.entries()]
+      .filter(([id, ext]) => ext.toLowerCase() === '.svg')
+      .map(([id]) => id)
+
+    console.log(`[SVG FORCE] Found ${svgIds.length} SVG files in extension map:`, svgIds)
+
+    for (const svgId of svgIds) {
+      const cached = mediaCache.get(svgId)
+      if (cached?.data) {
+        const filename = `${svgId}.svg`
+
+        // Check if this SVG is already in mediaFiles
+        if (!mediaFiles.find(f => f.filename === filename)) {
+          mediaFiles.push({
+            filename,
+            content: cached.data
+          })
+          console.log(`[SVG FORCE] ✅ Added ${filename} to mediaFiles (${cached.data.length} bytes)`)
+        } else {
+          console.log(`[SVG FORCE] ✅ ${filename} already in mediaFiles`)
+        }
+      } else {
+        console.warn(`[SVG FORCE] ⚠️ SVG ${svgId} not found in cache - will be missing from SCORM package`)
+      }
+    }
+
+    // Final debug logging to prove SVGs are included
+    const svgFilesInPackage = mediaFiles.filter(f => f.filename.endsWith('.svg'))
+    console.log(`[SVG FORCE] 🎯 FINAL COUNT: ${svgFilesInPackage.length} SVG files will be included in SCORM package:`)
+    svgFilesInPackage.forEach(f => console.log(`  - ${f.filename} (${f.content.length} bytes)`))
 
     const result = await Promise.race([
       invoke<number[]>('generate_scorm_enhanced', {

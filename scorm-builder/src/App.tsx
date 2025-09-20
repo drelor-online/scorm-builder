@@ -928,19 +928,53 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           debugLogger.info('App.loadProject', '🧹 Performing final orphaned media cleanup on loaded course content')
           
           try {
-            // Create media existence checker using UnifiedMediaContext
-            const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
-              try {
-                const result = await getMedia(mediaId)
-                return result !== null
-              } catch (error) {
-                debugLogger.debug('App.loadProject', `Media existence check failed for ${mediaId}: ${error}`)
-                return false
+            // 🚀 PERFORMANCE FIX: Collect all media IDs first and do batch existence check
+            debugLogger.info('App.loadProject', '⚡ Collecting media IDs for batch existence check')
+            let getMediaCallCount = 0
+
+            // Helper to collect all media IDs from course content
+            const collectMediaIds = (content: any): Set<string> => {
+              const mediaIds = new Set<string>()
+
+              const traverse = (obj: any) => {
+                if (!obj || typeof obj !== 'object') return
+
+                if (Array.isArray(obj)) {
+                  obj.forEach(traverse)
+                } else {
+                  // Check if this is a media item with an ID
+                  if (obj.id && typeof obj.id === 'string' && (obj.type || obj.url || obj.title)) {
+                    mediaIds.add(obj.id)
+                  }
+
+                  // Recursively traverse all properties
+                  Object.values(obj).forEach(traverse)
+                }
               }
+
+              traverse(content)
+              return mediaIds
             }
-            
+
+            const allMediaIds = collectMediaIds(loadedCourseContent)
+            debugLogger.info('App.loadProject', `🔍 Found ${allMediaIds.size} media IDs to check`)
+
+            // Do single batch existence check instead of N individual calls
+            const existingMediaIds = await checkMediaExistenceBatch(Array.from(allMediaIds))
+            debugLogger.info('App.loadProject', `✅ Batch check completed: ${existingMediaIds.size}/${allMediaIds.size} media items exist`)
+
+            // Create fast media existence checker using batch results
+            const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
+              getMediaCallCount++
+              const exists = existingMediaIds.has(mediaId)
+              debugLogger.debug('App.loadProject', `Media existence check ${getMediaCallCount}: ${mediaId} = ${exists}`)
+              return exists
+            }
+
             // Apply final cleanup to catch any orphaned references that might have slipped through
             const cleanupResult = await cleanupOrphanedMediaReferences(loadedCourseContent, mediaExistsChecker)
+
+            debugLogger.info('App.loadProject', `📊 Performance metrics: ${getMediaCallCount} individual getMedia calls (should be 0 after this fix)`)
             
             if (cleanupResult.removedMediaIds.length > 0) {
               debugLogger.info('App.loadProject', '🎯 Final cleanup removed orphaned media references', {
@@ -1493,20 +1527,48 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         // Post-save failsafe: Clean up any orphaned media references that might have been missed
         try {
           debugLogger.info('App.handleJSONNext', '🔧 Running post-save orphaned media cleanup validation')
-          
-          const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
-            try {
-              const result = await getMedia(mediaId)
-              const exists = result !== null
-              debugLogger.debug('App.handleJSONNext', `Post-save media check: ${mediaId} exists: ${exists}`)
-              return exists
-            } catch (error) {
-              debugLogger.debug('App.handleJSONNext', `Post-save media check error for ${mediaId}:`, error)
-              return false
+
+          // 🚀 PERFORMANCE FIX: Use batch check for post-save validation too
+          let getMediaCallCount = 0
+
+          // Helper to collect all media IDs from course content
+          const collectMediaIds = (content: any): Set<string> => {
+            const mediaIds = new Set<string>()
+
+            const traverse = (obj: any) => {
+              if (!obj || typeof obj !== 'object') return
+
+              if (Array.isArray(obj)) {
+                obj.forEach(traverse)
+              } else {
+                if (obj.id && typeof obj.id === 'string' && (obj.type || obj.url || obj.title)) {
+                  mediaIds.add(obj.id)
+                }
+                Object.values(obj).forEach(traverse)
+              }
             }
+
+            traverse(content)
+            return mediaIds
           }
-          
+
+          const allMediaIds = collectMediaIds(data)
+          debugLogger.info('App.handleJSONNext', `⚡ Found ${allMediaIds.size} media IDs for post-save batch check`)
+
+          // Do batch existence check
+          const existingMediaIds = await checkMediaExistenceBatch(Array.from(allMediaIds))
+          debugLogger.info('App.handleJSONNext', `✅ Post-save batch check: ${existingMediaIds.size}/${allMediaIds.size} media items exist`)
+
+          const mediaExistsChecker = async (mediaId: string): Promise<boolean> => {
+            getMediaCallCount++
+            const exists = existingMediaIds.has(mediaId)
+            debugLogger.debug('App.handleJSONNext', `Post-save media check ${getMediaCallCount}: ${mediaId} = ${exists}`)
+            return exists
+          }
+
           const cleanupResult = await cleanupOrphanedMediaReferences(data, mediaExistsChecker)
+
+          debugLogger.info('App.handleJSONNext', `📊 Post-save performance: ${getMediaCallCount} individual getMedia calls (should be 0)`)
           
           if (cleanupResult.removedMediaIds.length > 0) {
             debugLogger.info('App.handleJSONNext', '🧹 Post-save cleanup found and removed orphaned media references:', {
