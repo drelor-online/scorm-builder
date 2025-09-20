@@ -15,6 +15,7 @@ import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor'
 import { sanitizeScormFileName } from '../utils/fileSanitizer'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { safeDeepClone } from '../utils/safeClone'
+import { getExtensionFromMimeType } from '../services/rustScormGenerator'
 
 import { PageLayout } from './PageLayout'
 import { 
@@ -291,6 +292,25 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       mediaFilesRef.current.clear()
     }
   }, [])
+
+  // Helper function to get correct extension from MIME type
+  const getExtensionFromMedia = async (mediaId: string): Promise<string> => {
+    try {
+      const mediaData = await media.selectors.getMedia(mediaId)
+      if (mediaData?.metadata?.mimeType) {
+        const ext = getExtensionFromMimeType(mediaData.metadata.mimeType)
+        if (ext) {
+          console.log(`[SCORMPackageBuilder] Extension for ${mediaId}: .${ext} (from MIME: ${mediaData.metadata.mimeType})`)
+          return `.${ext}`
+        }
+      }
+      console.warn(`[SCORMPackageBuilder] No MIME type found for ${mediaId}, using .bin fallback`)
+      return '.bin'
+    } catch (error) {
+      console.error(`[SCORMPackageBuilder] Error getting extension for ${mediaId}:`, error)
+      return '.bin'
+    }
+  }
 
   // Helper function to get media blob from UnifiedMedia with proper cancellation
   const getMediaBlobFromRegistry = async (mediaId: string, signal?: AbortSignal): Promise<Blob | null> => {
@@ -608,7 +628,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id} (${mediaItem.type})`)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
           if (mediaBlob) {
-            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+            const extension = await getExtensionFromMedia(mediaItem.id)
             // Generate unique filename by including type to prevent overwrites
             const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
             mediaFilesRef.current.set(uniqueFilename, mediaBlob)
@@ -689,7 +709,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           loadedMediaIds.add(trackingKey)
           const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
           if (mediaBlob) {
-            const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+            const extension = await getExtensionFromMedia(mediaItem.id)
             // Generate unique filename by including type to prevent overwrites
             const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
             mediaFilesRef.current.set(uniqueFilename, mediaBlob)
@@ -800,7 +820,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             loadedMediaIds.add(trackingKey)
             const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
             if (mediaBlob) {
-              const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : mediaItem.type === 'audio' ? '.mp3' : '.bin'
+              const extension = await getExtensionFromMedia(mediaItem.id)
               // Generate unique filename by including type to prevent overwrites
               const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
               mediaFilesRef.current.set(uniqueFilename, mediaBlob)

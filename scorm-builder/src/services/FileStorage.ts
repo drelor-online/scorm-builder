@@ -1085,12 +1085,55 @@ export class FileStorage {
   
   async addMediaToTopic(topicId: string, blob: Blob, metadata: any): Promise<void> {
     if (!this._currentProjectPath) throw new Error('No project open');
-    
+
     const mediaId = Date.now().toString();
     await this.storeMedia(mediaId, blob, metadata.mediaType, {
       ...metadata,
       topicId
     });
+  }
+
+  /**
+   * PERFORMANCE OPTIMIZATION: Check existence of multiple media items in a single call
+   * Returns a Set of media IDs that exist, enabling O(1) existence lookups
+   * This replaces multiple individual getMedia() calls during project loading
+   */
+  async checkMediaExistenceBatch(mediaIds: string[]): Promise<Set<string>> {
+    if (!this._currentProjectId || mediaIds.length === 0) {
+      return new Set();
+    }
+
+    try {
+      debugLogger.debug('FileStorage.checkMediaExistenceBatch', `Checking existence of ${mediaIds.length} media items`, {
+        projectId: this._currentProjectId,
+        mediaIds: mediaIds.slice(0, 10) // Log first 10 for debugging
+      });
+
+      // Use the existing optimized metadata-only endpoint
+      const allMedia = await invoke<any[]>('get_all_project_media_metadata', {
+        projectId: this._currentProjectPath || this._currentProjectId
+      });
+
+      // Create Set of existing media IDs for O(1) lookup
+      const existingIds = new Set(allMedia.map(media => media.id));
+
+      // Filter to only the requested IDs
+      const requestedExisting = new Set<string>();
+      for (const mediaId of mediaIds) {
+        if (existingIds.has(mediaId)) {
+          requestedExisting.add(mediaId);
+        }
+      }
+
+      debugLogger.info('FileStorage.checkMediaExistenceBatch', `Found ${requestedExisting.size}/${mediaIds.length} requested media items`, {
+        existingIds: Array.from(requestedExisting)
+      });
+
+      return requestedExisting;
+    } catch (error) {
+      debugLogger.error('FileStorage.checkMediaExistenceBatch', 'Failed to check media existence', error);
+      return new Set(); // Return empty set on error
+    }
   }
 
   addStateChangeListener(callback: (state: any) => void): () => void {

@@ -3753,6 +3753,44 @@ export class MediaService implements MediaServiceExtended {
   }
 
   /**
+   * 🚀 PERFORMANCE: Batch existence check for multiple media items
+   * Optimized method that only checks if media exists without loading data
+   * Uses single backend call instead of N individual checks
+   */
+  async checkMediaExistenceBatch(mediaIds: string[]): Promise<Set<string>> {
+    if (mediaIds.length === 0) {
+      return new Set()
+    }
+
+    console.log(`[MediaService] BATCH EXISTENCE CHECK: Checking ${mediaIds.length} media items`)
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+
+      // Use existing optimized batch existence check
+      const existenceFlags = await invoke<boolean[]>('media_exists_batch', {
+        projectId: this.projectId,
+        mediaIds: mediaIds
+      })
+
+      // Build Set of existing media IDs for O(1) lookup
+      const existingIds = new Set<string>()
+      for (let i = 0; i < mediaIds.length; i++) {
+        if (existenceFlags[i]) {
+          existingIds.add(mediaIds[i])
+        }
+      }
+
+      console.log(`[MediaService] BATCH EXISTENCE CHECK: Found ${existingIds.size}/${mediaIds.length} existing items`)
+      return existingIds
+
+    } catch (error) {
+      console.error('[MediaService] BATCH EXISTENCE CHECK: Failed to check media existence:', error)
+      return new Set() // Return empty set on error
+    }
+  }
+
+  /**
    * 🔒 MEMORY MANAGEMENT: Enforce cache bounds using LRU eviction
    * Removes oldest entries when cache exceeds limits
    */

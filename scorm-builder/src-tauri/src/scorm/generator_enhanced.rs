@@ -180,6 +180,7 @@ impl EnhancedScormGenerator {
         &self,
         request: GenerateScormRequest,
         media_files: HashMap<String, Vec<u8>>,
+        extension_map: Option<HashMap<String, String>>,
     ) -> Result<Vec<u8>, String> {
         let mut zip_buffer = Vec::new();
         {
@@ -225,7 +226,7 @@ impl EnhancedScormGenerator {
 
             // Generate page HTML files
             if let Some(welcome) = &request.welcome_page {
-                let welcome_html = self.html_generator.generate_welcome_page(welcome, request.require_audio_completion.unwrap_or(false))?;
+                let welcome_html = self.html_generator.generate_welcome_page(welcome, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
                 zip.start_file("pages/welcome.html", options)
                     .map_err(|e| format!("Failed to create welcome.html: {e}"))?;
                 zip.write_all(welcome_html.as_bytes())
@@ -233,7 +234,7 @@ impl EnhancedScormGenerator {
             }
 
             if let Some(objectives) = &request.learning_objectives_page {
-                let objectives_html = self.html_generator.generate_objectives_page(objectives, request.require_audio_completion.unwrap_or(false))?;
+                let objectives_html = self.html_generator.generate_objectives_page(objectives, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
                 zip.start_file("pages/objectives.html", options)
                     .map_err(|e| format!("Failed to create objectives.html: {e}"))?;
                 zip.write_all(objectives_html.as_bytes())
@@ -242,7 +243,7 @@ impl EnhancedScormGenerator {
 
             // Generate topic pages
             for topic in &request.topics {
-                let topic_html = self.html_generator.generate_topic_page(topic, request.require_audio_completion.unwrap_or(false))?;
+                let topic_html = self.html_generator.generate_topic_page(topic, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
                 zip.start_file(format!("pages/{}.html", topic.id), options)
                     .map_err(|e| format!("Failed to create topic page: {e}"))?;
                 zip.write_all(topic_html.as_bytes())
@@ -394,7 +395,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generator.generate_scorm_package(request, HashMap::new());
+        let result = generator.generate_scorm_package(request, HashMap::new(), None);
         assert!(result.is_ok());
     }
 

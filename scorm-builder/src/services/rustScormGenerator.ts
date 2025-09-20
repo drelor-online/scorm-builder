@@ -827,7 +827,7 @@ interface MediaFile {
 }
 
 // Media cache to prevent duplicate loads during SCORM generation
-const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
+export const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
 
 // Authoritative extension map - built once and used throughout generation
 let authoritativeExtensionMap = new Map<string, string>()
@@ -1075,6 +1075,27 @@ export function hydrateMediaCacheById(preloadedById: Map<string, { data: Uint8Ar
  */
 function normalizeIdLike(s: string): string {
   return s.replace(/\.(jpg|jpeg|png|gif|webp|svg|mp3|mp4|webm|vtt)$/i, '');
+}
+
+/**
+ * Check if a media item is an SVG by examining ID, URL, type, and MIME type
+ * This is more robust than just checking ID/URL patterns
+ */
+export function isSvgMedia(m: any): boolean {
+  // Check existing patterns first (backward compatibility)
+  if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+    return true;
+  }
+
+  // Check MIME type from cache (handles SVGs with type="image" and generic IDs)
+  if (m?.id) {
+    const cached = mediaCache.get(m.id);
+    if (cached?.mimeType === 'image/svg+xml') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -1346,14 +1367,21 @@ export function getExtensionFromMimeType(mimeType: string): string {
 export function getExtensionFromMediaId(mediaId: string): string {
   if (mediaId.startsWith('audio-')) return 'mp3'
   if (mediaId.startsWith('caption-')) return 'vtt'
-  if (mediaId.startsWith('image-')) return 'jpg' // Default to jpg for images
+  if (mediaId.startsWith('image-')) {
+    // 🔧 NEW: Check cache for SVG MIME type first
+    const cached = mediaCache.get(mediaId)
+    if (cached?.mimeType === 'image/svg+xml') {
+      return 'svg'
+    }
+    return 'jpg' // Default to jpg for images
+  }
   if (mediaId.startsWith('video-')) {
     // Video IDs should not generate files - they should be YouTube embeds
     console.warn(`[rustScormGenerator] Video ID "${mediaId}" should be handled as YouTube embed, not file`)
     return 'json' // If it must be a file, store as JSON metadata
   }
   if (mediaId.startsWith('youtube-')) return 'json' // YouTube metadata
-  
+
   console.warn(`[rustScormGenerator] Unknown media ID pattern "${mediaId}", defaulting to .bin`)
   return 'bin'
 }
@@ -1550,19 +1578,15 @@ async function resolveImageUrl(
         }
       }
       
-      // 🔧 FIX: Use consistent counter-based naming for all images
+      // 🔧 CRITICAL FIX: Preserve original ID-based naming instead of counter renumbering
       // Check if we already have a filename for this media ID
       const existingFilename = mediaIdToFilename.get(imageUrl)
       if (existingFilename) {
-        console.log(`[Rust SCORM] Using existing counter-based filename for ${imageUrl}: ${existingFilename}`)
+        console.log(`[Rust SCORM] Using existing filename for ${imageUrl}: ${existingFilename}`)
         return `media/${existingFilename}`
       }
 
-      // Generate new counter-based filename
-      if (!mediaCounter.image) mediaCounter.image = 0
-      mediaCounter.image++
-
-      // Use authoritative extension map first, fallback to cache MIME, no more image→jpg fallback
+      // Get extension from authoritative map first, fallback to MIME type
       let ext = authoritativeExtensionMap.get(imageUrl)?.substring(1) // Remove the dot
       if (!ext) {
         ext = getExtensionFromMimeType(cached.mimeType)
@@ -1572,7 +1596,10 @@ async function resolveImageUrl(
         ext = 'bin'
       }
 
-      const filename = `image-${mediaCounter.image}.${ext}`
+      // PRESERVE ORIGINAL ID: Use the original imageUrl as base, don't generate counters
+      // This ensures image-1 stays as image-1.svg, not image-1.png
+      const filename = `${imageUrl}.${ext}`
+      console.log(`[Rust SCORM] PRESERVING original ID: ${imageUrl} → ${filename} (extension: ${ext})`)
 
       // Track the mapping
       mediaIdToFilename.set(imageUrl, filename)
@@ -2440,7 +2467,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         safeArrayFilter(cc.welcome?.media || cc.welcomePage?.media || [])
           .filter((m: any) => {
             // Keep SVG files regardless of their type classification
-            if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+            if (isSvgMedia(m)) {
               return true
             }
             // Filter out regular images
@@ -2480,7 +2507,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         Array.isArray(cc.learningObjectivesPage.media) ?
           cc.learningObjectivesPage.media.filter((m: any) => {
             // Keep SVG files regardless of their type classification
-            if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+            if (isSvgMedia(m)) {
               return true
             }
             // Filter out regular images
@@ -2563,7 +2590,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         media: await resolveMedia(
           safeArrayFilter(sanitizedTopic.media).filter((m: any) => {
             // Keep SVG files regardless of their type classification
-            if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+            if (isSvgMedia(m)) {
               return true
             }
             // Filter out regular images
@@ -2659,7 +2686,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   // 📊 PERFORMANCE TIMING: Inject orphaned media into course content structure
   console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
   const injectStartTime = Date.now()
-  await injectOrphanedMediaIntoCourseContent(projectId, result, allStoredMediaItems)
+  await injectOrphanedMediaIntoCourseContent(projectId, result, allStoredMediaItems, mediaFiles, mediaCounter)
   const injectDuration = Date.now() - injectStartTime
   console.log(`[PERFORMANCE] ✅ Media injection completed in ${injectDuration}ms`)
 
@@ -3096,7 +3123,7 @@ export async function validateMediaPageAssociations(allMediaItems: any[]): Promi
  * Inject orphaned media into course content structure based on pageId metadata
  * This ensures that media files included via auto-population are also referenced in HTML
  */
-async function injectOrphanedMediaIntoCourseContent(projectId: string, courseData: any, allMediaItems: any[]): Promise<void> {
+async function injectOrphanedMediaIntoCourseContent(projectId: string, courseData: any, allMediaItems: any[], mediaFiles: any[], mediaCounter: { [type: string]: number }): Promise<void> {
   console.log(`[Rust SCORM] Media injection called for project: ${projectId}`)
   try {
     // 📊 PERFORMANCE OPTIMIZATION: Using pre-loaded media items (no more listAllMedia() call)
@@ -3260,6 +3287,35 @@ async function injectOrphanedMediaIntoCourseContent(projectId: string, courseDat
       // Add media reference to the page
       targetPage.media.push(mediaReference)
       orphanedMediaInjected++
+
+      // 🔧 NEW: Also add binary file to mediaFiles array for non-YouTube media
+      if (!isYouTubeVideo) {
+        const extension = getExtensionFromMediaId(mediaItem.id)
+        const filename = `${mediaItem.id}.${extension}`
+
+        // Check if this media is already in mediaFiles to avoid duplicates
+        const alreadyInMediaFiles = mediaFiles.some(file => file.filename === filename)
+
+        if (!alreadyInMediaFiles) {
+          // Load actual binary data from cache
+          const cached = mediaCache.get(mediaItem.id)
+          if (cached?.data) {
+            const mediaFileEntry = {
+              filename,
+              content: cached.data
+            }
+
+            mediaFiles.push(mediaFileEntry)
+            console.log(`[Rust SCORM] 🔧 Added injected media ${mediaItem.id} to mediaFiles array with extension .${extension} (${cached.data.length} bytes)`)
+          } else {
+            console.log(`[Rust SCORM] ⚠️ Media ${mediaItem.id} not found in cache, skipping binary addition`)
+          }
+        } else {
+          console.log(`[Rust SCORM] Media ${filename} already exists in mediaFiles, skipping binary addition`)
+        }
+      } else {
+        console.log(`[Rust SCORM] Skipping binary addition for YouTube video ${mediaItem.id}`)
+      }
 
       // ✅ FINAL VALIDATION: Check for cross-contamination after injection
       const mediaCount = targetPage.media.length
@@ -3521,7 +3577,17 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         console.log(`[Extension Map] ${id} → no extension mapping for MIME: ${cached.mimeType}`)
       }
     } else {
-      console.log(`[Extension Map] ${id} → no cached MIME type available`)
+      // 🔧 FALLBACK: If no cached MIME type, try to determine extension from ID pattern
+      console.log(`[Extension Map] ${id} → no cached MIME type available, trying fallback...`)
+
+      // Use getExtensionFromMediaId which has SVG detection logic
+      const fallbackExt = getExtensionFromMediaId(id)
+      if (fallbackExt && fallbackExt !== 'bin') {
+        authoritativeExtensionMap.set(id, '.' + fallbackExt)
+        console.log(`[Extension Map] ${id} → .${fallbackExt} (from ID pattern fallback)`)
+      } else {
+        console.log(`[Extension Map] ${id} → no fallback extension available, will use Rust defaults`)
+      }
     }
   }
 
@@ -3605,7 +3671,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       // Filter out audio/caption from media array since they're handled separately
       media: await resolveMedia(safeArrayFilter(courseContent.welcome.media).filter((m: any) => {
         // Keep SVG files regardless of their type classification
-        if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+        if (isSvgMedia(m)) {
           return true
         }
         // Filter out audio and caption types
@@ -3654,7 +3720,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       media: await resolveMedia(
         (courseContent.objectivesPage?.media || (courseContent as any).learningObjectivesPage?.media)?.filter((m: any) => {
           // Keep SVG files regardless of their type classification
-          if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+          if (isSvgMedia(m)) {
             return true
           }
           // Filter out audio and caption types
@@ -3695,7 +3761,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
         // Filter out audio/caption from media array since they're handled separately
         media: await resolveMedia(safeArrayFilter(topic.media).filter((m: any) => {
           // Keep SVG files regardless of their type classification
-          if (m?.id?.includes('svg') || m?.url?.includes('.svg') || m?.type === 'svg') {
+          if (isSvgMedia(m)) {
             return true
           }
           // Filter out audio and caption types
@@ -3944,7 +4010,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   // 📊 PERFORMANCE TIMING: Inject orphaned media into course content structure
   console.log(`[Rust SCORM] Injecting orphaned media into course content...`)
   const injectStartTime = Date.now()
-  await injectOrphanedMediaIntoCourseContent(projectId, result, allStoredMediaItems)
+  await injectOrphanedMediaIntoCourseContent(projectId, result, allStoredMediaItems, mediaFiles, mediaCounter)
   const injectDuration = Date.now() - injectStartTime
   console.log(`[PERFORMANCE] ✅ Media injection completed in ${injectDuration}ms`)
 
@@ -4223,6 +4289,45 @@ export async function generateRustSCORM(
     // Convert extension map to plain object for Rust
     const extensionMapObject = Object.fromEntries(authoritativeExtensionMap)
     console.log(`[Extension Map] Passing ${Object.keys(extensionMapObject).length} extension mappings to Rust:`, extensionMapObject)
+
+    // 🔧 CRITICAL FIX: Rewrite all media URLs in rustCourseData to use authoritative extensions
+    // This ensures the enhanced generator HTML templates use the correct filenames
+    console.log(`[Extension Map] Rewriting media URLs to use authoritative extensions...`)
+
+    const rewriteMediaUrls = (obj: any, path = ''): void => {
+      if (!obj || typeof obj !== 'object') return
+
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = path ? `${path}.${key}` : key
+
+        if (key === 'url' && typeof value === 'string' && value && !value.startsWith('http')) {
+          // Check if this looks like a media ID that should be rewritten
+          const normalizedId = normalizeIdLike(value)
+          const authoritativeExt = authoritativeExtensionMap.get(normalizedId)
+
+          if (authoritativeExt) {
+            const correctUrl = `media/${normalizedId}${authoritativeExt}`
+            console.log(`[Extension Map] Rewriting URL: ${value} → ${correctUrl}`)
+            ;(obj as any)[key] = correctUrl
+          }
+        } else if (key === 'image_url' && typeof value === 'string' && value && !value.startsWith('http')) {
+          // Handle image_url fields specifically
+          const normalizedId = normalizeIdLike(value.replace('media/', ''))
+          const authoritativeExt = authoritativeExtensionMap.get(normalizedId)
+
+          if (authoritativeExt) {
+            const correctUrl = `media/${normalizedId}${authoritativeExt}`
+            console.log(`[Extension Map] Rewriting image_url: ${value} → ${correctUrl}`)
+            ;(obj as any)[key] = correctUrl
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          rewriteMediaUrls(value, currentPath)
+        }
+      }
+    }
+
+    rewriteMediaUrls(rustCourseData)
+    console.log(`[Extension Map] URL rewriting completed`)
 
     const result = await Promise.race([
       invoke<number[]>('generate_scorm_enhanced', {

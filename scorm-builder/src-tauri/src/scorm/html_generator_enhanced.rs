@@ -1,5 +1,6 @@
 use handlebars::{Context, Handlebars, Helper, HelperResult, Output, RenderContext, Renderable};
 use serde_json::json;
+use std::collections::HashMap;
 
 use super::generator_enhanced::{
     Assessment, GenerateScormRequest, ObjectivesPage, Topic, WelcomePage,
@@ -21,6 +22,35 @@ impl<'a> HtmlGenerator<'a> {
         } else {
             format!("media/{path}")
         }
+    }
+
+    // Helper to get correct media URL using extension map
+    fn get_correct_media_url(path: &str, extension_map: Option<&HashMap<String, String>>) -> Option<String> {
+        // Don't modify external URLs
+        if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("//") {
+            return Some(path.to_string());
+        }
+
+        // Extract media ID from path
+        let media_id = if path.starts_with("media/") {
+            path.strip_prefix("media/").unwrap_or(path)
+        } else {
+            path
+        };
+
+        // Remove any existing extension to get clean ID
+        let clean_id = media_id.split('.').next().unwrap_or(media_id);
+
+        // Check if we have an authoritative extension for this ID
+        if let Some(ext_map) = extension_map {
+            if let Some(extension) = ext_map.get(clean_id) {
+                eprintln!("[HTML Generator] Using extension map: {} -> {}", clean_id, extension);
+                return Some(format!("media/{}{}", clean_id, extension));
+            }
+        }
+
+        // Fallback to original behavior if no extension map or no mapping found
+        Some(Self::ensure_media_path(path))
     }
 
     pub fn new() -> Result<Self, String> {
@@ -89,7 +119,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render index template: {e}"))
     }
 
-    pub fn generate_welcome_page(&self, welcome: &WelcomePage, require_audio_completion: bool) -> Result<String, String> {
+    pub fn generate_welcome_page(&self, welcome: &WelcomePage, require_audio_completion: bool, extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating welcome page");
         eprintln!(
             "[HTML Generator] Welcome has audio_file: {}",
@@ -154,7 +184,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render welcome template: {e}"))
     }
 
-    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage, require_audio_completion: bool) -> Result<String, String> {
+    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage, require_audio_completion: bool, extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating objectives page");
         eprintln!(
             "[HTML Generator] Objectives has audio_file: {}",
@@ -214,7 +244,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render objectives template: {e}"))
     }
 
-    pub fn generate_topic_page(&self, topic: &Topic, require_audio_completion: bool) -> Result<String, String> {
+    pub fn generate_topic_page(&self, topic: &Topic, require_audio_completion: bool, extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
         // Use eprintln! for debugging - it goes to stderr which might be visible
         eprintln!("[HTML Generator] Processing topic: {}", topic.id);
         eprintln!(
@@ -326,15 +356,9 @@ impl<'a> HtmlGenerator<'a> {
             "knowledge_check_questions": kc_questions,
             "audio_file": audio_file_path,
             "caption_file": topic.caption_file.as_ref().map(|f| Self::ensure_media_path(f)),
-            // Filter out invalid image URLs like "media/image-3.jpg"
+            // Use extension map to get correct image URL
             "image_url": topic.image_url.as_ref()
-                .filter(|url| {
-                    // Skip URLs that look like broken paths (e.g., "media/image-X.jpg")
-                    !url.contains(".jpg") && !url.contains(".jpeg") && !url.contains(".png") && !url.contains(".gif")
-                    || url.starts_with("http://") || url.starts_with("https://")
-                    || url.starts_with("media/image-") && !url.contains(".")
-                })
-                .map(|f| Self::ensure_media_path(f)),
+                .and_then(|url| Self::get_correct_media_url(url, extension_map)),
             "media": topic.media.as_ref().map(|media_items| {
                 media_items.iter().map(|item| {
                     let mut url = item.url.clone();

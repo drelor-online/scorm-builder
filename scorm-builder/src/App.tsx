@@ -150,7 +150,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
-  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia, setLoadingProfile } = useUnifiedMedia();
+  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia, setLoadingProfile, checkMediaExistenceBatch } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -490,13 +490,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
         let loadedStep = 'seed'
 
         await measureAsync('loadProjectData', async () => {
-          // First, always try to load the courseSeedData using the helper method
-          setLoadingProgress({ current: 1, total: 5, phase: 'Loading course metadata...' })
-          debugLogger.info('App.loadProject', 'Loading courseSeedData from storage')
-          const seedData = await storage.getCourseSeedData()
+          // 🚀 PERFORMANCE OPTIMIZATION: Parallel data loading
+          // Load all core project data in parallel instead of sequentially
+          setLoadingProgress({ current: 1, total: 5, phase: 'Loading project data...' })
+          debugLogger.info('App.loadProject', 'Starting parallel load of all project data')
+
+          const [seedData, directCourseContent, audioNarrationData, mediaEnhancementsData] = await Promise.all([
+            storage.getCourseSeedData(),
+            storage.getCourseContent(),
+            storage.getContent('audioNarration'),
+            storage.getContent('media-enhancements')
+          ])
+
+          // Process courseSeedData
           if (seedData) {
             debugLogger.info('App.loadProject', 'Loaded courseSeedData', seedData)
-            
+
             // Handle both wrapped and unwrapped data formats
             // Sometimes data comes back wrapped with cache metadata: {data: {...}, key: "...", retryCount: 0, timestamp: ...}
             if (seedData && typeof seedData === 'object' && 'data' in seedData && typeof seedData.data === 'object') {
@@ -509,25 +518,70 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           } else {
             debugLogger.warn('App.loadProject', 'No courseSeedData found in project')
           }
-          
-          // Try to load course-content directly (for projects that saved complete content)
-          setLoadingProgress({ current: 2, total: 5, phase: 'Loading course content...' })
-          const directCourseContent = await storage.getCourseContent()
+
+          // Process courseContent
           if (directCourseContent) {
             debugLogger.info('App.loadProject', 'Loaded course-content directly from storage')
             // AUDIT FIX: Use original content structure, normalization applied at media item level
             loadedCourseContent = directCourseContent as CourseContent
+          }
+
+          setLoadingProgress({ current: 2, total: 5, phase: 'Processing media data...' })
+
+          debugLogger.info('App.loadProject', 'Parallel loading completed - processing media persistence data', {
+            hasAudioNarration: !!audioNarrationData,
+            hasMediaEnhancements: !!mediaEnhancementsData
+          })
             
-            // Also load audioNarration and media-enhancements to populate media arrays
-            setLoadingProgress({ current: 3, total: 5, phase: 'Loading media data...' })
-            const audioNarrationData = await storage.getContent('audioNarration')
-            const mediaEnhancementsData = await storage.getContent('media-enhancements')
-            
-            debugLogger.info('App.loadProject', 'Loading media persistence data', {
-              hasAudioNarration: !!audioNarrationData,
-              hasMediaEnhancements: !!mediaEnhancementsData
-            })
-            
+            // 🚀 PERFORMANCE OPTIMIZATION: Batch media existence check
+            // Collect all media IDs that need validation and check them in a single call
+            let mediaExistenceCache: Set<string> = new Set()
+            if (loadedCourseContent && (audioNarrationData || mediaEnhancementsData)) {
+              debugLogger.info('App.loadProject', 'Collecting media IDs for batch existence check')
+              const allMediaIdsToCheck: string[] = []
+
+              // Collect audio narration IDs
+              if (audioNarrationData) {
+                const audioKeys = ['welcome', 'objectives', ...Array.from({length: 20}, (_, i) => `topic-${i}`)]
+                for (const key of audioKeys) {
+                  const audioData = audioNarrationData[key]
+                  if (audioData) {
+                    let audioId: string | null = null
+                    if (typeof audioData === 'string') {
+                      audioId = audioData
+                    } else if (audioData && typeof audioData === 'object' && audioData.id) {
+                      audioId = audioData.id
+                    }
+                    if (audioId) allMediaIdsToCheck.push(audioId)
+                  }
+                }
+              }
+
+              // Collect media enhancement IDs
+              if (mediaEnhancementsData) {
+                const enhancementKeys = ['welcome', 'objectives', ...Array.from({length: 20}, (_, i) => `topic-${i}`)]
+                for (const key of enhancementKeys) {
+                  const enhancementData = mediaEnhancementsData[key]
+                  if (enhancementData) {
+                    const mediaItems = Array.isArray(enhancementData) ? enhancementData : [enhancementData]
+                    for (const item of mediaItems) {
+                      if (item && item.id) {
+                        allMediaIdsToCheck.push(item.id)
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Remove duplicates and perform batch existence check
+              const uniqueMediaIds = [...new Set(allMediaIdsToCheck)]
+              if (uniqueMediaIds.length > 0) {
+                debugLogger.info('App.loadProject', `Running batch existence check for ${uniqueMediaIds.length} media items`)
+                mediaExistenceCache = await checkMediaExistenceBatch(uniqueMediaIds)
+                debugLogger.info('App.loadProject', `Batch check completed: ${mediaExistenceCache.size}/${uniqueMediaIds.length} media items exist`)
+              }
+            }
+
             // Populate media arrays with saved media IDs if they exist
             if (loadedCourseContent && (audioNarrationData || mediaEnhancementsData)) {
               // Process welcome page
@@ -548,7 +602,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   
                   if (audioId) {
                     // CRITICAL FIX: Validate media exists before adding reference
-                    const mediaExists = await getMedia(audioId)
+                    const mediaExists = mediaExistenceCache.has(audioId)
                     if (mediaExists) {
                       // AUDIT FIX: Use schema normalization for media items
                       const audioItem = normalizeMediaItem({ 
@@ -574,7 +628,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     : [mediaEnhancementsData.welcome]
                   // CRITICAL FIX: Validate each media item exists before adding reference
                   for (const item of mediaItems) {
-                    const mediaExists = await getMedia(item.id)
+                    const mediaExists = mediaExistenceCache.has(item.id)
                     if (mediaExists) {
                       if (loadedCourseContent && !loadedCourseContent.welcomePage!.media!.some(m => m.id === item.id)) {
                         // AUDIT FIX: Use schema normalization for media items
@@ -607,7 +661,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                   
                   if (audioId) {
                     // CRITICAL FIX: Validate media exists before adding reference
-                    const mediaExists = await getMedia(audioId)
+                    const mediaExists = mediaExistenceCache.has(audioId)
                     if (mediaExists) {
                       // AUDIT FIX: Use schema normalization for media items
                       const audioItem = normalizeMediaItem({
@@ -633,7 +687,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     : [mediaEnhancementsData.objectives]
                   // CRITICAL FIX: Validate each media item exists before adding reference
                   for (const item of mediaItems) {
-                    const mediaExists = await getMedia(item.id)
+                    const mediaExists = mediaExistenceCache.has(item.id)
                     if (mediaExists) {
                       if (loadedCourseContent && !loadedCourseContent.learningObjectivesPage!.media!.some(m => m.id === item.id)) {
                         // AUDIT FIX: Use schema normalization for media items
@@ -670,7 +724,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                     
                     if (audioId) {
                       // CRITICAL FIX: Validate media exists before adding reference
-                      const mediaExists = await getMedia(audioId)
+                      const mediaExists = mediaExistenceCache.has(audioId)
                       if (mediaExists) {
                         // AUDIT FIX: Use schema normalization for media items
                         const audioItem = normalizeMediaItem({
@@ -697,7 +751,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                       : [mediaEnhancementsData[topicKey]]
                     // CRITICAL FIX: Validate each media item exists before adding reference
                     for (const item of mediaItems) {
-                      const mediaExists = await getMedia(item.id)
+                      const mediaExists = mediaExistenceCache.has(item.id)
                       if (mediaExists) {
                         if (!topic.media!.some(m => m.id === item.id)) {
                           // AUDIT FIX: Use schema normalization for media items
@@ -730,8 +784,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
                 }
               })
             }
-          }
-          
+
           // Get metadata (which now handles unified data model internally)
           const metadata = await storage.getCourseMetadata()
           debugLogger.info('App.loadProject', 'Loaded metadata', metadata)

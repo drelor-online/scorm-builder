@@ -67,6 +67,7 @@ export interface UnifiedMediaContextType {
   hasAudioCached: (mediaId: string) => boolean
   getCachedAudio: (mediaId: string) => { data: Uint8Array; metadata: MediaMetadata } | null
   clearAudioFromCache: (mediaId: string) => void
+  checkMediaExistenceBatch: (mediaIds: string[]) => Promise<Set<string>>
   
   // Utility
   isLoading: boolean
@@ -1595,6 +1596,16 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     }
   }, [])
 
+  const checkMediaExistenceBatch = useCallback(async (mediaIds: string[]): Promise<Set<string>> => {
+    const mediaService = mediaServiceRef.current
+    if (!mediaService) {
+      return new Set()
+    }
+
+    // Call the MediaService batch existence check method
+    return await mediaService.checkMediaExistenceBatch(mediaIds)
+  }, [])
+
   const updateMedia = useCallback(async (
     existingId: string,
     file: File | Blob,
@@ -1644,6 +1655,7 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     hasAudioCached,
     getCachedAudio,
     clearAudioFromCache,
+    checkMediaExistenceBatch,
     isLoading,
     error,
     partialLoadingWarning,
@@ -1675,6 +1687,7 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     hasAudioCached,
     getCachedAudio,
     clearAudioFromCache,
+    checkMediaExistenceBatch,
     isLoading,
     error,
     partialLoadingWarning,

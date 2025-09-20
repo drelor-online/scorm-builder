@@ -347,7 +347,7 @@ pub async fn generate_scorm_enhanced(
     }
 
     // Generate the SCORM package (synchronous)
-    let result = generator.generate_scorm_package(enhanced_request, media_files_map)?;
+    let result = generator.generate_scorm_package(enhanced_request, media_files_map, extension_map)?;
 
     // Emit final progress event
     let _ = app.emit(
