@@ -1101,8 +1101,9 @@ export function isSvgMedia(m: any): boolean {
 /**
  * Collect all media IDs from course content for batch pre-loading
  * This scans the entire course structure to extract every media reference
+ * EXPORTED for reuse in App.tsx to ensure consistent ID normalization
  */
-function collectAllMediaIds(courseContent: any): string[] {
+export function collectAllMediaIds(courseContent: any): string[] {
   const mediaIds = new Set<string>()
 
   console.log(`[SCORM Media Pre-Collection] Scanning course content for all media references`)
@@ -4349,6 +4350,9 @@ export async function generateRustSCORM(
 
     console.log(`[SVG FORCE] Found ${svgIds.length} SVG files in extension map:`, svgIds)
 
+    // Track which SVGs need fallback loading
+    const missingSvgIds: string[] = []
+
     for (const svgId of svgIds) {
       const cached = mediaCache.get(svgId)
       if (cached?.data) {
@@ -4365,7 +4369,47 @@ export async function generateRustSCORM(
           console.log(`[SVG FORCE] ✅ ${filename} already in mediaFiles`)
         }
       } else {
-        console.warn(`[SVG FORCE] ⚠️ SVG ${svgId} not found in cache - will be missing from SCORM package`)
+        console.log(`[SVG FORCE] ⚠️ SVG ${svgId} not found in cache, queuing for fallback load`)
+        missingSvgIds.push(svgId)
+      }
+    }
+
+    // 🔧 FALLBACK: Use getMediaBatchDirect for any SVGs not in cache
+    if (missingSvgIds.length > 0) {
+      console.log(`[SVG FORCE] Using fallback getMediaBatchDirect for ${missingSvgIds.length} missing SVGs:`, missingSvgIds)
+
+      try {
+        // Create mediaService for fallback operations
+        const { createMediaService } = await import('./MediaService')
+        const mediaService = createMediaService(projectId, undefined, true)
+
+        const fallbackResults = await mediaService.getMediaBatchDirect(missingSvgIds)
+
+        for (const svgId of missingSvgIds) {
+          const fallbackData = fallbackResults.get(svgId)
+          if (fallbackData?.data) {
+            // Add to cache for future use
+            mediaCache.set(svgId, {
+              data: fallbackData.data,
+              mimeType: fallbackData.metadata.mimeType || 'image/svg+xml'
+            })
+
+            // Add to mediaFiles
+            const filename = `${svgId}.svg`
+            if (!mediaFiles.find(f => f.filename === filename)) {
+              mediaFiles.push({
+                filename,
+                content: fallbackData.data
+              })
+              console.log(`[SVG FORCE] ✅ Fallback loaded and added ${filename} to mediaFiles (${fallbackData.data.length} bytes)`)
+            }
+          } else {
+            console.error(`[SVG FORCE] ❌ Fallback failed for ${svgId} - will be missing from SCORM package`)
+          }
+        }
+      } catch (error) {
+        console.error(`[SVG FORCE] ❌ Fallback batch load failed:`, error)
+        console.warn(`[SVG FORCE] ⚠️ ${missingSvgIds.length} SVG files will be missing from SCORM package:`, missingSvgIds)
       }
     }
 
@@ -4373,6 +4417,34 @@ export async function generateRustSCORM(
     const svgFilesInPackage = mediaFiles.filter(f => f.filename.endsWith('.svg'))
     console.log(`[SVG FORCE] 🎯 FINAL COUNT: ${svgFilesInPackage.length} SVG files will be included in SCORM package:`)
     svgFilesInPackage.forEach(f => console.log(`  - ${f.filename} (${f.content.length} bytes)`))
+
+    // 🔍 PRE-ZIP VALIDATION: Compare referenced media vs files being zipped
+    console.log(`[PRE-ZIP VALIDATION] Performing final validation before ZIP creation...`)
+    const referencedMediaIds = new Set(collectAllMediaIds(rustCourseData))
+    const filesToZip = new Set(mediaFiles.map(f => f.filename.replace(/\.[^.]+$/, ''))) // Remove extensions for comparison
+
+    console.log(`[PRE-ZIP VALIDATION] Referenced media IDs: ${referencedMediaIds.size}`)
+    console.log(`[PRE-ZIP VALIDATION] Files to be zipped: ${filesToZip.size}`)
+
+    // Find missing media (referenced but not in ZIP)
+    const missingFromZip = Array.from(referencedMediaIds).filter(id => !filesToZip.has(id))
+    if (missingFromZip.length > 0) {
+      console.warn(`[PRE-ZIP VALIDATION] ⚠️ ${missingFromZip.length} referenced media files will be missing from SCORM package:`)
+      missingFromZip.forEach(id => console.warn(`  - ${id} (will result in 404 errors)`))
+    }
+
+    // Find unreferenced files (in ZIP but not referenced)
+    const unreferencedInZip = Array.from(filesToZip).filter(filename => !referencedMediaIds.has(filename))
+    if (unreferencedInZip.length > 0) {
+      console.log(`[PRE-ZIP VALIDATION] ℹ️ ${unreferencedInZip.length} files will be included but not referenced in content:`)
+      unreferencedInZip.forEach(filename => console.log(`  - ${filename} (unused file)`))
+    }
+
+    if (missingFromZip.length === 0 && unreferencedInZip.length === 0) {
+      console.log(`[PRE-ZIP VALIDATION] ✅ Perfect match: All referenced media will be in ZIP, no unused files`)
+    } else {
+      console.log(`[PRE-ZIP VALIDATION] 📊 Summary: ${missingFromZip.length} missing, ${unreferencedInZip.length} unreferenced`)
+    }
 
     const result = await Promise.race([
       invoke<number[]>('generate_scorm_enhanced', {

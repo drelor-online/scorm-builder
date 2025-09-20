@@ -6,6 +6,7 @@ import { COLORS, SPACING, DURATIONS } from '@/constants'
 
 // Services
 import { apiKeyStorage } from '@/services/ApiKeyStorage'
+import { collectAllMediaIds } from '@/services/rustScormGenerator'
 
 // Utils
 import { logger } from '@/utils/logger'
@@ -932,31 +933,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
             debugLogger.info('App.loadProject', '⚡ Collecting media IDs for batch existence check')
             let getMediaCallCount = 0
 
-            // Helper to collect all media IDs from course content
-            const collectMediaIds = (content: any): Set<string> => {
-              const mediaIds = new Set<string>()
-
-              const traverse = (obj: any) => {
-                if (!obj || typeof obj !== 'object') return
-
-                if (Array.isArray(obj)) {
-                  obj.forEach(traverse)
-                } else {
-                  // Check if this is a media item with an ID
-                  if (obj.id && typeof obj.id === 'string' && (obj.type || obj.url || obj.title)) {
-                    mediaIds.add(obj.id)
-                  }
-
-                  // Recursively traverse all properties
-                  Object.values(obj).forEach(traverse)
-                }
-              }
-
-              traverse(content)
-              return mediaIds
-            }
-
-            const allMediaIds = collectMediaIds(loadedCourseContent)
+            // 🔄 REUSE: Use shared collectAllMediaIds for consistent normalization
+            const allMediaIds = new Set(collectAllMediaIds(loadedCourseContent))
             debugLogger.info('App.loadProject', `🔍 Found ${allMediaIds.size} media IDs to check`)
 
             // Do single batch existence check instead of N individual calls
@@ -1531,28 +1509,8 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           // 🚀 PERFORMANCE FIX: Use batch check for post-save validation too
           let getMediaCallCount = 0
 
-          // Helper to collect all media IDs from course content
-          const collectMediaIds = (content: any): Set<string> => {
-            const mediaIds = new Set<string>()
-
-            const traverse = (obj: any) => {
-              if (!obj || typeof obj !== 'object') return
-
-              if (Array.isArray(obj)) {
-                obj.forEach(traverse)
-              } else {
-                if (obj.id && typeof obj.id === 'string' && (obj.type || obj.url || obj.title)) {
-                  mediaIds.add(obj.id)
-                }
-                Object.values(obj).forEach(traverse)
-              }
-            }
-
-            traverse(content)
-            return mediaIds
-          }
-
-          const allMediaIds = collectMediaIds(data)
+          // 🔄 REUSE: Use shared collectAllMediaIds for consistent normalization
+          const allMediaIds = new Set(collectAllMediaIds(data))
           debugLogger.info('App.handleJSONNext', `⚡ Found ${allMediaIds.size} media IDs for post-save batch check`)
 
           // Do batch existence check
