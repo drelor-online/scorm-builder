@@ -829,6 +829,9 @@ interface MediaFile {
 // Media cache to prevent duplicate loads during SCORM generation
 const mediaCache = new Map<string, { data: Uint8Array, mimeType: string }>()
 
+// Authoritative extension map - built once and used throughout generation
+let authoritativeExtensionMap = new Map<string, string>()
+
 // Performance monitoring (module-level for access in helper functions)
 let performanceTrace: { cacheHits: number; cacheMisses: number; batchedLoads: number; startTime: number } | null = null
 
@@ -1067,6 +1070,14 @@ export function hydrateMediaCacheById(preloadedById: Map<string, { data: Uint8Ar
 }
 
 /**
+ * Normalize ID-like strings by stripping known extensions
+ * This ensures we always work with bare IDs, not URLs with extensions
+ */
+function normalizeIdLike(s: string): string {
+  return s.replace(/\.(jpg|jpeg|png|gif|webp|svg|mp3|mp4|webm|vtt)$/i, '');
+}
+
+/**
  * Collect all media IDs from course content for batch pre-loading
  * This scans the entire course structure to extract every media reference
  */
@@ -1080,8 +1091,10 @@ function collectAllMediaIds(courseContent: any): string[] {
     if (id && typeof id === 'string' && id.trim()) {
       // Only add if it looks like a media ID (contains -, numbers, or file extension)
       if (id.includes('-') || /\d/.test(id) || id.includes('.')) {
-        mediaIds.add(id.trim())
-        console.log(`[SCORM Media Pre-Collection] Found ${id} in ${context}`)
+        // Normalize to bare ID by stripping extensions
+        const normalizedId = normalizeIdLike(id.trim())
+        mediaIds.add(normalizedId)
+        console.log(`[SCORM Media Pre-Collection] Found ${id} → normalized to ${normalizedId} in ${context}`)
       }
     }
   }
@@ -1548,7 +1561,17 @@ async function resolveImageUrl(
       // Generate new counter-based filename
       if (!mediaCounter.image) mediaCounter.image = 0
       mediaCounter.image++
-      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(imageUrl)
+
+      // Use authoritative extension map first, fallback to cache MIME, no more image→jpg fallback
+      let ext = authoritativeExtensionMap.get(imageUrl)?.substring(1) // Remove the dot
+      if (!ext) {
+        ext = getExtensionFromMimeType(cached.mimeType)
+      }
+      if (!ext) {
+        console.warn(`[Extension Map] No extension found for ${imageUrl}, using 'bin' as last resort`)
+        ext = 'bin'
+      }
+
       const filename = `image-${mediaCounter.image}.${ext}`
 
       // Track the mapping
@@ -3483,6 +3506,27 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   await batchPreloadMedia(allMediaIds, projectId)
   console.log(`[Rust SCORM] Batch pre-loading completed`)
 
+  // 🗺️ BUILD AUTHORITATIVE EXTENSION MAP: Create single source of truth for all extensions
+  console.log(`[Rust SCORM] Building authoritative id→extension map from cache`)
+  authoritativeExtensionMap.clear() // Clear any previous map
+
+  for (const id of allMediaIds) {
+    const cached = mediaCache.get(id)
+    if (cached?.mimeType) {
+      const ext = getExtensionFromMimeType(cached.mimeType)
+      if (ext) {
+        authoritativeExtensionMap.set(id, '.' + ext)
+        console.log(`[Extension Map] ${id} → .${ext} (from MIME: ${cached.mimeType})`)
+      } else {
+        console.log(`[Extension Map] ${id} → no extension mapping for MIME: ${cached.mimeType}`)
+      }
+    } else {
+      console.log(`[Extension Map] ${id} → no cached MIME type available`)
+    }
+  }
+
+  console.log(`[Extension Map] Built authoritative map with ${authoritativeExtensionMap.size} entries`)
+
   // 📊 PERFORMANCE OPTIMIZATION: Single listAllMedia() call for all auto-population functions
   console.log(`[Rust SCORM] Loading all stored media items once for consolidated operations (enhanced format)`)
   const consolidatedListStartTime = Date.now()
@@ -4176,11 +4220,16 @@ export async function generateRustSCORM(
       console.log(`  ⚠️  No media files to include (empty array - this will prevent disk fallback)`)
     }
     
+    // Convert extension map to plain object for Rust
+    const extensionMapObject = Object.fromEntries(authoritativeExtensionMap)
+    console.log(`[Extension Map] Passing ${Object.keys(extensionMapObject).length} extension mappings to Rust:`, extensionMapObject)
+
     const result = await Promise.race([
       invoke<number[]>('generate_scorm_enhanced', {
         courseData: rustCourseData,
         projectId: projectId,
         mediaFiles: mediaFiles, // Always pass array, even if empty - prevents fallback to disk loading
+        extensionMap: extensionMapObject, // Pass complete authoritative extension map
       }),
       timeoutPromise
     ])

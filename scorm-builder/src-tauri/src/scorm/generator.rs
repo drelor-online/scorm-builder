@@ -30,6 +30,8 @@ pub struct GenerateScormRequest {
     pub media_files: Vec<MediaFile>,
     #[serde(default)]
     pub generated_files: Vec<GeneratedFile>,
+    #[serde(default)]
+    pub extension_map: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -93,24 +95,14 @@ pub async fn generate_scorm_package(
         }
     }
 
-    // Create media extension map that will be passed to collect_media_resources
-    let mut media_extension_map: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-
-    // Populate the map from media_files in the request
-    for media_file in &request.media_files {
-        // Extract extension from file_path (e.g., "media/image-1.svg" -> "svg")
-        if let Some(dot_pos) = media_file.file_path.rfind('.') {
-            let extension = &media_file.file_path[dot_pos..]; // Includes the dot
-            media_extension_map.insert(media_file.id.clone(), extension.to_string());
-        }
-    }
+    // Use the authoritative extension map from TypeScript (single source of truth)
+    let media_extension_map = &request.extension_map;
 
     // Always collect media resources from disk
     let media_resources = collect_media_resources(
         &request.project_id,
         &request.course_content,
-        &media_extension_map,
+        media_extension_map,
     )
     .await?;
     resources.extend(media_resources);
@@ -470,29 +462,38 @@ async fn collect_media_resources(
         }
     }
 
-    // Also load small images (logos, SVGs) that should be embedded
+    // Load images that should be embedded (logos and ALL SVGs)
     for media_id in &media_ids {
-        if media_id.starts_with("image-") && media_id.contains("logo") {
-            match media_storage::get_media(project_id.to_string(), media_id.to_string()) {
-                Ok(media_data) => {
-                    // Use extension from JavaScript if available, otherwise detect from magic bytes
-                    let extension = if let Some(ext) = media_extension_map.get(media_id) {
-                        ext.as_str()
-                    } else if media_data.data.len() >= 4 && &media_data.data[0..4] == b"\x89PNG" {
-                        ".png"
-                    } else if media_data.data.len() >= 5 && &media_data.data[0..5] == b"<?xml" {
-                        ".svg"
-                    } else {
-                        ".jpg"
-                    };
+        if media_id.starts_with("image-") {
+            // Get extension from authoritative map (single source of truth)
+            let should_embed = if let Some(extension) = media_extension_map.get(media_id) {
+                // Always embed logos and ALL SVGs
+                media_id.contains("logo") || extension.eq_ignore_ascii_case(".svg")
+            } else {
+                // Fallback: only embed logos if no extension info
+                media_id.contains("logo")
+            };
 
-                    resources.push(Resource {
-                        path: format!("media/{media_id}{extension}"),
-                        content: media_data.data,
-                    });
-                }
-                Err(e) => {
-                    println!("[SCORM] Warning: Failed to load media {media_id}: {e}");
+            if should_embed {
+                match media_storage::get_media(project_id.to_string(), media_id.to_string()) {
+                    Ok(media_data) => {
+                        // Use extension from authoritative map as single source of truth
+                        let extension = media_extension_map.get(media_id)
+                            .map(|s| s.as_str())
+                            .unwrap_or_else(|| {
+                                println!("[SCORM] Warning: No extension found for {media_id} in authoritative map, using .bin as last resort");
+                                ".bin"
+                            });
+
+                        resources.push(Resource {
+                            path: format!("media/{media_id}{extension}"),
+                            content: media_data.data,
+                        });
+                        println!("[SCORM] Embedded media file: {media_id}{extension}");
+                    }
+                    Err(e) => {
+                        println!("[SCORM] Warning: Failed to load media {media_id}: {e}");
+                    }
                 }
             }
         }
@@ -525,6 +526,7 @@ mod tests {
             },
             media_files: vec![],
             generated_files: crate::scorm::test_helpers::create_test_generated_files(),
+            extension_map: std::collections::HashMap::new(),
         };
 
         let result = generate_scorm_package(request).await;
@@ -562,6 +564,7 @@ mod tests {
             },
             media_files: vec![],
             generated_files: crate::scorm::test_helpers::create_test_generated_files(),
+            extension_map: std::collections::HashMap::new(),
         };
 
         let result = generate_scorm_package(request).await;

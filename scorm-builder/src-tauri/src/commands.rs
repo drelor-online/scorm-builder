@@ -176,6 +176,7 @@ pub async fn generate_scorm_enhanced(
     course_data: serde_json::Value,
     project_id: String,
     media_files: Option<Vec<MediaFile>>,
+    extension_map: Option<HashMap<String, String>>,
 ) -> Result<Vec<u8>, String> {
     use crate::scorm::generator_enhanced::{
         EnhancedScormGenerator, GenerateScormRequest as EnhancedRequest,
@@ -334,6 +335,16 @@ pub async fn generate_scorm_enhanced(
             "progress": 80
         }),
     );
+
+    // Log extension map if provided
+    if let Some(ref ext_map) = extension_map {
+        eprintln!("[generate_scorm_enhanced] Received extension map with {} entries", ext_map.len());
+        if !ext_map.is_empty() {
+            eprintln!("[generate_scorm_enhanced] Extension map entries: {:?}", ext_map);
+        }
+    } else {
+        eprintln!("[generate_scorm_enhanced] No extension map provided");
+    }
 
     // Generate the SCORM package (synchronous)
     let result = generator.generate_scorm_package(enhanced_request, media_files_map)?;
