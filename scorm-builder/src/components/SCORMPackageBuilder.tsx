@@ -576,7 +576,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       type?: string
       fileName: string
       trackingKey: string
-      source: 'welcome' | 'objectives' | 'topic'
+      source: 'welcome' | 'objectives' | 'topic' | 'objectives-fallback' | 'learning-objectives' | 'learning-objectives-fallback'
       topicIndex?: number
     }> = []
     
@@ -742,6 +742,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
     }
     
+    // 🔍 DEBUG: Check what properties exist on enhancedContent
+    console.log(`[SCORMPackageBuilder] DEBUG: enhancedContent properties:`, Object.keys(enhancedContent))
+    console.log(`[SCORMPackageBuilder] DEBUG: has objectivesPage:`, !!enhancedContent.objectivesPage)
+    console.log(`[SCORMPackageBuilder] DEBUG: has learningObjectivesPage:`, !!enhancedContent.learningObjectivesPage)
+
     // Collect objectives page media IDs
     if (enhancedContent.objectivesPage) {
       const objectivesAudioId = enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioFile
@@ -807,7 +812,106 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       }
     }
-    
+
+    // 🔧 FIX: Always include fallback audio-1 and caption-1 if ANY objectives page exists
+    // This ensures the standard learning objectives media is pre-loaded regardless of content structure
+    const hasAnyObjectivesPage = enhancedContent.objectivesPage || enhancedContent.learningObjectivesPage
+    if (hasAnyObjectivesPage) {
+      console.log(`[SCORMPackageBuilder] Adding fallback media IDs for objectives page (universal)`)
+      const audio1TrackingKey = createMediaTrackingKey('audio-1', 'audio')
+      const caption1TrackingKey = createMediaTrackingKey('caption-1', 'caption')
+
+      if (!loadedMediaIds.has(audio1TrackingKey)) {
+        loadedMediaIds.add(audio1TrackingKey)
+        mediaToLoad.push({
+          id: 'audio-1',
+          type: 'audio',
+          fileName: 'audio-1.mp3',
+          trackingKey: audio1TrackingKey,
+          source: 'objectives-fallback'
+        })
+        console.log(`[SCORMPackageBuilder] Added fallback: audio-1`)
+      }
+
+      if (!loadedMediaIds.has(caption1TrackingKey)) {
+        loadedMediaIds.add(caption1TrackingKey)
+        mediaToLoad.push({
+          id: 'caption-1',
+          type: 'caption',
+          fileName: 'caption-1.vtt',
+          trackingKey: caption1TrackingKey,
+          source: 'objectives-fallback'
+        })
+        console.log(`[SCORMPackageBuilder] Added fallback: caption-1`)
+      }
+    }
+
+    // Collect learningObjectivesPage media IDs (alternative naming)
+    if (enhancedContent.learningObjectivesPage) {
+      const objectivesAudioId = enhancedContent.learningObjectivesPage.audioFile
+      const objectivesCaptionId = enhancedContent.learningObjectivesPage.captionFile
+      const objectivesMedia = enhancedContent.learningObjectivesPage.media || []
+
+      if (objectivesAudioId) {
+        const trackingKey = createMediaTrackingKey(objectivesAudioId, 'audio')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: objectivesAudioId,
+            type: 'audio',
+            fileName: `${objectivesAudioId}.mp3`,
+            trackingKey,
+            source: 'learning-objectives'
+          })
+        }
+      }
+
+      if (objectivesCaptionId) {
+        const trackingKey = createMediaTrackingKey(objectivesCaptionId, 'caption')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: objectivesCaptionId,
+            type: 'caption',
+            fileName: `${objectivesCaptionId}.vtt`,
+            trackingKey,
+            source: 'learning-objectives'
+          })
+        }
+      }
+
+      for (const mediaItem of objectivesMedia) {
+        const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
+        if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: mediaItem.id,
+            type: mediaItem.type,
+            fileName: `${mediaItem.id}-${mediaItem.type}`,
+            trackingKey,
+            source: 'learning-objectives'
+          })
+        } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
+          const detectedType = detectMediaType(mediaItem.url)
+          const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'learning-objectives')
+          if (newId) {
+            mediaItem.id = newId
+            const trackingKey = createMediaTrackingKey(newId, detectedType)
+            if (!loadedMediaIds.has(trackingKey)) {
+              loadedMediaIds.add(trackingKey)
+              mediaToLoad.push({
+                id: newId,
+                type: detectedType,
+                fileName: `remote-${Date.now()}`,
+                trackingKey,
+                source: 'learning-objectives'
+              })
+            }
+          }
+        }
+      }
+    }
+
     // Collect topics media IDs
     if (enhancedContent.topics) {
       for (let topicIndex = 0; topicIndex < enhancedContent.topics.length; topicIndex++) {
