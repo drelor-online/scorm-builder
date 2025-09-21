@@ -349,6 +349,25 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     }
   }
 
+  // Helper function to get extension from ID using authoritative map (best-effort sync version)
+  const getExtensionFromId = (mediaId: string): string | null => {
+    try {
+      // Best-effort attempt to get extension without async calls
+      // This will only work if the media is already cached
+      const allMedia = media.selectors.getAllMedia()
+      const mediaItem = allMedia.find(m => m.id === mediaId)
+      if (mediaItem?.metadata?.mimeType) {
+        const ext = getExtensionFromMimeType(mediaItem.metadata.mimeType)
+        if (ext) {
+          return `.${ext}`
+        }
+      }
+      return null // Let caller provide fallback
+    } catch (error) {
+      return null // Let caller provide fallback
+    }
+  }
+
   // Helper function to get media blob from UnifiedMedia with proper cancellation
   const getMediaBlobFromRegistry = async (mediaId: string, signal?: AbortSignal): Promise<Blob | null> => {
     console.log('[SCORMPackageBuilder] Loading media:', mediaId)
@@ -417,20 +436,22 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.error(`[SCORMPackageBuilder] Error loading media ${mediaId}:`, error)
         return null
       }
-      console.log('[SCORMPackageBuilder] Media data retrieved:', {
-        mediaId,
-        hasData: !!mediaData?.data,
-        hasUrl: !!mediaData?.url,
-        dataType: mediaData?.data ? typeof mediaData.data : 'undefined',
-        dataSize: (() => {
-          if (!mediaData?.data) return 0
-          const data = mediaData.data as any
-          if (data instanceof Uint8Array) return data.length
-          if (data instanceof ArrayBuffer) return data.byteLength
-          return 0
-        })(),
-        metadata: mediaData?.metadata
-      })
+      if (import.meta.env.DEV) {
+        console.log('[SCORMPackageBuilder] Media data retrieved:', {
+          mediaId,
+          hasData: !!mediaData?.data,
+          hasUrl: !!mediaData?.url,
+          dataType: mediaData?.data ? typeof mediaData.data : 'undefined',
+          dataSize: (() => {
+            if (!mediaData?.data) return 0
+            const data = mediaData.data as any
+            if (data instanceof Uint8Array) return data.length
+            if (data instanceof ArrayBuffer) return data.byteLength
+            return 0
+          })(),
+          metadata: mediaData?.metadata
+        })
+      }
       
       if (mediaData) {
         // Check if we have binary data
@@ -553,7 +574,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         mediaToLoad.push({
           id: audio.id,
           type: 'audio',
-          fileName: `${audio.id}.mp3`,
+          fileName: `${audio.id}${getExtensionFromId(audio.id) || '.mp3'}`,
           trackingKey: audioTrackingKey,
           source: 'objectives'
         })
@@ -617,7 +638,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     
     // Get all media items
     const allMediaItems = getAllMedia()
-    console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items in storage')
+    if (import.meta.env.DEV) {
+      console.log('[SCORMPackageBuilder] Found', allMediaItems.length, 'media items in storage')
+    }
     
     // DEBUG: Log detailed course content media structure to identify missing mappings
     debugLogger.info('MEDIA_LOADING', 'Course content vs storage media analysis', {
@@ -703,7 +726,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     if (enhancedContent.welcome?.audioBlob && !enhancedContent.welcome.audioId && !enhancedContent.welcome.audioFile) {
       const generatedId = `audio-welcome-blob-${Date.now()}`
       console.log(`[SCORMPackageBuilder] Processing welcome audioBlob without ID, generating: ${generatedId}`)
-      mediaFilesRef.current.set(`${generatedId}.mp3`, enhancedContent.welcome.audioBlob)
+      mediaFilesRef.current.set(`${generatedId}${getExtensionFromId(generatedId) || '.mp3'}`, enhancedContent.welcome.audioBlob)
       loadedMediaIds.add(generatedId)
       enhancedContent.welcome.audioId = generatedId
       loadedCount++
@@ -861,7 +884,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         mediaToLoad.push({
           id: 'audio-1',
           type: 'audio',
-          fileName: 'audio-1.mp3',
+          fileName: `audio-1${getExtensionFromId('audio-1') || '.mp3'}`,
           trackingKey: audio1TrackingKey,
           source: 'objectives-fallback'
         })
@@ -956,7 +979,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         if (topic.audioBlob && !topic.audioId && !topic.audioFile) {
           const generatedId = `audio-topic-${topicIndex}-blob-${Date.now()}`
           console.log(`[SCORMPackageBuilder] Processing topic ${topicIndex} audioBlob without ID, generating: ${generatedId}`)
-          mediaFilesRef.current.set(`${generatedId}.mp3`, topic.audioBlob)
+          mediaFilesRef.current.set(`${generatedId}${getExtensionFromId(generatedId) || '.mp3'}`, topic.audioBlob)
           loadedMediaIds.add(generatedId)
           topic.audioId = generatedId
           loadedCount++
@@ -1115,10 +1138,13 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               extension = await Promise.race([extensionPromise, extensionTimeout])
             } catch (error) {
               console.warn(`[SCORMPackageBuilder] Extension lookup failed for ${id}, using fallback:`, error)
-              // Use fallback extension based on media type or result metadata
-              if (result.metadata?.mimeType?.includes('image')) extension = '.jpg'
-              else if (result.metadata?.mimeType?.includes('audio')) extension = '.mp3'
-              else if (result.metadata?.mimeType?.includes('video')) extension = '.mp4'
+              // Use fallback extension based on MIME type using the same authoritative function
+              if (result.metadata?.mimeType) {
+                const ext = getExtensionFromMimeType(result.metadata.mimeType)
+                extension = ext ? `.${ext}` : '.bin'
+              } else {
+                extension = '.bin'
+              }
             }
 
             const finalFileName = mediaInfo.fileName.includes('.')
@@ -1376,7 +1402,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           const welcomeAudioId = enhancedContent.welcome.audioId || enhancedContent.welcome.audioFile
           const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
           if (welcomeAudioId) {
-            (enhancedContent.welcome as any).audioBlob = mediaFilesRef.current.get(`${welcomeAudioId}.mp3`)
+            (enhancedContent.welcome as any).audioBlob = mediaFilesRef.current.get(`${welcomeAudioId}${getExtensionFromId(welcomeAudioId) || '.mp3'}`)
           }
           if (welcomeCaptionId) {
             (enhancedContent.welcome as any).captionBlob = mediaFilesRef.current.get(`${welcomeCaptionId}.vtt`)
@@ -1387,7 +1413,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           const objectivesAudioId = enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioFile
           const objectivesCaptionId = enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionFile
           if (objectivesAudioId) {
-            (enhancedContent.objectivesPage as any).audioBlob = mediaFilesRef.current.get(`${objectivesAudioId}.mp3`)
+            (enhancedContent.objectivesPage as any).audioBlob = mediaFilesRef.current.get(`${objectivesAudioId}${getExtensionFromId(objectivesAudioId) || '.mp3'}`)
           }
           if (objectivesCaptionId) {
             (enhancedContent.objectivesPage as any).captionBlob = mediaFilesRef.current.get(`${objectivesCaptionId}.vtt`)
@@ -1399,7 +1425,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             const topicAudioId = topic.audioId || topic.audioFile
             const topicCaptionId = topic.captionId || topic.captionFile
             if (topicAudioId) {
-              (topic as any).audioBlob = mediaFilesRef.current.get(`${topicAudioId}.mp3`)
+              (topic as any).audioBlob = mediaFilesRef.current.get(`${topicAudioId}${getExtensionFromId(topicAudioId) || '.mp3'}`)
             }
             if (topicCaptionId) {
               (topic as any).captionBlob = mediaFilesRef.current.get(`${topicCaptionId}.vtt`)
@@ -1408,7 +1434,10 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             if (topic.media) {
               topic.media.forEach(mediaItem => {
                 if (mediaItem.id) {
-                  const extension = mediaItem.type === 'image' ? '.jpg' : mediaItem.type === 'video' ? '.mp4' : '.bin'
+                  const extension = getExtensionFromId(mediaItem.id) ||
+                    (mediaItem.type === 'image' ? '.jpg' :
+                     mediaItem.type === 'video' ? '.mp4' :
+                     mediaItem.type === 'audio' ? '.mp3' : '.bin')
                   const blob = mediaFilesRef.current.get(`${mediaItem.id}${extension}`)
                   if (blob) {
                     (mediaItem as any).blob = blob
@@ -1794,7 +1823,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             courseSeedData?.courseTitle
           )
           const projectDir = await invoke<string>('get_projects_dir')
-          filePath = `${projectDir}/${fileName}`
+          const { sep } = await import('@tauri-apps/api/path')
+          filePath = `${projectDir}${sep}${fileName}`
           console.log('[SCORMPackageBuilder] Using fallback path:', filePath)
         } catch (fallbackError) {
           console.error('[SCORMPackageBuilder] Fallback error:', fallbackError)

@@ -185,12 +185,31 @@ impl EnhancedScormGenerator {
         let mut zip_buffer = Vec::new();
         {
             let mut zip = ZipWriter::new(std::io::Cursor::new(&mut zip_buffer));
-            let options =
-                FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+            // Helper function to choose compression method based on file extension
+            let compression_options = |path: &str| -> FileOptions {
+                let pre_compressed_extensions = [
+                    ".mp3", ".mp4", ".webm", ".avi", ".mov",
+                    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+                    ".pdf", ".zip", ".rar", ".7z"
+                ];
+
+                let use_stored = pre_compressed_extensions
+                    .iter()
+                    .any(|ext| path.to_lowercase().ends_with(ext));
+
+                FileOptions::default().compression_method(
+                    if use_stored {
+                        zip::CompressionMethod::Stored
+                    } else {
+                        zip::CompressionMethod::Deflated
+                    }
+                )
+            };
 
             // Generate scorm-api.js first (loads before navigation.js)
             let scorm_api_js = self.html_generator.generate_scorm_api_js(&request)?;
-            zip.start_file("scripts/scorm-api.js", options)
+            zip.start_file("scripts/scorm-api.js", compression_options("scripts/scorm-api.js"))
                 .map_err(|e| format!("Failed to create scorm-api.js: {e}"))?;
             zip.write_all(scorm_api_js.as_bytes())
                 .map_err(|e| format!("Failed to write scorm-api.js: {e}"))?;
@@ -201,7 +220,7 @@ impl EnhancedScormGenerator {
                 .validate_navigation_js(&navigation_js)
                 .map_err(|errors| errors.join("\n"))?;
 
-            zip.start_file("scripts/navigation.js", options)
+            zip.start_file("scripts/navigation.js", compression_options("scripts/navigation.js"))
                 .map_err(|e| format!("Failed to create navigation.js: {e}"))?;
             zip.write_all(navigation_js.as_bytes())
                 .map_err(|e| format!("Failed to write navigation.js: {e}"))?;
@@ -212,14 +231,14 @@ impl EnhancedScormGenerator {
                 .validate_css(&main_css)
                 .map_err(|errors| errors.join("\n"))?;
 
-            zip.start_file("styles/main.css", options)
+            zip.start_file("styles/main.css", compression_options("styles/main.css"))
                 .map_err(|e| format!("Failed to create main.css: {e}"))?;
             zip.write_all(main_css.as_bytes())
                 .map_err(|e| format!("Failed to write main.css: {e}"))?;
 
             // Generate index.html
             let index_html = self.html_generator.generate_index_html(&request)?;
-            zip.start_file("index.html", options)
+            zip.start_file("index.html", compression_options("index.html"))
                 .map_err(|e| format!("Failed to create index.html: {e}"))?;
             zip.write_all(index_html.as_bytes())
                 .map_err(|e| format!("Failed to write index.html: {e}"))?;
@@ -227,7 +246,7 @@ impl EnhancedScormGenerator {
             // Generate page HTML files
             if let Some(welcome) = &request.welcome_page {
                 let welcome_html = self.html_generator.generate_welcome_page(welcome, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
-                zip.start_file("pages/welcome.html", options)
+                zip.start_file("pages/welcome.html", compression_options("pages/welcome.html"))
                     .map_err(|e| format!("Failed to create welcome.html: {e}"))?;
                 zip.write_all(welcome_html.as_bytes())
                     .map_err(|e| format!("Failed to write welcome.html: {e}"))?;
@@ -235,7 +254,7 @@ impl EnhancedScormGenerator {
 
             if let Some(objectives) = &request.learning_objectives_page {
                 let objectives_html = self.html_generator.generate_objectives_page(objectives, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
-                zip.start_file("pages/objectives.html", options)
+                zip.start_file("pages/objectives.html", compression_options("pages/objectives.html"))
                     .map_err(|e| format!("Failed to create objectives.html: {e}"))?;
                 zip.write_all(objectives_html.as_bytes())
                     .map_err(|e| format!("Failed to write objectives.html: {e}"))?;
@@ -244,7 +263,7 @@ impl EnhancedScormGenerator {
             // Generate topic pages
             for topic in &request.topics {
                 let topic_html = self.html_generator.generate_topic_page(topic, request.require_audio_completion.unwrap_or(false), extension_map.as_ref())?;
-                zip.start_file(format!("pages/{}.html", topic.id), options)
+                zip.start_file(format!("pages/{}.html", topic.id), compression_options(&format!("pages/{}.html", topic.id)))
                     .map_err(|e| format!("Failed to create topic page: {e}"))?;
                 zip.write_all(topic_html.as_bytes())
                     .map_err(|e| format!("Failed to write topic page: {e}"))?;
@@ -253,7 +272,7 @@ impl EnhancedScormGenerator {
             // Generate assessment page
             if let Some(assessment) = &request.assessment {
                 let assessment_html = self.html_generator.generate_assessment_page(assessment)?;
-                zip.start_file("pages/assessment.html", options)
+                zip.start_file("pages/assessment.html", compression_options("pages/assessment.html"))
                     .map_err(|e| format!("Failed to create assessment.html: {e}"))?;
                 zip.write_all(assessment_html.as_bytes())
                     .map_err(|e| format!("Failed to write assessment.html: {e}"))?;
@@ -261,7 +280,7 @@ impl EnhancedScormGenerator {
 
             // Add manifest
             let manifest = self.generate_simple_manifest(&request)?;
-            zip.start_file("imsmanifest.xml", options)
+            zip.start_file("imsmanifest.xml", compression_options("imsmanifest.xml"))
                 .map_err(|e| format!("Failed to create manifest: {e}"))?;
             zip.write_all(manifest.as_bytes())
                 .map_err(|e| format!("Failed to write manifest: {e}"))?;
@@ -272,7 +291,7 @@ impl EnhancedScormGenerator {
                 eprintln!("[SCORM Generator] 📁 Adding media file {}/{}: {} ({} bytes)", 
                     idx + 1, media_files.len(), path, data.len());
                 
-                zip.start_file(path.as_str(), options)
+                zip.start_file(path.as_str(), compression_options(&path))
                     .map_err(|e| format!("Failed to create media file {path}: {e}"))?;
                 zip.write_all(&data)
                     .map_err(|e| format!("Failed to write media file {path}: {e}"))?;
