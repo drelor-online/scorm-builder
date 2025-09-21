@@ -1140,8 +1140,8 @@ export function collectAllMediaIds(courseContent: any): string[] {
     }
   }
 
-  // Scan learning objectives page
-  const objectives = courseContent.learningObjectivesPage
+  // Scan learning objectives page (support both naming variants)
+  const objectives = courseContent.learningObjectivesPage || courseContent.objectivesPage
   if (objectives) {
     addMediaId(objectives.audioId, 'objectives.audioId')
     addMediaId(objectives.audioFile, 'objectives.audioFile')
@@ -1154,6 +1154,23 @@ export function collectAllMediaIds(courseContent: any): string[] {
       objectives.media.forEach((m: any, i: number) => {
         addMediaId(m?.id, `objectives.media[${i}].id`)
         addMediaId(m?.url, `objectives.media[${i}].url`)
+      })
+    }
+  }
+
+  // If both variants exist, scan the other one too
+  if (courseContent.learningObjectivesPage && courseContent.objectivesPage) {
+    const otherObjectives = courseContent.objectivesPage === objectives ? courseContent.learningObjectivesPage : courseContent.objectivesPage
+    addMediaId(otherObjectives.audioId, 'otherObjectives.audioId')
+    addMediaId(otherObjectives.audioFile, 'otherObjectives.audioFile')
+    addMediaId(otherObjectives.captionId, 'otherObjectives.captionId')
+    addMediaId(otherObjectives.captionFile, 'otherObjectives.captionFile')
+    addMediaId(otherObjectives.imageUrl, 'otherObjectives.imageUrl')
+
+    if (Array.isArray(otherObjectives.media)) {
+      otherObjectives.media.forEach((m: any, i: number) => {
+        addMediaId(m?.id, `otherObjectives.media[${i}].id`)
+        addMediaId(m?.url, `otherObjectives.media[${i}].url`)
       })
     }
   }
@@ -1473,8 +1490,23 @@ async function resolveAudioCaptionFile(
       return `media/${filename}`
     }
     
-    // Media should be pre-loaded in cache - if not found, it doesn't exist
-    mediaServiceCallDetector.checkForRegressionCall('resolveAudioCaptionFile')
+    // Media should be pre-loaded in cache - if not found, it might be a known collection issue
+    // Check if this is a known Learning Objectives media that wasn't collected properly
+    const isLearningObjectivesMedia = cleanFileId.match(/^(audio|caption|image)-1$/)
+
+    if (isLearningObjectivesMedia) {
+      console.warn(`[SCORM Media Debug] Cache MISS for Learning Objectives media ${cleanFileId} - this might be due to objectivesPage vs learningObjectivesPage naming inconsistency`)
+      debugLogger.warn('SCORM_MEDIA', 'Learning Objectives media not found in cache - possible naming variant issue', {
+        projectId,
+        fileId: cleanFileId,
+        originalFileId: fileId,
+        suggestion: 'Check if content uses objectivesPage instead of learningObjectivesPage'
+      })
+    } else {
+      // For non-LO media, check for regression
+      mediaServiceCallDetector.checkForRegressionCall('resolveAudioCaptionFile')
+    }
+
     console.log(`[SCORM Media Debug] Cache MISS for ${cleanFileId} - media should be pre-loaded, skipping`)
     if (performanceTrace) performanceTrace.cacheMisses++
     debugLogger.warn('SCORM_MEDIA', 'Media file not found in pre-loaded cache', {
