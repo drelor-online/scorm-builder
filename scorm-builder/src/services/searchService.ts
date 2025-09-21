@@ -70,6 +70,24 @@ function parseDuration(duration: string): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
+// Helper function to detect SVG files to prevent SCORM compatibility issues
+function isSvgFile(url: string): boolean {
+  if (!url) return false
+
+  // Check file extension
+  const urlLower = url.toLowerCase()
+  if (urlLower.endsWith('.svg')) {
+    return true
+  }
+
+  // Check for SVG in query parameters (some CDNs use this)
+  if (urlLower.includes('format=svg') || urlLower.includes('type=svg')) {
+    return true
+  }
+
+  return false
+}
+
 export interface SearchResult {
   id: string
   url: string
@@ -113,7 +131,9 @@ export const searchGoogleImages = async (
     try {
       const start = (page - 1) * 10 + 1
       
-      const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${query}&searchType=image&start=${start}`
+      // Exclude SVG files from search results to prevent SCORM compatibility issues
+      const enhancedQuery = `${query} -filetype:svg`
+      const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${encodeURIComponent(enhancedQuery)}&searchType=image&start=${start}`
       console.log('[SearchService] Google Images API URL:', apiUrl.replace(apiKey, 'API_KEY_HIDDEN'))
       
       const response = await fetch(apiUrl)
@@ -133,16 +153,19 @@ export const searchGoogleImages = async (
         // Success case - process the response
         const data = await response.json() as GoogleSearchResponse
         if (data.items) {
-          let results = data.items.map((item, index) => ({
-            id: item.cacheId || `img-${start + index}`,
-            url: item.link,
-            thumbnail: item.image?.thumbnailLink || item.link,
-            title: item.title,
-            source: item.displayLink,
-            dimensions: item.image ? `${item.image.width}x${item.image.height}` : undefined,
-            photographer: undefined
-          }))
-          
+          let results = data.items
+            .map((item, index) => ({
+              id: item.cacheId || `img-${start + index}`,
+              url: item.link,
+              thumbnail: item.image?.thumbnailLink || item.link,
+              title: item.title,
+              source: item.displayLink,
+              dimensions: item.image ? `${item.image.width}x${item.image.height}` : undefined,
+              photographer: undefined
+            }))
+            // Filter out any SVG files that may have slipped through
+            .filter(result => !isSvgFile(result.url))
+
           return results
         }
       }

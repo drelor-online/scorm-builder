@@ -5,6 +5,7 @@ import { tokens } from './DesignSystem/designTokens'
 import { Home, Target, Image as ImageIcon, Video } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { useMedia } from '../hooks/useMedia'
+import { useDebounce } from '../hooks/useDebounce'
 import { normalizeAssetUrl } from '../utils/assetUrlHelper'
 import styles from './PageThumbnailGrid.module.css'
 // Removed blobUrlManager - now using asset URLs
@@ -492,24 +493,28 @@ export const PageThumbnailGrid: React.FC<PageThumbnailGridProps> = memo(({
     console.log(`[PageThumbnailGrid] 🧹 CACHE: Cleared ${cacheSize} cached thumbnails`)
   }, [])
 
-  // Clear cache when course content changes (new project loaded)
+  // Get media context
+  const media = useMedia()
+  const { getValidMediaForPage, mediaVersion } = media.selectors
+
+  // Debounce mediaVersion changes to prevent excessive cache clearing during rapid updates
+  const debouncedMediaVersion = useDebounce(mediaVersion, 300) // 300ms delay
+
+  // Clear cache when course content or media changes
   useEffect(() => {
     clearThumbnailCache()
-  }, [courseContent?.topics?.length, courseContent?.welcomePage?.id, clearThumbnailCache])
+    console.log(`[PageThumbnailGrid] Cache cleared due to changes - mediaVersion: ${debouncedMediaVersion}`)
+  }, [courseContent?.topics?.length, courseContent?.welcomePage?.id, debouncedMediaVersion, clearThumbnailCache])
 
   // Helper to extract text content and truncate - memoized
   const getContentPreview = useCallback((html: string, maxLength: number = 100): string => {
     const temp = document.createElement('div')
     temp.innerHTML = DOMPurify.sanitize(html)
     const text = temp.textContent || temp.innerText || ''
-    
+
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + '...'
   }, [])
-
-  // Get media context
-  const media = useMedia()
-  const { getValidMediaForPage } = media.selectors
   
   // Create array of all pages first - memoized to prevent recreation
   const allPages: Array<Page | Topic> = useMemo(() => [

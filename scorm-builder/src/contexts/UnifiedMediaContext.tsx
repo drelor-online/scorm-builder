@@ -62,6 +62,7 @@ export interface UnifiedMediaContextType {
   // URL management (now using asset URLs)
   createBlobUrl: (mediaId: string) => Promise<string | null>  // Returns asset URL
   revokeBlobUrl: (url: string) => void  // No-op for asset URLs
+  clearBlobCache: (mediaId: string) => void  // Clear cached blob URL
   
   // Cache operations (for performance optimization)
   hasAudioCached: (mediaId: string) => boolean
@@ -76,6 +77,7 @@ export interface UnifiedMediaContextType {
   clearError: () => void
   clearPartialLoadingWarning: () => void
   refreshMedia: () => Promise<void>
+  mediaVersion: number  // Increments when media is added, updated, or deleted
   
   // Performance optimization
   loadingProfile: LoadingProfile
@@ -529,7 +531,11 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
   const [loadingProfile, setLoadingProfile] = useState<LoadingProfile>('all')
   const [isBulkOperation, setIsBulkOperation] = useState(false)
   const [partialLoadingWarning, setPartialLoadingWarning] = useState<{ message: string; loadedCount: number } | null>(null)
-  
+  const [mediaVersion, setMediaVersion] = useState(0)  // Track media changes for cache invalidation
+
+  // Track pending blob URL requests to prevent duplicates
+  const pendingBlobRequests = useRef<Map<string, Promise<string | null>>>(new Map())
+
   // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Set global flag for MediaService blocking
   useEffect(() => {
     const isVisualOnly = loadingProfile === 'visual-only'
@@ -993,14 +999,20 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
       // Clear any existing blob URL for this media ID to force regeneration
       blobCache.revoke(item.id)
       mediaDebugLog('[UnifiedMediaContext] Cleared blob URL cache for replaced media:', item.id)
-      
+
       // Update cache
       setMediaCache(prev => {
         const updated = new Map(prev)
         updated.set(item.id, item)
         return updated
       })
-      
+
+      // Increment media version for cache invalidation after a small delay
+      // This allows blob URLs to stabilize before triggering cache clears
+      setTimeout(() => {
+        setMediaVersion(prev => prev + 1)
+      }, 100)
+
       return item
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to store media:', err)
@@ -1052,8 +1064,13 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
         // Clear blob URL cache for this media
         blobCache.revoke(mediaId)
         mediaDebugLog('[UnifiedMediaContext] Cleared blob URL cache for deleted media:', mediaId)
+
+        // Increment media version for cache invalidation after a delay
+        setTimeout(() => {
+          setMediaVersion(prev => prev + 1)
+        }, 100)
       }
-      
+
       return success
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to delete media:', mediaId, err)
@@ -1453,11 +1470,15 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
   
   const createBlobUrl = useCallback(async (mediaId: string): Promise<string | null> => {
     try {
-      // Reduced logging to prevent console lock-up
-      // mediaDebugLog('[UnifiedMediaContext v3.0.0] createBlobUrl called for:', mediaId, 'projectId:', actualProjectId)
-      
-      // Use BlobURLCache for efficient caching
-      return await blobCache.getOrCreate(mediaId, async () => {
+      // Check if there's already a pending request for this media ID
+      const pendingRequest = pendingBlobRequests.current.get(mediaId)
+      if (pendingRequest) {
+        console.log(`[UnifiedMediaContext] 🔄 Reusing pending blob URL request for ${mediaId}`)
+        return await pendingRequest
+      }
+
+      // Create new request and store it to prevent duplicates
+      const request = blobCache.getOrCreate(mediaId, async () => {
       
         // Get media with data from MediaService
         const mediaService = mediaServiceRef.current
@@ -1532,6 +1553,18 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
         console.error('[UnifiedMediaContext v3.0.0] No data available for media:', mediaId)
         return null
       })
+
+      // Store the request to prevent duplicates
+      pendingBlobRequests.current.set(mediaId, request)
+
+      // Wait for completion and clean up
+      try {
+        const result = await request
+        return result
+      } finally {
+        // Clean up the pending request regardless of success/failure
+        pendingBlobRequests.current.delete(mediaId)
+      }
     } catch (err) {
       // Check if it's an external URL that we should return directly
       if (err instanceof Error && err.message === 'External URL - skip caching') {
@@ -1549,11 +1582,19 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
       return null
     }
   }, [actualProjectId, blobCache])
-  
+
   const revokeBlobUrl = useCallback((url: string) => {
     // BlobURLCache handles revocation - this is now a no-op
     // Kept for backward compatibility
     mediaDebugLog('[UnifiedMediaContext] revokeBlobUrl called (handled by BlobURLCache):', url)
+  }, [])
+
+  const clearBlobCache = useCallback((mediaId: string) => {
+    // Clear the cached blob URL for this media ID
+    blobCache.revoke(mediaId)
+    // Also clear any pending requests
+    pendingBlobRequests.current.delete(mediaId)
+    console.log(`[UnifiedMediaContext] 🗑️ Cleared blob cache for ${mediaId}`)
   }, [])
   
   const clearError = useCallback(() => {
@@ -1629,7 +1670,12 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
       
       // Clear any existing blob URL for this media since the content changed
       blobCache.revoke(existingId)
-      
+
+      // Increment media version for cache invalidation after a delay
+      setTimeout(() => {
+        setMediaVersion(prev => prev + 1)
+      }, 100)
+
       return updatedItem
     } catch (err) {
       logger.error('[UnifiedMediaContext] Failed to update media:', existingId, err)
@@ -1652,6 +1698,7 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     getMediaById,
     createBlobUrl,
     revokeBlobUrl,
+    clearBlobCache,
     hasAudioCached,
     getCachedAudio,
     clearAudioFromCache,
@@ -1669,7 +1716,8 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     loadingProfile,
     setLoadingProfile,
     isBulkOperation,
-    setBulkOperation: setIsBulkOperation
+    setBulkOperation: setIsBulkOperation,
+    mediaVersion
   }), [
     storeMedia,
     updateMedia,
@@ -1684,6 +1732,7 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     getMediaById,
     createBlobUrl,
     revokeBlobUrl,
+    clearBlobCache,
     hasAudioCached,
     getCachedAudio,
     clearAudioFromCache,
@@ -1700,7 +1749,8 @@ export function UnifiedMediaProvider({ children, projectId, loadingTimeout = 300
     setCriticalMediaLoadingCallback,
     setLoadingProfile,
     isBulkOperation,
-    setIsBulkOperation
+    setIsBulkOperation,
+    mediaVersion
   ])
   
   // Set global context for TauriAudioPlayer

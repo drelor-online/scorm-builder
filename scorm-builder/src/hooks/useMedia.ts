@@ -45,6 +45,7 @@ export interface MediaSelectors {
   isLoading: boolean
   error: Error | null
   loadingProfile: 'visual-only' | 'all'
+  mediaVersion: number  // Increments when media is added, updated, or deleted
 }
 
 // ============================================================================
@@ -65,6 +66,7 @@ export interface MediaActions {
   // URL management
   createBlobUrl: (mediaId: string) => Promise<string | null>
   revokeBlobUrl: (url: string) => void
+  clearBlobCache: (mediaId: string) => void
   
   // System operations
   refreshMedia: () => Promise<void>
@@ -146,6 +148,7 @@ export function useMedia(): UseMediaReturn {
     isLoading: context.isLoading,
     error: context.error,
     loadingProfile: context.loadingProfile,
+    mediaVersion: context.mediaVersion,
   }), [
     context.getMediaForPage,
     context.getValidMediaForPage,
@@ -157,6 +160,7 @@ export function useMedia(): UseMediaReturn {
     context.isLoading,
     context.error,
     context.loadingProfile,
+    context.mediaVersion,
   ])
   
   // ============================================================================
@@ -252,6 +256,7 @@ export function useMedia(): UseMediaReturn {
     // URL management
     createBlobUrl: context.createBlobUrl,
     revokeBlobUrl: context.revokeBlobUrl,
+    clearBlobCache: context.clearBlobCache,
     
     // System operations
     refreshMedia: context.refreshMedia,

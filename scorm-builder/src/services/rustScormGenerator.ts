@@ -6,6 +6,8 @@ import { downloadIfExternal, isExternalUrl } from './externalImageDownloader'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { z } from 'zod'
 import { PAGE_LEARNING_OBJECTIVES, CONTENT_LEARNING_OBJECTIVES } from '../constants/media'
+import { devLog, devTime, devBatchLog, devMemoryLog, criticalLog, criticalWarn } from '../utils/logging'
+import { MEDIA_FETCH_TIMEOUT, BATCH_GENERATION_TIMEOUT } from '../constants/timeouts'
 
 // ============================================================================
 // REGRESSION DETECTION GUARDS
@@ -978,10 +980,7 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
 export function clearMediaCache(): void {
   mediaCache.clear()
   debugLogger.debug('SCORM_MEDIA', 'Media cache cleared', { cacheSize: mediaCache.size })
-  // Only log cache operations in development
-  if (import.meta.env.DEV) {
-    console.log('[Rust SCORM] Media cache cleared')
-  }
+  devLog('[Rust SCORM] Media cache cleared')
 }
 
 /**
@@ -1035,10 +1034,7 @@ function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: 
   // Add clip timing parameters if provided
   if (clipStart !== undefined && clipStart >= 0) {
     params.set('start', Math.floor(clipStart).toString())
-    // Only log URL parameter details in development
-    if (import.meta.env.DEV) {
-      console.log(`[SCORM DEBUG] Added start parameter: ${Math.floor(clipStart)}`)
-    }
+    devLog(`[SCORM DEBUG] Added start parameter: ${Math.floor(clipStart)}`)
   }
   
   if (clipEnd !== undefined && clipEnd > 0) {
@@ -1056,10 +1052,7 @@ function generateYouTubeEmbedUrl(videoId: string, clipStart?: number, clipEnd?: 
  * This allows SCORMPackageBuilder to pass already-loaded media
  */
 export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<void> {
-  // Only log verbose cache operations in development
-  if (import.meta.env.DEV) {
-    console.log(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache (filename-keyed)`)
-  }
+  devLog(`[Rust SCORM] Pre-loading ${mediaMap.size} media files into cache (filename-keyed)`)
 
   // Convert to array for parallel processing
   const entries = Array.from(mediaMap.entries())
@@ -1083,10 +1076,7 @@ export async function preloadMediaCache(mediaMap: Map<string, Blob>): Promise<vo
 
         // Store in cache
         mediaCache.set(mediaId, { data, mimeType })
-        // Only log individual cache operations in development
-        if (import.meta.env.DEV) {
-          console.log(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
-        }
+        devLog(`[Rust SCORM] Cached ${mediaId} (${mimeType}, ${data.length} bytes)`)
       } catch (error) {
         console.error(`[Rust SCORM] Failed to pre-load ${filename}:`, error)
       }
@@ -4210,8 +4200,11 @@ export async function generateRustSCORM(
   preloadedMedia?: Map<string, Blob> | Map<string, { data: Uint8Array; mimeType: string }>,
   courseSettings?: CourseSettings,
   strictValidation?: boolean,
-  authoritativeExtensionMap?: Map<string, string>
+  authoritativeExtensionMap?: Map<string, string> // Optional map for enhanced path to prevent extension fallbacks
 ): Promise<Uint8Array> {
+  // Provide default if no authoritative extension map is provided
+  const effectiveExtensionMap = authoritativeExtensionMap || new Map<string, string>()
+
   debugLogger.info('SCORM_GENERATION', 'Starting SCORM generation process', {
     projectId,
     hasPreloadedMedia: !!preloadedMedia,
@@ -4289,8 +4282,8 @@ export async function generateRustSCORM(
       const cachedMediaIds = new Set(mediaCache.keys())
       const missingFromCache = Array.from(referencedMediaIds).filter(id => !cachedMediaIds.has(id))
 
-      // Use passed authoritativeExtensionMap or build one from cache for SVG identification
-      let extensionMap = authoritativeExtensionMap
+      // Use passed effectiveExtensionMap or build one from cache for SVG identification
+      let extensionMap = effectiveExtensionMap
       if (!extensionMap) {
         // Build extension map from cache if not provided
         extensionMap = new Map()
@@ -4520,7 +4513,7 @@ export async function generateRustSCORM(
     }
     
     // Convert extension map to plain object for Rust
-    const extensionMapObject = authoritativeExtensionMap ? Object.fromEntries(authoritativeExtensionMap) : {}
+    const extensionMapObject = effectiveExtensionMap ? Object.fromEntries(effectiveExtensionMap) : {}
     console.log(`[Extension Map] Passing ${Object.keys(extensionMapObject).length} extension mappings to Rust:`, extensionMapObject)
 
     // 🔧 CRITICAL FIX: Rewrite all media URLs in rustCourseData to use authoritative extensions
@@ -4536,7 +4529,7 @@ export async function generateRustSCORM(
         if (key === 'url' && typeof value === 'string' && value && !value.startsWith('http')) {
           // Check if this looks like a media ID that should be rewritten
           const normalizedId = normalizeIdLike(value)
-          const authoritativeExt = authoritativeExtensionMap?.get(normalizedId)
+          const authoritativeExt = effectiveExtensionMap.get(normalizedId)
 
           if (authoritativeExt) {
             const correctUrl = `media/${normalizedId}${authoritativeExt}`
@@ -4546,7 +4539,7 @@ export async function generateRustSCORM(
         } else if (key === 'image_url' && typeof value === 'string' && value && !value.startsWith('http')) {
           // Handle image_url fields specifically
           const normalizedId = normalizeIdLike(value.replace('media/', ''))
-          const authoritativeExt = authoritativeExtensionMap?.get(normalizedId)
+          const authoritativeExt = effectiveExtensionMap.get(normalizedId)
 
           if (authoritativeExt) {
             const correctUrl = `media/${normalizedId}${authoritativeExt}`
@@ -4565,7 +4558,7 @@ export async function generateRustSCORM(
     // 🔧 SVG FORCE-INCLUSION FIX: Ensure ALL SVG files are in mediaFiles array
     // The enhanced generator only zips what's in mediaFiles, so missing SVGs = 404s
     console.log(`[SVG FORCE] Checking for SVG files to force-include...`)
-    const svgIds = authoritativeExtensionMap ? [...authoritativeExtensionMap.entries()]
+    const svgIds = effectiveExtensionMap ? [...effectiveExtensionMap.entries()]
       .filter(([id, ext]) => ext.toLowerCase() === '.svg')
       .map(([id]) => id) : []
 
@@ -4647,7 +4640,7 @@ export async function generateRustSCORM(
     const expectedFiles = new Set(
       Array.from(referencedMediaIds)
         .map(id => {
-          const ext = authoritativeExtensionMap?.get(id)
+          const ext = effectiveExtensionMap.get(id)
           return ext ? `media/${id}${ext}` : null
         })
         .filter(Boolean) as string[]
@@ -4680,7 +4673,17 @@ export async function generateRustSCORM(
     if (unreferencedInZip.length > 0) {
       const unreferencedIds = unreferencedInZip.map(file => file.replace(/^media\//, '').replace(/\.[^.]+$/, ''))
       console.log(`[PRE-ZIP VALIDATION] ℹ️ ${unreferencedInZip.length} files will be included but not referenced in content:`)
-      unreferencedIds.forEach(id => console.log(`  - ${id} (unused file)`))
+
+      // Cap output in production to avoid log spam
+      const maxLogItems = import.meta.env.DEV ? unreferencedIds.length : 10
+      const itemsToShow = unreferencedIds.slice(0, maxLogItems)
+
+      itemsToShow.forEach(id => console.log(`  - ${id} (unused file)`))
+
+      // Show summary if truncated in production
+      if (!import.meta.env.DEV && unreferencedIds.length > maxLogItems) {
+        console.log(`  ... +${unreferencedIds.length - maxLogItems} more (use dev build for full list)`)
+      }
     }
 
     if (missingFromZip.length === 0 && unreferencedInZip.length === 0) {
@@ -4835,23 +4838,21 @@ export async function buildScormPackageEnhanced(
     projectId: courseSeedData.projectId,
     strictValidation,
     mediaCount: mediaCache.size,
-    extensionMapSize: authoritativeExtensionMap?.size || 0
+    extensionMapSize: authoritativeExtensionMap.size
   })
 
   // PRE-BUILD VALIDATION: Check extension map completeness if strict mode
   // Check for missing extensions in authoritative map and validate extensions
   const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
-  const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap?.has(id))
+  const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap.has(id))
 
   // Validate extensions against whitelist (security check)
   const invalidExtensions: string[] = []
-  if (authoritativeExtensionMap) {
-    for (const [id, ext] of authoritativeExtensionMap.entries()) {
+  for (const [id, ext] of authoritativeExtensionMap.entries()) {
       if (ext && !/^\.[a-z0-9]+$/i.test(ext)) {
         invalidExtensions.push(`${id}=${ext}`)
       }
     }
-  }
 
   if (invalidExtensions.length > 0) {
     const errorMessage = `Invalid file extensions detected (security risk): ${invalidExtensions.join(', ')}`

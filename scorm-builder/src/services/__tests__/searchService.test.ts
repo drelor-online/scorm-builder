@@ -38,9 +38,9 @@ describe('searchService', () => {
 
       const results = await searchGoogleImages('test query', 1, 'test-api-key', 'test-cse-id')
 
-      // Verify API was called with correct parameters
+      // Verify API was called with correct parameters (including SVG exclusion)
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://www.googleapis.com/customsearch/v1?key=test-api-key&cx=test-cse-id&q=test query&searchType=image&start=1'
+        'https://www.googleapis.com/customsearch/v1?key=test-api-key&cx=test-cse-id&q=test%20query%20-filetype%3Asvg&searchType=image&start=1'
       )
 
       // Verify results are formatted correctly
@@ -66,16 +66,28 @@ describe('searchService', () => {
       expect(results[0].id).toContain('img-')
     })
 
-    it('should handle non-OK responses and return mock data', async () => {
+    it('should throw SearchError for invalid API key (403)', async () => {
       ;(global.fetch as any).mockResolvedValueOnce({
         ok: false,
         status: 403,
         statusText: 'Forbidden'
       })
 
+      // Should throw SearchError for authentication issues
+      await expect(searchGoogleImages('test query', 1, 'test-api-key', 'test-cse-id'))
+        .rejects.toThrow('Invalid API key or insufficient permissions.')
+    })
+
+    it('should handle server errors and return mock data', async () => {
+      ;(global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error'
+      })
+
       const results = await searchGoogleImages('test query', 1, 'test-api-key', 'test-cse-id')
 
-      // Should fall back to mock data
+      // Should fall back to mock data for server errors
       expect(results).toHaveLength(10)
       expect(results[0].id).toContain('img-')
     })
@@ -109,6 +121,46 @@ describe('searchService', () => {
       expect(global.fetch).not.toHaveBeenCalled()
       expect(results).toHaveLength(10)
       expect(results[0].id).toContain('img-')
+    })
+
+    it('should filter out SVG files from search results', async () => {
+      const mockResponse = {
+        items: [
+          {
+            cacheId: 'test-id-1',
+            link: 'https://example.com/image1.jpg',
+            title: 'Test Image 1',
+            displayLink: 'example.com'
+          },
+          {
+            cacheId: 'test-id-2',
+            link: 'https://example.com/image2.svg', // This should be filtered out
+            title: 'Test SVG Image',
+            displayLink: 'example.com'
+          },
+          {
+            cacheId: 'test-id-3',
+            link: 'https://example.com/image3.png',
+            title: 'Test Image 3',
+            displayLink: 'example.com'
+          }
+        ]
+      }
+
+      ;(global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse
+      })
+
+      const results = await searchGoogleImages('test query', 1, 'test-api-key', 'test-cse-id')
+
+      // Should only have 2 results (SVG filtered out)
+      expect(results).toHaveLength(2)
+      expect(results[0].url).toBe('https://example.com/image1.jpg')
+      expect(results[1].url).toBe('https://example.com/image3.png')
+
+      // Ensure SVG file is not in results
+      expect(results.find(r => r.url.includes('.svg'))).toBeUndefined()
     })
   })
 

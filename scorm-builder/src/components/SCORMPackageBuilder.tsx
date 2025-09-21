@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react'
 import { CourseContent, Media, Topic } from '../types/aiPrompt'
 import type { EnhancedCourseContent } from '../types/scorm'
 import type { CourseMetadata } from '../types/metadata'
@@ -20,14 +20,15 @@ import { PAGE_LEARNING_OBJECTIVES, CONTENT_LEARNING_OBJECTIVES } from '../consta
 import { getLearningObjectivesAudioCaption } from '../services/storageMigration'
 
 import { PageLayout } from './PageLayout'
-import { 
-  Card, 
-  Button, 
+import {
+  Card,
+  Button,
+  ButtonGroup,
   LoadingSpinner,
   ProgressBar,
   Icon
 } from './DesignSystem'
-import { Package, Download, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { Package, Download, Loader2, AlertCircle, CheckCircle, X, ChevronUp, ChevronDown } from 'lucide-react'
 import './DesignSystem/designSystem.css'
 import type { CourseSeedData } from '../types/course'
 
@@ -258,9 +259,43 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   const [isCancellable, setIsCancellable] = useState(false)
   const [isGenerationCancelled, setIsGenerationCancelled] = useState(false)
   const generationAbortController = useRef<AbortController | null>(null)
+
+  // Two-tier progress tracking
+  const [currentPhase, setCurrentPhase] = useState('')
+  const [phaseProgress, setPhaseProgress] = useState(0)
+  const [operationDetails, setOperationDetails] = useState('')
+
+  // Diagnostics panel (always shown during generation)
+  const [showDiagnostics, setShowDiagnostics] = useState(true)
+  const [diagnosticsData, setDiagnosticsData] = useState({
+    mediaStats: { total: 0, loaded: 0, failed: 0, cached: 0 },
+    performance: { startTime: 0, phases: {} as Record<string, number> },
+    systemInfo: { memoryUsage: 0, processingTime: 0 },
+    warnings: [] as string[],
+    debugLogs: [] as string[]
+  })
+
+  // Error-proof interactions
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false)
+  const [lastClickTime, setLastClickTime] = useState(0)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const storage = useStorage()
   const media = useMedia()
-  
+
+  // Diagnostics helper function
+  const updateDiagnostics = useCallback((updates: Partial<typeof diagnosticsData>) => {
+    setDiagnosticsData(prev => ({
+      ...prev,
+      ...updates,
+      mediaStats: { ...prev.mediaStats, ...updates.mediaStats },
+      performance: { ...prev.performance, ...updates.performance },
+      systemInfo: { ...prev.systemInfo, ...updates.systemInfo },
+      warnings: updates.warnings ? [...prev.warnings, ...updates.warnings] : prev.warnings,
+      debugLogs: updates.debugLogs ? [...prev.debugLogs, ...updates.debugLogs] : prev.debugLogs
+    }))
+  }, [])
+
+
   // Extract commonly used methods
   const {
     createBlobUrl,
@@ -1157,8 +1192,20 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     setIsLoadingMedia(true)
     setIsCancellable(true)
     setIsGenerationCancelled(false)
+    // Truthful progress tracking - Phase 1: Initialization (0% complete)
     setGenerationProgress(0)
+    setCurrentPhase('Initialization')
+    setPhaseProgress(0)
+    setOperationDetails('Starting generation process')
     setLoadingMessage('Preparing course content...')
+
+    // Initialize diagnostics
+    const startTime = Date.now()
+    updateDiagnostics({
+      performance: { startTime, phases: { initialization: startTime } },
+      debugLogs: ['Generation started'],
+      systemInfo: { memoryUsage: ('memory' in performance) ? Math.round(((performance as any).memory?.usedJSHeapSize || 0) / 1048576) : 0, processingTime: 0 }
+    })
     
     // Create new AbortController for this generation
     if (abortControllerRef.current) {
@@ -1213,7 +1260,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         throw new Error('Generation cancelled by user')
       }
       
+      // Truthful progress tracking - Phase 1: Content preparation (5% complete)
       setGenerationProgress(5)
+      setCurrentPhase('Content Preparation')
+      setPhaseProgress(50)
+      setOperationDetails('Processing course structure')
       await yieldToUI()
       
       const metadata: CourseMetadata = {
@@ -1225,7 +1276,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         passMark: 80
       }
       
+      // Truthful progress tracking - Phase 2: Media injection (10% complete)
       setGenerationProgress(10)
+      setCurrentPhase('Content Enhancement')
+      setPhaseProgress(0)
+      setOperationDetails('Injecting missing media references')
       setLoadingMessage('Injecting missing topic media from storage...')
       await yieldToUI()
       
@@ -1249,7 +1304,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       
       console.log('[SCORMPackageBuilder] Enhanced content ready:', enhancedContent)
       
+      // Truthful progress tracking - Phase 2: Content enhancement (15% complete)
       setGenerationProgress(15)
+      setCurrentPhase('Content Enhancement')
+      setPhaseProgress(100)
+      setOperationDetails('Content enhancement complete')
       await yieldToUI()
       
       // Debug: Log the enhanced content to check audio/caption fields
@@ -1273,7 +1332,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         throw new Error('Generation cancelled by user')
       }
       
+      // Truthful progress tracking - Phase 3: Media loading start (20% complete)
       setGenerationProgress(20)
+      setCurrentPhase('Media Loading')
+      setPhaseProgress(0)
+      setOperationDetails('Identifying required media files')
       setLoadingMessage('Loading media files...')
       await yieldToUI()
       
@@ -1286,7 +1349,25 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         console.log('[SCORMPackageBuilder] === MEDIA LOAD PHASE COMPLETE ===')
         console.log('[SCORMPackageBuilder] Media files ready for packaging:', mediaFilesRef.current.size)
         
+        // Truthful progress tracking - Phase 3: Media pre-loading complete (40% complete)
         setGenerationProgress(40)
+        setCurrentPhase('Media Loading')
+        setPhaseProgress(100)
+        setOperationDetails(`${mediaFilesRef.current.size} media files loaded`)
+
+        // Update media diagnostics
+        const totalMediaCount = media.selectors.getAllMedia().length
+        updateDiagnostics({
+          mediaStats: {
+            total: totalMediaCount,
+            loaded: mediaFilesRef.current.size,
+            cached: mediaFilesRef.current.size,
+            failed: Math.max(0, totalMediaCount - mediaFilesRef.current.size)
+          },
+          debugLogs: [`Media loading complete: ${mediaFilesRef.current.size}/${totalMediaCount} files`],
+          performance: { startTime: Date.now(), phases: { mediaLoading: Date.now() } }
+        })
+
         await new Promise<void>(resolve => setTimeout(resolve, 50))
         
         // Add blob references to enhanced content for Rust generator
@@ -1416,7 +1497,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       const estimatedSeconds = Math.round(60 + (mediaCount * 2)) // Reduced base time and per-file time
-      setGenerationProgress(45)
+      // Truthful progress tracking - Phase 4: Starting Rust generation (40% complete)
+      setGenerationProgress(40)
+      setCurrentPhase('SCORM Generation')
+      setPhaseProgress(0)
+      setOperationDetails('Initializing SCORM package builder')
       debugLogger.info('SCORM_PACKAGE', 'Starting Rust SCORM generation phase', {
         projectId: storage.currentProjectId,
         mediaCount,
@@ -1487,10 +1572,16 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                 storage.currentProjectId || 'default-project',
                 (message, progress) => {
                   setLoadingMessage(message)
-                  // Map Rust progress (0-100) to our progress range (45-95)
-                  const mappedProgress = 45 + (progress * 0.5)
-                  setGenerationProgress(mappedProgress)
-                  console.log('[SCORMPackageBuilder] Progress:', progress, message)
+                  // Truthful progress tracking - Phase 5: Rust generation (40-90% complete)
+                  // Map Rust progress (0-100) to completion range (40-90%)
+                  const truthfulProgress = 40 + (progress * 0.5)
+                  setGenerationProgress(truthfulProgress)
+                  setCurrentPhase('SCORM Generation')
+                  setPhaseProgress(progress)
+                  setOperationDetails(message || 'Processing SCORM components')
+
+                  // Log progress with meaningful context
+                  console.log(`[SCORMPackageBuilder] Rust Generation: ${progress}% (Overall: ${Math.round(truthfulProgress)}%) - ${message}`)
                 },
                 mediaFilesRef.current, // Pass the pre-loaded media files
                 finalCourseSettings // Pass course settings with defaults applied
@@ -1510,7 +1601,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         throw new Error('Failed to generate SCORM package - no data returned')
       }
       
+      // Truthful progress tracking - Phase 6: Package finalization (95% complete)
       setGenerationProgress(95)
+      setCurrentPhase('Finalization')
+      setPhaseProgress(0)
+      setOperationDetails('Preparing package for download')
       setLoadingMessage('Finalizing SCORM package...')
       await yieldToUI()
       
@@ -1524,7 +1619,11 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
       
       setGeneratedPackage(newPackage)
+      // Truthful progress tracking - Phase 7: Complete (100% complete)
       setGenerationProgress(100)
+      setCurrentPhase('Complete')
+      setPhaseProgress(100)
+      setOperationDetails('Package ready for download')
       setLoadingMessage('SCORM package generated successfully!')
       await yieldToUI()
       
@@ -1605,6 +1704,47 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       console.log('[SCORMPackageBuilder] Generation cancelled by user')
     }
   }
+
+  // Error-proof generation wrapper (defined after generatePackage)
+  const handleGenerateWithProtection = useCallback(() => {
+    const now = Date.now()
+
+    // Prevent double-clicks (within 1 second)
+    if (now - lastClickTime < 1000) {
+      console.log('[SCORMPackageBuilder] Double-click prevented')
+      return
+    }
+
+    setLastClickTime(now)
+
+    // Disable button temporarily to prevent rapid clicks
+    setIsButtonDisabled(true)
+    setTimeout(() => setIsButtonDisabled(false), 2000)
+
+    // Check if there's already a generation in progress
+    if (isGenerating) {
+      warning('Generation already in progress. Please wait for the current generation to complete before starting a new one.')
+      return
+    }
+
+    // Show confirmation for large courses (>10 media files or >5 topics)
+    const mediaCount = media.selectors.getAllMedia().length
+    const topicCount = courseContent?.topics?.length || 0
+
+    if (mediaCount > 10 || topicCount > 5) {
+      setShowConfirmDialog(true)
+      return
+    }
+
+    // Proceed with generation
+    generatePackage()
+  }, [lastClickTime, isGenerating, media.selectors.getAllMedia, courseContent?.topics, warning, generatePackage])
+
+  // Confirm generation for large courses
+  const confirmGeneration = useCallback(() => {
+    setShowConfirmDialog(false)
+    generatePackage()
+  }, [generatePackage])
 
   const downloadPackage = async (packageToDownload?: GeneratedPackage | null) => {
     console.log('[SCORMPackageBuilder] downloadPackage called')
@@ -1815,14 +1955,25 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               </div>
               
               <Button
-                onClick={generatePackage}
+                onClick={handleGenerateWithProtection}
                 variant="primary"
                 size="large"
                 className="min-w-[250px]"
+                disabled={isGenerating || isButtonDisabled}
                 data-testid="generate-scorm-button"
+                aria-describedby="generation-status"
               >
-                <Icon icon={Package} />
-                Generate SCORM Package
+                {isGenerating ? (
+                  <>
+                    <Icon icon={Loader2} className="animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Icon icon={Package} />
+                    Generate SCORM Package
+                  </>
+                )}
               </Button>
             </div>
           </Card>
@@ -1854,37 +2005,210 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
             <div className="p-8">
               <div className="text-center">
                 
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                <h3
+                  className="text-lg font-semibold text-gray-900 mb-2"
+                  id="generation-title"
+                  aria-live="polite"
+                >
                   Generating SCORM Package
                 </h3>
-                <p className="text-gray-600 mb-4">{loadingMessage}</p>
+                <p
+                  className="text-gray-600 mb-4"
+                  id="generation-status"
+                  aria-live="polite"
+                  aria-describedby="generation-title"
+                  role="status"
+                >
+                  {loadingMessage}
+                </p>
                 
-                {/* Linear Progress Bar */}
-                <div className="max-w-md mx-auto mb-4">
-                  <ProgressBar
-                    value={generationProgress}
-                    max={100}
-                    label="SCORM package generation"
-                    showPercentage={true}
-                    showTimeRemaining={true}
-                    startTime={generationStartTime || undefined}
-                    size="medium"
-                    variant="primary"
-                    className="mb-2"
-                  />
+                {/* Two-Tier Progress Display */}
+                <div className="max-w-lg mx-auto mb-6">
+                  {/* Overall Progress */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label
+                        htmlFor="overall-progress"
+                        className="text-sm font-medium text-gray-700"
+                      >
+                        Overall Progress
+                      </label>
+                      <span
+                        className="text-sm font-bold text-blue-600"
+                        aria-label={`${Math.round(generationProgress)} percent complete`}
+                      >
+                        {Math.round(generationProgress)}%
+                      </span>
+                    </div>
+                    <ProgressBar
+                      value={generationProgress}
+                      max={100}
+                      label="SCORM package generation"
+                      showPercentage={false}
+                      showTimeRemaining={true}
+                      startTime={generationStartTime || undefined}
+                      size="medium"
+                      variant="primary"
+                      className="mb-1"
+                    />
+                  </div>
+
+                  {/* Current Phase Progress */}
+                  {currentPhase && (
+                    <div
+                      className="bg-gray-50 rounded-lg p-4"
+                      role="region"
+                      aria-labelledby="phase-progress-label"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <label
+                          id="phase-progress-label"
+                          htmlFor="phase-progress"
+                          className="text-sm font-medium text-gray-600"
+                        >
+                          Current Phase: {currentPhase}
+                        </label>
+                        <span
+                          className="text-xs font-medium text-gray-500"
+                          aria-label={`Phase ${Math.round(phaseProgress)} percent complete`}
+                        >
+                          {Math.round(phaseProgress)}%
+                        </span>
+                      </div>
+                      <ProgressBar
+                        value={phaseProgress}
+                        max={100}
+                        label={currentPhase}
+                        showPercentage={false}
+                        showTimeRemaining={false}
+                        size="small"
+                        variant="primary"
+                        className="mb-2"
+                      />
+                      {operationDetails && (
+                        <div
+                          className="text-xs text-gray-500 flex items-center gap-2"
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <div
+                            className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"
+                            aria-hidden="true"
+                          />
+                          <span aria-label={`Current operation: ${operationDetails}`}>
+                            {operationDetails}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                
-                {/* Time and Control Section */}
-                <div className="flex items-center justify-center gap-4 mb-4">
-                  {generationStartTime && (
+
+
+                {/* Diagnostics Panel */}
+                <Card
+                  id="diagnostics-panel"
+                  className="max-w-lg mx-auto mb-6 bg-white border border-gray-200 shadow-sm"
+                  role="region"
+                  aria-labelledby="diagnostics-title"
+                >
+                    <h4 id="diagnostics-title" className="sr-only">Technical Diagnostics Information</h4>
+
+                    {/* Header */}
+                    <div className="mb-4 pb-3 border-b border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-800">Generation Diagnostics</h3>
+                      <p className="text-xs text-gray-500 mt-1">Real-time generation metrics and system status</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Media Statistics */}
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Media Files</h4>
+                        <div className="space-y-1 text-gray-600">
+                          <div className="flex justify-between">
+                            <span>Total:</span>
+                            <span className="font-mono">{diagnosticsData.mediaStats.total}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Loaded:</span>
+                            <span className="font-mono text-green-600">{diagnosticsData.mediaStats.loaded}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Cached:</span>
+                            <span className="font-mono text-blue-600">{diagnosticsData.mediaStats.cached}</span>
+                          </div>
+                          {diagnosticsData.mediaStats.failed > 0 && (
+                            <div className="flex justify-between">
+                              <span>Failed:</span>
+                              <span className="font-mono text-red-600">{diagnosticsData.mediaStats.failed}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Performance Metrics */}
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Performance</h4>
+                        <div className="space-y-1 text-gray-600">
+                          <div className="flex justify-between">
+                            <span>Elapsed:</span>
+                            <span className="font-mono">{elapsedTime.toFixed(1)}s</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Memory:</span>
+                            <span className="font-mono">{diagnosticsData.systemInfo.memoryUsage}MB</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Current Phase:</span>
+                            <span className="font-mono text-blue-600">{currentPhase || 'N/A'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warnings */}
+                    {diagnosticsData.warnings.length > 0 && (
+                      <div className="mt-6 pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Warnings</h4>
+                        <div className="space-y-1">
+                          {diagnosticsData.warnings.slice(-3).map((warning, index) => (
+                            <div key={index} className="text-amber-600 text-xs">
+                              • {warning}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Debug Logs */}
+                    {diagnosticsData.debugLogs.length > 0 && (
+                      <div className="mt-6 pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">Recent Activity</h4>
+                        <div className="space-y-1 max-h-20 overflow-y-auto">
+                          {diagnosticsData.debugLogs.slice(-5).map((log, index) => (
+                            <div key={index} className="text-gray-500 text-xs font-mono">
+                              {log}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+
+                {/* Elapsed Time Display */}
+                {generationStartTime && (
+                  <div className="flex justify-center mb-4">
                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-sm text-blue-700">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                       {elapsedTime.toFixed(1)}s elapsed
                     </div>
-                  )}
-                  
-                  {isCancellable && !isGenerationCancelled && (
-                    <div className="flex items-center gap-3">
+                  </div>
+                )}
+
+                {/* Control Section */}
+                {isCancellable && !isGenerationCancelled && (
+                  <div className="flex justify-center mb-6">
+                    <div className="flex items-center gap-4">
                       {/* Timeout warning when approaching limit */}
                       {elapsedTime > 90 && (
                         <div className="flex items-center gap-1 text-orange-600 text-sm">
@@ -1892,7 +2216,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                           <span>Timing out in {Math.max(0, 120 - elapsedTime).toFixed(0)}s</span>
                         </div>
                       )}
-                      
+
                       <Button
                         variant="secondary"
                         size="small"
@@ -1905,8 +2229,8 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
                         Cancel
                       </Button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
                 
                 {/* Media Loading Details */}
                 {isLoadingMedia && loadingDetails.totalFiles > 0 && (
@@ -2022,6 +2346,58 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           <div className="text-center text-sm text-gray-500">
             <p>The package will include all course content, media files, and assessments</p>
             <p>Compatible with any SCORM 1.2 compliant Learning Management System</p>
+          </div>
+        )}
+
+        {/* Confirmation Dialog for Large Courses */}
+        {showConfirmDialog && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dialog-title"
+            aria-describedby="dialog-description"
+          >
+            <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl focus:outline-none">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center" aria-hidden="true">
+                  <Icon icon={AlertCircle} className="text-amber-600" size="md" />
+                </div>
+                <div>
+                  <h3 id="dialog-title" className="text-lg font-semibold text-gray-900">Large Course Detected</h3>
+                  <p className="text-sm text-gray-600">This may take several minutes to generate</p>
+                </div>
+              </div>
+
+              <div id="dialog-description" className="mb-6 text-sm text-gray-700">
+                <p className="mb-2">Your course contains:</p>
+                <ul className="list-disc list-inside space-y-1 ml-4">
+                  <li>{media.selectors.getAllMedia().length} media files</li>
+                  <li>{courseContent?.topics?.length || 0} topic pages</li>
+                </ul>
+                <p className="mt-3 text-amber-700">
+                  Large courses may take 5-10 minutes to generate. Please ensure your computer stays active during this process.
+                </p>
+              </div>
+
+              <ButtonGroup gap="medium" justify="end">
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowConfirmDialog(false)}
+                  size="medium"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={confirmGeneration}
+                  size="medium"
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  Continue Generation
+                </Button>
+              </ButtonGroup>
+            </div>
           </div>
         )}
       </div>
