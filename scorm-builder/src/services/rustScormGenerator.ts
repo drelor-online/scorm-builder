@@ -2515,58 +2515,65 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       ),
     } : undefined,
     
-    learning_objectives_page: cc.learningObjectivesPage ? {
-      // For CourseContent format, extract objectives from content; for other formats, use objectives property
-      objectives: cc.learningObjectivesPage.objectives ||
-                  (cc.learningObjectivesPage.content ? extractObjectivesFromContent(cc.learningObjectivesPage.content) : []),
-      audio_file: await resolveAudioCaptionFile(
-        cc.learningObjectivesPage.audioFile ||
-        safeFindInArray(cc.learningObjectivesPage.media, (m: any) => m?.type === 'audio')?.id ||
-        // Direct audio-1 fallback for learning objectives page based on standard indexing
-        'audio-1',
-        projectId,
-        mediaFiles
-      ),
-      caption_file: await resolveAudioCaptionFile(
-        cc.learningObjectivesPage.captionFile ||
-        safeFindInArray(cc.learningObjectivesPage.media, (m: any) => m?.type === 'caption')?.id,
-        projectId,
-        mediaFiles
-      ),
-      // Extract image from imageUrl property or media array (consistent with topics)
-      image_url: await resolveImageUrl(
-        cc.learningObjectivesPage.imageUrl ||
-        cc.learningObjectivesPage.media?.find((m: any) => m.type === 'image')?.url ||
-        cc.learningObjectivesPage.media?.find((m: any) => m.type === 'image')?.id,
-        projectId,
-        mediaFiles,
-        mediaCounter
-      ),
-      // Filter out regular images (but keep SVGs) from media array since images are handled by image_url
-      media: await resolveMedia(
-        (() => {
-          const objectivePage = cc.learningObjectivesPage;
-          if (!objectivePage) return undefined;
+    learning_objectives_page: (cc.learningObjectivesPage || cc.objectivesPage) ? await (async () => {
+      // Support both naming variants: learningObjectivesPage and objectivesPage
+      const objectivesPageData = cc.learningObjectivesPage || cc.objectivesPage;
 
-          if (Array.isArray(objectivePage.media)) {
-            return objectivePage.media.filter((m: any) => {
-              // Keep SVG files regardless of their type classification
-              if (isSvgMedia(m)) {
-                return true
-              }
-              // Filter out regular images
-              return m?.type !== 'image'
-            });
-          }
+      return {
+        // For CourseContent format, extract objectives from content; for other formats, use objectives property
+        objectives: objectivesPageData.objectives ||
+                    (objectivesPageData.content ? extractObjectivesFromContent(objectivesPageData.content) : []),
+        audio_file: await resolveAudioCaptionFile(
+          objectivesPageData.audioFile ||
+          objectivesPageData.audioId ||
+          safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'audio')?.id ||
+          // Direct audio-1 fallback for learning objectives page based on standard indexing
+          'audio-1',
+          projectId,
+          mediaFiles
+        ),
+        caption_file: await resolveAudioCaptionFile(
+          objectivesPageData.captionFile ||
+          objectivesPageData.captionId ||
+          safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'caption')?.id ||
+          // Direct caption-1 fallback for learning objectives page based on standard indexing
+          'caption-1',
+          projectId,
+          mediaFiles
+        ),
+        // Extract image from imageUrl property or media array (consistent with topics)
+        image_url: await resolveImageUrl(
+          objectivesPageData.imageUrl ||
+          objectivesPageData.media?.find((m: any) => m.type === 'image')?.url ||
+          objectivesPageData.media?.find((m: any) => m.type === 'image')?.id,
+          projectId,
+          mediaFiles,
+          mediaCounter
+        ),
+        // Filter out regular images (but keep SVGs) from media array since images are handled by image_url
+        media: await resolveMedia(
+          (() => {
+            if (!objectivesPageData) return undefined;
 
-          if (objectivePage.media && (
-            objectivePage.media.type !== 'image' ||
-            objectivePage.media?.id?.includes('svg') ||
-            objectivePage.media?.url?.includes('.svg') ||
-            objectivePage.media?.type === 'svg'
-          )) {
-            return [objectivePage.media];
-          }
+            if (Array.isArray(objectivesPageData.media)) {
+              return objectivesPageData.media.filter((m: any) => {
+                // Keep SVG files regardless of their type classification
+                if (isSvgMedia(m)) {
+                  return true
+                }
+                // Filter out regular images
+                return m?.type !== 'image'
+              });
+            }
+
+            if (objectivesPageData.media && (
+              objectivesPageData.media.type !== 'image' ||
+              objectivesPageData.media?.id?.includes('svg') ||
+              objectivesPageData.media?.url?.includes('.svg') ||
+              objectivesPageData.media?.type === 'svg'
+            )) {
+              return [objectivesPageData.media];
+            }
 
           return undefined;
         })(),
@@ -2574,7 +2581,8 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         mediaFiles,
         mediaCounter
       ),
-    } : undefined,
+      };
+    })() : undefined,
     
     topics: await safePromiseAll(
       safeArrayMap(cc.topics, async (topic: any) => {
