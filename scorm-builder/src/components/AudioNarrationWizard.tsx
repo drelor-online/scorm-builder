@@ -35,6 +35,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import { useStepData } from '../hooks/useStepData'
 // Removed blobUrlManager - now using asset URLs from MediaService
 import { generateAudioRecordingId } from '../utils/idGenerator'
+import { PAGE_LEARNING_OBJECTIVES } from '../constants/media'
 import { logger } from '../utils/logger'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { safeDeepClone } from '../utils/safeClone'
@@ -54,9 +55,9 @@ function normalizePageId(pageId: string): string {
   if (pageId === 'welcomePage' || pageId === 'welcome-page') {
     return 'welcome'
   }
-  // Normalize objectives page variations
-  if (pageId === 'learningObjectivesPage' || pageId === 'learning-objectives' || pageId === 'objectives-page' || pageId === 'learningObjectives') {
-    return 'objectives'
+  // Normalize objectives page variations to canonical name
+  if (pageId === 'learningObjectivesPage' || pageId === 'learning-objectives' || pageId === 'objectives-page' || pageId === 'learningObjectives' || pageId === 'objectives') {
+    return PAGE_LEARNING_OBJECTIVES
   }
   // Keep topic IDs as-is
   if (pageId.includes('topic')) {
@@ -133,7 +134,7 @@ function extractNarrationBlocks(content: CourseContentUnion): UnifiedNarrationBl
         text: content.learningObjectivesPage?.narration || '',
         blockNumber: '0002',
         // Always use 'objectives' for consistency with media ID generation
-        pageId: 'objectives',
+        pageId: PAGE_LEARNING_OBJECTIVES,
         pageTitle: content.learningObjectivesPage?.title || 'Learning Objectives'
       })
     }
@@ -1629,7 +1630,7 @@ export function AudioNarrationWizard({
     // Process objectives page
     if ('learningObjectivesPage' in contentWithAudio) {
       const objectivesBlock = narrationBlocks.find(b => 
-        b.pageId === 'objectives' || 
+        b.pageId === PAGE_LEARNING_OBJECTIVES || 
         b.pageId === 'learningObjectives' || 
         b.pageId === 'learning-objectives' ||
         b.pageTitle?.toLowerCase().includes('objective')
@@ -1831,7 +1832,7 @@ export function AudioNarrationWizard({
     
     // Update learning objectives page narration and caption
     if ((contentWithAudio as any).learningObjectivesPage) {
-      const objectivesBlock = narrationBlocks.find(b => b.pageId === 'objectives' || b.pageId === (contentWithAudio as any).learningObjectivesPage?.id)
+      const objectivesBlock = narrationBlocks.find(b => b.pageId === PAGE_LEARNING_OBJECTIVES || b.pageId === (contentWithAudio as any).learningObjectivesPage?.id)
       if (objectivesBlock) {
         (contentWithAudio as any).learningObjectivesPage.narration = objectivesBlock.text
         

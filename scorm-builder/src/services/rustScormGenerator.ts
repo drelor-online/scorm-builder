@@ -5,6 +5,7 @@ import type { CourseSettings } from '../components/CourseSettingsWizard'
 import { downloadIfExternal, isExternalUrl } from './externalImageDownloader'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { z } from 'zod'
+import { PAGE_LEARNING_OBJECTIVES, CONTENT_LEARNING_OBJECTIVES } from '../constants/media'
 
 // ============================================================================
 // REGRESSION DETECTION GUARDS
@@ -249,7 +250,7 @@ const CourseContentSchema = z.object({
   title: z.string().min(1, 'Course title is required').max(200, 'Title too long'),
   description: z.string().max(2000, 'Description too long').optional(),
   welcome: PageContentSchema,
-  objectivesPage: PageContentSchema,
+  learningObjectivesPage: PageContentSchema,
   topics: z.array(TopicSchema).max(1000, 'Too many topics'),
   assessment: AssessmentSchema
 })
@@ -300,7 +301,7 @@ function validateCourseContent(courseContent: any, projectId: string): void {
       topicsCount: courseContent.topics?.length || 0,
       hasAssessment: !!courseContent.assessment?.enabled,
       hasWelcome: !!courseContent.welcome,
-      hasObjectives: isEnhanced ? !!courseContent.objectives?.length : !!courseContent.objectivesPage
+      hasObjectives: isEnhanced ? !!courseContent.objectives?.length : !!courseContent.learningObjectivesPage
     })
 
   } catch (error) {
@@ -1139,8 +1140,8 @@ export function collectAllMediaIds(courseContent: any): string[] {
     }
   }
 
-  // Scan objectives/learning objectives page
-  const objectives = courseContent.objectivesPage || courseContent.learningObjectivesPage
+  // Scan learning objectives page
+  const objectives = courseContent.learningObjectivesPage
   if (objectives) {
     addMediaId(objectives.audioId, 'objectives.audioId')
     addMediaId(objectives.audioFile, 'objectives.audioFile')
@@ -1744,27 +1745,15 @@ function extractAllMediaIds(courseContent: CourseContent | EnhancedCourseContent
     )
   }
 
-  // Objectives page media (safe property access)
-  const objectivesPage = (courseContent as any).objectivesPage || (courseContent as any).learningObjectivesPage
-  if (objectivesPage) {
-    addMediaFromArray(objectivesPage.media)
+  // Learning objectives page media
+  const learningObjectivesPage = (courseContent as any).learningObjectivesPage
+  if (learningObjectivesPage) {
+    addMediaFromArray(learningObjectivesPage.media)
     addAudioCaptionIds(
-      objectivesPage.audioId,
-      objectivesPage.audioFile,
-      objectivesPage.captionId,
-      objectivesPage.captionFile
-    )
-  }
-
-  // Legacy learningObjectivesPage support
-  const legacyObjectives = (courseContent as any).learningObjectivesPage
-  if (legacyObjectives) {
-    addMediaFromArray(legacyObjectives.media)
-    addAudioCaptionIds(
-      legacyObjectives.audioId,
-      legacyObjectives.audioFile,
-      legacyObjectives.captionId,
-      legacyObjectives.captionFile
+      learningObjectivesPage.audioId,
+      learningObjectivesPage.audioFile,
+      learningObjectivesPage.captionId,
+      learningObjectivesPage.captionFile
     )
   }
 
@@ -2345,11 +2334,16 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   })
   
   // Run diagnostic scan of MediaService before processing
+  // TEMPORARY FIX: Commenting out diagnostic scan to prevent SCORM generation hang
+  // The diagnostic was causing timeouts by making 60+ sequential getMedia calls
+  console.log(`[SCORM Media Debug] 🔍 Skipping MediaService diagnostic for project: ${projectId} (prevents generation hang)`)
+
+  /*
   console.log(`[SCORM Media Debug] 🔍 Running MediaService diagnostic for project: ${projectId}`)
   try {
     const { diagnoseMedieServiceForProject } = await import('../utils/mediaServiceDiagnostics')
     const diagnostic = await diagnoseMedieServiceForProject(projectId)
-    
+
     console.log(`[SCORM Media Debug] 📊 MediaService contains ${diagnostic.totalMediaCount} total media items`)
     if (diagnostic.mediaDetails.length > 0) {
       console.log(`[SCORM Media Debug] 📋 Available media:`)
@@ -2357,7 +2351,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         console.log(`  ${idx + 1}. ${media.id} (${media.type}, ${media.size} bytes, ${media.mimeType || 'unknown type'})`)
       })
     }
-    
+
     if (diagnostic.errors.length > 0) {
       console.warn(`[SCORM Media Debug] ⚠️  MediaService diagnostic found ${diagnostic.errors.length} errors:`)
       diagnostic.errors.forEach(error => console.warn(`  • ${error}`))
@@ -2365,6 +2359,7 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
   } catch (error) {
     console.warn(`[SCORM Media Debug] ⚠️  Failed to run MediaService diagnostic: ${error}`)
   }
+  */
   
   // Validate required fields
   if (!courseContent) {
@@ -2490,10 +2485,22 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
     
     learning_objectives_page: cc.learningObjectivesPage ? {
       // For CourseContent format, extract objectives from content; for other formats, use objectives property
-      objectives: cc.learningObjectivesPage.objectives || 
+      objectives: cc.learningObjectivesPage.objectives ||
                   (cc.learningObjectivesPage.content ? extractObjectivesFromContent(cc.learningObjectivesPage.content) : []),
-      audio_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.audioFile, projectId, mediaFiles),
-      caption_file: await resolveAudioCaptionFile(cc.learningObjectivesPage.captionFile, projectId, mediaFiles),
+      audio_file: await resolveAudioCaptionFile(
+        cc.learningObjectivesPage.audioFile ||
+        safeFindInArray(cc.learningObjectivesPage.media, (m: any) => m?.type === 'audio')?.id ||
+        // Direct audio-1 fallback for learning objectives page based on standard indexing
+        'audio-1',
+        projectId,
+        mediaFiles
+      ),
+      caption_file: await resolveAudioCaptionFile(
+        cc.learningObjectivesPage.captionFile ||
+        safeFindInArray(cc.learningObjectivesPage.media, (m: any) => m?.type === 'caption')?.id,
+        projectId,
+        mediaFiles
+      ),
       // Extract image from imageUrl property or media array (consistent with topics)
       image_url: await resolveImageUrl(
         cc.learningObjectivesPage.imageUrl ||
@@ -2505,25 +2512,34 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
       ),
       // Filter out regular images (but keep SVGs) from media array since images are handled by image_url
       media: await resolveMedia(
-        Array.isArray(cc.learningObjectivesPage.media) ?
-          cc.learningObjectivesPage.media.filter((m: any) => {
-            // Keep SVG files regardless of their type classification
-            if (isSvgMedia(m)) {
-              return true
-            }
-            // Filter out regular images
-            return m?.type !== 'image'
-          }) :
-          cc.learningObjectivesPage.media && (
-            cc.learningObjectivesPage.media.type !== 'image' ||
-            cc.learningObjectivesPage.media?.id?.includes('svg') ||
-            cc.learningObjectivesPage.media?.url?.includes('.svg') ||
-            cc.learningObjectivesPage.media?.type === 'svg'
-          ) ?
-            [cc.learningObjectivesPage.media] :
-            undefined,
-        projectId, 
-        mediaFiles, 
+        (() => {
+          const objectivePage = cc.learningObjectivesPage;
+          if (!objectivePage) return undefined;
+
+          if (Array.isArray(objectivePage.media)) {
+            return objectivePage.media.filter((m: any) => {
+              // Keep SVG files regardless of their type classification
+              if (isSvgMedia(m)) {
+                return true
+              }
+              // Filter out regular images
+              return m?.type !== 'image'
+            });
+          }
+
+          if (objectivePage.media && (
+            objectivePage.media.type !== 'image' ||
+            objectivePage.media?.id?.includes('svg') ||
+            objectivePage.media?.url?.includes('.svg') ||
+            objectivePage.media?.type === 'svg'
+          )) {
+            return [objectivePage.media];
+          }
+
+          return undefined;
+        })(),
+        projectId,
+        mediaFiles,
         mediaCounter
       ),
     } : undefined,
@@ -3002,16 +3018,16 @@ async function autoPopulateYouTubeFromStorage(
           // Add video to the appropriate page based on pageId
           const pageId = fileData.metadata.pageId
           if (pageId === 'learning-objectives') {
-            // Handle both enhanced format (objectivesPage) and standard format (objectives_page)
-            const objectivesPage = courseData.objectivesPage || courseData.objectives_page
-            if (objectivesPage) {
-              if (!objectivesPage.media) {
-                objectivesPage.media = []
+            // Handle learning objectives page
+            const learningObjectivesPage = courseData.learningObjectivesPage || courseData.objectives_page
+            if (learningObjectivesPage) {
+              if (!learningObjectivesPage.media) {
+                learningObjectivesPage.media = []
               }
               // Check if video is already present
-              const exists = objectivesPage.media.some((m: any) => m.id === youtubeMedia.id)
+              const exists = learningObjectivesPage.media.some((m: any) => m.id === youtubeMedia.id)
               if (!exists) {
-                objectivesPage.media.push(youtubeMedia)
+                learningObjectivesPage.media.push(youtubeMedia)
                 youtubeVideosAdded++
                 console.log(`[Rust SCORM] Added YouTube video ${youtubeMedia.id} to objectives page`)
               } else {
@@ -3364,7 +3380,7 @@ async function extractCourseContentMedia(courseContent: EnhancedCourseContent, p
     console.log(`  - Title: ${courseContent.title || 'No title'}`)
     console.log(`  - Topics count: ${courseContent.topics?.length || 0}`)
     console.log(`  - Welcome page: ${!!courseContent.welcome}`)
-    console.log(`  - Objectives page: ${!!courseContent.objectivesPage}`)
+    console.log(`  - Learning Objectives page: ${!!courseContent.learningObjectivesPage}`)
     
     const { createMediaService } = await import('./MediaService')
     const mediaService = createMediaService(projectId, undefined, true)
@@ -3486,9 +3502,9 @@ async function extractCourseContentMedia(courseContent: EnhancedCourseContent, p
       await extractMediaFromPage(courseContent.welcome, 'welcome', 'welcome page')
     }
     
-    // Extract from objectives page
-    if (courseContent.objectivesPage) {
-      await extractMediaFromPage(courseContent.objectivesPage, 'objectives', 'objectives page')
+    // Extract from learning objectives page
+    if (courseContent.learningObjectivesPage) {
+      await extractMediaFromPage(courseContent.learningObjectivesPage, PAGE_LEARNING_OBJECTIVES, 'learning objectives page')
     }
     
     // Extract from topics
@@ -3534,10 +3550,10 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
     courseContent.welcome?.audioFile || 
     courseContent.welcome?.media?.find((m: any) => m.type === 'audio')?.id
   )
-  console.log('[Rust SCORM] Objectives audio:', 
-    (courseContent.objectivesPage as any)?.audioId || 
-    courseContent.objectivesPage?.audioFile || 
-    courseContent.objectivesPage?.media?.find((m: any) => m.type === 'audio')?.id
+  console.log('[Rust SCORM] Learning Objectives audio:',
+    (courseContent.learningObjectivesPage as any)?.audioId ||
+    courseContent.learningObjectivesPage?.audioFile ||
+    courseContent.learningObjectivesPage?.media?.find((m: any) => m.type === 'audio')?.id
   )
   courseContent.topics.forEach((topic, i) => {
     console.log(`[Rust SCORM] Topic ${i+1} (${topic.id}) audio:`, 
@@ -3680,46 +3696,38 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       }), projectId, mediaFiles, mediaCounter),
     } : undefined,
     
-    learning_objectives_page: courseContent.objectives ? {
-      objectives: courseContent.objectives,
+    learning_objectives_page: (courseContent.objectives || courseContent.learningObjectivesPage) ? {
+      objectives: courseContent.objectives || courseContent.learningObjectivesPage?.objectives || [],
       audio_file: await resolveAudioCaptionFile(
-        courseContent.objectivesPage?.audioId ||
-        courseContent.objectivesPage?.audioFile ||
-        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'audio')?.id ||
-        // Fallback to learningObjectivesPage for backward compatibility
-        (courseContent as any).learningObjectivesPage?.audioFile ||
-        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'audio')?.id,
+        (courseContent.learningObjectivesPage as any)?.audioId ||
+        courseContent.learningObjectivesPage?.audioFile ||
+        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'audio')?.id ||
+        // Direct audio-1 fallback for learning objectives page based on standard indexing
+        'audio-1',
         projectId,
         mediaFiles,
-        courseContent.objectivesPage?.audioBlob || (courseContent as any).learningObjectivesPage?.audioBlob
+        courseContent.learningObjectivesPage?.audioBlob
       ),
       caption_file: await resolveAudioCaptionFile(
-        courseContent.objectivesPage?.captionId ||
-        courseContent.objectivesPage?.captionFile ||
-        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'caption')?.id ||
-        // Fallback to learningObjectivesPage for backward compatibility
-        (courseContent as any).learningObjectivesPage?.captionFile ||
-        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'caption')?.id,
+        (courseContent.learningObjectivesPage as any)?.captionId ||
+        courseContent.learningObjectivesPage?.captionFile ||
+        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'caption')?.id,
         projectId,
         mediaFiles,
-        courseContent.objectivesPage?.captionBlob || (courseContent as any).learningObjectivesPage?.captionBlob
+        courseContent.learningObjectivesPage?.captionBlob
       ),
       image_url: await resolveImageUrl(
-        courseContent.objectivesPage?.imageUrl ||
-        (courseContent as any).learningObjectivesPage?.imageUrl ||
+        courseContent.learningObjectivesPage?.imageUrl ||
         // Check media arrays for images (consistent with topics)
-        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'image')?.url ||
-        safeFindInArray(courseContent.objectivesPage?.media, (m: any) => m?.type === 'image')?.id ||
-        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'image')?.url ||
-        safeFindInArray((courseContent as any).learningObjectivesPage?.media, (m: any) => m?.type === 'image')?.id,
+        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'image')?.url ||
+        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'image')?.id,
         projectId,
         mediaFiles,
         mediaCounter
       ),
       // Filter out audio/caption from media array since they're handled separately
-      // Support both objectivesPage and learningObjectivesPage for backward compatibility
       media: await resolveMedia(
-        (courseContent.objectivesPage?.media || (courseContent as any).learningObjectivesPage?.media)?.filter((m: any) => {
+        courseContent.learningObjectivesPage?.media?.filter((m: any) => {
           // Keep SVG files regardless of their type classification
           if (isSvgMedia(m)) {
             return true
@@ -4120,7 +4128,7 @@ export async function generateRustSCORM(
         // Build extension map from cache if not provided
         extensionMap = new Map()
         for (const [id, media] of mediaCache.entries()) {
-          const ext = getMediaExtensionFromMimeType(media.mimeType || '')
+          const ext = getExtensionFromMimeType(media.mimeType || '')
           if (ext) {
             extensionMap.set(id, ext)
           }
@@ -4345,7 +4353,7 @@ export async function generateRustSCORM(
     }
     
     // Convert extension map to plain object for Rust
-    const extensionMapObject = Object.fromEntries(authoritativeExtensionMap)
+    const extensionMapObject = authoritativeExtensionMap ? Object.fromEntries(authoritativeExtensionMap) : {}
     console.log(`[Extension Map] Passing ${Object.keys(extensionMapObject).length} extension mappings to Rust:`, extensionMapObject)
 
     // 🔧 CRITICAL FIX: Rewrite all media URLs in rustCourseData to use authoritative extensions
@@ -4361,7 +4369,7 @@ export async function generateRustSCORM(
         if (key === 'url' && typeof value === 'string' && value && !value.startsWith('http')) {
           // Check if this looks like a media ID that should be rewritten
           const normalizedId = normalizeIdLike(value)
-          const authoritativeExt = authoritativeExtensionMap.get(normalizedId)
+          const authoritativeExt = authoritativeExtensionMap?.get(normalizedId)
 
           if (authoritativeExt) {
             const correctUrl = `media/${normalizedId}${authoritativeExt}`
@@ -4371,7 +4379,7 @@ export async function generateRustSCORM(
         } else if (key === 'image_url' && typeof value === 'string' && value && !value.startsWith('http')) {
           // Handle image_url fields specifically
           const normalizedId = normalizeIdLike(value.replace('media/', ''))
-          const authoritativeExt = authoritativeExtensionMap.get(normalizedId)
+          const authoritativeExt = authoritativeExtensionMap?.get(normalizedId)
 
           if (authoritativeExt) {
             const correctUrl = `media/${normalizedId}${authoritativeExt}`
@@ -4390,9 +4398,9 @@ export async function generateRustSCORM(
     // 🔧 SVG FORCE-INCLUSION FIX: Ensure ALL SVG files are in mediaFiles array
     // The enhanced generator only zips what's in mediaFiles, so missing SVGs = 404s
     console.log(`[SVG FORCE] Checking for SVG files to force-include...`)
-    const svgIds = [...authoritativeExtensionMap.entries()]
+    const svgIds = authoritativeExtensionMap ? [...authoritativeExtensionMap.entries()]
       .filter(([id, ext]) => ext.toLowerCase() === '.svg')
-      .map(([id]) => id)
+      .map(([id]) => id) : []
 
     console.log(`[SVG FORCE] Found ${svgIds.length} SVG files in extension map:`, svgIds)
 
@@ -4472,7 +4480,7 @@ export async function generateRustSCORM(
     const expectedFiles = new Set(
       Array.from(referencedMediaIds)
         .map(id => {
-          const ext = authoritativeExtensionMap.get(id)
+          const ext = authoritativeExtensionMap?.get(id)
           return ext ? `media/${id}${ext}` : null
         })
         .filter(Boolean) as string[]
@@ -4625,7 +4633,14 @@ export async function generateRustSCORM(
  * This function adds strict validation capabilities based on external AI audit recommendations
  */
 export interface ScormBuildOptions {
+  /** @deprecated Use validationMode instead */
   strictValidation?: boolean
+  /** Validation mode: 'off' (skip validation), 'warn' (log warnings), 'strict' (throw errors) */
+  validationMode?: 'off' | 'warn' | 'strict'
+  /** Maximum number of missing files to allow before failing (only in warn mode) */
+  maxMissing?: number
+  /** Allow files with unmapped extensions to fall back to .bin */
+  allowUnmappedExt?: boolean
   onProgress?: (message: string, progress: number) => void
   courseSettings?: CourseSettings
 }
@@ -4637,7 +4652,17 @@ export async function buildScormPackageEnhanced(
   authoritativeExtensionMap: Map<string, string>,
   options: ScormBuildOptions = {}
 ): Promise<Uint8Array> {
-  const { strictValidation = false, onProgress, courseSettings } = options
+  const {
+    strictValidation = false,
+    validationMode,
+    maxMissing = 0,
+    allowUnmappedExt = false,
+    onProgress,
+    courseSettings
+  } = options
+
+  // Determine final validation mode (with backward compatibility)
+  const finalValidationMode = validationMode || (strictValidation ? 'strict' : 'warn')
 
   debugLogger.info('SCORM_ENHANCED_BUILD', 'Starting enhanced SCORM build', {
     projectId: courseSeedData.projectId,
@@ -4647,90 +4672,52 @@ export async function buildScormPackageEnhanced(
   })
 
   // PRE-BUILD VALIDATION: Check extension map completeness if strict mode
-  // Check for missing extensions in authoritative map
+  // Check for missing extensions in authoritative map and validate extensions
   const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
   const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap.has(id))
+
+  // Validate extensions against whitelist (security check)
+  const invalidExtensions: string[] = []
+  for (const [id, ext] of authoritativeExtensionMap.entries()) {
+    if (ext && !/^\.[a-z0-9]+$/i.test(ext)) {
+      invalidExtensions.push(`${id}=${ext}`)
+    }
+  }
+
+  if (invalidExtensions.length > 0) {
+    const errorMessage = `Invalid file extensions detected (security risk): ${invalidExtensions.join(', ')}`
+    debugLogger.error('SCORM_ENHANCED_BUILD', errorMessage)
+    throw new Error(errorMessage)
+  }
 
   if (missingExtensions.length > 0) {
     const errorMessage = `Missing file extensions in authoritative map for media IDs: ${missingExtensions.join(', ')}`
 
-    if (strictValidation) {
+    if (finalValidationMode === 'strict') {
       debugLogger.error('SCORM_ENHANCED_BUILD', errorMessage)
       throw new Error(errorMessage)
-    } else {
+    } else if (finalValidationMode === 'warn') {
       console.warn(`[PRE-ZIP VALIDATION] ⚠️ WARNING MODE: ${errorMessage}`)
       missingExtensions.forEach(id => console.warn(`  - ${id} (may cause issues)`))
     }
+    // 'off' mode: skip validation entirely
   }
 
-  // ENHANCED PRE-ZIP VALIDATION with configurable strict mode
-  const performPreZipValidation = (mediaFiles: Array<{ filename: string; content: Uint8Array }>) => {
-    console.log(`[PRE-ZIP VALIDATION] Performing ${strictValidation ? 'STRICT' : 'warning'} validation before ZIP creation...`)
-
-    const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
-
-    // Build expected filenames using authoritative extension map
-    const expectedFiles = new Set(
-      Array.from(referencedMediaIds)
-        .map(id => {
-          const ext = authoritativeExtensionMap.get(id)
-          return ext ? `media/${id}${ext}` : null
-        })
-        .filter(Boolean) as string[]
-    )
-
-    // Build actual filenames going to ZIP
-    const actualFiles = new Set(mediaFiles.map(f => `media/${f.filename}`))
-
-    console.log(`[PRE-ZIP VALIDATION] Referenced media IDs: ${referencedMediaIds.size}`)
-    console.log(`[PRE-ZIP VALIDATION] Expected files: ${expectedFiles.size}`)
-    console.log(`[PRE-ZIP VALIDATION] Actual files: ${actualFiles.size}`)
-
-    // Find missing files (expected but not in ZIP)
-    const missingFromZip = Array.from(expectedFiles).filter(file => !actualFiles.has(file))
-    if (missingFromZip.length > 0) {
-      const missingIds = missingFromZip.map(file => file.replace(/^media\//, '').replace(/\.[^.]+$/, ''))
-      const message = `${missingFromZip.length} referenced media files will be missing from SCORM package: ${missingIds.join(', ')}`
-
-      if (strictValidation) {
-        console.error(`[PRE-ZIP VALIDATION] ❌ STRICT MODE: ${message}`)
-        throw new Error(`SCORM generation failed: ${message}`)
-      } else {
-        console.warn(`[PRE-ZIP VALIDATION] ⚠️ WARNING MODE: ${message}`)
-        missingIds.forEach(id => console.warn(`  - ${id} (will result in 404 errors)`))
-      }
-    }
-
-    // Find unreferenced files (in ZIP but not referenced) - always just log
-    const unreferencedInZip = Array.from(actualFiles).filter(file => !expectedFiles.has(file))
-    if (unreferencedInZip.length > 0) {
-      const unreferencedIds = unreferencedInZip.map(file => file.replace(/^media\//, '').replace(/\.[^.]+$/, ''))
-      console.log(`[PRE-ZIP VALIDATION] ℹ️ ${unreferencedInZip.length} files will be included but not referenced in content:`)
-      unreferencedIds.forEach(id => console.log(`  - ${id} (unused file)`))
-    }
-
-    if (missingFromZip.length === 0 && unreferencedInZip.length === 0) {
-      console.log(`[PRE-ZIP VALIDATION] ✅ Perfect match: All referenced media will be in ZIP, no unused files`)
-    } else {
-      console.log(`[PRE-ZIP VALIDATION] 📊 Summary: ${missingFromZip.length} missing, ${unreferencedInZip.length} unreferenced`)
-    }
-
-    return { missingFromZip, unreferencedInZip }
-  }
+  // The actual validation is performed in generateRustSCORM function
 
   // Use the existing generateRustSCORM function but with enhanced validation
   try {
     // Temporarily inject our validation function into the existing flow
     const originalFunction = generateRustSCORM
 
-    // Call the existing function with our strict validation parameter
+    // Call the existing function with our enhanced validation parameters
     const result = await generateRustSCORM(
       courseContent,
       courseSeedData.projectId,
       onProgress,
       mediaCache,
       courseSettings,
-      strictValidation,
+      finalValidationMode === 'strict', // Convert back to boolean for now
       authoritativeExtensionMap
     )
 

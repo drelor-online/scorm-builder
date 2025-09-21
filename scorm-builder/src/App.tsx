@@ -7,6 +7,7 @@ import { COLORS, SPACING, DURATIONS } from '@/constants'
 // Services
 import { apiKeyStorage } from '@/services/ApiKeyStorage'
 import { collectAllMediaIds } from '@/services/rustScormGenerator'
+import { normalizeLearningObjectives } from '@/services/storageMigration'
 
 // Utils
 import { logger } from '@/utils/logger'
@@ -151,7 +152,7 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
     hideDialog,
   } = useDialogManager();
   const statusMessages = useStatusMessages();
-  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia, setLoadingProfile, checkMediaExistenceBatch } = useUnifiedMedia();
+  const { deleteAllMedia, getMedia, resetMediaCache, cleanContaminatedMedia, setLoadingProfile, checkMediaExistenceBatch, getAllMedia } = useUnifiedMedia();
   
   // Focus management for modals
   const settingsCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -528,6 +529,22 @@ function AppContent({ onBackToDashboard, pendingProjectId, onPendingProjectHandl
           }
 
           setLoadingProgress({ current: 2, total: 5, phase: 'Processing media data...' })
+
+          // 🔄 MIGRATION: Normalize Learning Objectives naming (one-time fix for legacy projects)
+          if (loadedCourseContent) {
+            const allStorageMedia = getAllMedia()
+            const projectData = {
+              allStorageMedia,
+              courseContent: loadedCourseContent
+            }
+            const migrationPerformed = normalizeLearningObjectives(projectData)
+            if (migrationPerformed) {
+              // Save the migrated content back to storage
+              await storage.saveCourseContent(projectData.courseContent)
+              loadedCourseContent = projectData.courseContent
+              debugLogger.info('App.loadProject', 'Learning Objectives migration completed and saved')
+            }
+          }
 
           debugLogger.info('App.loadProject', 'Parallel loading completed - processing media persistence data', {
             hasAudioNarration: !!audioNarrationData,

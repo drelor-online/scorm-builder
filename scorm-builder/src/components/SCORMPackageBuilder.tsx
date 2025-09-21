@@ -16,6 +16,8 @@ import { sanitizeScormFileName } from '../utils/fileSanitizer'
 import { debugLogger } from '../utils/ultraSimpleLogger'
 import { safeDeepClone } from '../utils/safeClone'
 import { getExtensionFromMimeType } from '../services/rustScormGenerator'
+import { PAGE_LEARNING_OBJECTIVES, CONTENT_LEARNING_OBJECTIVES } from '../constants/media'
+import { getLearningObjectivesAudioCaption } from '../services/storageMigration'
 
 import { PageLayout } from './PageLayout'
 import { 
@@ -465,13 +467,103 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
     return null
   }
 
+  /**
+   * Ensure Learning Objectives media is always included when present in storage
+   * This prevents the issue where LO audio/caption exists in storage but isn't
+   * referenced in content structure, causing it to be excluded from SCORM packages.
+   */
+  const ensureLearningObjectivesMedia = async (
+    enhancedContent: EnhancedCourseContent,
+    allMediaItems: any[],
+    mediaToLoad: any[],
+    loadedMediaIds: Set<string>
+  ): Promise<void> => {
+    console.log('[SCORMPackageBuilder] Ensuring Learning Objectives media is included')
+
+    // Get LO audio/caption from storage using canonical naming
+    const { audio, caption } = getLearningObjectivesAudioCaption(allMediaItems)
+
+    if (!audio && !caption) {
+      console.log('[SCORMPackageBuilder] No Learning Objectives audio/caption found in storage')
+      return
+    }
+
+    // Ensure learningObjectivesPage exists in content
+    if (!enhancedContent[CONTENT_LEARNING_OBJECTIVES]) {
+      enhancedContent[CONTENT_LEARNING_OBJECTIVES] = {
+        objectives: [],
+        imageUrl: undefined,
+        audioFile: undefined,
+        audioBlob: undefined,
+        captionFile: undefined,
+        captionBlob: undefined,
+        embedUrl: undefined,
+        media: []
+      }
+      console.log('[SCORMPackageBuilder] Created learningObjectivesPage structure in content')
+    }
+
+    const learningObjectivesPage = enhancedContent[CONTENT_LEARNING_OBJECTIVES] as any
+    const missingIds: string[] = []
+
+    // Check if audio exists in storage but not referenced in content
+    if (audio) {
+      const audioTrackingKey = createMediaTrackingKey(audio.id, 'audio')
+      if (!learningObjectivesPage.audioId && !learningObjectivesPage.audioFile && !loadedMediaIds.has(audioTrackingKey)) {
+        console.log(`[SCORMPackageBuilder] Adding missing LO audio: ${audio.id}`)
+        missingIds.push(audio.id)
+
+        // Add to media collection for batch loading
+        loadedMediaIds.add(audioTrackingKey)
+        mediaToLoad.push({
+          id: audio.id,
+          type: 'audio',
+          fileName: `${audio.id}.mp3`,
+          trackingKey: audioTrackingKey,
+          source: 'objectives'
+        })
+
+        // Set audioFile reference so it gets included in Rust generation
+        learningObjectivesPage.audioFile = audio.id
+      }
+    }
+
+    // Check if caption exists in storage but not referenced in content
+    if (caption) {
+      const captionTrackingKey = createMediaTrackingKey(caption.id, 'caption')
+      if (!learningObjectivesPage.captionId && !learningObjectivesPage.captionFile && !loadedMediaIds.has(captionTrackingKey)) {
+        console.log(`[SCORMPackageBuilder] Adding missing LO caption: ${caption.id}`)
+        missingIds.push(caption.id)
+
+        // Add to media collection for batch loading
+        loadedMediaIds.add(captionTrackingKey)
+        mediaToLoad.push({
+          id: caption.id,
+          type: 'caption',
+          fileName: `${caption.id}.vtt`,
+          trackingKey: captionTrackingKey,
+          source: 'objectives'
+        })
+
+        // Set captionFile reference so it gets included in Rust generation
+        learningObjectivesPage.captionFile = caption.id
+      }
+    }
+
+    if (missingIds.length > 0) {
+      console.log(`[SCORMPackageBuilder] ✅ Ensured ${missingIds.length} Learning Objectives media files will be included: ${missingIds.join(', ')}`)
+    } else {
+      console.log('[SCORMPackageBuilder] Learning Objectives media already properly referenced')
+    }
+  }
+
+  // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
+  const createMediaTrackingKey = (id: string, type?: string): string => {
+    return type ? `${id}:${type}` : id
+  }
+
   const loadMediaFromRegistry = async (enhancedContent: EnhancedCourseContent, signal?: AbortSignal): Promise<string[]> => {
     console.log('[SCORMPackageBuilder] Starting BATCH media loading from UnifiedMedia')
-
-    // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
-    const createMediaTrackingKey = (id: string, type?: string): string => {
-      return type ? `${id}:${type}` : id
-    }
 
     // Track loaded media to prevent duplicates (using ID:type to allow same ID with different types)
     const loadedMediaIds = new Set<string>()
@@ -809,6 +901,9 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         }
       }
     }
+
+    // 🚀 PHASE 1.5: Ensure Learning Objectives media is always included
+    await ensureLearningObjectivesMedia(enhancedContent, allMediaItems, mediaToLoad, loadedMediaIds)
 
     // 🚀 PHASE 2: Batch load all collected media IDs
     console.log(`[SCORMPackageBuilder] Phase 2: Batch loading ${mediaToLoad.length} media files`)
