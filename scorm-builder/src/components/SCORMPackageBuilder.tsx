@@ -328,7 +328,7 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       const timeoutId = setTimeout(() => {
         console.warn(`[SCORMPackageBuilder] Timeout loading media: ${mediaId}`)
         controller.abort()
-      }, 5000) // 5 second timeout per media file
+      }, 10000) // 10 second timeout per media file (increased since this is now used for fallbacks)
       
       // Combine signals - abort if either parent signal or timeout signal fires
       // Use AbortSignal.any if available (newer browsers), otherwise listen to parent signal manually
@@ -466,18 +466,27 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
   }
 
   const loadMediaFromRegistry = async (enhancedContent: EnhancedCourseContent, signal?: AbortSignal): Promise<string[]> => {
-    console.log('[SCORMPackageBuilder] Starting media loading from UnifiedMedia')
-    
+    console.log('[SCORMPackageBuilder] Starting BATCH media loading from UnifiedMedia')
+
     // Helper function to create unique tracking key for media (prevents overwrites of same ID with different types)
     const createMediaTrackingKey = (id: string, type?: string): string => {
       return type ? `${id}:${type}` : id
     }
-    
+
     // Track loaded media to prevent duplicates (using ID:type to allow same ID with different types)
     const loadedMediaIds = new Set<string>()
     const failedMedia: string[] = []
     let loadedCount = 0
-    let totalMediaToLoad = 0
+
+    // 🚀 BATCH OPTIMIZATION: Collect all media IDs first, then load in batches
+    const mediaToLoad: Array<{
+      id: string
+      type?: string
+      fileName: string
+      trackingKey: string
+      source: 'welcome' | 'objectives' | 'topic'
+      topicIndex?: number
+    }> = []
     
     // Get all media items
     const allMediaItems = getAllMedia()
@@ -560,241 +569,203 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
       }
     }
     
-    // Load media for each page
-    // Use correct property name 'welcome' instead of 'welcomePage'
+    // 🚀 PHASE 1: Collect all media IDs from course content (no loading yet)
+    console.log('[SCORMPackageBuilder] Phase 1: Collecting media IDs for batch loading')
+
+    // Handle audioBlobs first (these don't need batch loading)
+    if (enhancedContent.welcome?.audioBlob && !enhancedContent.welcome.audioId && !enhancedContent.welcome.audioFile) {
+      const generatedId = `audio-welcome-blob-${Date.now()}`
+      console.log(`[SCORMPackageBuilder] Processing welcome audioBlob without ID, generating: ${generatedId}`)
+      mediaFilesRef.current.set(`${generatedId}.mp3`, enhancedContent.welcome.audioBlob)
+      loadedMediaIds.add(generatedId)
+      enhancedContent.welcome.audioId = generatedId
+      loadedCount++
+      console.log(`[SCORMPackageBuilder] ✓ Added welcome audioBlob: ${generatedId}`)
+    }
+
+    // Collect welcome page media IDs
     if (enhancedContent.welcome) {
-      // Handle audioBlob without ID FIRST (recorded audio that hasn't been saved to registry)
-      if (enhancedContent.welcome.audioBlob && !enhancedContent.welcome.audioId && !enhancedContent.welcome.audioFile) {
-        const generatedId = `audio-welcome-blob-${Date.now()}`
-        console.log(`[SCORMPackageBuilder] Processing welcome audioBlob without ID, generating: ${generatedId}`)
-        mediaFilesRef.current.set(`${generatedId}.mp3`, enhancedContent.welcome.audioBlob)
-        // Mark this ID as already loaded to avoid trying to fetch it from registry
-        loadedMediaIds.add(generatedId)
-        // Update the content to include the generated ID so Rust generator can find it
-        enhancedContent.welcome.audioId = generatedId
-        loadedCount++
-        console.log(`[SCORMPackageBuilder] ✓ Added welcome audioBlob: ${generatedId}`)
-      }
-      
-      // Welcome page media - look for audioFile/captionFile which contain the media IDs
       const welcomeAudioId = enhancedContent.welcome.audioId || enhancedContent.welcome.audioFile
       const welcomeCaptionId = enhancedContent.welcome.captionId || enhancedContent.welcome.captionFile
       const welcomeMedia = enhancedContent.welcome.media || []
-      
-      if (welcomeAudioId && !loadedMediaIds.has(welcomeAudioId)) {
-        loadedMediaIds.add(welcomeAudioId)
-        totalMediaToLoad++
-        console.log(`[SCORMPackageBuilder] Loading welcome audio (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeAudioId}`)
-        const audioBlob = await getMediaBlobFromRegistry(welcomeAudioId, signal)
-        if (audioBlob) {
-          mediaFilesRef.current.set(`${welcomeAudioId}.mp3`, audioBlob)
-          loadedCount++
-          console.log(`[SCORMPackageBuilder] ✓ Loaded welcome audio: ${welcomeAudioId}`)
-        } else {
-          failedMedia.push(`welcome audio: ${welcomeAudioId}`)
-          console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome audio: ${welcomeAudioId}`)
+
+      if (welcomeAudioId) {
+        const trackingKey = createMediaTrackingKey(welcomeAudioId, 'audio')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: welcomeAudioId,
+            type: 'audio',
+            fileName: `${welcomeAudioId}.mp3`,
+            trackingKey,
+            source: 'welcome'
+          })
         }
       }
-      
-      if (welcomeCaptionId && !loadedMediaIds.has(welcomeCaptionId)) {
-        loadedMediaIds.add(welcomeCaptionId)
-        totalMediaToLoad++
-        console.log(`[SCORMPackageBuilder] Loading welcome caption (${loadedCount + 1}/${totalMediaToLoad}): ${welcomeCaptionId}`)
 
-        // Update loading message to indicate caption processing
-        setLoadingMessage(`Loading media files... (processing caption files: ${loadedCount + 1}/${totalMediaToLoad})`)
-        await new Promise<void>(resolve => setTimeout(resolve, 50))
-
-        const captionBlob = await getMediaBlobFromRegistry(welcomeCaptionId, signal)
-        if (captionBlob) {
-          mediaFilesRef.current.set(`${welcomeCaptionId}.vtt`, captionBlob)
-          loadedCount++
-          console.log(`[SCORMPackageBuilder] ✓ Loaded welcome caption: ${welcomeCaptionId}`)
-        } else {
-          failedMedia.push(`welcome caption: ${welcomeCaptionId}`)
-          console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome caption: ${welcomeCaptionId}`)
+      if (welcomeCaptionId) {
+        const trackingKey = createMediaTrackingKey(welcomeCaptionId, 'caption')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: welcomeCaptionId,
+            type: 'caption',
+            fileName: `${welcomeCaptionId}.vtt`,
+            trackingKey,
+            source: 'welcome'
+          })
         }
-
-        // Reset loading message
-        setLoadingMessage('Loading media files...')
-        await new Promise<void>(resolve => setTimeout(resolve, 50))
       }
-      
+
       for (const mediaItem of welcomeMedia) {
         const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
         if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
           loadedMediaIds.add(trackingKey)
-          totalMediaToLoad++
-          console.log(`[SCORMPackageBuilder] Loading welcome media (${loadedCount + 1}/${totalMediaToLoad}): ${mediaItem.id} (${mediaItem.type})`)
-          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
-          if (mediaBlob) {
-            const extension = await getExtensionFromMedia(mediaItem.id)
-            // Generate unique filename by including type to prevent overwrites
-            const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
-            mediaFilesRef.current.set(uniqueFilename, mediaBlob)
-            loadedCount++
-            console.log(`[SCORMPackageBuilder] ✓ Loaded welcome media: ${mediaItem.id} as ${uniqueFilename}`)
-          } else {
-            failedMedia.push(`welcome ${mediaItem.type || 'media'}: ${mediaItem.id}`)
-            console.warn(`[SCORMPackageBuilder] ✗ Failed to load welcome media: ${mediaItem.id}`)
-          }
-        } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
-          console.log(`[SCORMPackageBuilder] Skipping duplicate welcome media: ${mediaItem.id} (${mediaItem.type})`)
+          mediaToLoad.push({
+            id: mediaItem.id,
+            type: mediaItem.type,
+            fileName: `${mediaItem.id}-${mediaItem.type}`, // Extension will be added later
+            trackingKey,
+            source: 'welcome'
+          })
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
-          // Handle remote media
+          // Handle remote media (still needs individual processing for now)
           const detectedType = detectMediaType(mediaItem.url)
           const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'welcome')
           if (newId) {
-            mediaItem.id = newId // Update the media reference with the new ID
-            const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
-            if (mediaBlob) {
-              const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
-              mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
-              console.log('[SCORMPackageBuilder] Loaded remote media with new ID:', newId)
+            mediaItem.id = newId
+            const trackingKey = createMediaTrackingKey(newId, detectedType)
+            if (!loadedMediaIds.has(trackingKey)) {
+              loadedMediaIds.add(trackingKey)
+              mediaToLoad.push({
+                id: newId,
+                type: detectedType,
+                fileName: `remote-${Date.now()}`,
+                trackingKey,
+                source: 'welcome'
+              })
             }
           }
         }
       }
     }
     
-    // Use correct property name 'objectivesPage'
+    // Collect objectives page media IDs
     if (enhancedContent.objectivesPage) {
-      // Objectives page media - look for audioFile/captionFile which contain the media IDs
       const objectivesAudioId = enhancedContent.objectivesPage.audioId || enhancedContent.objectivesPage.audioFile
       const objectivesCaptionId = enhancedContent.objectivesPage.captionId || enhancedContent.objectivesPage.captionFile
       const objectivesMedia = enhancedContent.objectivesPage.media || []
-      
-      if (objectivesAudioId && !loadedMediaIds.has(objectivesAudioId)) {
-        loadedMediaIds.add(objectivesAudioId)
-        totalMediaToLoad++
-        console.log(`[SCORMPackageBuilder] Loading objectives audio (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesAudioId}`)
-        const audioBlob = await getMediaBlobFromRegistry(objectivesAudioId, signal)
-        if (audioBlob) {
-          mediaFilesRef.current.set(`${objectivesAudioId}.mp3`, audioBlob)
-          loadedCount++
-          console.log(`[SCORMPackageBuilder] ✓ Loaded objectives audio: ${objectivesAudioId}`)
-        } else {
-          failedMedia.push(`objectives audio: ${objectivesAudioId}`)
-          console.warn(`[SCORMPackageBuilder] ✗ Failed to load objectives audio: ${objectivesAudioId}`)
+
+      if (objectivesAudioId) {
+        const trackingKey = createMediaTrackingKey(objectivesAudioId, 'audio')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: objectivesAudioId,
+            type: 'audio',
+            fileName: `${objectivesAudioId}.mp3`,
+            trackingKey,
+            source: 'objectives'
+          })
         }
       }
-      
-      if (objectivesCaptionId && !loadedMediaIds.has(objectivesCaptionId)) {
-        loadedMediaIds.add(objectivesCaptionId)
-        totalMediaToLoad++
-        console.log(`[SCORMPackageBuilder] Loading objectives caption (${loadedCount + 1}/${totalMediaToLoad}): ${objectivesCaptionId}`)
 
-        // Update loading message to indicate caption processing
-        setLoadingMessage(`Loading media files... (processing caption files: ${loadedCount + 1}/${totalMediaToLoad})`)
-        await new Promise<void>(resolve => setTimeout(resolve, 50))
-
-        const captionBlob = await getMediaBlobFromRegistry(objectivesCaptionId, signal)
-        if (captionBlob) {
-          mediaFilesRef.current.set(`${objectivesCaptionId}.vtt`, captionBlob)
-          loadedCount++
-          console.log(`[SCORMPackageBuilder] ✓ Loaded objectives caption: ${objectivesCaptionId}`)
-        } else {
-          failedMedia.push(`objectives caption: ${objectivesCaptionId}`)
-          console.warn(`[SCORMPackageBuilder] ✗ Failed to load objectives caption: ${objectivesCaptionId}`)
+      if (objectivesCaptionId) {
+        const trackingKey = createMediaTrackingKey(objectivesCaptionId, 'caption')
+        if (!loadedMediaIds.has(trackingKey)) {
+          loadedMediaIds.add(trackingKey)
+          mediaToLoad.push({
+            id: objectivesCaptionId,
+            type: 'caption',
+            fileName: `${objectivesCaptionId}.vtt`,
+            trackingKey,
+            source: 'objectives'
+          })
         }
-
-        // Reset loading message
-        setLoadingMessage('Loading media files...')
-        await new Promise<void>(resolve => setTimeout(resolve, 50))
       }
-      
+
       for (const mediaItem of objectivesMedia) {
         const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
         if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
           loadedMediaIds.add(trackingKey)
-          const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
-          if (mediaBlob) {
-            const extension = await getExtensionFromMedia(mediaItem.id)
-            // Generate unique filename by including type to prevent overwrites
-            const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
-            mediaFilesRef.current.set(uniqueFilename, mediaBlob)
-            console.log(`[SCORMPackageBuilder] Loaded objectives media: ${mediaItem.id} as ${uniqueFilename}`)
-          }
-        } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
-          console.log(`[SCORMPackageBuilder] Skipping duplicate objectives media: ${mediaItem.id} (${mediaItem.type})`)
+          mediaToLoad.push({
+            id: mediaItem.id,
+            type: mediaItem.type,
+            fileName: `${mediaItem.id}-${mediaItem.type}`,
+            trackingKey,
+            source: 'objectives'
+          })
         } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
-          // Handle remote media
           const detectedType = detectMediaType(mediaItem.url)
           const newId = await handleRemoteMedia(mediaItem.url, detectedType, 'objectives')
           if (newId) {
             mediaItem.id = newId
-            const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
-            if (mediaBlob) {
-              const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
-              mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
-              console.log('[SCORMPackageBuilder] Loaded remote objectives media with new ID:', newId)
+            const trackingKey = createMediaTrackingKey(newId, detectedType)
+            if (!loadedMediaIds.has(trackingKey)) {
+              loadedMediaIds.add(trackingKey)
+              mediaToLoad.push({
+                id: newId,
+                type: detectedType,
+                fileName: `remote-${Date.now()}`,
+                trackingKey,
+                source: 'objectives'
+              })
             }
           }
         }
       }
     }
     
-    // Topics
+    // Collect topics media IDs
     if (enhancedContent.topics) {
       for (let topicIndex = 0; topicIndex < enhancedContent.topics.length; topicIndex++) {
         const topic = enhancedContent.topics[topicIndex]
-        
+
         // Handle audioBlob without ID FIRST for this topic (recorded audio that hasn't been saved to registry)
         if (topic.audioBlob && !topic.audioId && !topic.audioFile) {
           const generatedId = `audio-topic-${topicIndex}-blob-${Date.now()}`
           console.log(`[SCORMPackageBuilder] Processing topic ${topicIndex} audioBlob without ID, generating: ${generatedId}`)
           mediaFilesRef.current.set(`${generatedId}.mp3`, topic.audioBlob)
-          // Mark this ID as already loaded to avoid trying to fetch it from registry
           loadedMediaIds.add(generatedId)
-          // Update the content to include the generated ID so Rust generator can find it
           topic.audioId = generatedId
           loadedCount++
           console.log(`[SCORMPackageBuilder] ✓ Added topic ${topicIndex} audioBlob: ${generatedId}`)
         }
-        
+
         const topicAudioId = topic.audioId || topic.audioFile
         const topicCaptionId = topic.captionId || topic.captionFile
         const topicMedia = topic.media || []
-        
-        if (topicAudioId && !loadedMediaIds.has(topicAudioId)) {
-          loadedMediaIds.add(topicAudioId)
-          totalMediaToLoad++
-          console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} audio (${loadedCount + 1}/${totalMediaToLoad}): ${topicAudioId}`)
-          const audioBlob = await getMediaBlobFromRegistry(topicAudioId, signal)
-          if (audioBlob) {
-            mediaFilesRef.current.set(`${topicAudioId}.mp3`, audioBlob)
-            loadedCount++
-            console.log(`[SCORMPackageBuilder] ✓ Loaded topic ${topicIndex} audio: ${topicAudioId}`)
-          } else {
-            failedMedia.push(`topic ${topicIndex} audio: ${topicAudioId}`)
-            console.warn(`[SCORMPackageBuilder] ✗ Failed to load topic ${topicIndex} audio: ${topicAudioId}`)
+
+        if (topicAudioId) {
+          const trackingKey = createMediaTrackingKey(topicAudioId, 'audio')
+          if (!loadedMediaIds.has(trackingKey)) {
+            loadedMediaIds.add(trackingKey)
+            mediaToLoad.push({
+              id: topicAudioId,
+              type: 'audio',
+              fileName: `${topicAudioId}.mp3`,
+              trackingKey,
+              source: 'topic',
+              topicIndex
+            })
           }
         }
-        
-        if (topicCaptionId && !loadedMediaIds.has(topicCaptionId)) {
-          loadedMediaIds.add(topicCaptionId)
-          totalMediaToLoad++
-          console.log(`[SCORMPackageBuilder] Loading topic ${topicIndex} caption (${loadedCount + 1}/${totalMediaToLoad}): ${topicCaptionId}`)
 
-          // Update loading message to indicate caption processing for specific topic
-          setLoadingMessage(`Loading media files... (processing topic ${topicIndex} captions: ${loadedCount + 1}/${totalMediaToLoad})`)
-          await new Promise<void>(resolve => setTimeout(resolve, 50))
-
-          const captionBlob = await getMediaBlobFromRegistry(topicCaptionId, signal)
-          if (captionBlob) {
-            mediaFilesRef.current.set(`${topicCaptionId}.vtt`, captionBlob)
-            loadedCount++
-            console.log(`[SCORMPackageBuilder] ✓ Loaded topic ${topicIndex} caption: ${topicCaptionId}`)
-          } else {
-            failedMedia.push(`topic ${topicIndex} caption: ${topicCaptionId}`)
-            console.warn(`[SCORMPackageBuilder] ✗ Failed to load topic ${topicIndex} caption: ${topicCaptionId}`)
+        if (topicCaptionId) {
+          const trackingKey = createMediaTrackingKey(topicCaptionId, 'caption')
+          if (!loadedMediaIds.has(trackingKey)) {
+            loadedMediaIds.add(trackingKey)
+            mediaToLoad.push({
+              id: topicCaptionId,
+              type: 'caption',
+              fileName: `${topicCaptionId}.vtt`,
+              trackingKey,
+              source: 'topic',
+              topicIndex
+            })
           }
-
-          // Reset loading message
-          setLoadingMessage('Loading media files...')
-          await new Promise<void>(resolve => setTimeout(resolve, 50))
         }
-        
+
         // DEBUG: Log topic media processing details
         debugLogger.info('MEDIA_LOADING', `Topic ${topicIndex} media processing`, {
           topicIndex,
@@ -802,61 +773,109 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           mediaCount: topicMedia.length,
           mediaItems: topicMedia.map(m => ({ id: m.id, type: m.type, hasUrl: !!m.url }))
         })
-        
+
         for (const mediaItem of topicMedia) {
           const trackingKey = createMediaTrackingKey(mediaItem.id, mediaItem.type)
-          
-          // DEBUG: Log each media item processing decision
-          debugLogger.info('MEDIA_LOADING', `Processing topic ${topicIndex} media item`, {
-            mediaId: mediaItem.id,
-            mediaType: mediaItem.type,
-            trackingKey,
-            hasId: !!mediaItem.id,
-            alreadyLoaded: loadedMediaIds.has(trackingKey),
-            hasUrl: !!mediaItem.url
-          })
-          
+
           if (mediaItem.id && !loadedMediaIds.has(trackingKey)) {
             loadedMediaIds.add(trackingKey)
-            const mediaBlob = await getMediaBlobFromRegistry(mediaItem.id, signal)
-            if (mediaBlob) {
-              const extension = await getExtensionFromMedia(mediaItem.id)
-              // Generate unique filename by including type to prevent overwrites
-              const uniqueFilename = `${mediaItem.id}-${mediaItem.type}${extension}`
-              mediaFilesRef.current.set(uniqueFilename, mediaBlob)
-              console.log(`[SCORMPackageBuilder] Loaded topic ${topicIndex} media: ${mediaItem.id} as ${uniqueFilename}`)
-              debugLogger.info('MEDIA_LOADING', `Successfully loaded topic ${topicIndex} media`, {
-                mediaId: mediaItem.id,
-                filename: uniqueFilename,
-                blobSize: mediaBlob.size
-              })
-            } else {
-              debugLogger.error('MEDIA_LOADING', `Failed to load topic ${topicIndex} media`, {
-                mediaId: mediaItem.id,
-                reason: 'No blob returned from getMediaBlobFromRegistry'
-              })
-            }
-          } else if (mediaItem.id && loadedMediaIds.has(trackingKey)) {
-            console.log(`[SCORMPackageBuilder] Skipping duplicate topic ${topicIndex} media: ${mediaItem.id} (${mediaItem.type})`)
-            debugLogger.info('MEDIA_LOADING', `Skipped duplicate topic ${topicIndex} media`, {
-              mediaId: mediaItem.id,
-              trackingKey
+            mediaToLoad.push({
+              id: mediaItem.id,
+              type: mediaItem.type,
+              fileName: `${mediaItem.id}-${mediaItem.type}`,
+              trackingKey,
+              source: 'topic',
+              topicIndex
             })
           } else if (mediaItem.url && mediaItem.url.startsWith('http')) {
-            // Handle remote media
             const detectedType = detectMediaType(mediaItem.url)
             const newId = await handleRemoteMedia(mediaItem.url, detectedType, `topic-${topicIndex}`)
             if (newId) {
               mediaItem.id = newId
-              const mediaBlob = await getMediaBlobFromRegistry(newId, signal)
-              if (mediaBlob) {
-                const extension = detectedType === 'image' ? '.jpg' : detectedType === 'video' ? '.mp4' : '.mp3'
-                mediaFilesRef.current.set(`remote-${Date.now()}${extension}`, mediaBlob)
-                console.log('[SCORMPackageBuilder] Loaded remote topic media with new ID:', newId)
+              const trackingKey = createMediaTrackingKey(newId, detectedType)
+              if (!loadedMediaIds.has(trackingKey)) {
+                loadedMediaIds.add(trackingKey)
+                mediaToLoad.push({
+                  id: newId,
+                  type: detectedType,
+                  fileName: `remote-${Date.now()}`,
+                  trackingKey,
+                  source: 'topic',
+                  topicIndex
+                })
               }
             }
           }
         }
+      }
+    }
+
+    // 🚀 PHASE 2: Batch load all collected media IDs
+    console.log(`[SCORMPackageBuilder] Phase 2: Batch loading ${mediaToLoad.length} media files`)
+    setLoadingMessage(`Loading ${mediaToLoad.length} media files...`)
+
+    if (mediaToLoad.length > 0) {
+      try {
+        // Check for cancellation
+        if (signal?.aborted) {
+          console.log('[SCORMPackageBuilder] Batch loading was aborted before starting')
+          return failedMedia
+        }
+
+        // Extract all media IDs for batch loading
+        const mediaIds = mediaToLoad.map(m => m.id)
+        console.log('[SCORMPackageBuilder] Calling getMedia for batch loading:', mediaIds)
+
+        // 🚀 SINGLE BATCH CALL instead of 60+ individual calls
+        const startTime = Date.now()
+        const batchResults = await Promise.all(
+          mediaIds.map(async (id) => {
+            try {
+              const result = await getMedia(id)
+              return { id, result }
+            } catch (error) {
+              console.warn(`[SCORMPackageBuilder] Failed to load media ${id}:`, error)
+              return { id, result: null, error }
+            }
+          })
+        )
+        const batchDuration = Date.now() - startTime
+        console.log(`[SCORMPackageBuilder] ✅ Batch loading completed in ${batchDuration}ms`)
+
+        // Process batch results
+        for (const { id, result, error } of batchResults) {
+          const mediaInfo = mediaToLoad.find(m => m.id === id)
+          if (!mediaInfo) continue
+
+          if (result?.data && result.data instanceof Uint8Array) {
+            // Convert Uint8Array to Blob - create a new Uint8Array to ensure proper typing
+            const blob = new Blob([new Uint8Array(result.data)], {
+              type: result.metadata?.mimeType || 'application/octet-stream'
+            })
+
+            // Get proper extension
+            const extension = await getExtensionFromMedia(id)
+            const finalFileName = mediaInfo.fileName.includes('.')
+              ? mediaInfo.fileName
+              : `${mediaInfo.fileName}${extension}`
+
+            mediaFilesRef.current.set(finalFileName, blob)
+            loadedCount++
+
+            console.log(`[SCORMPackageBuilder] ✓ Loaded ${mediaInfo.source} media: ${id} as ${finalFileName}`)
+          } else {
+            const errorDescription = `${mediaInfo.source}${mediaInfo.topicIndex !== undefined ? ` topic ${mediaInfo.topicIndex}` : ''} ${mediaInfo.type || 'media'}: ${id}`
+            failedMedia.push(errorDescription)
+            console.warn(`[SCORMPackageBuilder] ✗ Failed to load ${errorDescription}`)
+          }
+        }
+      } catch (error) {
+        console.error('[SCORMPackageBuilder] Batch loading failed:', error)
+        // Fallback: mark all as failed
+        mediaToLoad.forEach(mediaInfo => {
+          const errorDescription = `${mediaInfo.source}${mediaInfo.topicIndex !== undefined ? ` topic ${mediaInfo.topicIndex}` : ''} ${mediaInfo.type || 'media'}: ${mediaInfo.id}`
+          failedMedia.push(errorDescription)
+        })
       }
     }
     
