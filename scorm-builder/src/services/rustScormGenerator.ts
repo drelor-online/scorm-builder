@@ -883,14 +883,64 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
       return
     }
     
-    // Construct possible paths based on the numeric ID
-    console.log(`[Rust SCORM] Project not loaded, attempting to open project with ID: ${numericProjectId}`)
-    const projectsPath = `C:\\Users\\sierr\\Documents\\SCORM Projects`
-    const possiblePaths = [
-      `${projectsPath}\\${numericProjectId}.scormproj`,
-      `${projectsPath}\\Complex_Projects_-_1_-_49_CFR_192_${numericProjectId}.scormproj`,
-      // Add more patterns if needed based on user's project naming
-    ]
+    // Dynamically find project file containing the numeric ID
+    console.log(`[Rust SCORM] Project not loaded, attempting to find project with ID: ${numericProjectId}`)
+    const projectsPath = `C:/Users/sierr/Documents/SCORM Projects`
+
+    // Try to find any .scormproj file containing the numeric project ID
+    let possiblePaths: string[] = []
+    try {
+      // Use Tauri's filesystem API for better cross-platform compatibility
+      const { readDir } = await import('@tauri-apps/plugin-fs')
+
+      try {
+        const entries = await readDir(projectsPath)
+        const matchingFiles = entries
+          .filter((entry: any) =>
+            entry.name && entry.name.endsWith('.scormproj') &&
+            entry.name.includes(numericProjectId) &&
+            !entry.name.includes('.backup') // Exclude backup files
+          )
+          .map((entry: any) => entry.name)
+
+        possiblePaths = matchingFiles.map((file: string) => `${projectsPath}/${file}`)
+        console.log(`[Rust SCORM] Found ${matchingFiles.length} matching project files:`, matchingFiles)
+      } catch (fsError) {
+        console.warn(`[Rust SCORM] Could not read projects directory with Tauri API:`, fsError)
+
+        // Fallback to Node.js fs (for non-Tauri environments like tests)
+        try {
+          const fs = await import('fs')
+          const path = await import('path')
+
+          if (fs.existsSync(projectsPath)) {
+            const files = fs.readdirSync(projectsPath)
+            const matchingFiles = files.filter(file =>
+              file.endsWith('.scormproj') &&
+              file.includes(numericProjectId) &&
+              !file.includes('.backup')
+            )
+
+            possiblePaths = matchingFiles.map(file => path.join(projectsPath, file))
+            console.log(`[Rust SCORM] Found ${matchingFiles.length} matching project files (Node.js fallback):`, matchingFiles)
+          }
+        } catch (nodeError) {
+          console.warn(`[Rust SCORM] Node.js filesystem fallback also failed:`, nodeError)
+        }
+      }
+    } catch (error) {
+      console.warn(`[Rust SCORM] Could not search for project files:`, error)
+    }
+
+    // Fallback to hardcoded patterns if dynamic search failed
+    if (possiblePaths.length === 0) {
+      console.log(`[Rust SCORM] No files found by dynamic search, trying fallback patterns`)
+      possiblePaths = [
+        `${projectsPath}/${numericProjectId}.scormproj`,
+        `${projectsPath}/Complex_Projects_-_1_-_49_CFR_192_${numericProjectId}.scormproj`,
+        // Add more patterns if needed based on user's project naming
+      ]
+    }
     
     let projectOpened = false
     for (const projectPath of possiblePaths) {
@@ -1175,6 +1225,15 @@ export function collectAllMediaIds(courseContent: any): string[] {
     }
   }
 
+  // 🔧 FIX: Always include fallback audio-1 and caption-1 for learning objectives if page exists
+  // This ensures the standard learning objectives media is pre-loaded even if not explicitly in content
+  if (objectives) {
+    console.log(`[SCORM Media Pre-Collection] Adding fallback media IDs for learning objectives page`)
+    mediaIds.add('audio-1')
+    mediaIds.add('caption-1')
+    console.log(`[SCORM Media Pre-Collection] Added fallback: audio-1, caption-1`)
+  }
+
   // Scan all topics
   const topics = courseContent.topics || []
   topics.forEach((topic: any, topicIndex: number) => {
@@ -1334,14 +1393,21 @@ function validateImageExtensions(mediaFiles: MediaFile[], expectedUrls: string[]
 /**
  * Get file extension from MIME type
  */
-export function getExtensionFromMimeType(mimeType: string): string {
+/**
+ * Get file extension from MIME type with smart caption fallback
+ *
+ * This function handles the issue where caption files are sometimes stored with
+ * incorrect MIME type 'audio/*' instead of 'text/vtt', causing them to be
+ * excluded from SCORM packages.
+ */
+export function getExtensionFromMimeType(mimeType: string, mediaId?: string): string {
   // Return empty string for invalid MIME types to allow fallback patterns to work
   if (!mimeType || !mimeType.trim()) return ''
-  
+
   const mimeToExt: Record<string, string> = {
     // Images
     'image/svg+xml': 'svg',
-    'image/png': 'png', 
+    'image/png': 'png',
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
     'image/gif': 'gif',
@@ -1355,7 +1421,7 @@ export function getExtensionFromMimeType(mimeType: string): string {
     'audio/ogg': 'ogg',
     'audio/aac': 'aac',
     'audio/m4a': 'm4a',
-    // Video  
+    // Video
     'video/mp4': 'mp4',
     'video/webm': 'webm',
     'video/avi': 'avi',
@@ -1368,13 +1434,23 @@ export function getExtensionFromMimeType(mimeType: string): string {
     'application/json': 'json',
     'text/plain': 'txt'
   }
-  
+
   const ext = mimeToExt[mimeType.toLowerCase()]
   if (ext) {
     console.log(`[rustScormGenerator] MIME type "${mimeType}" mapped to extension "${ext}"`)
     return ext
   }
-  
+
+  // SMART FALLBACK: Handle caption files with wrong MIME type
+  // This fixes the issue where caption files get stored with 'audio/*' MIME type
+  // instead of 'text/vtt', causing them to be excluded from SCORM packages
+  if (mediaId && mediaId.match(/^caption-[\w-]+$/)) {
+    if (mimeType === 'audio/*' || mimeType.startsWith('audio/')) {
+      console.log(`[rustScormGenerator] 🔧 CAPTION FIX: Detected caption file "${mediaId}" with wrong MIME type "${mimeType}", using 'vtt' extension`)
+      return 'vtt'
+    }
+  }
+
   console.log(`[rustScormGenerator] Unknown MIME type "${mimeType}", returning empty for fallback`)
   return '' // Return empty to allow fallback pattern to work
 }
@@ -1439,7 +1515,7 @@ async function resolveAudioCaptionFile(
       const uint8Array = new Uint8Array(arrayBuffer)
       const mimeType = blob.type || 'application/octet-stream'
       const cleanFileId = fileId.endsWith('.bin') ? fileId.replace('.bin', '') : fileId
-      const ext = getExtensionFromMimeType(mimeType) || getExtensionFromMediaId(cleanFileId)
+      const ext = getExtensionFromMimeType(mimeType, cleanFileId) || getExtensionFromMediaId(cleanFileId)
       const filename = `${cleanFileId}.${ext}`
       
       mediaFiles.push({
@@ -1476,7 +1552,7 @@ async function resolveAudioCaptionFile(
     if (cached) {
       console.log(`[SCORM Media Debug] Cache HIT for ${cleanFileId}`)
       if (performanceTrace) performanceTrace.cacheHits++
-      const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(cleanFileId)
+      const ext = getExtensionFromMimeType(cached.mimeType, cleanFileId) || getExtensionFromMediaId(cleanFileId)
       const filename = `${cleanFileId}.${ext}`
       
       // Add to mediaFiles if not already there
@@ -1495,13 +1571,46 @@ async function resolveAudioCaptionFile(
     const isLearningObjectivesMedia = cleanFileId.match(/^(audio|caption|image)-1$/)
 
     if (isLearningObjectivesMedia) {
-      console.warn(`[SCORM Media Debug] Cache MISS for Learning Objectives media ${cleanFileId} - this might be due to objectivesPage vs learningObjectivesPage naming inconsistency`)
-      debugLogger.warn('SCORM_MEDIA', 'Learning Objectives media not found in cache - possible naming variant issue', {
+      console.warn(`[SCORM Media Debug] Cache MISS for Learning Objectives media ${cleanFileId} - attempting active load from MediaService`)
+      debugLogger.warn('SCORM_MEDIA', 'Learning Objectives media not found in cache - attempting active load', {
         projectId,
         fileId: cleanFileId,
         originalFileId: fileId,
-        suggestion: 'Check if content uses objectivesPage instead of learningObjectivesPage'
+        suggestion: 'Loading directly from MediaService as fallback'
       })
+
+      // 🔧 FIX: Actively load known Learning Objectives media from MediaService
+      try {
+        const { createMediaService } = await import('./MediaService')
+        const mediaService = createMediaService(projectId, undefined, true)
+        console.log(`[SCORM Media Debug] 🔄 FALLBACK: Attempting to load ${cleanFileId} directly from MediaService`)
+
+        const mediaResult = await mediaService.getMedia(cleanFileId)
+        if (mediaResult?.data && mediaResult?.metadata) {
+          console.log(`[SCORM Media Debug] ✅ FALLBACK SUCCESS: Loaded ${cleanFileId} from MediaService (${mediaResult.data.length} bytes)`)
+
+          // Add to cache for future use
+          mediaCache.set(cleanFileId, {
+            data: mediaResult.data,
+            mimeType: mediaResult.metadata.mimeType || 'application/octet-stream'
+          })
+
+          const ext = getExtensionFromMimeType(mediaResult.metadata.mimeType || '', cleanFileId) || getExtensionFromMediaId(cleanFileId)
+          const filename = `${cleanFileId}.${ext}`
+
+          mediaFiles.push({
+            filename,
+            content: mediaResult.data,
+          })
+
+          if (performanceTrace) performanceTrace.cacheHits++ // Count as cache hit since we loaded it
+          return `media/${filename}`
+        } else {
+          console.warn(`[SCORM Media Debug] ❌ FALLBACK FAILED: ${cleanFileId} not found in MediaService`)
+        }
+      } catch (error) {
+        console.error(`[SCORM Media Debug] ❌ FALLBACK ERROR: Failed to load ${cleanFileId} from MediaService:`, error)
+      }
     } else {
       // For non-LO media, check for regression
       mediaServiceCallDetector.checkForRegressionCall('resolveAudioCaptionFile')
@@ -1623,7 +1732,7 @@ async function resolveImageUrl(
       // Get extension from authoritative map first, fallback to MIME type
       let ext = authoritativeExtensionMap.get(imageUrl)?.substring(1) // Remove the dot
       if (!ext) {
-        ext = getExtensionFromMimeType(cached.mimeType)
+        ext = getExtensionFromMimeType(cached.mimeType, imageUrl)
       }
       if (!ext) {
         console.warn(`[Extension Map] No extension found for ${imageUrl}, using 'bin' as last resort`)
@@ -1854,7 +1963,7 @@ async function resolveMedia(
           if (cached) {
             console.log(`[SCORM Media Debug] Cache HIT for ${media.id}`)
             console.log(`[Rust SCORM] Using cached media:`, media.id)
-            const ext = getExtensionFromMimeType(cached.mimeType) || getExtensionFromMediaId(media.id)
+            const ext = getExtensionFromMimeType(cached.mimeType, media.id) || getExtensionFromMediaId(media.id)
             const filename = `${media.id}.${ext}`
             
             // Add to mediaFiles if not already there
@@ -2524,20 +2633,36 @@ export async function convertToRustFormat(courseContent: CourseContent | Enhance
         objectives: objectivesPageData.objectives ||
                     (objectivesPageData.content ? extractObjectivesFromContent(objectivesPageData.content) : []),
         audio_file: await resolveAudioCaptionFile(
-          objectivesPageData.audioFile ||
-          objectivesPageData.audioId ||
-          safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'audio')?.id ||
-          // Direct audio-1 fallback for learning objectives page based on standard indexing
-          'audio-1',
+          (() => {
+            const audioId = objectivesPageData.audioFile ||
+              objectivesPageData.audioId ||
+              safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'audio')?.id
+
+            if (audioId) {
+              console.log(`[SCORM Objectives] Using explicit audio ID: ${audioId}`)
+              return audioId
+            } else {
+              console.log(`[SCORM Objectives] 🔄 FALLBACK: No explicit audio found, using fallback audio-1`)
+              return 'audio-1'
+            }
+          })(),
           projectId,
           mediaFiles
         ),
         caption_file: await resolveAudioCaptionFile(
-          objectivesPageData.captionFile ||
-          objectivesPageData.captionId ||
-          safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'caption')?.id ||
-          // Direct caption-1 fallback for learning objectives page based on standard indexing
-          'caption-1',
+          (() => {
+            const captionId = objectivesPageData.captionFile ||
+              objectivesPageData.captionId ||
+              safeFindInArray(objectivesPageData.media, (m: any) => m?.type === 'caption')?.id
+
+            if (captionId) {
+              console.log(`[SCORM Objectives] Using explicit caption ID: ${captionId}`)
+              return captionId
+            } else {
+              console.log(`[SCORM Objectives] 🔄 FALLBACK: No explicit caption found, using fallback caption-1`)
+              return 'caption-1'
+            }
+          })(),
           projectId,
           mediaFiles
         ),
@@ -3626,7 +3751,7 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
   for (const id of allMediaIds) {
     const cached = mediaCache.get(id)
     if (cached?.mimeType) {
-      const ext = getExtensionFromMimeType(cached.mimeType)
+      const ext = getExtensionFromMimeType(cached.mimeType, id)
       if (ext) {
         authoritativeExtensionMap.set(id, '.' + ext)
         console.log(`[Extension Map] ${id} → .${ext} (from MIME: ${cached.mimeType})`)
@@ -3751,7 +3876,9 @@ async function convertEnhancedToRustFormat(courseContent: EnhancedCourseContent,
       caption_file: await resolveAudioCaptionFile(
         (courseContent.learningObjectivesPage as any)?.captionId ||
         courseContent.learningObjectivesPage?.captionFile ||
-        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'caption')?.id,
+        safeFindInArray(courseContent.learningObjectivesPage?.media, (m: any) => m?.type === 'caption')?.id ||
+        // Direct caption-1 fallback for learning objectives page (matches audio-1 fallback pattern)
+        'caption-1',
         projectId,
         mediaFiles,
         courseContent.learningObjectivesPage?.captionBlob
@@ -4168,7 +4295,7 @@ export async function generateRustSCORM(
         // Build extension map from cache if not provided
         extensionMap = new Map()
         for (const [id, media] of mediaCache.entries()) {
-          const ext = getExtensionFromMimeType(media.mimeType || '')
+          const ext = getExtensionFromMimeType(media.mimeType || '', id)
           if (ext) {
             extensionMap.set(id, ext)
           }
@@ -4708,19 +4835,21 @@ export async function buildScormPackageEnhanced(
     projectId: courseSeedData.projectId,
     strictValidation,
     mediaCount: mediaCache.size,
-    extensionMapSize: authoritativeExtensionMap.size
+    extensionMapSize: authoritativeExtensionMap?.size || 0
   })
 
   // PRE-BUILD VALIDATION: Check extension map completeness if strict mode
   // Check for missing extensions in authoritative map and validate extensions
   const referencedMediaIds = new Set(collectAllMediaIds(courseContent))
-  const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap.has(id))
+  const missingExtensions = Array.from(referencedMediaIds).filter(id => !authoritativeExtensionMap?.has(id))
 
   // Validate extensions against whitelist (security check)
   const invalidExtensions: string[] = []
-  for (const [id, ext] of authoritativeExtensionMap.entries()) {
-    if (ext && !/^\.[a-z0-9]+$/i.test(ext)) {
-      invalidExtensions.push(`${id}=${ext}`)
+  if (authoritativeExtensionMap) {
+    for (const [id, ext] of authoritativeExtensionMap.entries()) {
+      if (ext && !/^\.[a-z0-9]+$/i.test(ext)) {
+        invalidExtensions.push(`${id}=${ext}`)
+      }
     }
   }
 
