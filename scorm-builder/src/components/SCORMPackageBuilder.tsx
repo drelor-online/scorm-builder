@@ -921,21 +921,39 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
         const mediaIds = mediaToLoad.map(m => m.id)
         console.log('[SCORMPackageBuilder] Calling getMedia for batch loading:', mediaIds)
 
-        // 🚀 SINGLE BATCH CALL instead of 60+ individual calls
-        const startTime = Date.now()
-        const batchResults = await Promise.all(
-          mediaIds.map(async (id) => {
-            try {
-              const result = await getMedia(id)
-              return { id, result }
-            } catch (error) {
-              console.warn(`[SCORMPackageBuilder] Failed to load media ${id}:`, error)
-              return { id, result: null, error }
-            }
-          })
-        )
-        const batchDuration = Date.now() - startTime
-        console.log(`[SCORMPackageBuilder] ✅ Batch loading completed in ${batchDuration}ms`)
+        // 🚀 TIMEOUT RECOVERY: Add master timeout to prevent hanging
+        const MASTER_TIMEOUT_MS = 60000 // 60 seconds total timeout for all media loading
+
+        const mediaLoadingPromise = async () => {
+          // 🚀 SINGLE BATCH CALL instead of 60+ individual calls
+          const startTime = Date.now()
+          const batchResults = await Promise.all(
+            mediaIds.map(async (id) => {
+              try {
+                const result = await getMedia(id)
+                return { id, result }
+              } catch (error) {
+                console.warn(`[SCORMPackageBuilder] Failed to load media ${id}:`, error)
+                return { id, result: null, error }
+              }
+            })
+          )
+          const batchDuration = Date.now() - startTime
+          console.log(`[SCORMPackageBuilder] ✅ Batch loading completed in ${batchDuration}ms`)
+          return batchResults
+        }
+
+        // Add master timeout to prevent hanging
+        const timeoutPromise = new Promise<any[]>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Media loading timed out after ${MASTER_TIMEOUT_MS}ms`))
+          }, MASTER_TIMEOUT_MS)
+        })
+
+        const batchResults = await Promise.race([
+          mediaLoadingPromise(),
+          timeoutPromise
+        ])
 
         // Process batch results
         for (const { id, result, error } of batchResults) {
@@ -948,8 +966,22 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
               type: result.metadata?.mimeType || 'application/octet-stream'
             })
 
-            // Get proper extension
-            const extension = await getExtensionFromMedia(id)
+            // Get proper extension with timeout protection
+            let extension = '.bin' // Fallback extension
+            try {
+              const extensionPromise = getExtensionFromMedia(id)
+              const extensionTimeout = new Promise<string>((_, reject) => {
+                setTimeout(() => reject(new Error('Extension lookup timeout')), 5000)
+              })
+              extension = await Promise.race([extensionPromise, extensionTimeout])
+            } catch (error) {
+              console.warn(`[SCORMPackageBuilder] Extension lookup failed for ${id}, using fallback:`, error)
+              // Use fallback extension based on media type or result metadata
+              if (result.metadata?.mimeType?.includes('image')) extension = '.jpg'
+              else if (result.metadata?.mimeType?.includes('audio')) extension = '.mp3'
+              else if (result.metadata?.mimeType?.includes('video')) extension = '.mp4'
+            }
+
             const finalFileName = mediaInfo.fileName.includes('.')
               ? mediaInfo.fileName
               : `${mediaInfo.fileName}${extension}`
@@ -965,12 +997,21 @@ const SCORMPackageBuilderComponent: React.FC<SCORMPackageBuilderProps> = ({
           }
         }
       } catch (error) {
-        console.error('[SCORMPackageBuilder] Batch loading failed:', error)
-        // Fallback: mark all as failed
+        const isTimeout = error instanceof Error && error.message.includes('timed out')
+        console.error(`[SCORMPackageBuilder] Batch loading ${isTimeout ? 'timed out' : 'failed'}:`, error)
+
+        if (isTimeout) {
+          console.warn(`[SCORMPackageBuilder] ⏰ Media loading timed out after 60000ms - continuing with partial media`)
+        }
+
+        // Fallback: mark all as failed but continue SCORM generation
         mediaToLoad.forEach(mediaInfo => {
           const errorDescription = `${mediaInfo.source}${mediaInfo.topicIndex !== undefined ? ` topic ${mediaInfo.topicIndex}` : ''} ${mediaInfo.type || 'media'}: ${mediaInfo.id}`
           failedMedia.push(errorDescription)
         })
+
+        // Log summary of what happened
+        console.warn(`[SCORMPackageBuilder] ⚠️ RECOVERY: Marked ${mediaToLoad.length} media items as failed due to ${isTimeout ? 'timeout' : 'error'}, SCORM generation will continue`)
       }
     }
     
