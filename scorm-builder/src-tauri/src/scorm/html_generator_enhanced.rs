@@ -119,7 +119,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render index template: {e}"))
     }
 
-    pub fn generate_welcome_page(&self, welcome: &WelcomePage, require_audio_completion: bool, extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
+    pub fn generate_welcome_page(&self, welcome: &WelcomePage, require_audio_completion: bool, _extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating welcome page");
         eprintln!(
             "[HTML Generator] Welcome has audio_file: {}",
@@ -184,7 +184,7 @@ impl<'a> HtmlGenerator<'a> {
             .map_err(|e| format!("Failed to render welcome template: {e}"))
     }
 
-    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage, require_audio_completion: bool, extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
+    pub fn generate_objectives_page(&self, objectives: &ObjectivesPage, require_audio_completion: bool, _extension_map: Option<&HashMap<String, String>>) -> Result<String, String> {
         eprintln!("[HTML Generator] Generating objectives page");
         eprintln!(
             "[HTML Generator] Objectives has audio_file: {}",
