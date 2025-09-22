@@ -1434,6 +1434,26 @@ export class FileStorage {
     }
   }
 
+  /**
+   * Check if media exists by ID
+   * @param mediaId The media ID to check
+   * @returns Promise<boolean> True if media exists, false otherwise
+   */
+  async doesMediaExist(mediaId: string): Promise<boolean> {
+    if (!this._currentProjectId) {
+      debugLogger.error('FileStorage.doesMediaExist', 'No project open');
+      return false;
+    }
+
+    try {
+      const media = await this.getMedia(mediaId);
+      return media !== null;
+    } catch (error) {
+      debugLogger.error('FileStorage.doesMediaExist', `Failed to check media existence: ${mediaId}`, error);
+      return false;
+    }
+  }
+
   // Method to cancel all pending saves (for cleanup)
   cancelAllPendingSaves(): void {
     debugLogger.info('FileStorage.cancelAllPendingSaves', `Cancelling ${this.saveTimeouts.size} pending saves`);
@@ -1986,6 +2006,94 @@ export class FileStorage {
     } catch (error) {
       debugLogger.error('FileStorage.getCourseContent', 'Failed to get course content', error);
       return null;
+    }
+  }
+
+  /**
+   * Repairs media alignment issues in project data
+   * Specifically fixes objectives media from being duplicated in topic media arrays
+   */
+  async repairProjectMediaAlignment(projectId?: string): Promise<{ fixed: boolean; corrections: number }> {
+    try {
+      const targetProjectId = projectId || this._currentProjectId;
+      if (!targetProjectId) {
+        debugLogger.warn('FileStorage.repairProjectMediaAlignment', 'No project ID available for repair');
+        return { fixed: false, corrections: 0 };
+      }
+
+      debugLogger.info('FileStorage.repairProjectMediaAlignment', 'Starting media alignment repair', { projectId: targetProjectId });
+
+      // Get course content
+      const courseContent = await this.getCourseContent();
+      if (!courseContent) {
+        debugLogger.info('FileStorage.repairProjectMediaAlignment', 'No course content to repair');
+        return { fixed: false, corrections: 0 };
+      }
+
+      let corrections = 0;
+
+      // Get learning objectives media IDs
+      const objectivesAudioId = courseContent.learningObjectivesPage?.media?.find((m: any) => m.type === 'audio')?.id;
+      const objectivesCaptionId = courseContent.learningObjectivesPage?.media?.find((m: any) => m.type === 'caption')?.id;
+
+      if (!objectivesAudioId && !objectivesCaptionId) {
+        debugLogger.info('FileStorage.repairProjectMediaAlignment', 'No objectives media to check for duplication');
+        return { fixed: false, corrections: 0 };
+      }
+
+      // Check each topic for duplicated objectives media
+      if (courseContent.topics && Array.isArray(courseContent.topics)) {
+        for (let topicIndex = 0; topicIndex < courseContent.topics.length; topicIndex++) {
+          const topic = courseContent.topics[topicIndex];
+          if (!topic.media || !Array.isArray(topic.media)) continue;
+
+          const originalMediaCount = topic.media.length;
+
+          // Remove any media that duplicates objectives media
+          topic.media = topic.media.filter((media: any) => {
+            const isDuplicate = (objectivesAudioId && media.id === objectivesAudioId) ||
+                              (objectivesCaptionId && media.id === objectivesCaptionId);
+
+            if (isDuplicate) {
+              debugLogger.info('FileStorage.repairProjectMediaAlignment', 'Removing duplicated objectives media from topic', {
+                mediaId: media.id,
+                mediaType: media.type,
+                topicIndex,
+                topicId: topic.id
+              });
+              corrections++;
+              return false;
+            }
+            return true;
+          });
+
+          if (topic.media.length !== originalMediaCount) {
+            debugLogger.info('FileStorage.repairProjectMediaAlignment', 'Repaired topic media array', {
+              topicIndex,
+              topicId: topic.id,
+              originalCount: originalMediaCount,
+              newCount: topic.media.length,
+              removedCount: originalMediaCount - topic.media.length
+            });
+          }
+        }
+      }
+
+      // Save the repaired content if corrections were made
+      if (corrections > 0) {
+        await this.saveCourseContent(courseContent);
+        debugLogger.info('FileStorage.repairProjectMediaAlignment', 'Media alignment repair completed', {
+          projectId: targetProjectId,
+          corrections
+        });
+        return { fixed: true, corrections };
+      } else {
+        debugLogger.info('FileStorage.repairProjectMediaAlignment', 'No media alignment issues found');
+        return { fixed: false, corrections: 0 };
+      }
+    } catch (error) {
+      debugLogger.error('FileStorage.repairProjectMediaAlignment', 'Failed to repair media alignment', error);
+      return { fixed: false, corrections: 0 };
     }
   }
 }
