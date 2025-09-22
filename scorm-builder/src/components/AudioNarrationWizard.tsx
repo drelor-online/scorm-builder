@@ -66,6 +66,16 @@ function normalizePageId(pageId: string): string {
   return pageId
 }
 
+// Helper function to calculate correct block number from media ID
+function getBlockNumberFromMediaId(mediaId: string): string | null {
+  const match = mediaId.match(/^(audio|caption)-(\d+)$/i);
+  if (!match) return null;
+  const n = parseInt(match[2], 10);
+  if (!Number.isFinite(n)) return null;
+  // 0 -> 0001 (welcome), 1 -> 0002 (objectives), 2 -> 0003 (topic-0), etc.
+  return String(n + 1).padStart(4, '0');
+}
+
 interface AudioNarrationWizardProps {
   courseContent: CourseContentUnion
   courseSeedData?: CourseSeedData
@@ -280,6 +290,26 @@ export function AudioNarrationWizard({
   // Loading state for persisted data
   const [isLoadingPersistedData, setIsLoadingPersistedData] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 })
+
+  // Failsafe to prevent stuck loading state
+  useEffect(() => {
+    let failsafeTimeout: NodeJS.Timeout
+
+    if (isLoadingPersistedData) {
+      // Set a failsafe timeout to clear loading state after 2 minutes
+      failsafeTimeout = setTimeout(() => {
+        logger.warn('[AudioNarrationWizard] Failsafe: Clearing stuck loading state after 2 minutes')
+        setIsLoadingPersistedData(false)
+        setError('Loading took too long and was automatically cancelled. Please try refreshing the page.')
+      }, 120000) // 2 minutes
+    }
+
+    return () => {
+      if (failsafeTimeout) {
+        clearTimeout(failsafeTimeout)
+      }
+    }
+  }, [isLoadingPersistedData])
 
   // Helper function to get cached getAllMedia result
   const getCachedAllMedia = useCallback((): ExtendedMedia[] => {
@@ -1071,10 +1101,87 @@ export function AudioNarrationWizard({
 
             logger.log(`[AudioNarrationWizard] 🚀 BATCH: Found ${captionMediaItems.length} caption items`)
 
-            // Process each caption from the batch (async)
-            const captionLoadPromises = captionIdsInContent.map(async (captionId, index) => {
-              const block = narrationBlocks[index]
+            // Create a proper mapping between caption IDs and blocks based on page structure
+            const captionToBlockMapping: { captionId: string, block: any, pageType: 'welcome' | 'objectives' | 'topic', topicIndex?: number }[] = []
 
+            // Map welcome page caption
+            if ('welcomePage' in courseContent) {
+              const welcomeCaption = (courseContent as any).welcomePage.media?.find((m: Media) => (m as any).type === 'caption')
+              if (welcomeCaption?.id) {
+                const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome')
+                if (welcomeBlock) {
+                  captionToBlockMapping.push({
+                    captionId: welcomeCaption.id,
+                    block: welcomeBlock,
+                    pageType: 'welcome'
+                  })
+                }
+              }
+            }
+
+            // Map objectives page caption
+            if ('learningObjectivesPage' in courseContent) {
+              const objCaption = (courseContent as any).learningObjectivesPage.media?.find((m: Media) => (m as any).type === 'caption')
+              if (objCaption?.id) {
+                const objBlock = narrationBlocks.find(b =>
+                  b.pageId === 'objectives' ||
+                  b.pageId === 'learningObjectives' ||
+                  b.pageId === 'learning-objectives' ||
+                  b.pageTitle?.toLowerCase().includes('objective')
+                )
+                if (objBlock) {
+                  captionToBlockMapping.push({
+                    captionId: objCaption.id,
+                    block: objBlock,
+                    pageType: 'objectives'
+                  })
+                }
+              }
+            }
+
+            // Map topic captions
+            if ('topics' in courseContent && courseContent.topics) {
+              courseContent.topics.forEach((topic: any, topicIndex: number) => {
+                const topicCaption = topic.media?.find((m: Media) => (m as any).type === 'caption')
+                if (topicCaption?.id) {
+                  const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
+                  if (topicBlock) {
+                    captionToBlockMapping.push({
+                      captionId: topicCaption.id,
+                      block: topicBlock,
+                      pageType: 'topic',
+                      topicIndex
+                    })
+                  }
+                }
+              })
+            }
+
+            logger.log(`[AudioNarrationWizard] 🚀 BATCH: Created caption mapping for ${captionToBlockMapping.length} captions:`,
+              captionToBlockMapping.map(m => `${m.captionId} -> ${m.block.blockNumber} (${m.pageType})`))
+
+            // 🔍 VALIDATION: Detect caption ID mismatches
+            captionToBlockMapping.forEach(({ captionId, block, pageType, topicIndex }) => {
+              const expectedBlockNumber = getBlockNumberFromMediaId(captionId)
+              if (expectedBlockNumber && expectedBlockNumber !== block.blockNumber) {
+                logger.warn(`[AudioNarrationWizard] 🚨 CAPTION MISMATCH DETECTED: ${captionId} assigned to block ${block.blockNumber} but should be block ${expectedBlockNumber} based on ID pattern`)
+              }
+
+              // Additional validation for page type consistency
+              if (pageType === 'welcome' && !captionId.includes('-0')) {
+                logger.warn(`[AudioNarrationWizard] 🚨 CAPTION MISMATCH: Welcome page has ${captionId}, expected caption-0`)
+              } else if (pageType === 'objectives' && !captionId.includes('-1')) {
+                logger.warn(`[AudioNarrationWizard] 🚨 CAPTION MISMATCH: Objectives page has ${captionId}, expected caption-1`)
+              } else if (pageType === 'topic' && typeof topicIndex === 'number') {
+                const expectedCaptionSuffix = `-${topicIndex + 2}` // topic-0 should have caption-2, topic-1 should have caption-3, etc.
+                if (!captionId.includes(expectedCaptionSuffix)) {
+                  logger.warn(`[AudioNarrationWizard] 🚨 CAPTION MISMATCH: Topic ${topicIndex} has ${captionId}, expected caption${expectedCaptionSuffix}`)
+                }
+              }
+            })
+
+            // Process each caption using proper page-based mapping
+            const captionLoadPromises = captionToBlockMapping.map(async ({ captionId, block, pageType, topicIndex }) => {
               if (!block || !captionId) {
                 if (block && !captionId) {
                   logger.log(`[AudioNarrationWizard] No caption ID for block ${block.blockNumber} (${block.pageTitle})`)
@@ -1127,20 +1234,20 @@ export function AudioNarrationWizard({
                   content = typeof (mediaItem as any).content === 'string' ? (mediaItem as any).content : ''
                 }
 
-                // Fallback: check course content media array
+                // Fallback: check course content media array based on page type
                 if (!content) {
-                  if (index === 0 && 'welcomePage' in courseContent) {
+                  if (pageType === 'welcome' && 'welcomePage' in courseContent) {
                     const welcomeCaption = (courseContent as any).welcomePage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
                     if ((welcomeCaption as any)?.content) {
                       content = (welcomeCaption as any).content
                     }
-                  } else if (index === 1 && 'learningObjectivesPage' in courseContent) {
+                  } else if (pageType === 'objectives' && 'learningObjectivesPage' in courseContent) {
                     const objCaption = (courseContent as any).learningObjectivesPage.media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
                     if ((objCaption as any)?.content) {
                       content = (objCaption as any).content
                     }
-                  } else if ('topics' in courseContent && courseContent.topics[index - 2]) {
-                    const topicCaption = courseContent.topics[index - 2].media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
+                  } else if (pageType === 'topic' && 'topics' in courseContent && typeof topicIndex === 'number' && courseContent.topics[topicIndex]) {
+                    const topicCaption = courseContent.topics[topicIndex].media?.find((m: Media) => m.id === captionId && (m as any).type === 'caption')
                     if ((topicCaption as any)?.content) {
                       content = (topicCaption as any).content
                     }
@@ -1193,9 +1300,65 @@ export function AudioNarrationWizard({
             // Fallback: try individual loading if batch fails
             logger.log('[AudioNarrationWizard] Falling back to individual caption loading...')
 
-            const captionLoadPromises = captionIdsInContent.map(async (captionId, index) => {
-              const block = narrationBlocks[index]
+            // Recreate the same page-based mapping for fallback loading
+            const fallbackCaptionMapping: { captionId: string, block: any, pageType: 'welcome' | 'objectives' | 'topic', topicIndex?: number }[] = []
 
+            // Map welcome page caption
+            if ('welcomePage' in courseContent) {
+              const welcomeCaption = (courseContent as any).welcomePage.media?.find((m: Media) => (m as any).type === 'caption')
+              if (welcomeCaption?.id) {
+                const welcomeBlock = narrationBlocks.find(b => b.pageId === 'welcome')
+                if (welcomeBlock) {
+                  fallbackCaptionMapping.push({
+                    captionId: welcomeCaption.id,
+                    block: welcomeBlock,
+                    pageType: 'welcome'
+                  })
+                }
+              }
+            }
+
+            // Map objectives page caption
+            if ('learningObjectivesPage' in courseContent) {
+              const objCaption = (courseContent as any).learningObjectivesPage.media?.find((m: Media) => (m as any).type === 'caption')
+              if (objCaption?.id) {
+                const objBlock = narrationBlocks.find(b =>
+                  b.pageId === 'objectives' ||
+                  b.pageId === 'learningObjectives' ||
+                  b.pageId === 'learning-objectives' ||
+                  b.pageTitle?.toLowerCase().includes('objective')
+                )
+                if (objBlock) {
+                  fallbackCaptionMapping.push({
+                    captionId: objCaption.id,
+                    block: objBlock,
+                    pageType: 'objectives'
+                  })
+                }
+              }
+            }
+
+            // Map topic captions
+            if ('topics' in courseContent && courseContent.topics) {
+              courseContent.topics.forEach((topic: any, topicIndex: number) => {
+                const topicCaption = topic.media?.find((m: Media) => (m as any).type === 'caption')
+                if (topicCaption?.id) {
+                  const topicBlock = narrationBlocks.find(b => b.pageId === topic.id)
+                  if (topicBlock) {
+                    fallbackCaptionMapping.push({
+                      captionId: topicCaption.id,
+                      block: topicBlock,
+                      pageType: 'topic',
+                      topicIndex
+                    })
+                  }
+                }
+              })
+            }
+
+            logger.log(`[AudioNarrationWizard] FALLBACK: Created caption mapping for ${fallbackCaptionMapping.length} captions`)
+
+            const captionLoadPromises = fallbackCaptionMapping.map(async ({ captionId, block, pageType, topicIndex }) => {
               if (!block || !captionId) return null
 
               try {
@@ -1304,6 +1467,25 @@ export function AudioNarrationWizard({
         logger.log('[AudioNarrationWizard] No valid audio IDs in course content, will check getAllMedia')
       }
       
+      // VALIDATION: Check for media ID to block mismatches in loaded content
+      audioFiles.forEach(audioFile => {
+        if (audioFile.mediaId) {
+          const expectedBlock = getBlockNumberFromMediaId(audioFile.mediaId);
+          if (expectedBlock && expectedBlock !== audioFile.blockNumber) {
+            logger.warn(`[AudioNarrationWizard] ⚠️ MISMATCH: ${audioFile.mediaId} expected block ${expectedBlock} but assigned to ${audioFile.blockNumber} — keeping content assignment`);
+          }
+        }
+      });
+
+      captionFiles.forEach(captionFile => {
+        if (captionFile.mediaId) {
+          const expectedBlock = getBlockNumberFromMediaId(captionFile.mediaId);
+          if (expectedBlock && expectedBlock !== captionFile.blockNumber) {
+            logger.warn(`[AudioNarrationWizard] ⚠️ MISMATCH: ${captionFile.mediaId} expected block ${expectedBlock} but assigned to ${captionFile.blockNumber} — keeping content assignment`);
+          }
+        }
+      });
+
       // Always check getAllMedia as a fallback to catch media not in course content
       logger.log('[AudioNarrationWizard] 📋 Using cached getAllMedia for fallback loading...')
       const allMediaItems = getCachedAllMedia()
@@ -1323,7 +1505,19 @@ export function AudioNarrationWizard({
       for (const item of allAudioItems) {
         // Find the corresponding narration block
         const normalizedPageId = normalizePageId(item.pageId || '')
-        const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
+        let block = narrationBlocks.find(b => b.pageId === normalizedPageId)
+
+        // If pageId lookup failed, try to calculate block from media ID
+        if (!block) {
+          const expectedBlockNumber = getBlockNumberFromMediaId(item.id);
+          if (expectedBlockNumber) {
+            block = narrationBlocks.find(b => b.blockNumber === expectedBlockNumber);
+            if (block) {
+              logger.log(`[AudioNarrationWizard] 🔧 FALLBACK: Found block ${expectedBlockNumber} for ${item.id} via media ID calculation (pageId lookup failed)`);
+            }
+          }
+        }
+
         if (block) {
           // Use createBlobUrl for proper blob URL management
           let url: string | undefined
@@ -1364,7 +1558,13 @@ export function AudioNarrationWizard({
       if (loadedAudioFiles.length > 0) {
         setAudioFiles(prev => {
           const existingBlocks = new Set(prev.map(f => f.blockNumber))
-          const newFilesToAdd = loadedAudioFiles.filter(f => !existingBlocks.has(f.blockNumber))
+          const newFilesToAdd = loadedAudioFiles.filter(f => {
+            if (existingBlocks.has(f.blockNumber)) {
+              logger.log(`[AudioNarrationWizard] 🛡️ OVERWRITE PREVENTION: Block ${f.blockNumber} already has audio from content, skipping fallback ${f.mediaId}`)
+              return false
+            }
+            return true
+          })
           if (newFilesToAdd.length > 0) {
             logger.log('[AudioNarrationWizard] Adding audio files from getAllMedia:', newFilesToAdd.length)
             return [...prev, ...newFilesToAdd]
@@ -1383,7 +1583,19 @@ export function AudioNarrationWizard({
       for (const item of allCaptionItems) {
         // Find the corresponding narration block
         const normalizedPageId = normalizePageId(item.pageId || '')
-        const block = narrationBlocks.find(b => b.pageId === normalizedPageId)
+        let block = narrationBlocks.find(b => b.pageId === normalizedPageId)
+
+        // If pageId lookup failed, try to calculate block from media ID
+        if (!block) {
+          const expectedBlockNumber = getBlockNumberFromMediaId(item.id);
+          if (expectedBlockNumber) {
+            block = narrationBlocks.find(b => b.blockNumber === expectedBlockNumber);
+            if (block) {
+              logger.log(`[AudioNarrationWizard] 🔧 FALLBACK: Found block ${expectedBlockNumber} for ${item.id} via media ID calculation (pageId lookup failed)`);
+            }
+          }
+        }
+
         if (block) {
           const mediaData = await getMedia(item.id)
           if (mediaData) {
@@ -1414,7 +1626,13 @@ export function AudioNarrationWizard({
       if (loadedCaptionFiles.length > 0) {
         setCaptionFiles(prev => {
           const existingBlocks = new Set(prev.map(f => f.blockNumber))
-          const newFilesToAdd = loadedCaptionFiles.filter(f => !existingBlocks.has(f.blockNumber))
+          const newFilesToAdd = loadedCaptionFiles.filter(f => {
+            if (existingBlocks.has(f.blockNumber)) {
+              logger.log(`[AudioNarrationWizard] 🛡️ OVERWRITE PREVENTION: Block ${f.blockNumber} already has caption from content, skipping fallback ${f.mediaId}`)
+              return false
+            }
+            return true
+          })
           if (newFilesToAdd.length > 0) {
             logger.log('[AudioNarrationWizard] Adding caption files from getAllMedia:', newFilesToAdd.length)
             return [...prev, ...newFilesToAdd]
@@ -1461,27 +1679,29 @@ export function AudioNarrationWizard({
       // Check for new format
       let hasAudioInContent = false
       let hasCaptionInContent = false
-      
+
       if ('welcomePage' in courseContent) {
-        hasAudioInContent = 
+        hasAudioInContent =
           (courseContent as any).welcomePage?.media?.some((m: Media) => m.type === 'audio') ||
           (courseContent as any).learningObjectivesPage?.media?.some((m: Media) => m.type === 'audio') ||
           courseContent.topics?.some(t => t.media?.some((m: Media) => m.type === 'audio')) || false
-        
+
         hasCaptionInContent =
           (courseContent as any).welcomePage?.media?.some((m: Media) => (m as any).type === 'caption') ||
           (courseContent as any).learningObjectivesPage?.media?.some((m: Media) => (m as any).type === 'caption') ||
           courseContent.topics?.some(t => t.media?.some((m: Media) => (m as any).type === 'caption')) || false
       }
-      
+
       // If we have media in content but no files loaded yet, trigger load
       // CRITICAL FIX: Don't reload persisted data during uploads to prevent clearing manually entered captions
-      if ((hasAudioInContent || hasCaptionInContent) && audioFiles.length === 0 && captionFiles.length === 0 && !isUploading && !isBulkOperationActive) {
+      // ADDED: Check that we haven't loaded recently to prevent loops
+      const timeSinceLastLoad = Date.now() - lastLoadTime.current
+      if ((hasAudioInContent || hasCaptionInContent) && audioFiles.length === 0 && captionFiles.length === 0 && !isUploading && !isBulkOperationActive && timeSinceLastLoad > 1000) {
         logger.log('[AudioNarrationWizard] Detected media in course content, loading persisted data')
         loadPersistedData()
       }
     }
-  }, [courseContent, narrationBlocks.length, isLoadingPersistedData, audioFiles.length, captionFiles.length, loadPersistedData, isUploading, isBulkOperationActive])
+  }, [courseContent, narrationBlocks.length, isLoadingPersistedData, loadPersistedData, isUploading, isBulkOperationActive])
 
   // Watch for changes in audioFiles map and update upload state
   // Using array conversion for proper dependency tracking in production
