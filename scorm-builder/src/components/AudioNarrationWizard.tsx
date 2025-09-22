@@ -375,7 +375,12 @@ export function AudioNarrationWizard({
   })
   
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
-  
+
+  // --- Duration sum (true total from actual audio files) ---
+  const [totalDurationSec, setTotalDurationSec] = useState<number | null>(null)
+  const [durationLoading, setDurationLoading] = useState(false)
+  const durationCacheRef = useRef<Map<string, number>>(new Map())  // mediaId -> seconds
+
   // Helper functions for recording state updates (to minimize migration changes)
   const showRecordingModal = recordingState.showModal
   const recordingBlockId = recordingState.blockId
@@ -2557,6 +2562,73 @@ export function AudioNarrationWizard({
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // Format duration in H:MM:SS format for stats display
+  const formatHMS = (s: number) => {
+    if (!isFinite(s) || s <= 0) return '0:00'
+    const hrs = Math.floor(s / 3600)
+    const mins = Math.floor((s % 3600) / 60)
+    const secs = Math.floor(s % 60).toString().padStart(2, '0')
+    return hrs > 0 ? `${hrs}:${mins.toString().padStart(2,'0')}:${secs}` : `${mins}:${secs}`
+  }
+
+  // Measure blob duration using HTML5 audio metadata
+  const measureBlobDuration = (blob: Blob): Promise<number> =>
+    new Promise((resolve) => {
+      const audio = document.createElement('audio')
+      audio.preload = 'metadata'
+      const url = URL.createObjectURL(blob)
+      const cleanup = () => { URL.revokeObjectURL(url); audio.src = '' }
+      const done = (sec: number) => { cleanup(); resolve(isFinite(sec) && sec > 0 ? sec : 0) }
+      audio.onloadedmetadata = () => done(audio.duration)
+      audio.onerror = () => done(0)
+      audio.src = url
+      if (audio.readyState < 1) audio.load()
+    })
+
+  // Calculate real total duration from actual audio files
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const audioIds = [...new Set(audioFiles.map(f => f.mediaId).filter(Boolean) as string[])]
+      if (audioIds.length === 0) {
+        setTotalDurationSec(0)
+        setDurationLoading(false)
+        return
+      }
+
+      setDurationLoading(true)
+
+      const need = audioIds.filter(id => !durationCacheRef.current.has(id))
+      if (need.length) {
+        try {
+          const { createMediaService } = await import('../services/MediaService')
+          const mediaService = createMediaService(storage.currentProjectId!, undefined, true)
+          const batch = await mediaService.getMediaBatchDirect(need)
+
+          for (const id of need) {
+            if (cancelled) return
+            const rec = batch.get(id)
+            if (rec?.data) {
+              const blob = new Blob([new Uint8Array(rec.data)], { type: rec.metadata?.mimeType || 'audio/mpeg' })
+              const sec = await measureBlobDuration(blob)
+              durationCacheRef.current.set(id, sec)
+            }
+          }
+        } catch (error) {
+          logger.error('[AudioNarrationWizard] Error calculating durations:', error)
+        }
+      }
+
+      if (!cancelled) {
+        const sum = audioIds.reduce((acc, id) => acc + (durationCacheRef.current.get(id) || 0), 0)
+        setTotalDurationSec(sum)
+        setDurationLoading(false)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [audioFiles, storage.currentProjectId])
+
   // Bulk upload functions
   const downloadNarrationFile = () => {
     const narrationText = narrationBlocks
@@ -3326,7 +3398,8 @@ export function AudioNarrationWizard({
               <div className={styles.statItem}>
                 <span className={styles.statLabel}>Duration</span>
                 <span className={styles.statValue}>
-                  {audioFiles.length > 0 ? `${Math.floor(audioFiles.length * 1.5)} min` : '--'}
+                  {durationLoading ? 'Calculating...' :
+                   totalDurationSec !== null ? formatHMS(totalDurationSec) : '--'}
                 </span>
               </div>
             </div>
