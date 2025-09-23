@@ -288,6 +288,9 @@ pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
     let path = validate_project_path(&file_path)?;
     let project = load_project_file(&path)?;
 
+    // Extract project ID for any future needs
+    let _project_id = extract_project_id(&file_path);
+
     // Log what we're loading
     if let Some(ref seed_data) = project.course_seed_data {
         log_debug(&format!(
@@ -303,6 +306,148 @@ pub async fn load_project(file_path: String) -> Result<ProjectFile, String> {
     ));
 
     Ok(project)
+}
+
+#[tauri::command]
+pub async fn export_project_data(project_path: String) -> Result<serde_json::Value, String> {
+    log_debug(&format!("export_project_data called with path: {project_path}"));
+
+    let path = validate_project_path(&project_path)?;
+    let project = load_project_file(&path)?;
+
+    // Extract project ID from path for media loading
+    let project_id = extract_project_id(&project_path);
+
+    // Load all media metadata for this project
+    let media_list = match crate::media_storage::get_all_project_media_metadata(project_id.clone()) {
+        Ok(media) => media,
+        Err(e) => {
+            log_debug(&format!("Warning: Failed to load media metadata: {}", e));
+            Vec::new() // Continue without media if there's an error
+        }
+    };
+
+    // Create export data structure
+    let export_data = serde_json::json!({
+        "projectMetadata": {
+            "id": project.project.id,
+            "name": project.project.name,
+            "path": project_path
+        },
+        "courseSeedData": project.course_seed_data,
+        "courseData": project.course_data,
+        "mediaList": media_list.iter().map(|media| serde_json::json!({
+            "id": media.id,
+            "filename": media.metadata.original_name,
+            "type": media.metadata.media_type,
+            "metadata": {
+                "filename": media.metadata.original_name,
+                "type": media.metadata.media_type,
+                "page_id": media.metadata.page_id,
+                "mime_type": media.metadata.mime_type,
+                "source": media.metadata.source,
+                "embed_url": media.metadata.embed_url,
+                "title": media.metadata.title,
+                "clip_start": media.metadata.clip_start,
+                "clip_end": media.metadata.clip_end
+            }
+        })).collect::<Vec<_>>()
+    });
+
+    log_debug(&format!("Export data prepared for project: {} (media items: {})", project.project.name, media_list.len()));
+
+    Ok(export_data)
+}
+
+#[tauri::command]
+pub async fn get_media_for_export(project_path: String, media_id: String) -> Result<serde_json::Value, String> {
+    log_debug(&format!("get_media_for_export called with project: {project_path}, media: {media_id}"));
+
+    // Extract project ID from path
+    let project_id = extract_project_id(&project_path);
+
+    // Get media with binary data
+    let media = crate::media_storage::get_media(project_id, media_id.clone())?;
+
+    // Convert binary data to base64 for transport
+    use base64::Engine;
+    let base64_data = base64::engine::general_purpose::STANDARD.encode(&media.data);
+
+    // Determine MIME type from metadata or filename
+    let mime_type = media.metadata.mime_type.as_deref()
+        .unwrap_or_else(|| {
+            // Try to guess from filename extension
+            let filename = &media.metadata.original_name;
+            if filename.ends_with(".jpg") || filename.ends_with(".jpeg") {
+                "image/jpeg"
+            } else if filename.ends_with(".png") {
+                "image/png"
+            } else if filename.ends_with(".mp3") {
+                "audio/mpeg"
+            } else if filename.ends_with(".wav") {
+                "audio/wav"
+            } else if filename.ends_with(".vtt") {
+                "text/vtt"
+            } else {
+                "application/octet-stream"
+            }
+        });
+
+    let result = serde_json::json!({
+        "id": media.id,
+        "data": base64_data,
+        "mimeType": mime_type,
+        "filename": media.metadata.original_name,
+        "metadata": {
+            "filename": media.metadata.original_name,
+            "type": media.metadata.media_type,
+            "page_id": media.metadata.page_id,
+            "mime_type": media.metadata.mime_type,
+            "source": media.metadata.source,
+            "embed_url": media.metadata.embed_url,
+            "title": media.metadata.title,
+            "clip_start": media.metadata.clip_start,
+            "clip_end": media.metadata.clip_end
+        }
+    });
+
+    Ok(result)
+}
+
+// Helper function to extract project ID from path or use the path as ID
+fn extract_project_id(project_path: &str) -> String {
+    if let Some(file_name) = std::path::Path::new(project_path).file_stem() {
+        let filename_str = file_name.to_string_lossy();
+
+        // Extract numeric timestamp ID from the end of the filename
+        // Pattern: Some_Project_Name_1234567890123.scormproj -> 1234567890123
+        if let Some(last_underscore) = filename_str.rfind('_') {
+            let potential_id = &filename_str[last_underscore + 1..];
+
+            // Check if it's all digits (13-digit timestamp ID)
+            if potential_id.len() == 13 && potential_id.chars().all(|c| c.is_ascii_digit()) {
+                return potential_id.to_string();
+            }
+        }
+
+        // If no valid numeric suffix found, try to extract any sequence of digits at the end
+        let digits_at_end: String = filename_str.chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+
+        if digits_at_end.len() >= 10 { // At least 10 digits (reasonable timestamp length)
+            return digits_at_end;
+        }
+
+        // Fallback to original filename if no numeric suffix found
+        filename_str.to_string()
+    } else {
+        project_path.to_string()
+    }
 }
 
 #[tauri::command]
@@ -359,6 +504,56 @@ pub async fn list_projects() -> Result<Vec<ProjectMetadata>, String> {
 pub async fn delete_project(file_path: String) -> Result<(), String> {
     let path = validate_project_path(&file_path)?;
     delete_project_file(&path)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProjectExistsResult {
+    pub exists: bool,
+    pub project_id: Option<String>,
+    pub project_path: Option<String>,
+}
+
+#[tauri::command]
+pub async fn check_project_exists(project_name: String) -> Result<ProjectExistsResult, String> {
+    log_debug(&format!("check_project_exists called with name: {}", project_name));
+
+    // Get all project files
+    let files = list_project_files()?;
+
+    // Check each project for matching name
+    for path in files {
+        match load_project_file(&path) {
+            Ok(project_file) => {
+                // Compare project names (case-insensitive)
+                if project_file.project.name.to_lowercase() == project_name.to_lowercase() {
+                    log_debug(&format!(
+                        "Found existing project: id={}, name='{}', path='{}'",
+                        project_file.project.id,
+                        project_file.project.name,
+                        path.display()
+                    ));
+
+                    return Ok(ProjectExistsResult {
+                        exists: true,
+                        project_id: Some(project_file.project.id),
+                        project_path: Some(path.to_string_lossy().to_string()),
+                    });
+                }
+            }
+            Err(e) => {
+                // Log error but continue checking other projects
+                log_debug(&format!("Failed to load project {}: {}", path.display(), e));
+            }
+        }
+    }
+
+    // No matching project found
+    log_debug(&format!("No existing project found with name: {}", project_name));
+    Ok(ProjectExistsResult {
+        exists: false,
+        project_id: None,
+        project_path: None,
+    })
 }
 
 #[tauri::command]
@@ -848,5 +1043,54 @@ mod tests {
         let result = append_to_log(large_content).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("too large"));
+    }
+
+    #[test]
+    fn test_extract_project_id_from_complex_filename() {
+        // This is the actual case from user's project
+        let project_path = "C:\\Users\\sierr\\Documents\\SCORM Projects\\Complex_Projects_-_02_-_Hazardous_Area_Classification_1756944132721.scormproj";
+        let extracted_id = extract_project_id(project_path);
+
+        // Should extract only the numeric timestamp ID
+        assert_eq!(extracted_id, "1756944132721",
+            "Expected to extract only numeric timestamp '1756944132721', but got '{}'", extracted_id);
+    }
+
+    #[test]
+    fn test_extract_project_id_from_simple_filename() {
+        let project_path = "/path/to/1234567890123.scormproj";
+        let extracted_id = extract_project_id(project_path);
+
+        assert_eq!(extracted_id, "1234567890123",
+            "Expected to extract '1234567890123', but got '{}'", extracted_id);
+    }
+
+    #[test]
+    fn test_extract_project_id_with_underscores_and_dashes() {
+        let project_path = "/path/to/My_Cool-Project_Name_9876543210987.scormproj";
+        let extracted_id = extract_project_id(project_path);
+
+        assert_eq!(extracted_id, "9876543210987",
+            "Expected to extract '9876543210987', but got '{}'", extracted_id);
+    }
+
+    #[test]
+    fn test_extract_project_id_without_extension() {
+        let project_path = "/path/to/Test_Project_1111111111111";
+        let extracted_id = extract_project_id(project_path);
+
+        assert_eq!(extracted_id, "1111111111111",
+            "Expected to extract '1111111111111', but got '{}'", extracted_id);
+    }
+
+    #[test]
+    fn test_extract_project_id_fallback_when_no_numeric_suffix() {
+        // Edge case: if there's no numeric suffix, return the original filename
+        let project_path = "/path/to/InvalidProject.scormproj";
+        let extracted_id = extract_project_id(project_path);
+
+        // Should fall back to the original filename
+        assert_eq!(extracted_id, "InvalidProject",
+            "Expected fallback to 'InvalidProject', but got '{}'", extracted_id);
     }
 }

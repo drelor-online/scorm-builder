@@ -22,6 +22,7 @@ mod tests {
             },
             media_files: vec![],
             generated_files: vec![], // Empty files - this should fail in production
+            extension_map: std::collections::HashMap::new(),
         };
 
         // In production, this should return an error if no files are provided
@@ -64,6 +65,7 @@ mod tests {
                     is_binary: false,
                 },
             ],
+            extension_map: std::collections::HashMap::new(),
         };
 
         let result = generate_scorm_package(request).await;

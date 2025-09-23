@@ -147,6 +147,34 @@ export class MockFileStorage {
     return () => {}
   }
 
+  // Additional methods for testing
+
+  getStoredMetadata(mediaId: string): any {
+    if (!this.currentProjectId) return null
+    const media = this.mockData[this.currentProjectId]?.media?.[mediaId]
+    return media?.metadata || null
+  }
+
+  async getAllProjectMediaMetadata(): Promise<any[]> {
+    if (!this.currentProjectId) return []
+    const media = this.mockData[this.currentProjectId]?.media || {}
+
+    return Object.entries(media).map(([id, mediaData]: [string, any]) => ({
+      id,
+      type: mediaData.mediaType,
+      page_id: mediaData.metadata.page_id,
+      original_name: mediaData.metadata.original_name,
+      mime_type: mediaData.metadata.mime_type,
+      size: mediaData.size,
+      ...mediaData.metadata
+    }))
+  }
+
+  async doesMediaExist(mediaId: string): Promise<boolean> {
+    if (!this.currentProjectId) return false
+    return !!(this.mockData[this.currentProjectId]?.media?.[mediaId])
+  }
+
   async openProjectFromFile(): Promise<any> {
     const projectId = Date.now().toString()
     const project = {
@@ -256,6 +284,19 @@ export class MockFileStorage {
   async getMediaUrl(id: string): Promise<string | null> {
     const media = await this.getMedia(id)
     return media ? `blob://mock/${id}` : null
+  }
+
+  async listMedia(projectId?: string): Promise<any[]> {
+    const targetProjectId = projectId || this.currentProjectId
+    if (!targetProjectId) return []
+
+    const media = this.mockData[targetProjectId]?.media || {}
+    return Object.keys(media).map(id => ({
+      id,
+      filename: media[id].metadata?.filename || `${id}.${media[id].mediaType}`,
+      type: media[id].mediaType,
+      metadata: media[id].metadata
+    }))
   }
 
   get courseData(): any {

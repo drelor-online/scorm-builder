@@ -34,6 +34,7 @@ async fn test_direct_file_streaming_into_zip() {
             mime_type: "video/mp4".to_string(),
         }],
         generated_files: crate::scorm::test_helpers::create_test_generated_files(),
+        extension_map: std::collections::HashMap::new(),
     };
 
     // Track memory usage before generation

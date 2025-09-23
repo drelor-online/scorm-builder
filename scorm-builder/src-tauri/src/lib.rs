@@ -4,6 +4,7 @@ mod commands;
 mod commands_secure;
 mod localstorage_migration;
 mod media_storage;
+mod media_page_id_migration;
 mod project_storage;
 mod project_export_import;
 mod scorm;
@@ -17,8 +18,8 @@ use commands::{
 };
 // Import secure versions of project commands and other secure commands
 use commands_secure::{
-    append_to_log, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
-    load_api_keys, load_project, rename_project, save_api_keys, save_project, unsafe_download_image,
+    append_to_log, check_project_exists, delete_api_keys, delete_project, get_cli_args, get_projects_dir, list_projects,
+    load_api_keys, load_project, export_project_data, get_media_for_export, rename_project, save_api_keys, save_project, unsafe_download_image,
     diagnose_projects_directory,
 };
 use backup_recovery::{
@@ -29,7 +30,10 @@ use localstorage_migration::{
 };
 use media_storage::{
     delete_media, get_all_project_media, get_all_project_media_metadata, get_media, store_media, store_media_base64,
-    get_media_batch, media_exists_batch,
+    get_media_batch, media_exists_batch, clean_duplicate_media,
+};
+use media_page_id_migration::{
+    migrate_media_page_ids, validate_media_page_ids
 };
 use project_export_import::{
     create_project_zip, create_project_zip_with_progress, extract_project_zip,
@@ -63,7 +67,10 @@ pub fn run() {
             create_project,
             save_project,
             load_project,
+            export_project_data,
+            get_media_for_export,
             list_projects,
+            check_project_exists,
             delete_project,
             rename_project,
             get_projects_dir,
@@ -104,7 +111,10 @@ pub fn run() {
             export_workflow_zip,
             save_workflow_json,
             unsafe_download_image,
-            diagnose_projects_directory
+            diagnose_projects_directory,
+            migrate_media_page_ids,
+            validate_media_page_ids,
+            clean_duplicate_media
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

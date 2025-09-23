@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { Button, Alert, Modal, LoadingSpinner } from './DesignSystem'
 import { exportProject, importProject, ProjectExportData, ImportResult } from '../services/ProjectExportImport'
+import { ProjectImportConflictDialog } from './ProjectImportConflictDialog'
 import { COLORS, SPACING } from '../constants'
 
 interface ProjectExportButtonProps {
@@ -103,7 +104,9 @@ export const ProjectImportButton: React.FC<ProjectImportButtonProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [showFileDialog, setShowFileDialog] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [conflictResult, setConflictResult] = useState<ImportResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleButtonClick = () => {
@@ -140,7 +143,7 @@ export const ProjectImportButton: React.FC<ProjectImportButtonProps> = ({
     }
   }
 
-  const performImport = async (file: File) => {
+  const performImport = async (file: File, forceImport: boolean = false) => {
     setIsImporting(true)
     setError(null)
     setShowFileDialog(false)
@@ -148,8 +151,18 @@ export const ProjectImportButton: React.FC<ProjectImportButtonProps> = ({
 
     try {
       const result = await importProject(file)
+
+      // Check if this is a duplicate conflict and we haven't been told to force import
+      if (!forceImport && result.isDuplicate && !result.success) {
+        // Show conflict dialog instead of importing
+        setConflictResult(result)
+        setShowConflictDialog(true)
+        setIsImporting(false)
+        return
+      }
+
       onImport(result)
-      
+
       if (!result.success) {
         setError(result.error || 'Import failed')
       }
@@ -175,6 +188,31 @@ export const ProjectImportButton: React.FC<ProjectImportButtonProps> = ({
 
   const handleCancelImport = () => {
     setShowConfirmDialog(false)
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleReplaceProject = () => {
+    setShowConflictDialog(false)
+    if (selectedFile) {
+      // TODO: Implement replace logic - for now just proceed with import
+      performImport(selectedFile, true)
+    }
+  }
+
+  const handleCreateNewProject = () => {
+    setShowConflictDialog(false)
+    if (selectedFile) {
+      // TODO: Implement create new logic - for now just proceed with import
+      performImport(selectedFile, true)
+    }
+  }
+
+  const handleCancelConflict = () => {
+    setShowConflictDialog(false)
+    setConflictResult(null)
     setSelectedFile(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -276,6 +314,16 @@ export const ProjectImportButton: React.FC<ProjectImportButtonProps> = ({
           </div>
         </div>
       </Modal>
+
+      {/* Project import conflict dialog */}
+      <ProjectImportConflictDialog
+        isOpen={showConflictDialog}
+        projectName={conflictResult?.data?.metadata.projectName || 'Unknown Project'}
+        existingProjectPath={conflictResult?.existingProjectPath}
+        onReplace={handleReplaceProject}
+        onCreateNew={handleCreateNewProject}
+        onCancel={handleCancelConflict}
+      />
     </>
   )
 }

@@ -6,7 +6,7 @@
  */
 
 import { FileStorage } from './FileStorage'
-import { generateMediaId, type MediaType } from '../utils/idGenerator'
+import { generateMediaId, type MediaType, type MediaId } from '../utils/idGenerator'
 import { logger } from '../utils/logger'
 
 // 🔧 FIX 5: ULTIMATE CIRCUIT BREAKER - Global flag declaration
@@ -313,7 +313,8 @@ export class MediaService implements MediaServiceExtended {
     metadata?: Partial<MediaMetadata>,
     progressCallback?: ProgressCallback
   ): Promise<MediaItem> {
-    const id = generateMediaId(type, pageId)
+    // 🔧 FIX: Generate unique ID by checking for existing media
+    const id = await this.generateUniqueMediaId(type, pageId)
     
     // 🚨 CONTAMINATION DETECTION: Check for incoming metadata contamination at storage time
     const hasYouTubeMetadata = !!(
@@ -563,6 +564,56 @@ export class MediaService implements MediaServiceExtended {
     
     // Call the new method with corrected parameters
     return this.storeMedia(file, pageId, mediaType, metadata, progressCallback)
+  }
+
+  /**
+   * Generate a unique media ID by checking for existing media
+   * Prevents duplicate IDs when storing multiple media items of the same type on the same page
+   */
+  private async generateUniqueMediaId(type: MediaType, pageId: string): Promise<MediaId> {
+    // Start with the base ID from the original generator
+    const baseId = generateMediaId(type, pageId)
+
+    try {
+      // Check if the base ID already exists
+      const existingMedia = await this.fileStorage.doesMediaExist(baseId)
+
+      if (!existingMedia) {
+        // Base ID is available
+        mediaServiceDebugLog(`[MediaService] Using base ID: ${baseId}`)
+        return baseId as MediaId
+      }
+
+      // Base ID exists, find the next available suffix
+      let counter = 1
+      let candidateId: string
+
+      do {
+        candidateId = `${baseId}-${counter}`
+        const exists = await this.fileStorage.doesMediaExist(candidateId)
+
+        if (!exists) {
+          mediaServiceDebugLog(`[MediaService] Generated unique ID: ${candidateId} (base: ${baseId}, suffix: ${counter})`)
+          return candidateId as MediaId
+        }
+
+        counter++
+
+        // Safety limit to prevent infinite loops
+        if (counter > 1000) {
+          console.error(`[MediaService] ERROR: Could not generate unique ID after 1000 attempts for base: ${baseId}`)
+          // Fall back to UUID-based ID
+          const uuid = crypto.randomUUID().slice(0, 8)
+          const fallbackId = `${type}-${uuid}`
+          console.log(`[MediaService] Using fallback UUID-based ID: ${fallbackId}`)
+          return fallbackId as MediaId
+        }
+      } while (true)
+
+    } catch (error) {
+      console.warn(`[MediaService] Error checking for existing media, falling back to base ID: ${baseId}`, error)
+      return baseId as MediaId
+    }
   }
 
   /**
@@ -927,7 +978,7 @@ export class MediaService implements MediaServiceExtended {
         if (mediaId.startsWith('caption-')) {
           // Captions need more time and retry logic
           const isBulkScenario = this.batchResolvers.size >= 10
-          timeoutMs = isBulkScenario ? 30000 : 20000 // 30s during bulk ops, 20s otherwise
+          timeoutMs = isBulkScenario ? 30000 : 5000 // 30s during bulk ops, 5s otherwise
         } else {
           // Check if we're in a bulk loading scenario by looking at batch size
           const isBulkScenario = this.batchResolvers.size >= 10
@@ -3787,6 +3838,63 @@ export class MediaService implements MediaServiceExtended {
     } catch (error) {
       console.error('[MediaService] BATCH EXISTENCE CHECK: Failed to check media existence:', error)
       return new Set() // Return empty set on error
+    }
+  }
+
+  /**
+   * 🚀 PRELOAD: Load all audio and caption media for AudioNarrationWizard
+   * Optimized bulk loading to prevent 30-second wait times
+   */
+  async preloadAudioNarrationMedia(): Promise<{ loadedCount: number; totalCount: number; duration: number }> {
+    const startTime = performance.now()
+    console.log('[MediaService] 🚀 PRELOAD: Starting audio narration media preload')
+
+    try {
+      // Get all media from cache to find audio and caption files
+      const allMediaItems = Array.from(this.mediaCache.values())
+
+      // Filter for audio and caption files
+      const audioAndCaptionIds = allMediaItems
+        .filter((item) =>
+          item.type === 'audio' || item.type === 'caption'
+        )
+        .map((item) => item.id)
+
+      if (audioAndCaptionIds.length === 0) {
+        console.log('[MediaService] 🚀 PRELOAD: No audio/caption media found')
+        return { loadedCount: 0, totalCount: 0, duration: performance.now() - startTime }
+      }
+
+      console.log(`[MediaService] 🚀 PRELOAD: Found ${audioAndCaptionIds.length} audio/caption files to preload`)
+
+      // Use batch loading for maximum efficiency
+      const batchResult = await this.getMediaBatchDirect(audioAndCaptionIds)
+
+      let loadedCount = 0
+      for (const [id, data] of batchResult) {
+        if (data) {
+          loadedCount++
+          // Update cache statistics
+          this.cacheMetrics.hits++
+        }
+      }
+
+      const duration = performance.now() - startTime
+      console.log(`[MediaService] 🚀 PRELOAD: Completed in ${duration.toFixed(2)}ms - loaded ${loadedCount}/${audioAndCaptionIds.length} items`)
+
+      return {
+        loadedCount,
+        totalCount: audioAndCaptionIds.length,
+        duration
+      }
+
+    } catch (error) {
+      console.error('[MediaService] 🚀 PRELOAD: Failed to preload audio/caption media:', error)
+      return {
+        loadedCount: 0,
+        totalCount: 0,
+        duration: performance.now() - startTime
+      }
     }
   }
 

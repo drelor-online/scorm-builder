@@ -28,12 +28,17 @@ export async function handleFileAssociation(callbacks: FileAssociationCallbacks)
       
       // Import the project using the existing import functionality
       const result = await importProject(file)
-      
+
       if (result.success && result.data) {
         if (callbacks.onProjectOpened) {
           // Generate a project ID based on the project name and timestamp
           const projectId = `${result.data.metadata.projectName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
           callbacks.onProjectOpened(projectId)
+        }
+      } else if (result.isDuplicate && result.existingProjectId) {
+        // Project already exists, reuse the existing project ID
+        if (callbacks.onProjectOpened) {
+          callbacks.onProjectOpened(result.existingProjectId)
         }
       } else {
         throw new Error(result.error || 'Failed to import project')

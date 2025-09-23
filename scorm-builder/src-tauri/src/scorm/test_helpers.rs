@@ -519,6 +519,7 @@ pub fn create_test_scorm_request() -> GenerateScormRequest {
         },
         media_files: vec![],
         generated_files: create_test_generated_files(),
+        extension_map: std::collections::HashMap::new(),
     }
 }
 
@@ -551,5 +552,6 @@ pub fn create_test_scorm_request_with_settings(settings: TestCourseSettings) -> 
         },
         media_files: vec![],
         generated_files: create_test_generated_files_with_settings(&settings),
+        extension_map: std::collections::HashMap::new(),
     }
 }

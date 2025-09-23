@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { invoke } from '@tauri-apps/api/core'
 
 export interface MediaFile {
   filename: string
@@ -56,6 +57,11 @@ export interface ImportResult {
     captionsMap: Record<string, string> // caption filename to content mapping
   }
   error?: string
+  // Duplicate detection properties
+  isDuplicate?: boolean
+  existingProjectId?: string
+  existingProjectPath?: string
+  conflictOptions?: ('replace' | 'create_new' | 'cancel')[]
 }
 
 const SUPPORTED_VERSION = '1.0.0'
@@ -203,7 +209,33 @@ export async function importProject(file: File): Promise<ImportResult> {
         error: `Unsupported project version: ${manifest.version}. This version supports ${SUPPORTED_VERSION}`
       }
     }
-    
+
+    // Check for duplicate project names
+    try {
+      const duplicateResult = await invoke<{
+        exists: boolean
+        project_id?: string
+        project_path?: string
+      }>('check_project_exists', {
+        projectName: manifest.projectName
+      })
+
+      if (duplicateResult.exists) {
+        return {
+          success: false,
+          error: `A project named "${manifest.projectName}" already exists`,
+          isDuplicate: true,
+          existingProjectId: duplicateResult.project_id,
+          existingProjectPath: duplicateResult.project_path,
+          conflictOptions: ['replace', 'create_new', 'cancel']
+        }
+      }
+    } catch (error) {
+      // If duplicate check fails, log error but continue with import
+      // (Don't block imports due to backend issues)
+      console.warn('Failed to check for duplicate projects:', error)
+    }
+
     // Read and parse course data
     let courseData
     try {

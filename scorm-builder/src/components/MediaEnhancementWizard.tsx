@@ -777,21 +777,32 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     return validateCourseContent(courseContent)
   }, [courseContent])
   
-  const getCurrentPage = React.useCallback((): Page | Topic | undefined => {
+  // Helper function to get page by specific index (not current)
+  const getPageByIndex = React.useCallback((pageIndex: number): Page | Topic | undefined => {
     if (!courseContent) return undefined
-    
+
     const content = courseContent as CourseContent
-    
-    if (currentPageIndex === 0) return content.welcomePage
-    if (currentPageIndex === 1) return content.learningObjectivesPage
-    
-    const topicIndex = currentPageIndex - 2
+
+    if (pageIndex === 0) return content.welcomePage
+    if (pageIndex === 1) return content.learningObjectivesPage
+
+    const topicIndex = pageIndex - 2
     if (content.topics && topicIndex >= 0 && topicIndex < content.topics.length) {
       return content.topics[topicIndex]
     }
-    
+
     return undefined
-  }, [currentPageIndex, courseContent])
+  }, [courseContent])
+
+  const getCurrentPage = React.useCallback((): Page | Topic | undefined => {
+    return getPageByIndex(currentPageIndex)
+  }, [getPageByIndex, currentPageIndex])
+
+  // Helper function to get pageId by specific index (immune to navigation race conditions)
+  const getPageIdByIndex = React.useCallback((pageIndex: number): string => {
+    const page = getPageByIndex(pageIndex)
+    return getPageId(page)
+  }, [getPageByIndex])
   
   const getCurrentPageTitle = React.useMemo((): string => {
     const page = getCurrentPage()
@@ -1644,12 +1655,13 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       
       // Create the main media addition logic as a separate promise
       const addMediaPromise = async () => {
-        // Declare pageId at function scope so it's accessible throughout
-      const currentPage = getCurrentPage()
-      if (!currentPage) {
-        throw new Error('No current page selected')
-      }
-      const pageId = getPageId(currentPage)
+        // FIX: Capture pageId using the page index at operation start to prevent race conditions
+        const pageIndexAtOperationStart = currentPageIndexRef.current
+        const pageAtOperationStart = getPageByIndex(pageIndexAtOperationStart)
+        if (!pageAtOperationStart) {
+          throw new Error('No current page selected')
+        }
+        const pageId = getPageId(pageAtOperationStart)
       
       // Variable to store the result of storing media
       let storedItem: MediaItem
@@ -1809,8 +1821,8 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
       // Media added successfully
       
       // Update course content with the combined media array
-      if (currentPage) {
-        updatePageInCourseContent(currentPage, updatedPageMedia)
+      if (pageAtOperationStart) {
+        updatePageInCourseContent(pageAtOperationStart, updatedPageMedia)
       }
 
       // Show success message
@@ -2730,11 +2742,12 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
   const handleAddSelectedMedia = async () => {
     // FIX: Capture page index at start of async operation
     const pageIndexAtStart = currentPageIndexRef.current
-    
-    const currentPage = getCurrentPage()
-    if (!currentPage) return
-    
-    const pageId = getPageId(currentPage)
+
+    // FIX: Use the captured page index to get pageId (prevents race conditions during navigation)
+    const pageAtStart = getPageByIndex(pageIndexAtStart)
+    if (!pageAtStart) return
+
+    const pageId = getPageId(pageAtStart)
     const allResults = displayedResults
     const selectedItems: (SearchResult | Media)[] = []
     
@@ -2881,7 +2894,7 @@ const MediaEnhancementWizard: React.FC<MediaEnhancementWizardRefactoredProps> = 
     setRecentlyUploadedIds(new Set())
     
     // Update course content
-    updatePageInCourseContent(currentPage, updatedPageMedia)
+    updatePageInCourseContent(pageAtStart, updatedPageMedia)
     
     // Reload existing media to get blob URLs for newly stored items
     setTimeout(() => {

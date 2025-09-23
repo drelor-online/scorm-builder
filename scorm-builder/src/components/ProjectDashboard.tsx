@@ -13,13 +13,18 @@ import { formatDistanceToNow } from 'date-fns'
 // Removed notifyError, info, success - using NotificationContext instead
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { RefreshCw, FolderOpen, FileText, Palette, BarChart3, Package, Zap, Edit2, Check, X } from 'lucide-react'
 import ProjectsList from './projects/ProjectsList'
 import { ProjectRow } from './projects/types'
 import './DesignSystem/transitions.css'
 import { envConfig } from '../config/environment'
+import { ExportProgressDialog, type ExportProgressState } from './ExportProgressDialog'
+// Import removed: now using Rust-only import flow
+import { ProjectImportConflictDialog } from './ProjectImportConflictDialog'
 import { debugLogger } from '@/utils/ultraSimpleLogger'
 import styles from './ProjectDashboard.module.css'
+import JSZip from 'jszip'
 
 interface Project {
   id: string
@@ -134,12 +139,28 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
   const [defaultFolder, setDefaultFolder] = useState<string | null>(null)
   const [importingProject, setImportingProject] = useState(false)
   const [exportingProjectId, setExportingProjectId] = useState<string | null>(null)
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: 'preparing',
+    progress: 0,
+    filesProcessed: 0,
+    totalFiles: 0,
+    message: '',
+    canCancel: true
+  })
+  const [showExportProgress, setShowExportProgress] = useState(false)
+  const [exportProgressListener, setExportProgressListener] = useState<UnlistenFn | null>(null)
+  const [exportCancelled, setExportCancelled] = useState(false)
   const [runningAutomation, setRunningAutomation] = useState(false)
   const [showAutomationMenu, setShowAutomationMenu] = useState(false)
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
-  
+
+  // Import conflict dialog state (disabled for now - using Rust-only import)
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
+  const [conflictResult, setConflictResult] = useState<any | null>(null)
+  const [selectedFile, setSelectedFile] = useState<Uint8Array | null>(null)
+
   // Secret click functionality for beta features
   const [clickCount, setClickCount] = useState(0)
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -211,7 +232,16 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
     }
     loadDefaultFolder()
   }, [])
-  
+
+  // Cleanup event listener on unmount
+  useEffect(() => {
+    return () => {
+      if (exportProgressListener && typeof exportProgressListener === 'function') {
+        exportProgressListener()
+      }
+    }
+  }, [exportProgressListener])
+
   async function loadProjects() {
     if (!storage.isInitialized) {
       debugLogger.warn('ProjectDashboard.loadProjects', 'Storage not initialized, skipping load')
@@ -469,11 +499,18 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
     }
   }
 
+  // State for import cancellation
+  const [importAbortController, setImportAbortController] = useState<AbortController | null>(null)
+
   async function handleImportProject() {
+    // Create abort controller for this import operation
+    const abortController = new AbortController()
+    setImportAbortController(abortController)
+
     try {
       setImportingProject(true)
       debugLogger.info('ProjectDashboard.handleImportProject', 'Starting project import')
-      
+
       // Open file dialog for zip files
       const selected = await open({
         filters: [{
@@ -482,78 +519,335 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         }],
         multiple: false
       })
-      
+
       if (!selected || typeof selected !== 'string') {
         debugLogger.debug('ProjectDashboard.handleImportProject', 'Import cancelled by user')
         return
       }
-      
+
       debugLogger.debug('ProjectDashboard.handleImportProject', 'File selected for import', {
         path: selected
       })
-      
+
+      // Check if import was cancelled
+      if (abortController.signal.aborted) {
+        debugLogger.debug('ProjectDashboard.handleImportProject', 'Import aborted during file selection')
+        return
+      }
+
       // Load the zip file using Tauri's file system API
       const { readFile } = await import('@tauri-apps/plugin-fs')
+
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'Reading ZIP file from disk')
       const fileData = await readFile(selected)
-      // Convert Uint8Array to Blob - fileData is already a Uint8Array which is a valid BlobPart
+
+      // Check file size (limit to 500MB)
+      const fileSizeBytes = fileData.length
+      const fileSizeMB = fileSizeBytes / (1024 * 1024)
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'ZIP file size', { fileSizeMB: fileSizeMB.toFixed(2) })
+
+      if (fileSizeMB > 500) {
+        throw new Error(`File too large: ${fileSizeMB.toFixed(1)}MB. Maximum size is 500MB.`)
+      }
+
+      // Check if import was cancelled
+      if (abortController.signal.aborted) {
+        debugLogger.debug('ProjectDashboard.handleImportProject', 'Import aborted during file read')
+        return
+      }
+
+      // Convert Uint8Array to Blob for Rust backend
       const blob = new Blob([new Uint8Array(fileData)], { type: 'application/zip' })
-      
-      // Import the project
-      debugLogger.debug('ProjectDashboard.handleImportProject', 'Importing project from zip')
+
+      // Extract filename for logging
+      const fileName = selected.split(/[\\/]/).pop() || 'project.zip'
+
+      // STEP 1: Check for duplicates by reading project name from ZIP
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'Checking for duplicate projects')
+
+      // Read the ZIP to extract project name with timeout
+      const zip = new JSZip()
+
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'Loading ZIP file into JSZip')
+
+      // Add timeout for ZIP loading (30 seconds)
+      const zipLoadPromise = zip.loadAsync(blob)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('ZIP file loading timed out after 30 seconds. The file may be corrupted or too large.'))
+        }, 30000)
+
+        // Clear timeout if aborted
+        abortController.signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId)
+          reject(new Error('Import cancelled by user'))
+        })
+      })
+
+      await Promise.race([zipLoadPromise, timeoutPromise])
+
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'ZIP file loaded successfully')
+
+      // Check if import was cancelled
+      if (abortController.signal.aborted) {
+        debugLogger.debug('ProjectDashboard.handleImportProject', 'Import aborted during ZIP loading')
+        return
+      }
+
+      let projectName: string | null = null
+
+      // Try to find a .scormproj file in the ZIP (new format)
+      for (const [fileName, zipEntry] of Object.entries(zip.files)) {
+        if (fileName.endsWith('.scormproj') && !zipEntry.dir) {
+          try {
+            const projectData = await zipEntry.async('string')
+            const parsed = JSON.parse(projectData)
+            projectName = parsed.project?.name || parsed.course_data?.title
+            debugLogger.debug('ProjectDashboard.handleImportProject', 'Found project name from .scormproj', { projectName })
+            break
+          } catch (error) {
+            debugLogger.warn('ProjectDashboard.handleImportProject', 'Failed to parse .scormproj file', { fileName, error })
+          }
+        }
+      }
+
+      // Fallback: Try to read from manifest.json (old format)
+      if (!projectName && zip.files['manifest.json']) {
+        try {
+          const manifestContent = await zip.files['manifest.json'].async('string')
+          const manifest = JSON.parse(manifestContent)
+          projectName = manifest.projectName
+          debugLogger.debug('ProjectDashboard.handleImportProject', 'Found project name from manifest.json', { projectName })
+        } catch (error) {
+          debugLogger.warn('ProjectDashboard.handleImportProject', 'Failed to parse manifest.json', { error })
+        }
+      }
+
+      if (!projectName) {
+        debugLogger.warn('ProjectDashboard.handleImportProject', 'Could not determine project name, using filename')
+        projectName = fileName.replace(/\.zip$/i, '')
+      }
+
+      // STEP 2: Check if project with this name already exists
+      const allProjects = [...projects, ...recentProjects]
+      const existingProject = allProjects.find(p =>
+        p.name.toLowerCase().trim() === projectName!.toLowerCase().trim()
+      )
+
+      if (existingProject) {
+        debugLogger.info('ProjectDashboard.handleImportProject', 'Duplicate project detected', {
+          projectName,
+          existingId: existingProject.id,
+          existingPath: existingProject.path
+        })
+
+        // Show conflict dialog
+        setSelectedFile(new Uint8Array(fileData))
+        setConflictResult({
+          data: {
+            metadata: {
+              projectName: projectName
+            }
+          },
+          existingProjectId: existingProject.id,
+          existingProjectPath: existingProject.path || ''
+        })
+        setShowConflictDialog(true)
+        setImportingProject(false) // Reset loading state while dialog is shown
+        return
+      }
+
+      // STEP 3: No conflict, proceed with import
+      debugLogger.debug('ProjectDashboard.handleImportProject', 'No duplicate found, proceeding with import')
+      await performImport(blob, fileName)
+
+    } catch (error) {
+      debugLogger.error('ProjectDashboard.handleImportProject', 'Failed to import project', error)
+
+      // Don't show error if import was cancelled
+      if (!abortController.signal.aborted) {
+        notifyError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+      setImportingProject(false)
+      setImportAbortController(null)
+    }
+  }
+
+  // Helper function to perform the actual import
+  async function performImport(blob: Blob, fileName: string) {
+    try {
+      debugLogger.debug('ProjectDashboard.performImport', 'Importing project using Rust backend')
+
+      // Check if import was cancelled before starting Rust operation
+      if (importAbortController?.signal.aborted) {
+        debugLogger.debug('ProjectDashboard.performImport', 'Import aborted before Rust operation')
+        return
+      }
+
+      // Use Rust extract_project_zip function directly via storage
       await storage.importProjectFromZip(blob)
-      
-      // Reload projects list
+
+      // Check if import was cancelled after Rust operation
+      if (importAbortController?.signal.aborted) {
+        debugLogger.debug('ProjectDashboard.performImport', 'Import aborted after Rust operation')
+        return
+      }
+
+      // Reload projects list to show the imported project
       await loadProjects()
-      
-      // Navigate to the imported project
+
+      // Navigate to the imported project - the Rust function should set the current project
       const projectId = storage.getCurrentProjectId()
       if (projectId) {
-        debugLogger.info('ProjectDashboard.handleImportProject', 'Project imported successfully', { projectId })
+        debugLogger.info('ProjectDashboard.performImport', 'Project imported successfully', {
+          projectId,
+          fileName
+        })
         success('Project imported successfully')
         onProjectSelected(projectId)
       } else {
-        debugLogger.warn('ProjectDashboard.handleImportProject', 'No project ID after import')
+        debugLogger.warn('ProjectDashboard.performImport', 'No project ID after import')
+        success('Project imported successfully - please select the imported project from the list')
       }
     } catch (error) {
-      debugLogger.error('ProjectDashboard.handleImportProject', 'Failed to import project', error)
-      notifyError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      debugLogger.error('ProjectDashboard.performImport', 'Failed to import project', error)
+
+      // Enhanced error messages
+      let errorMessage = 'Unknown error'
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = 'Import timed out. The file may be too large or corrupted.'
+        } else if (error.message.includes('ZIP')) {
+          errorMessage = 'Invalid ZIP file. Please ensure the file is a valid SCORM project export.'
+        } else if (error.message.includes('cancelled')) {
+          errorMessage = 'Import was cancelled'
+        } else {
+          errorMessage = error.message
+        }
+      }
+
+      // Don't show error if import was cancelled
+      if (!importAbortController?.signal.aborted) {
+        notifyError(`Failed to import project: ${errorMessage}`)
+      }
     } finally {
       setImportingProject(false)
+      setImportAbortController(null)
+    }
+  }
+
+  // Cancel import function
+  function cancelImport() {
+    if (importAbortController) {
+      debugLogger.info('ProjectDashboard.cancelImport', 'User cancelled import')
+      importAbortController.abort()
+      setImportingProject(false)
+      setImportAbortController(null)
+      info('Import cancelled')
     }
   }
 
   async function handleExportProject(projectId: string, projectPath?: string) {
     try {
       setExportingProjectId(projectId)
-      debugLogger.info('ProjectDashboard.handleExportProject', 'Exporting project', { projectId, projectPath })
-      
-      // Export directly using the project path and ID without opening/navigating
-      // This prevents unwanted navigation away from the dashboard
-      const effectivePath = projectPath || projectId
-      
-      // Call the create_project_zip command directly
-      const { invoke } = await import('@tauri-apps/api/core')
-      const zipResult = await invoke<any>('create_project_zip', {
-        projectPath: effectivePath,
-        projectId: projectId,
-        includeMedia: true
+      setShowExportProgress(true)
+      setExportCancelled(false)
+
+      // Initialize progress state
+      setExportProgress({
+        phase: 'preparing',
+        progress: 0,
+        filesProcessed: 0,
+        totalFiles: 0,
+        message: 'Preparing export...',
+        canCancel: true
       })
-      
-      // Create blob from the ZIP data
-      const zipBlob = new Blob([new Uint8Array(zipResult.zipData)], { type: 'application/zip' })
-      
+
+      // Set up progress event listener
+      const unlisten = await listen<any>('export-progress', (event) => {
+        // Skip progress updates if export was cancelled
+        if (exportCancelled) {
+          debugLogger.debug('ProjectDashboard.exportProgress', 'Skipping progress update - export cancelled')
+          return
+        }
+
+        debugLogger.debug('ProjectDashboard.exportProgress', 'Received progress event', event.payload)
+        const { phase, progress, message, filesProcessed, totalFiles, currentFile } = event.payload
+
+        setExportProgress(prev => ({
+          ...prev,
+          phase: phase || prev.phase,
+          progress: progress || prev.progress,
+          message: message || prev.message,
+          filesProcessed: filesProcessed || prev.filesProcessed,
+          totalFiles: totalFiles || prev.totalFiles,
+          currentFile: currentFile || prev.currentFile,
+          canCancel: phase !== 'creating' && phase !== 'completing' // Can't cancel during final phases
+        }))
+      })
+      setExportProgressListener(unlisten)
+
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Exporting project', { projectId, projectPath })
+
       // Find project name
       const allProjects = [...projects, ...recentProjects]
       const project = allProjects.find(p => p.id === projectId)
       const projectName = project?.name || 'project'
-      
-      debugLogger.debug('ProjectDashboard.handleExportProject', 'Exporting as zip', {
-        projectName,
-        blobSize: zipBlob.size
+
+      // Load project data without opening/changing current project
+      const effectivePath = projectPath || project?.path
+      if (!effectivePath) {
+        throw new Error('Project path not found')
+      }
+
+      // Check for cancellation before starting the export
+      if (exportCancelled) {
+        debugLogger.info('ProjectDashboard.handleExportProject', 'Export cancelled before starting')
+        return
+      }
+
+      debugLogger.debug('ProjectDashboard.handleExportProject', 'Creating ZIP using Rust backend with progress', {
+        projectPath: effectivePath,
+        projectId,
+        projectName
       })
-      
+
+      // Use the progress-enabled Rust command
+      const zipResult = await invoke<{
+        zipData: number[]
+        fileCount: number
+        totalSize: number
+      }>('create_project_zip_with_progress', {
+        projectPath: effectivePath,
+        projectId: projectId,
+        includeMedia: true
+      })
+
+      // Check for cancellation after the export completes
+      if (exportCancelled) {
+        debugLogger.info('ProjectDashboard.handleExportProject', 'Export cancelled after completion')
+        return
+      }
+
+      // Debug: Log the actual structure received from Rust
+      debugLogger.debug('ProjectDashboard.handleExportProject', 'ZIP result from Rust', {
+        hasZipData: !!zipResult.zipData,
+        zipDataLength: zipResult.zipData?.length || 0,
+        fileCount: zipResult.fileCount,
+        totalSize: zipResult.totalSize
+      })
+
+      // Error checking: Ensure we have valid ZIP data
+      if (!zipResult.zipData || zipResult.zipData.length === 0) {
+        throw new Error('Received empty ZIP data from Rust backend')
+      }
+
+      // Convert the ZIP data to a Blob
+      const zipData = new Uint8Array(zipResult.zipData)
+      const blob = new Blob([zipData], { type: 'application/zip' })
+
       // Download the zip file
-      const url = URL.createObjectURL(zipBlob)
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       link.download = `${projectName}.zip`
@@ -561,22 +855,184 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
-      debugLogger.info('ProjectDashboard.handleExportProject', 'Project exported successfully', { 
+
+      // Brief delay to show completion, then close dialog
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      setShowExportProgress(false)
+
+      debugLogger.info('ProjectDashboard.handleExportProject', 'Project exported successfully', {
         projectId,
+        projectName,
         fileCount: zipResult.fileCount,
-        totalSize: zipResult.totalSize,
-        zipSize: zipBlob.size
+        zipSize: blob.size
       })
       success('Project exported successfully')
+
     } catch (error) {
       debugLogger.error('ProjectDashboard.handleExportProject', 'Failed to export project', { projectId, error })
+      setShowExportProgress(false)
       notifyError(`Failed to export project: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
+      // Clean up event listener
+      if (exportProgressListener && typeof exportProgressListener === 'function') {
+        exportProgressListener()
+        setExportProgressListener(null)
+      }
       setExportingProjectId(null)
     }
   }
 
+  function handleCancelExport() {
+    debugLogger.info('ProjectDashboard.handleCancelExport', 'User cancelled export')
+
+    // Set cancellation flag to stop processing
+    setExportCancelled(true)
+
+    // Update progress to show cancellation
+    setExportProgress(prev => ({
+      ...prev,
+      message: 'Cancelling export...',
+      canCancel: false
+    }))
+
+    // Brief delay to show cancellation message, then close
+    setTimeout(() => {
+      setShowExportProgress(false)
+      setExportingProjectId(null)
+      setExportCancelled(false)
+
+      // Clean up event listener
+      if (exportProgressListener && typeof exportProgressListener === 'function') {
+        exportProgressListener()
+        setExportProgressListener(null)
+      }
+
+      info('Export cancelled')
+    }, 1000)
+  }
+
+  // Helper function to generate unique project name
+  function generateUniqueProjectName(baseName: string, existingProjects: Project[]): string {
+    const existingNames = existingProjects.map(p => p.name.toLowerCase())
+
+    // If the base name doesn't exist, use it as-is
+    if (!existingNames.includes(baseName.toLowerCase())) {
+      return baseName
+    }
+
+    // Try adding numeric suffixes until we find a unique name
+    let counter = 2
+    while (true) {
+      const candidateName = `${baseName} (${counter})`
+      if (!existingNames.includes(candidateName.toLowerCase())) {
+        return candidateName
+      }
+      counter++
+    }
+  }
+
+  // Import conflict resolution handlers
+  async function handleReplaceProject() {
+    if (!selectedFile || !conflictResult) return
+
+    try {
+      setImportingProject(true)
+      setShowConflictDialog(false)
+
+      debugLogger.debug('ProjectDashboard.handleReplaceProject', 'Replacing existing project')
+
+      // SAFETY: First, delete the existing project, then import the new one
+      if (conflictResult.existingProjectId) {
+        debugLogger.info('ProjectDashboard.handleReplaceProject', 'Deleting existing project', {
+          existingProjectId: conflictResult.existingProjectId
+        })
+        await storage.deleteProject(conflictResult.existingProjectId)
+      }
+
+      // Now import the new project using our helper function
+      const blob = new Blob([new Uint8Array(selectedFile)], { type: 'application/zip' })
+      const fileName = conflictResult.data.metadata.projectName + '.zip'
+
+      await performImport(blob, fileName)
+
+      success('Project replaced successfully')
+    } catch (error) {
+      debugLogger.error('ProjectDashboard.handleReplaceProject', 'Failed to replace project', error)
+      notifyError(`Failed to replace project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setImportingProject(false)
+    } finally {
+      setSelectedFile(null)
+      setConflictResult(null)
+      setShowConflictDialog(false)
+    }
+  }
+
+  async function handleCreateNewProject() {
+    if (!selectedFile || !conflictResult) return
+
+    try {
+      setImportingProject(true)
+      setShowConflictDialog(false)
+
+      debugLogger.debug('ProjectDashboard.handleCreateNewProject', 'Creating new project with unique name')
+
+      // Generate a unique name for the imported project
+      const baseName = conflictResult.data.metadata.projectName
+      const allProjects = [...projects, ...recentProjects]
+      const uniqueName = generateUniqueProjectName(baseName, allProjects)
+
+      debugLogger.info('ProjectDashboard.handleCreateNewProject', 'Generated unique name', {
+        originalName: baseName,
+        uniqueName
+      })
+
+      // For now, we'll import with the original name and then rename it
+      // This is a limitation since Rust import doesn't support renaming during import yet
+      const blob = new Blob([new Uint8Array(selectedFile)], { type: 'application/zip' })
+      const fileName = baseName + '.zip'
+
+      // Import the project first
+      await performImport(blob, fileName)
+
+      // Then rename it to the unique name
+      // Find the newly imported project (it should be the most recent)
+      await loadProjects()
+      const newProjects = [...projects, ...recentProjects]
+      const importedProject = newProjects.find(p => p.name === baseName)
+
+      if (importedProject && importedProject.path) {
+        debugLogger.info('ProjectDashboard.handleCreateNewProject', 'Renaming imported project', {
+          projectId: importedProject.id,
+          oldName: baseName,
+          newName: uniqueName
+        })
+
+        await storage.renameProject(importedProject.path, uniqueName)
+        await loadProjects()
+
+        success(`Project imported as "${uniqueName}"`)
+      } else {
+        debugLogger.warn('ProjectDashboard.handleCreateNewProject', 'Could not find imported project to rename')
+        success('Project imported successfully')
+      }
+
+    } catch (error) {
+      debugLogger.error('ProjectDashboard.handleCreateNewProject', 'Failed to create new project', error)
+      notifyError(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setImportingProject(false)
+    } finally {
+      setSelectedFile(null)
+      setConflictResult(null)
+      setShowConflictDialog(false)
+    }
+  }
+
+  function handleCancelConflict() {
+    setShowConflictDialog(false)
+    setSelectedFile(null)
+    setConflictResult(null)
+    setImportingProject(false)
+  }
 
   // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -699,6 +1155,20 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
         <div className={styles.loadingState}>
           <LoadingSpinner />
           <p>Importing project...</p>
+          <p className={styles.loadingDetails}>
+            Please wait while we process the ZIP file and check for duplicates.
+            <br />
+            Large files may take a few minutes to import.
+          </p>
+          {importAbortController && (
+            <Button
+              variant="secondary"
+              onClick={cancelImport}
+              className={styles.cancelButton}
+            >
+              Cancel Import
+            </Button>
+          )}
         </div>
       </div>
     )
@@ -985,6 +1455,21 @@ export function ProjectDashboard({ onProjectSelected, onSecretClick }: ProjectDa
           </div>
         </div>
       </Modal>
+
+      <ExportProgressDialog
+        isOpen={showExportProgress}
+        state={exportProgress}
+        onCancel={handleCancelExport}
+      />
+
+      <ProjectImportConflictDialog
+        isOpen={showConflictDialog}
+        projectName={conflictResult?.data?.metadata.projectName || 'Unknown Project'}
+        existingProjectPath={conflictResult?.existingProjectPath}
+        onReplace={handleReplaceProject}
+        onCreateNew={handleCreateNewProject}
+        onCancel={handleCancelConflict}
+      />
     </div>
   )
 }

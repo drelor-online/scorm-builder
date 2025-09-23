@@ -120,14 +120,16 @@ export default function ProjectsList({ projects, onOpen, onExport, onDelete, onR
       </div>
 
       <div className={styles.rows} role="table" aria-label="Projects">
-        {filtered.map((p) => {
+        {filtered.map((p, index) => {
           const path = getProjectPath(p)
           const last = getLastAccessed(p)
+          // Use composite key to handle duplicate IDs (same project imported multiple times)
+          const uniqueKey = `${p.id}-${path || index}`
           return (
-            <div 
-              key={p.id} 
-              className={styles.row} 
-              role="row" 
+            <div
+              key={uniqueKey}
+              className={styles.row}
+              role="row"
               tabIndex={0}
               onDoubleClick={() => onOpen(p)}
             >

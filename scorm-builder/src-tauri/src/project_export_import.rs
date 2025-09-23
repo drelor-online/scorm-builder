@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
+use tauri::Emitter;
 use tempfile::TempDir;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -13,6 +14,30 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 fn debug_log(message: &str) {
     println!("[DEBUG] Project Export: {}", message);
     eprintln!("[DEBUG] Project Export: {}", message);
+}
+
+/// Check if a media file is a duplicate (has -1, -2, etc. suffix)
+/// Returns true for duplicates like audio-0-1.json, false for normal files like audio-1.json
+fn is_duplicate_media_file(file_name: &str) -> bool {
+    // Extract name without extension
+    let name_without_ext = if let Some(dot_pos) = file_name.rfind('.') {
+        &file_name[..dot_pos]
+    } else {
+        file_name
+    };
+
+    // Look for pattern: {type}-{number}-{suffix} (e.g., audio-1-1, caption-2-1)
+    // ALL such patterns are invalid duplicates - no exceptions
+    let parts: Vec<&str> = name_without_ext.split('-').collect();
+    if parts.len() >= 3 {
+        // Check if last part is a number (suffix)
+        if let Ok(_suffix) = parts.last().unwrap().parse::<u32>() {
+            // Any file with format like audio-1-1, caption-2-1 etc. is a duplicate
+            return true;
+        }
+    }
+
+    false
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -85,6 +110,26 @@ pub async fn create_project_zip(
         // Add media files if requested
         if include_media {
             debug_log(&format!("Media inclusion requested for project_id: {}", project_id));
+
+            // Validate media page_id assignments before export
+            if let Ok(validation_result) = crate::media_page_id_migration::validate_media_page_ids(project_id.clone()).await {
+                if let Some(invalid_files) = validation_result.get("invalid_files").and_then(|v| v.as_u64()) {
+                    if invalid_files > 0 {
+                        debug_log(&format!("WARNING: Found {} media files with incorrect page_id assignments in project {}", invalid_files, project_id));
+                        debug_log("Consider running migrate_media_page_ids to fix these issues before export");
+                        if let Some(issues) = validation_result.get("issues").and_then(|v| v.as_array()) {
+                            for issue in issues.iter().take(3) { // Show first 3 issues
+                                if let Some(issue_str) = issue.as_str() {
+                                    debug_log(&format!("  - {}", issue_str));
+                                }
+                            }
+                            if issues.len() > 3 {
+                                debug_log(&format!("  ... and {} more issues", issues.len() - 3));
+                            }
+                        }
+                    }
+                }
+            }
 
             let mut effective_project_id = project_id.clone();
             let mut media_dir = get_media_directory(&effective_project_id)
@@ -195,14 +240,241 @@ pub async fn create_project_zip(
 /// Creates a ZIP file with progress reporting
 #[tauri::command]
 pub async fn create_project_zip_with_progress(
+    app: tauri::AppHandle,
     project_path: String,
     project_id: String,
     include_media: bool,
-    _progress_callback: bool,
 ) -> Result<ZipExportResult, String> {
-    // For now, just delegate to the regular function
-    // TODO: Implement actual progress reporting
-    create_project_zip(project_path, project_id, include_media).await
+    debug_log(&format!("Starting export with progress for project_id: {}, path: {}, include_media: {}",
+                      project_id, project_path, include_media));
+
+    // Phase 1: Preparing
+    let _ = app.emit(
+        "export-progress",
+        serde_json::json!({
+            "phase": "preparing",
+            "progress": 5,
+            "message": "Loading project file...",
+            "filesProcessed": 0,
+            "totalFiles": 0
+        }),
+    );
+
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    let mut file_count = 0;
+    let mut total_size = 0;
+
+    // Read the project file
+    let project_path_obj = std::path::Path::new(&project_path);
+    let project_file_name = project_path_obj
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Invalid project file name".to_string())?;
+
+    let project_content = std::fs::read(&project_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+
+    // Phase 2: Validating
+    let _ = app.emit(
+        "export-progress",
+        serde_json::json!({
+            "phase": "validating",
+            "progress": 15,
+            "message": "Validating project data...",
+            "filesProcessed": 0,
+            "totalFiles": 1
+        }),
+    );
+
+    // Validate project content
+    if project_content.is_empty() {
+        return Err("Project file is empty".to_string());
+    }
+
+    // Add project file to ZIP
+    zip.start_file(project_file_name, options)
+        .map_err(|e| format!("Failed to start project file in ZIP: {}", e))?;
+    zip.write_all(&project_content)
+        .map_err(|e| format!("Failed to write project file to ZIP: {}", e))?;
+
+    file_count += 1;
+    total_size += project_content.len();
+
+    debug_log(&format!("Added project file {} to ZIP ({} bytes)", project_file_name, project_content.len()));
+
+    // Phase 3: Processing media files
+    if include_media {
+        let _ = app.emit(
+            "export-progress",
+            serde_json::json!({
+                "phase": "processing",
+                "progress": 25,
+                "message": "Scanning media directory...",
+                "filesProcessed": 1,
+                "totalFiles": 1
+            }),
+        );
+
+        let mut effective_project_id = project_id.clone();
+        let mut media_dir = get_media_directory(&effective_project_id)
+            .map_err(|e| format!("Failed to get media directory: {}", e))?;
+
+        debug_log(&format!("Media directory path: {}", media_dir.display()));
+
+        // Count media files first
+        let mut media_files_list = Vec::new();
+        if media_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&media_dir) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_file() {
+                            media_files_list.push(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If no media found, try extracting project ID from filename
+        if media_files_list.is_empty() {
+            if let Some(filename_stem) = project_path_obj.file_stem().and_then(|s| s.to_str()) {
+                if let Some(last_underscore_pos) = filename_stem.rfind('_') {
+                    let potential_id = &filename_stem[last_underscore_pos + 1..];
+                    if potential_id.chars().all(|c| c.is_ascii_digit()) && potential_id.len() >= 10 {
+                        let fallback_media_dir = get_media_directory(potential_id)
+                            .map_err(|e| format!("Failed to get fallback media directory: {}", e))?;
+
+                        if fallback_media_dir.exists() {
+                            if let Ok(entries) = std::fs::read_dir(&fallback_media_dir) {
+                                for entry in entries {
+                                    if let Ok(entry) = entry {
+                                        let path = entry.path();
+                                        if path.is_file() {
+                                            media_files_list.push(path);
+                                        }
+                                    }
+                                }
+                                if !media_files_list.is_empty() {
+                                    effective_project_id = potential_id.to_string();
+                                    // Note: media_dir is not needed after this point
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let total_media_files = media_files_list.len();
+        debug_log(&format!("Found {} media files to process", total_media_files));
+
+        let _ = app.emit(
+            "export-progress",
+            serde_json::json!({
+                "phase": "processing",
+                "progress": 30,
+                "message": format!("Processing {} media files...", total_media_files),
+                "filesProcessed": 1,
+                "totalFiles": total_media_files + 1
+            }),
+        );
+
+        // Process media files with progress updates
+        for (idx, media_file_path) in media_files_list.iter().enumerate() {
+            let file_name = media_file_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| "Invalid media file name".to_string())?;
+
+            let file_content = std::fs::read(&media_file_path)
+                .map_err(|e| format!("Failed to read media file {}: {}", file_name, e))?;
+
+            let zip_path = format!("{}/media/{}", effective_project_id, file_name);
+            zip.start_file(&zip_path, options)
+                .map_err(|e| format!("Failed to start media file in ZIP: {}", e))?;
+            zip.write_all(&file_content)
+                .map_err(|e| format!("Failed to write media file to ZIP: {}", e))?;
+
+            file_count += 1;
+            total_size += file_content.len();
+
+            // Emit progress every 5 files or on the last file
+            if idx % 5 == 0 || idx == total_media_files - 1 {
+                let progress = 30 + ((idx as f32 / total_media_files as f32) * 45.0) as u32; // 30-75% range
+                let _ = app.emit(
+                    "export-progress",
+                    serde_json::json!({
+                        "phase": "processing",
+                        "progress": progress,
+                        "message": format!("Processing media files ({}/{})", idx + 1, total_media_files),
+                        "currentFile": file_name,
+                        "filesProcessed": idx + 2, // +1 for project file, +1 for current
+                        "totalFiles": total_media_files + 1
+                    }),
+                );
+            }
+
+            debug_log(&format!("Added media file {} to ZIP ({} bytes)", file_name, file_content.len()));
+        }
+
+        debug_log(&format!("Total media files added: {}", total_media_files));
+    }
+
+    // Phase 4: Creating archive
+    let _ = app.emit(
+        "export-progress",
+        serde_json::json!({
+            "phase": "creating",
+            "progress": 80,
+            "message": "Creating archive...",
+            "filesProcessed": file_count,
+            "totalFiles": file_count
+        }),
+    );
+
+    // Finalize the ZIP
+    let zip_cursor = zip.finish()
+        .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+    let zip_data = zip_cursor.into_inner();
+
+    // Phase 5: Completing
+    let _ = app.emit(
+        "export-progress",
+        serde_json::json!({
+            "phase": "completing",
+            "progress": 95,
+            "message": "Finalizing export...",
+            "filesProcessed": file_count,
+            "totalFiles": file_count
+        }),
+    );
+
+    let result = ZipExportResult {
+        zip_data: zip_data.clone(),
+        file_count,
+        total_size,
+    };
+
+    // Emit completion
+    let _ = app.emit(
+        "export-progress",
+        serde_json::json!({
+            "phase": "completing",
+            "progress": 100,
+            "message": "Export completed successfully!",
+            "filesProcessed": file_count,
+            "totalFiles": file_count
+        }),
+    );
+
+    debug_log(&format!("Export completed successfully: {} files, {} bytes total", file_count, total_size));
+
+    Ok(result)
 }
 
 /// Fixes media alignment issues when importing projects
@@ -432,22 +704,40 @@ pub async fn extract_project_zip(zip_data: Vec<u8>) -> Result<serde_json::Value,
             fs::create_dir_all(&new_media_dir)
                 .map_err(|e| format!("Failed to create media directory: {}", e))?;
             
-            // Copy all media files
+            // Copy all media files with deduplication
             let entries = fs::read_dir(&old_media_dir)
                 .map_err(|e| format!("Failed to read media directory: {}", e))?;
-            
+
+            let mut skipped_duplicates = Vec::new();
+
             for entry in entries {
                 let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-                let file_name = entry.file_name();
+                let file_name_os = entry.file_name();
+                let file_name = file_name_os.to_string_lossy();
                 let src = entry.path();
-                let dst = new_media_dir.join(&file_name);
-                
+                let dst = new_media_dir.join(&file_name_os);
+
+                // Check if this is a duplicate file (has -1, -2, etc. suffix)
+                if is_duplicate_media_file(&file_name) {
+                    // Skip duplicates during import to prevent confusion
+                    println!("[IMPORT_DEDUP] Skipping duplicate media file: {}", file_name);
+                    skipped_duplicates.push(file_name.to_string());
+                    continue;
+                }
+
                 fs::copy(&src, &dst)
                     .map_err(|e| format!("Failed to copy media file: {}", e))?;
             }
+
+            if !skipped_duplicates.is_empty() {
+                println!("[IMPORT_DEDUP] Skipped {} duplicate media files: {:?}",
+                        skipped_duplicates.len(), skipped_duplicates);
+            }
+
+            // Import completed successfully
         }
     }
-    
+
     Ok(serde_json::json!({
         "projectPath": new_project_path.to_string_lossy(),
         "projectId": new_project_id,

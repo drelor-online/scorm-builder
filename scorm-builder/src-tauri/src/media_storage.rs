@@ -556,6 +556,213 @@ pub fn media_exists_batch(
     Ok(results)
 }
 
+/// Repair shifted audio content caused by duplicate media files
+/// Detects when audio files have been shifted (e.g., audio-1 contains audio-2 content)
+/// and repairs them to the correct alignment
+#[tauri::command]
+pub async fn repair_shifted_audio(project_id: String) -> Result<serde_json::Value, String> {
+    println!("[REPAIR] 🔧 Starting audio shift repair for project: {}", project_id);
+
+    let media_dir = get_media_directory(&project_id)
+        .map_err(|e| format!("Failed to get media directory: {}", e))?;
+
+    if !media_dir.exists() {
+        return Ok(serde_json::json!({
+            "success": true,
+            "message": "No media directory found, nothing to repair",
+            "repairs_made": 0
+        }));
+    }
+
+    let mut repairs_made = 0;
+    let mut repair_log = Vec::new();
+
+    // First, detect if we have the telltale signs of shifted audio:
+    // 1. Both audio-1 and audio-1-1 exist
+    // 2. Similar pattern for other audio files
+    let audio_1_exists = media_dir.join("audio-1.bin").exists();
+    let audio_1_1_exists = media_dir.join("audio-1-1.bin").exists();
+
+    if audio_1_exists && audio_1_1_exists {
+        println!("[REPAIR] 🔍 Detected shifted audio pattern: audio-1 and audio-1-1 both exist");
+
+        // Get all audio files to analyze the pattern
+        let audio_files = get_audio_file_mapping(&media_dir)?;
+
+        // Repair strategy:
+        // - audio-1-1.bin should become audio-1.bin (objectives audio)
+        // - audio-1.bin should become audio-0.bin (welcome audio)
+        // - Continue the shift pattern for all files
+
+        for (shifted_id, correct_id) in calculate_shift_mappings(audio_files)? {
+            if perform_audio_swap(&media_dir, &shifted_id, &correct_id)? {
+                repairs_made += 1;
+                repair_log.push(format!("Moved {} content to {}", shifted_id, correct_id));
+                println!("[REPAIR] ✅ Repaired: {} -> {}", shifted_id, correct_id);
+            }
+        }
+
+        // After repairing, remove the duplicate files
+        remove_duplicate_files(&media_dir)?;
+
+    } else {
+        println!("[REPAIR] ✅ No audio shift detected - audio files appear to be in correct alignment");
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "repairs_made": repairs_made,
+        "repair_log": repair_log,
+        "message": format!("Audio repair completed. {} repairs made.", repairs_made)
+    }))
+}
+
+/// Get mapping of all audio files in the media directory
+fn get_audio_file_mapping(media_dir: &Path) -> Result<Vec<String>, String> {
+    let mut audio_files = Vec::new();
+
+    let entries = fs::read_dir(media_dir)
+        .map_err(|e| format!("Failed to read media directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if filename.starts_with("audio-") && filename.ends_with(".bin") {
+                let audio_id = filename.trim_end_matches(".bin");
+                audio_files.push(audio_id.to_string());
+            }
+        }
+    }
+
+    audio_files.sort();
+    Ok(audio_files)
+}
+
+/// Calculate which files need to be swapped to fix the shift
+fn calculate_shift_mappings(audio_files: Vec<String>) -> Result<Vec<(String, String)>, String> {
+    let mut mappings = Vec::new();
+
+    // The core issue: audio-1-1 contains the correct objectives audio
+    // But audio-1 contains what should be audio-0 (welcome)
+    // We need to shift everything back by one position
+
+    for audio_id in audio_files {
+        if audio_id.ends_with("-1") {
+            // audio-X-1 should become audio-X
+            let base_id = audio_id.trim_end_matches("-1");
+            mappings.push((audio_id.clone(), base_id.to_string()));
+        } else if !audio_id.contains("-") || audio_id.matches('-').count() == 1 {
+            // audio-X should become audio-(X-1)
+            if let Some(dash_pos) = audio_id.rfind('-') {
+                if let Ok(num) = audio_id[dash_pos + 1..].parse::<i32>() {
+                    if num > 0 {
+                        let new_num = num - 1;
+                        let new_id = format!("audio-{}", new_num);
+                        mappings.push((audio_id.clone(), new_id));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(mappings)
+}
+
+/// Swap the content of two audio files
+fn perform_audio_swap(media_dir: &Path, from_id: &str, to_id: &str) -> Result<bool, String> {
+    let from_bin = media_dir.join(format!("{}.bin", from_id));
+    let from_json = media_dir.join(format!("{}.json", from_id));
+    let to_bin = media_dir.join(format!("{}.bin", to_id));
+    let to_json = media_dir.join(format!("{}.json", to_id));
+
+    // Check if source files exist
+    if !from_bin.exists() || !from_json.exists() {
+        return Ok(false);
+    }
+
+    // Create backup location
+    let backup_bin = media_dir.join(format!("{}.backup.bin", to_id));
+    let backup_json = media_dir.join(format!("{}.backup.json", to_id));
+
+    // Backup existing target if it exists
+    if to_bin.exists() {
+        fs::rename(&to_bin, &backup_bin)
+            .map_err(|e| format!("Failed to backup {}: {}", to_id, e))?;
+    }
+    if to_json.exists() {
+        fs::rename(&to_json, &backup_json)
+            .map_err(|e| format!("Failed to backup {}: {}", to_id, e))?;
+    }
+
+    // Move source to target
+    fs::rename(&from_bin, &to_bin)
+        .map_err(|e| format!("Failed to move {} to {}: {}", from_id, to_id, e))?;
+
+    // Update metadata for the moved file
+    if let Ok(mut metadata_content) = fs::read_to_string(&from_json) {
+        // Update the ID in the metadata to match the new location
+        metadata_content = metadata_content.replace(&format!("\"{}\"", from_id), &format!("\"{}\"", to_id));
+        fs::write(&to_json, metadata_content)
+            .map_err(|e| format!("Failed to update metadata for {}: {}", to_id, e))?;
+    }
+
+    // Remove the source metadata file
+    if from_json.exists() {
+        fs::remove_file(&from_json)
+            .map_err(|e| format!("Failed to remove source metadata {}: {}", from_id, e))?;
+    }
+
+    // Clean up backup files
+    if backup_bin.exists() {
+        fs::remove_file(&backup_bin).ok();
+    }
+    if backup_json.exists() {
+        fs::remove_file(&backup_json).ok();
+    }
+
+    Ok(true)
+}
+
+/// Remove duplicate files after repair
+fn remove_duplicate_files(media_dir: &Path) -> Result<(), String> {
+    let entries = fs::read_dir(media_dir)
+        .map_err(|e| format!("Failed to read media directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            // Remove any files with -1, -2, etc. suffixes (but preserve audio-1, caption-1 which are valid)
+            if filename.contains("-") && (filename.ends_with(".bin") || filename.ends_with(".json")) {
+                let name_parts: Vec<&str> = filename.split('-').collect();
+                if name_parts.len() >= 3 {
+                    // Check if last part before extension is a number
+                    let last_part = if let Some(dot_pos) = name_parts.last().unwrap().find('.') {
+                        &name_parts.last().unwrap()[..dot_pos]
+                    } else {
+                        name_parts.last().unwrap()
+                    };
+
+                    if last_part.parse::<u32>().is_ok() {
+                        // This is a duplicate pattern like audio-0-1.bin
+                        let base_name = name_parts[..name_parts.len()-1].join("-");
+                        if !(base_name == "audio-1" || base_name == "caption-1") {
+                            fs::remove_file(&path)
+                                .map_err(|e| format!("Failed to remove duplicate {}: {}", filename, e))?;
+                            println!("[REPAIR] 🗑️ Removed duplicate: {}", filename);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1094,6 +1301,102 @@ mod contamination_prevention_tests {
         // Cleanup
         std::env::remove_var("SCORM_BUILDER_TEST_DIR");
     }
+}
+
+/// Clean duplicate media files with -1 suffix (except valid audio-1/caption-1)
+#[tauri::command]
+pub async fn clean_duplicate_media(project_id: String) -> Result<serde_json::Value, String> {
+    println!("[media_storage] 🧹 Starting duplicate media cleanup for project: {}", project_id);
+
+    let actual_project_id = extract_project_id(&project_id);
+    let media_dir = get_media_directory(&actual_project_id)?;
+
+    if !media_dir.exists() {
+        return Ok(serde_json::json!({
+            "success": true,
+            "message": "No media directory found",
+            "removed": [],
+            "removed_count": 0
+        }));
+    }
+
+    let mut removed_files = Vec::new();
+    let mut removed_count = 0;
+
+    // Read all files in media directory
+    let entries = std::fs::read_dir(&media_dir)
+        .map_err(|e| format!("Failed to read media directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+            // Check if this is a duplicate file (has -1, -2, etc. suffix)
+            if let Some(base_name) = extract_duplicate_suffix(file_name) {
+                // Special case: audio-1 and caption-1 are valid (objectives page)
+                if base_name == "audio-1" || base_name == "caption-1" {
+                    continue; // Skip - these are legitimate files
+                }
+
+                // This is a duplicate - remove it
+                match std::fs::remove_file(&path) {
+                    Ok(()) => {
+                        println!("[media_storage] 🗑️ Removed duplicate: {}", file_name);
+                        removed_files.push(file_name.to_string());
+                        removed_count += 1;
+                    }
+                    Err(e) => {
+                        println!("[media_storage] ⚠️ Failed to remove {}: {}", file_name, e);
+                    }
+                }
+            }
+        }
+    }
+
+    println!("[media_storage] 🧹 Cleanup complete. Removed {} duplicate files", removed_count);
+
+    Ok(serde_json::json!({
+        "success": true,
+        "message": format!("Cleanup complete. Removed {} duplicate files", removed_count),
+        "removed": removed_files,
+        "removed_count": removed_count
+    }))
+}
+
+/// Extract base name if file has duplicate suffix pattern
+/// Returns None for normal files, Some(base_name) for duplicates
+fn extract_duplicate_suffix(file_name: &str) -> Option<String> {
+    // Pattern: audio-0-1.json -> Some("audio-0")
+    // Pattern: caption-10-1.json -> Some("caption-10")
+    // Pattern: audio-1.json -> None (normal file)
+
+    if let Some(name_without_ext) = file_name.strip_suffix(".json") {
+        // Look for pattern: {type}-{number}-{suffix}
+        let parts: Vec<&str> = name_without_ext.split('-').collect();
+        if parts.len() >= 3 {
+            // Check if last part is a number (suffix)
+            if let Ok(_suffix) = parts.last().unwrap().parse::<u32>() {
+                // Reconstruct base name without suffix
+                let base_parts = &parts[..parts.len()-1];
+                return Some(base_parts.join("-"));
+            }
+        }
+    }
+
+    // Also check for non-JSON files with same pattern
+    if let Some(dot_pos) = file_name.rfind('.') {
+        let name_without_ext = &file_name[..dot_pos];
+        let parts: Vec<&str> = name_without_ext.split('-').collect();
+        if parts.len() >= 3 {
+            if let Ok(_suffix) = parts.last().unwrap().parse::<u32>() {
+                let base_parts = &parts[..parts.len()-1];
+                return Some(base_parts.join("-"));
+            }
+        }
+    }
+
+    None
 }
 
 // Add efficiency tests module
